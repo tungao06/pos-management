@@ -1,0 +1,30 @@
+{
+  "name": "@dayo/db-schema",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./sqlite": "./src/sqlite/index.ts",
+    "./pg": "./src/pg/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "generate": "drizzle-kit generate --config drizzle.config.sqlite.ts && drizzle-kit generate --config drizzle.config.pg.ts"
+  },
+  "dependencies": {
+    "@dayo/contracts": "workspace:*",
+    "@dayo/domain": "workspace:*",
+    "drizzle-orm": "^0.45.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.0",
+    "@types/node": "^22.0.0",
+    "@types/sql.js": "^1.4.9",
+    "drizzle-kit": "^0.31.0",
+    "sql.js": "^1.14.0",
+    "typescript": "~5.9.0",
+    "vitest": "^5.0.0"
+  }
+}
