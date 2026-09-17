@@ -14,6 +14,17 @@ describe('canonicalJson', () => {
     expect(() => canonicalJson({ n: Infinity })).toThrow(TypeError)
     expect(() => canonicalJson({ n: 1n })).toThrow(TypeError)
   })
+  it('rejects non-plain objects (Date, Map, Set, class instances) instead of silently hashing them as {}', () => {
+    class Foo { x = 1 }
+    expect(() => canonicalJson({ at: new Date() })).toThrow(TypeError)
+    expect(() => canonicalJson({ m: new Map([['a', 1]]) })).toThrow(TypeError)
+    expect(() => canonicalJson({ s: new Set([1, 2]) })).toThrow(TypeError)
+    expect(() => canonicalJson({ f: new Foo() })).toThrow(TypeError)
+  })
+  it('still accepts plain objects and objects with a null prototype', () => {
+    expect(canonicalJson({ a: 1 })).toBe('{"a":1}')
+    expect(canonicalJson(Object.create(null))).toBe('{}')
+  })
 })
 
 describe('sha256Hex', () => {

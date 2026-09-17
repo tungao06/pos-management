@@ -18,6 +18,10 @@ function canon(v: unknown): unknown {
       return undefined
     case 'object': {
       if (Array.isArray(v)) return v.map((x) => (x === undefined ? null : canon(x)))
+      const proto = Object.getPrototypeOf(v)
+      if (proto !== Object.prototype && proto !== null) {
+        throw new TypeError(`canonicalJson: unsupported object type ${(v as object).constructor?.name ?? 'unknown'} (only plain objects and arrays are allowed)`)
+      }
       const out: Record<string, unknown> = {}
       for (const k of Object.keys(v as object).sort()) {
         const c = canon((v as Record<string, unknown>)[k])

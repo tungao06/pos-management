@@ -7,6 +7,19 @@ describe('expectedCashSatang', () => {
   it('opening + sales − refunds + paid in − paid out − drops', () => {
     expect(expectedCashSatang(cash)).toBe(100_000 + 523_000 - 4_500 - 20_000 - 300_000)
   })
+
+  it('a voided 45-baht cash bill reduces expected cash exactly once', () => {
+    const voidRefundSatang = 4_500 // the automatic PAID_OUT cash_movement the void creates (spec §4.3)
+    const base = { openingFloatSatang: 100_000, cashSalesSatang: 527_500, paidInSatang: 0, dropsSatang: 0 }
+    // Correct per CashInputs' JSDoc: the auto-void PAID_OUT is counted in cashRefundsSatang only;
+    // paidOutSatang (manual paid-outs) excludes it.
+    const correct = { ...base, cashRefundsSatang: voidRefundSatang, paidOutSatang: 0 }
+    expect(expectedCashSatang(correct)).toBe(100_000 + 527_500 - voidRefundSatang)
+    // If a caller instead folded the same auto-void row into paidOutSatang too (summing every PAID_OUT
+    // row without excluding void rows), the 45 baht would be subtracted twice.
+    const doubleCounted = { ...base, cashRefundsSatang: voidRefundSatang, paidOutSatang: voidRefundSatang }
+    expect(expectedCashSatang(doubleCounted)).toBe(expectedCashSatang(correct) - voidRefundSatang)
+  })
 })
 
 describe('buildZReport', () => {

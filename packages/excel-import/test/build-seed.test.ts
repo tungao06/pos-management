@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { buildSeed } from '../src/build-seed.js'
 import { loadFixture } from './workbook.js'
@@ -32,5 +34,16 @@ describe('buildSeed', () => {
     const item = (code: string) => seed.items.find((i) => i.code === code)!
     expect(item('PB-TEA-THAI').standardCostUsat).toBe(2_000_000)
     expect(item('PK-SET-16').standardCostUsat).toBeGreaterThan(0)
+  })
+  it('committed seed/dayo-seed.json is exactly what the CLI would (re)write from the fixture (minor 5)', async () => {
+    // Plan 2 reads the committed file, not the parser. This guards against the fixture or parser changing
+    // without re-running `pnpm --filter @dayo/excel-import import <fixture> seed/dayo-seed.json`.
+    const seed = buildSeed(await loadFixture())
+    const expected = `${JSON.stringify(seed, null, 2)}\n` // matches cli.ts's exact serialization
+    const committedPath = fileURLToPath(new URL('../seed/dayo-seed.json', import.meta.url))
+    // Normalize CRLF -> LF: this repo has no .gitattributes and core.autocrlf can rewrite line endings on
+    // checkout, which is an OS/git artifact unrelated to the CLI's own (LF-only) serialization.
+    const committed = readFileSync(committedPath, 'utf8').replace(/\r\n/g, '\n')
+    expect(committed).toBe(expected)
   })
 })
