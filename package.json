@@ -1,0 +1,16 @@
+{
+  "name": "dayo-pos",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.5",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "build": "turbo run build"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.0",
+    "typescript": "~5.9.0"
+  }
+}

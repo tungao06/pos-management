@@ -1,0 +1,19 @@
+{
+  "name": "@dayo/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.4.0"
+  },
+  "devDependencies": {
+    "fast-check": "^4.10.0",
+    "typescript": "~5.9.0",
+    "vitest": "^5.0.0"
+  }
+}
