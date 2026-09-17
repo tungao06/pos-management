@@ -6,7 +6,7 @@ spec ครอบคลุมหลายระบบย่อย จึงแ�
 
 | # | แผน | ขั้นใน spec §11 | ผลลัพธ์ที่ใช้ได้ | สถานะ |
 |---|---|---|---|---|
-| 1 | [2026-09-17-01-foundation-domain.md](2026-09-17-01-foundation-domain.md) | 0–1 | monorepo + CI · `packages/domain` ครบทุกกฎ §4 พร้อม property test · `packages/contracts` · `packages/excel-import` + **golden test 360 สูตรตรงกับ Excel** | 📝 เขียนแล้ว |
+| 1 | [2026-09-17-01-foundation-domain.md](2026-09-17-01-foundation-domain.md) | 0–1 | monorepo + CI · `packages/domain` ครบทุกกฎ §4 พร้อม property test · `packages/contracts` · `packages/excel-import` + **golden test 360 สูตรตรงกับ Excel** | ✅ เสร็จ 2026-09-17 (CI ผ่านในเครื่อง · ยังไม่ push) |
 | 2 | [2026-09-17-02-db-schema.md](2026-09-17-02-db-schema.md) | 2 | `packages/db-schema` 2 dialect + parity test · migration · seed จาก Excel ลง SQLite/Postgres | 📝 เขียนแล้ว |
 | 3 | 03-pos-sell (spike SQLite WASM/OPFS ก่อน) | 0, 3 | แอปขายในเครื่อง: ล็อกอิน · กะ · ขาย · เงินสด/QR · ตัดสต็อก · ประวัติ · ยกเลิก · ปิดกะ/Z | รอ |
 | 4 | 04-pos-stock | 4 | ทำเบส · รับของ · นับ · ปรับ · หน้าสต็อก · เตือน | รอ |
