@@ -1,0 +1,21 @@
+# แผนการสร้าง DA-YO POS — ภาพรวม
+
+Spec: [../specs/2026-09-17-pos-design.md](../specs/2026-09-17-pos-design.md) (🟢 อนุมัติ 17 ก.ย. 2026)
+
+spec ครอบคลุมหลายระบบย่อย จึงแยกเป็นแผนละ 1 ระบบ แต่ละแผนจบแล้วต้องได้ซอฟต์แวร์ที่ทดสอบได้จริง · เขียนแผนถัดไปเมื่อแผนก่อนหน้าเสร็จ (กันแผนเก่าล้าสมัย)
+
+| # | แผน | ขั้นใน spec §11 | ผลลัพธ์ที่ใช้ได้ | สถานะ |
+|---|---|---|---|---|
+| 1 | [2026-09-17-01-foundation-domain.md](2026-09-17-01-foundation-domain.md) | 0–1 | monorepo + CI · `packages/domain` ครบทุกกฎ §4 พร้อม property test · `packages/contracts` · `packages/excel-import` + **golden test 360 สูตรตรงกับ Excel** | 📝 เขียนแล้ว |
+| 2 | [2026-09-17-02-db-schema.md](2026-09-17-02-db-schema.md) | 2 | `packages/db-schema` 2 dialect + parity test · migration · seed จาก Excel ลง SQLite/Postgres | 📝 เขียนแล้ว |
+| 3 | 03-pos-sell (spike SQLite WASM/OPFS ก่อน) | 0, 3 | แอปขายในเครื่อง: ล็อกอิน · กะ · ขาย · เงินสด/QR · ตัดสต็อก · ประวัติ · ยกเลิก · ปิดกะ/Z | รอ |
+| 4 | 04-pos-stock | 4 | ทำเบส · รับของ · นับ · ปรับ · หน้าสต็อก · เตือน | รอ |
+| 5 | 05-api-sync | 5 | NestJS: auth · push/pull · admin · deploy Render/Neon · ping · backup | รอ |
+| 6 | 06-line-ordering | 6 | LIFF โหมดลูกค้า · LineModule · แถบออเดอร์ LINE · หมดเวลาอัตโนมัติ | รอ |
+| 7 | 07-reports | 7 | รายงานในเครื่อง + เซิร์ฟเวอร์ · โหมดดูรายงานบนมือถือ | รอ |
+| 8 | 08-jobs-invariants | 8 | งานตรวจ invariant รายคืน · แจ้งเตือน · หน้าสถานะระบบ · E2E ครบ | รอ |
+
+กติกาทุกแผน
+- TDD: เขียนเทสต์ให้ตกก่อน แล้วค่อยเขียนโค้ด · commit บ่อย
+- ทุก commit ลงท้ายด้วย `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`
+- ห้ามแตะ `docs/` ยกเว้นติ๊ก checkbox ในแผนและเพิ่มบันทึกการตัดสินใจใหม่ใน `docs/design/00-บันทึกการตัดสินใจ.md`
