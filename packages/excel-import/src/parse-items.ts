@@ -8,7 +8,7 @@ import { UNTRACKED_ITEM_CODES } from './constants.js'
 type Item = z.infer<typeof SeedItem>
 type PU = z.infer<typeof SeedPurchaseUnit>
 
-const COL = { code: 1, name: 2, kind: 3, category: 4, purchaseUnit: 5, qtyPerUnit: 6, useUnit: 7, price: 8, reorder: 9, note: 10 } as const
+const COL = { code: 1, name: 2, kind: 3, category: 4, purchaseUnit: 5, qtyPerUnit: 6, useUnit: 7, price: 8, reorder: 9, note: 10, avgPrice: 13 } as const
 const FIRST_ROW = 6
 
 export function parseItems(wb: ExcelJS.Workbook): { items: Item[]; purchaseUnits: PU[] } {
@@ -20,7 +20,8 @@ export function parseItems(wb: ExcelJS.Workbook): { items: Item[]; purchaseUnits
     const code = str(ws, r, COL.code)
     const qtyPerUnit = num(ws, r, COL.qtyPerUnit)
     if (qtyPerUnit <= 0) throw new Error(`${code}: ปริมาณต่อหน่วยซื้อ must be > 0`)
-    const pricePerUnit = num(ws, r, COL.price)
+    const avgPricePerUnit = num(ws, r, COL.avgPrice)
+    if (avgPricePerUnit <= 0) throw new Error(`${code}: ต้นทุนเฉลี่ยต่อหน่วยซื้อ must be > 0`)
     const useUnit = UseUnit.parse(str(ws, r, COL.useUnit))
     items.push(
       SeedItem.parse({
@@ -31,7 +32,7 @@ export function parseItems(wb: ExcelJS.Workbook): { items: Item[]; purchaseUnits
         useUnit,
         isTracked: !UNTRACKED_ITEM_CODES.has(code),
         reorderPointMilli: Math.round(num(ws, r, COL.reorder) * 1000),
-        standardCostUsat: bahtToUsat(pricePerUnit / qtyPerUnit),
+        standardCostUsat: bahtToUsat(avgPricePerUnit / qtyPerUnit),
         shelfLifeHours: null,
         note: str(ws, r, COL.note) || null,
       }),

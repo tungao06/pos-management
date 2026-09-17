@@ -33,4 +33,9 @@ describe('parseItems', () => {
     const matcha = items.find((i) => i.code === 'RM-MAT-02')!
     expect(matcha).toMatchObject({ useUnit: 'g', isTracked: true, standardCostUsat: 956_666_667 })
   })
+  it('uses the purchase-log average cost (col 13), not the sticker price, for RM-SWT-03', async () => {
+    const { items } = parseItems(await loadFixture())
+    const sweet = items.find((i) => i.code === 'RM-SWT-03')!
+    expect(sweet.standardCostUsat).toBe(19_800_000)
+  })
 })
