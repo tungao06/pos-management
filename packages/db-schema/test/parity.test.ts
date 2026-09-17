@@ -90,4 +90,14 @@ describe('schema parity sqlite ↔ pg', () => {
       expect(pgConfig(t!).columns.map((c) => c.name), n).toContain('server_received_at')
     }
   })
+  it('local-only and server-only tables exist on their side only', () => {
+    expect(sqliteTables.has('outbox')).toBe(true)
+    expect(sqliteTables.has('sync_state')).toBe(true)
+    expect(pgTables.has('outbox')).toBe(false)
+    expect(pgTables.has('sync_state')).toBe(false)
+    expect(pgTables.has('idempotency_record')).toBe(true)
+    expect(pgTables.has('invariant_run')).toBe(true)
+    expect(sqliteTables.has('idempotency_record')).toBe(false)
+    expect(sqliteTables.has('invariant_run')).toBe(false)
+  })
 })
