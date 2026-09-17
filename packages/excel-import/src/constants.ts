@@ -1,9 +1,11 @@
 // Values fixed by decisions D16, D27, D29 and the Excel sheets "Lists", "เบสและซับสูตร".
 
+// 2026-09-17 shop edit: sheet "ต้นทุนและราคา" header row (เมนู | ชื่อไทย | 16 oz | 20 oz | 22 oz)
+// is now in natural column order — C=16oz, D=20oz, E=22oz. (Was C/E/D before the edit.)
 export const SIZES = [
   { code: '16oz', name: '16 oz', sort: 1, packagingItemCode: 'PK-SET-16', priceCol: 3 }, // ต้นทุนและราคา!C
-  { code: '20oz', name: '20 oz', sort: 2, packagingItemCode: 'PK-SET-20', priceCol: 5 }, // ต้นทุนและราคา!E
-  { code: '22oz', name: '22 oz', sort: 3, packagingItemCode: 'PK-SET-22', priceCol: 4 }, // ต้นทุนและราคา!D
+  { code: '20oz', name: '20 oz', sort: 2, packagingItemCode: 'PK-SET-20', priceCol: 4 }, // ต้นทุนและราคา!D
+  { code: '22oz', name: '22 oz', sort: 3, packagingItemCode: 'PK-SET-22', priceCol: 5 }, // ต้นทุนและราคา!E
 ] as const
 
 export const SWEETNESS = [

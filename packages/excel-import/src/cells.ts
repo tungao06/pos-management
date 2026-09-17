@@ -14,7 +14,8 @@ export function sheet(wb: ExcelJS.Workbook, name: string): ExcelJS.Worksheet {
 
 /** Unwrap exceljs cell values: formula → cached result, rich text → plain text. */
 export function cellValue(ws: ExcelJS.Worksheet, row: number, col: number): unknown {
-  const v = ws.getCell(row, col).value as unknown
+  const cell = ws.getCell(row, col)
+  const v = cell.value as unknown
   if (v === null || v === undefined) return null
   if (v instanceof Date) return v
   if (typeof v === 'object') {
@@ -23,6 +24,10 @@ export function cellValue(ws: ExcelJS.Worksheet, row: number, col: number): unkn
     if ('richText' in o) return (o['richText'] as { text: string }[]).map((t) => t.text).join('')
     if ('text' in o) return o['text']
     if ('error' in o) return null
+    // Shared formula (e.g. `{ sharedFormula: 'E242' }`): exceljs's `.value` getter for a
+    // non-master cell in a shared-formula range doesn't surface the cached result even though
+    // it parsed one — read it off `cell.result` instead.
+    if ('sharedFormula' in o) return (cell as unknown as { result?: unknown }).result ?? null
     // Cross-sheet formula with no cached result (e.g. `เบสและซับสูตร!$B$13`): the workbook
     // didn't persist a calculated value for this cell. Treat as unknown/empty rather than
     // returning the raw { formula } object, which str()/num() cannot stringify or add.
