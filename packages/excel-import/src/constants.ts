@@ -79,16 +79,3 @@ export const BOM_ALIAS_NAMES = new Set(['นมสด', 'นมข้นจื�
 
 /** D29: costed but not counted. */
 export const UNTRACKED_ITEM_CODES = new Set(['RM-WTR-01', 'RM-WTR-02', 'RM-WTR-03', 'RM-SEA-01'])
-
-/**
- * DEVIATION (documented, not in the brief): rows added to "สินค้าและสต็อก" in the live
- * workbook on 2026-09-17, after this task's 32-item count was verified against the sheet:
- *  - RM-MAT-02 (row 38): a real purchase (บันทึกซื้อ!P260917-001, dated today) of the actual
- *    matcha powder used in production. "ต้นทุนเบส" BOM line B-42 (มัทฉะช็อต) already points at
- *    RM-MAT-02, not RM-MAT-01 — so a later task that builds the full Seed must add RM-MAT-02 to
- *    `items` for that BOM line to resolve. Tracked here, not silently dropped.
- *  - OT-SUP-01, OT-SUP-02 (rows 39-40): non-recipe consumables (nitrile gloves, marker pens).
- *    Not referenced by any BOM/recipe row in "ต้นทุนเบส" or "ข้อมูลสูตร".
- * Excluded so `parseItems` matches the brief's verified count; see task-9-10-report.md.
- */
-export const PENDING_ITEM_CODES = new Set(['RM-MAT-02', 'OT-SUP-01', 'OT-SUP-02'])

@@ -3,10 +3,10 @@ import { parseItems } from '../src/parse-items.js'
 import { loadFixture } from './workbook.js'
 
 describe('parseItems', () => {
-  it('reads all 32 purchasable items with purchase units', async () => {
+  it('reads all 35 purchasable items with purchase units', async () => {
     const { items, purchaseUnits } = parseItems(await loadFixture())
-    expect(items).toHaveLength(32)
-    expect(purchaseUnits).toHaveLength(32)
+    expect(items).toHaveLength(35)
+    expect(purchaseUnits).toHaveLength(35)
     expect(items.every((i) => i.kind === 'raw')).toBe(true)
   })
   it('maps RM-TEA-01 exactly (400 g bag at 77 baht, reorder 400 g)', async () => {
@@ -27,5 +27,10 @@ describe('parseItems', () => {
     const { items, purchaseUnits } = parseItems(await loadFixture())
     expect(items.find((i) => i.code === 'RM-JUI-03')!.useUnit).toBe('ml')
     expect(purchaseUnits.find((u) => u.itemCode === 'RM-JUI-03')).toMatchObject({ name: 'กิโลกรัม', qtyPerUnitMilli: 250_000 })
+  })
+  it('maps RM-MAT-02 (30 g bag at 287 baht) used by the matcha shot base', async () => {
+    const { items } = parseItems(await loadFixture())
+    const matcha = items.find((i) => i.code === 'RM-MAT-02')!
+    expect(matcha).toMatchObject({ useUnit: 'g', isTracked: true, standardCostUsat: 956_666_667 })
   })
 })

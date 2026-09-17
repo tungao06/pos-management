@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { PACKAGING_SETS, PREPARED_ITEMS } from '../src/constants.js'
 import { parseBoms } from '../src/parse-boms.js'
+import { parseItems } from '../src/parse-items.js'
 import { loadFixture } from './workbook.js'
 
 describe('parseBoms', () => {
@@ -40,5 +42,25 @@ describe('parseBoms', () => {
   it('does not create BOMs for 1:1 aliases such as นมสด', async () => {
     const { boms } = parseBoms(await loadFixture())
     expect(boms.some((b) => b.itemCode === 'RM-MLK-01')).toBe(false)
+  })
+  it('matcha shot base uses RM-MAT-02, 30 g per batch', async () => {
+    const { boms } = parseBoms(await loadFixture())
+    const shot = boms.find((b) => b.itemCode === 'PB-MATCHA-SHOT')!
+    expect(shot.lines).toContainEqual({ itemCode: 'RM-MAT-02', qtyMilli: 30_000 })
+  })
+  it('every BOM line references a real item (raw, prepared or packaging_set)', async () => {
+    const wb = await loadFixture()
+    const { items: rawItems } = parseItems(wb)
+    const { boms } = parseBoms(wb)
+    const knownCodes = new Set([
+      ...rawItems.map((i) => i.code),
+      ...PREPARED_ITEMS.map((p) => p.code),
+      ...PACKAGING_SETS.map((s) => s.code),
+    ])
+    for (const bom of boms) {
+      for (const line of bom.lines) {
+        expect(knownCodes.has(line.itemCode)).toBe(true)
+      }
+    }
   })
 })

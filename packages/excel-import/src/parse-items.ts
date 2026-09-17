@@ -3,7 +3,7 @@ import type { z } from 'zod'
 import { SeedItem, SeedPurchaseUnit, UseUnit } from '@dayo/contracts'
 import { bahtToUsat } from '@dayo/domain'
 import { num, rowsWhile, sheet, str } from './cells.js'
-import { PENDING_ITEM_CODES, UNTRACKED_ITEM_CODES } from './constants.js'
+import { UNTRACKED_ITEM_CODES } from './constants.js'
 
 type Item = z.infer<typeof SeedItem>
 type PU = z.infer<typeof SeedPurchaseUnit>
@@ -18,7 +18,6 @@ export function parseItems(wb: ExcelJS.Workbook): { items: Item[]; purchaseUnits
   const purchaseUnits: PU[] = []
   for (const r of rowsWhile(ws, FIRST_ROW, COL.code)) {
     const code = str(ws, r, COL.code)
-    if (PENDING_ITEM_CODES.has(code)) continue
     const qtyPerUnit = num(ws, r, COL.qtyPerUnit)
     if (qtyPerUnit <= 0) throw new Error(`${code}: ปริมาณต่อหน่วยซื้อ must be > 0`)
     const pricePerUnit = num(ws, r, COL.price)
