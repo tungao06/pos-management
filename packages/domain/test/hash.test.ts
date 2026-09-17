@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { GENESIS_HASH, canonicalJson, computeEventHash, sha256Hex, verifyChain, type EventCore } from '../src/hash.js'
+import { GENESIS_HASH, canonicalJson, computeEventHash, sha256Hex, verifyChain, type ChainedEvent, type EventCore } from '../src/hash.js'
 
 describe('canonicalJson', () => {
   it('sorts keys recursively and drops undefined', () => {
@@ -34,10 +34,10 @@ describe('sha256Hex', () => {
 })
 
 function mkEvent(chainSeq: number, type = 'CREATED', payload: unknown = { n: chainSeq }): EventCore {
-  return { chainId: 'dev-A', chainSeq, orderId: 'o1', type, payload, actorType: 'user', actorId: 'u1', at: '2026-09-17T10:00:00.000Z' }
+  return { chainId: 'dev-A', chainSeq, orderId: 'o1', seq: chainSeq, deviceId: 'dev-A', type, payload, actorType: 'user', actorId: 'u1', at: '2026-09-17T10:00:00.000Z' }
 }
-function chain(n: number) {
-  const out: (EventCore & { prevHash: string; hash: string })[] = []
+function chain(n: number): ChainedEvent[] {
+  const out: ChainedEvent[] = []
   let prev = GENESIS_HASH
   for (let i = 1; i <= n; i++) {
     const e = mkEvent(i)
@@ -48,15 +48,40 @@ function chain(n: number) {
   return out
 }
 
-describe('event chain', () => {
-  it('hash depends on prevHash and every field', () => {
+describe('event hash', () => {
+  it('is pinned: sha256(prevHash + "\\n" + canonicalJson of the 10 EventCore fields) — changing the format breaks every stored chain', () => {
+    // canonical body: {"actorId":"u1","actorType":"user","at":"2026-09-17T10:00:00.000Z","chainId":"dev-A","chainSeq":1,"deviceId":"dev-A","orderId":"o1","payload":{"n":1},"seq":1,"type":"CREATED"}
+    expect(computeEventHash(GENESIS_HASH, mkEvent(1))).toBe('e95ff8d2936a30d967046ac82a6062b39ef3a477227f78b94250293d1f1171e0')
+  })
+  it('depends on prevHash and on every EventCore field, including orderId, seq, deviceId, chainId and chainSeq (D38)', () => {
     const e = mkEvent(1)
     const h = computeEventHash(GENESIS_HASH, e)
     expect(h).toHaveLength(64)
     expect(computeEventHash('1'.repeat(64), e)).not.toBe(h)
-    expect(computeEventHash(GENESIS_HASH, { ...e, type: 'PAID' })).not.toBe(h)
-    expect(computeEventHash(GENESIS_HASH, { ...e, payload: { n: 2 } })).not.toBe(h)
+    const variants: EventCore[] = [
+      { ...e, chainId: 'dev-B' },
+      { ...e, chainSeq: 2 },
+      { ...e, orderId: 'o2' },
+      { ...e, seq: 2 },
+      { ...e, deviceId: 'dev-B' },
+      { ...e, deviceId: null },
+      { ...e, type: 'PAID' },
+      { ...e, payload: { n: 2 } },
+      { ...e, actorType: 'system' },
+      { ...e, actorId: 'u2' },
+      { ...e, at: '2026-09-17T10:00:00.001Z' },
+    ]
+    for (const v of variants) expect(computeEventHash(GENESIS_HASH, v), JSON.stringify(v)).not.toBe(h)
   })
+  it('hashes a server-written event (deviceId null)', () => {
+    const e: EventCore = { chainId: 'server', chainSeq: 1, orderId: 'o9', seq: 1, deviceId: null, type: 'CREATED', payload: { lines: 2 }, actorType: 'customer', actorId: 'c1', at: '2026-09-17T10:00:00.000Z' }
+    const h = computeEventHash(GENESIS_HASH, e)
+    expect(h).toHaveLength(64)
+    expect(verifyChain([{ ...e, prevHash: GENESIS_HASH, hash: h }])).toEqual({ ok: true })
+  })
+})
+
+describe('event chain', () => {
   it('verifies a valid chain and an empty chain', () => {
     expect(verifyChain(chain(5))).toEqual({ ok: true })
     expect(verifyChain([])).toEqual({ ok: true })
@@ -71,6 +96,14 @@ describe('event chain', () => {
       expect(r.ok).toBe(false)
       if (!r.ok) expect(r.brokenAtChainSeq).toBe(idx + 1)
     }))
+  })
+  it('detects an event moved to another order, renumbered within its order, or attributed to another device', () => {
+    const tampered: Partial<EventCore>[] = [{ orderId: 'o2' }, { seq: 99 }, { deviceId: 'dev-B' }, { deviceId: null }]
+    for (const patch of tampered) {
+      const c = chain(3)
+      c[1] = { ...c[1]!, ...patch }
+      expect(verifyChain(c), JSON.stringify(patch)).toMatchObject({ ok: false, brokenAtChainSeq: 2, reason: 'hash mismatch' })
+    }
   })
   it('detects a deleted event (gap in chainSeq) and a wrong genesis', () => {
     const c = chain(4)
