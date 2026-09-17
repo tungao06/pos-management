@@ -16,7 +16,7 @@ const minimal = {
   variants: [{ productCode: 'Original', sizeCode: '16oz', sku: 'Original-16oz' }],
   prices: [{ productCode: 'Original', sizeCode: '16oz', channelCode: 'STORE', priceSatang: 4500 }],
   recipes: [{ productCode: 'Original', sizeCode: '16oz', sweetnessCode: 'S050', lines: [{ itemCode: 'PK-SET-16', qtyMilli: 1_000 }], excelCostSatang: 400, excelLiquidMilli: 0 }],
-  equipment: [{ code: 'EQ-001', name: 'เหยือก', purchasedAt: '2026-08-31', priceSatang: 13_800, qty: 1, supplier: 'Mr. DIY', lifeYears: 3, condition: 'ใช้งานได้', owner: 'TungAo', note: null }],
+  equipment: [{ code: 'EQ-001', name: 'เหยือก', purchasedAt: '2026-08-31', priceSatang: 13_800, qty: 1, supplier: 'Mr. DIY', lifeMonths: 36, condition: 'ใช้งานได้', owner: 'TungAo', note: null }],
 }
 
 describe('SeedSchema', () => {
@@ -31,6 +31,14 @@ describe('SeedSchema', () => {
   it('rejects a recipe line that references an unknown item code (refinement)', () => {
     const bad = { ...minimal, recipes: [{ ...minimal.recipes[0], lines: [{ itemCode: 'NOPE', qtyMilli: 1 }] }] }
     expect(() => parseSeed(bad)).toThrow(/NOPE/)
+  })
+  it('equipment life is whole months or null (D37)', () => {
+    const eq = minimal.equipment[0]!
+    expect(parseSeed({ ...minimal, equipment: [{ ...eq, lifeMonths: null }] }).equipment[0]!.lifeMonths).toBeNull()
+    expect(() => parseSeed({ ...minimal, equipment: [{ ...eq, lifeMonths: 30.5 }] })).toThrow(/lifeMonths/)
+    expect(() => parseSeed({ ...minimal, equipment: [{ ...eq, lifeMonths: 0 }] })).toThrow(/lifeMonths/)
+    const { lifeMonths: _drop, ...withoutMonths } = eq
+    expect(() => parseSeed({ ...minimal, equipment: [{ ...withoutMonths, lifeYears: 3 }] })).toThrow(/lifeMonths/)
   })
   it('exposes enums', () => {
     expect(OrderStatus.options).toContain('pending_verify')
