@@ -5,6 +5,16 @@ import type { CostOf, MovementDraft } from './movements.js'
 export type CostState = { onHandMilli: number; avgCostUsat: number }
 export const EMPTY_COST_STATE: CostState = { onHandMilli: 0, avgCostUsat: 0 }
 
+/**
+ * Cost state before any movement, per spec §4.4: "ก่อนมีการซื้อครั้งแรก: avg = standard_cost จากไฟล์"
+ * (before the first purchase, avg = the item's standard cost). This lets a SALE or PRODUCE_OUT be costed
+ * correctly even when it happens before the item's first inbound movement is ever recorded.
+ */
+export function initialCostState(standardCostUsat: number): CostState {
+  assertSafeInt(standardCostUsat, 'standardCostUsat')
+  return { onHandMilli: 0, avgCostUsat: standardCostUsat }
+}
+
 export function applyMovement(s: CostState, m: { qtyMilli: number; unitCostUsat: number }): CostState {
   assertSafeInt(m.qtyMilli, 'qtyMilli')
   assertSafeInt(m.unitCostUsat, 'unitCostUsat')
@@ -15,8 +25,8 @@ export function applyMovement(s: CostState, m: { qtyMilli: number; unitCostUsat:
   return { onHandMilli: s.onHandMilli + m.qtyMilli, avgCostUsat: Number(roundDivBig(num, den)) }
 }
 
-export function rebuildCostState(movements: readonly { qtyMilli: number; unitCostUsat: number }[]): CostState {
-  return movements.reduce(applyMovement, EMPTY_COST_STATE)
+export function rebuildCostState(movements: readonly { qtyMilli: number; unitCostUsat: number }[], standardCostUsat = 0): CostState {
+  return movements.reduce(applyMovement, initialCostState(standardCostUsat))
 }
 
 export function productionMovements(

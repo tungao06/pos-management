@@ -524,7 +524,7 @@
       "useUnit": "ml",
       "isTracked": true,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 2000000,
       "shelfLifeHours": 72,
       "note": null
     },
@@ -536,7 +536,7 @@
       "useUnit": "ml",
       "isTracked": true,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 2433250,
       "shelfLifeHours": 24,
       "note": null
     },
@@ -548,7 +548,7 @@
       "useUnit": "ml",
       "isTracked": true,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 1674375,
       "shelfLifeHours": 336,
       "note": null
     },
@@ -560,7 +560,7 @@
       "useUnit": "ml",
       "isTracked": true,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 23358333,
       "shelfLifeHours": null,
       "note": null
     },
@@ -572,7 +572,7 @@
       "useUnit": "ml",
       "isTracked": true,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 7353000,
       "shelfLifeHours": null,
       "note": null
     },
@@ -584,7 +584,7 @@
       "useUnit": "g",
       "isTracked": true,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 15839240,
       "shelfLifeHours": 12,
       "note": null
     },
@@ -596,7 +596,7 @@
       "useUnit": "ml",
       "isTracked": true,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 95666667,
       "shelfLifeHours": 4,
       "note": null
     },
@@ -608,7 +608,7 @@
       "useUnit": "ชุด",
       "isTracked": false,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 400000000,
       "shelfLifeHours": null,
       "note": null
     },
@@ -620,7 +620,7 @@
       "useUnit": "ชุด",
       "isTracked": false,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 460000000,
       "shelfLifeHours": null,
       "note": null
     },
@@ -632,7 +632,7 @@
       "useUnit": "ชุด",
       "isTracked": false,
       "reorderPointMilli": 0,
-      "standardCostUsat": 0,
+      "standardCostUsat": 480000000,
       "shelfLifeHours": null,
       "note": null
     }

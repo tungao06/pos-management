@@ -27,4 +27,10 @@ describe('buildSeed', () => {
     const wb = await loadFixture()
     expect(JSON.stringify(buildSeed(wb))).toBe(JSON.stringify(buildSeed(wb)))
   })
+  it('rolls up standard cost through the BOM for prepared and packaging_set items (spec §4.4)', async () => {
+    const seed = buildSeed(await loadFixture())
+    const item = (code: string) => seed.items.find((i) => i.code === code)!
+    expect(item('PB-TEA-THAI').standardCostUsat).toBe(2_000_000)
+    expect(item('PK-SET-16').standardCostUsat).toBeGreaterThan(0)
+  })
 })

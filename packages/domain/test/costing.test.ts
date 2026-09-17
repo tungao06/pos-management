@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { EMPTY_COST_STATE, applyMovement, productionMovements, rebuildCostState } from '../src/stock/costing.js'
+import { EMPTY_COST_STATE, applyMovement, initialCostState, productionMovements, rebuildCostState } from '../src/stock/costing.js'
 import { costSatang } from '../src/money.js'
 import type { Bom } from '../src/stock/catalog.js'
 import { milliArb, usatArb } from './arb.js'
@@ -22,6 +22,24 @@ describe('applyMovement (moving weighted average)', () => {
   it('inbound when on hand <= 0 resets the average to the new cost', () => {
     const s = applyMovement({ onHandMilli: -500, avgCostUsat: 100 }, { qtyMilli: 1_000, unitCostUsat: 300 })
     expect(s).toEqual({ onHandMilli: 500, avgCostUsat: 300 })
+  })
+  it('a SALE before any inbound keeps avg = standard cost (spec §4.4)', () => {
+    const s = applyMovement(initialCostState(2_000_000), { qtyMilli: -130_000, unitCostUsat: 0 })
+    expect(s).toEqual({ onHandMilli: -130_000, avgCostUsat: 2_000_000 })
+  })
+  it('after the first PURCHASE, avg becomes the purchase cost, not the standard cost (spec §4.4)', () => {
+    const s = applyMovement(initialCostState(2_000_000), { qtyMilli: 1_000, unitCostUsat: 3_000_000 })
+    expect(s).toEqual({ onHandMilli: 1_000, avgCostUsat: 3_000_000 })
+  })
+  it('rebuildCostState starts from the standard cost and a leading SALE keeps it until the first inbound', () => {
+    const movements = [
+      { qtyMilli: -100_000, unitCostUsat: 0 }, // SALE before any inbound
+      { qtyMilli: 400_000, unitCostUsat: 19_250_000 }, // first PURCHASE resets avg
+    ]
+    expect(rebuildCostState(movements, 2_000_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 19_250_000 })
+  })
+  it('initialCostState requires a safe integer', () => {
+    expect(() => initialCostState(1.5)).toThrow(RangeError)
   })
   it('average is always between min and max inbound cost and never NaN', () => {
     fc.assert(fc.property(fc.array(fc.record({ qtyMilli: milliArb, unitCostUsat: usatArb }), { minLength: 1, maxLength: 30 }), (ins) => {
