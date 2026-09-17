@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MovementKind, OrderStatus, SeedSchema, parseSeed } from '../src/index.js'
+import { CashMovementKind, MovementKind, OrderStatus, SeedSchema, parseSeed } from '../src/index.js'
 
 const minimal = {
   categories: [{ code: 'THAI', name: 'ชาไทย', sort: 1 }],
@@ -35,6 +35,7 @@ describe('SeedSchema', () => {
   it('exposes enums', () => {
     expect(OrderStatus.options).toContain('pending_verify')
     expect(MovementKind.options).toHaveLength(11)
+    expect(CashMovementKind.options).toEqual(['PAID_IN', 'PAID_OUT', 'DROP', 'VOID_REFUND'])
     expect(SeedSchema).toBeDefined()
   })
 })
