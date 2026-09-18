@@ -1,10 +1,11 @@
 import { sqliteTable, unique } from 'drizzle-orm/sqlite-core'
-import { big, bool, id, int, json, text } from './columns.js'
+import { ItemKind, UseUnit, UserRole } from '@dayo/contracts'
+import { big, bool, id, int, json, text, textEnum } from './columns.js'
 
 export const user = sqliteTable('user', {
   id: id(),
   displayName: text('display_name').notNull(),
-  role: text('role').notNull(),               // UserRole
+  role: textEnum('role', UserRole).notNull(),
   pinHash: text('pin_hash').notNull(),
   isActive: bool('is_active').notNull(),
   createdAt: text('created_at').notNull(),
@@ -39,9 +40,9 @@ export const item = sqliteTable('item', {
   id: id(),
   code: text('code').notNull().unique(),
   name: text('name').notNull(),
-  kind: text('kind').notNull(),               // ItemKind
+  kind: textEnum('kind', ItemKind).notNull(),
   category: text('category').notNull(),
-  useUnit: text('use_unit').notNull(),        // UseUnit
+  useUnit: textEnum('use_unit', UseUnit).notNull(),
   isTracked: bool('is_tracked').notNull(),
   reorderPointMilli: int('reorder_point_milli').notNull(),
   standardCostUsat: big('standard_cost_usat').notNull(), // raw: purchase-log average (D34) · prepared/packaging_set: BOM roll-up

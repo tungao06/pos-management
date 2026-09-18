@@ -11,3 +11,8 @@ export const json = (name: string) => jsonb(name)
 export const serverSeq = () => bigserial('server_seq', { mode: 'number' }).notNull()
 /** When the server first received this transaction row. */
 export const serverReceivedAt = () => dText('server_received_at')
+/**
+ * Text column typed by a @dayo/contracts zod enum (M4). Narrows `$inferSelect`/`$inferInsert` only: it emits no SQL
+ * and no CHECK, so the DB still accepts any string — zod validates at the app boundary.
+ */
+export const textEnum = <T extends string>(name: string, e: { options: T[] }) => dText(name, { enum: e.options as [T, ...T[]] })

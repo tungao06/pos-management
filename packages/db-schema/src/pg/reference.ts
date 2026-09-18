@@ -1,10 +1,11 @@
 import { pgTable, unique } from 'drizzle-orm/pg-core'
-import { big, bool, id, int, json, serverSeq, text } from './columns.js'
+import { ItemKind, UseUnit, UserRole } from '@dayo/contracts'
+import { big, bool, id, int, json, serverSeq, text, textEnum } from './columns.js'
 
 export const user = pgTable('user', {
   id: id(),
   displayName: text('display_name').notNull(),
-  role: text('role').notNull(),
+  role: textEnum('role', UserRole).notNull(),
   pinHash: text('pin_hash').notNull(),
   isActive: bool('is_active').notNull(),
   createdAt: text('created_at').notNull(),
@@ -43,9 +44,9 @@ export const item = pgTable('item', {
   id: id(),
   code: text('code').notNull().unique(),
   name: text('name').notNull(),
-  kind: text('kind').notNull(),
+  kind: textEnum('kind', ItemKind).notNull(),
   category: text('category').notNull(),
-  useUnit: text('use_unit').notNull(),
+  useUnit: textEnum('use_unit', UseUnit).notNull(),
   isTracked: bool('is_tracked').notNull(),
   reorderPointMilli: int('reorder_point_milli').notNull(),
   standardCostUsat: big('standard_cost_usat').notNull(), // raw: purchase-log average (D34) · prepared/packaging_set: BOM roll-up

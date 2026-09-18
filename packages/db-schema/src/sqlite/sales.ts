@@ -1,12 +1,13 @@
+import { ActorType, CashMovementKind, EventType, OrderOrigin, OrderStatus, PaymentMethod, ShiftStatus, VerifyStatus } from '@dayo/contracts'
 import { index, sqliteTable, unique } from 'drizzle-orm/sqlite-core'
-import { id, int, json, text } from './columns.js'
+import { id, int, json, text, textEnum } from './columns.js'
 import { channel, customer, device, productVariant, recipe, sweetnessLevel, user } from './reference.js'
 
 export const shift = sqliteTable('shift', {
   id: id(),
   deviceId: text('device_id').notNull().references(() => device.id),
   businessDate: text('business_date').notNull(),
-  status: text('status').notNull(),                 // ShiftStatus
+  status: textEnum('status', ShiftStatus).notNull(),
   openedBy: text('opened_by').notNull().references(() => user.id),
   openedAt: text('opened_at').notNull(),
   openingFloatSatang: int('opening_float_satang').notNull(),
@@ -17,7 +18,7 @@ export const shift = sqliteTable('shift', {
 export const cashMovement = sqliteTable('cash_movement', {
   id: id(),
   shiftId: text('shift_id').notNull().references(() => shift.id),
-  kind: text('kind').notNull(),                     // CashMovementKind: PAID_IN | PAID_OUT | DROP | VOID_REFUND (D36)
+  kind: textEnum('kind', CashMovementKind).notNull(),                     // CashMovementKind: PAID_IN | PAID_OUT | DROP | VOID_REFUND (D36)
   amountSatang: int('amount_satang').notNull(),     // always > 0; the kind gives the direction
   orderId: text('order_id').references(() => order.id), // the voided order for VOID_REFUND; null for the other kinds
   reason: text('reason'),
@@ -47,7 +48,7 @@ export const zReport = sqliteTable('z_report', {
 
 export const order = sqliteTable('order', {
   id: id(),
-  origin: text('origin').notNull(),                 // OrderOrigin
+  origin: textEnum('origin', OrderOrigin).notNull(),
   deviceId: text('device_id').references(() => device.id),
   receiptNo: text('receipt_no'),
   queueNo: int('queue_no'),
@@ -55,14 +56,14 @@ export const order = sqliteTable('order', {
   shiftId: text('shift_id').references(() => shift.id),
   channelId: text('channel_id').notNull().references(() => channel.id),
   customerId: text('customer_id').references(() => customer.id),
-  status: text('status').notNull(),                 // OrderStatus
+  status: textEnum('status', OrderStatus).notNull(),
   subtotalSatang: int('subtotal_satang').notNull(),
   discountSatang: int('discount_satang').notNull(),
   totalSatang: int('total_satang').notNull(),
   vatSatang: int('vat_satang').notNull(),
   costSatang: int('cost_satang').notNull(),
   note: text('note'),
-  createdByType: text('created_by_type').notNull(), // ActorType
+  createdByType: textEnum('created_by_type', ActorType).notNull(),
   createdById: text('created_by_id').notNull(),
   createdAt: text('created_at').notNull(),
   paidAt: text('paid_at'),
@@ -89,12 +90,12 @@ export const orderLine = sqliteTable('order_line', {
 export const payment = sqliteTable('payment', {
   id: id(),
   orderId: text('order_id').notNull().references(() => order.id),
-  method: text('method').notNull(),                 // PaymentMethod
+  method: textEnum('method', PaymentMethod).notNull(),
   amountSatang: int('amount_satang').notNull(),
   tenderedSatang: int('tendered_satang'),
   changeSatang: int('change_satang'),
   reference: text('reference'),
-  verifyStatus: text('verify_status').notNull(),    // VerifyStatus
+  verifyStatus: textEnum('verify_status', VerifyStatus).notNull(),
   createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),
 })
@@ -115,9 +116,9 @@ export const orderEvent = sqliteTable('order_event', {
   deviceId: text('device_id').references(() => device.id), // null when the server wrote the event (EventCore.deviceId)
   chainId: text('chain_id').notNull(),              // device id or 'server' (EventCore.chainId)
   chainSeq: int('chain_seq').notNull(),             // 1, 2, 3, … per chain, gap-free (EventCore.chainSeq)
-  type: text('type').notNull(),                     // EventType
+  type: textEnum('type', EventType).notNull(),
   payloadJson: json('payload_json').notNull(),
-  actorType: text('actor_type').notNull(),          // ActorType
+  actorType: textEnum('actor_type', ActorType).notNull(),
   actorId: text('actor_id').notNull(),
   at: text('at').notNull(),
   prevHash: text('prev_hash').notNull(),

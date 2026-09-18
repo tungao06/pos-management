@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { getTableConfig as pgConfig, PgTable } from 'drizzle-orm/pg-core'
-import { getTableConfig as sqliteConfig, SQLiteTable } from 'drizzle-orm/sqlite-core'
+import type { SQL } from 'drizzle-orm'
+import { getTableConfig as pgConfig, PgDialect, PgTable } from 'drizzle-orm/pg-core'
+import { getTableConfig as sqliteConfig, SQLiteSyncDialect, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import * as pg from '../src/pg/index.js'
 import * as sqlite from '../src/sqlite/index.js'
 
@@ -21,9 +22,20 @@ function category(columnType: string): Cat {
 }
 
 type Shape = {
-  columns: Record<string, { cat: Cat; notNull: boolean; primary: boolean }>
+  columns: Record<string, { cat: Cat; notNull: boolean; primary: boolean; unique: boolean }>
   fks: string[]      // "col->table.col"
-  uniques: string[]  // "colA,colB"
+  uniques: string[]  // "colA,colB" — table-level unique(); column-level .unique() is columns[name].unique
+  indexes: string[]  // "name(colA,colB)[ unique][ where <sql>]"
+}
+
+type IndexLike = { config: { name?: string; columns: unknown[]; unique: boolean; where?: SQL } }
+const pgDialect = new PgDialect()
+const sqliteDialect = new SQLiteSyncDialect()
+
+function indexShape(idx: IndexLike, render: (w: SQL) => string): string {
+  const cols = idx.config.columns.map((c) => (c as { name?: string }).name ?? '<expr>').join(',')
+  const where = idx.config.where ? ` where ${render(idx.config.where)}` : ''
+  return `${idx.config.name ?? '<unnamed>'}(${cols})${idx.config.unique ? ' unique' : ''}${where}`
 }
 
 function shapeOfPg(t: PgTable): Shape {
@@ -31,13 +43,14 @@ function shapeOfPg(t: PgTable): Shape {
   const columns: Shape['columns'] = {}
   for (const col of c.columns) {
     if (PG_ONLY_COLUMNS.has(col.name)) continue
-    // sqlite 'big' is plain integer, so compare big as int
+    // sqlite 'big' is plain integer, so compare big as int (the naming-rule test below pins pg _usat to bigint)
     const cat = category(col.columnType)
-    columns[col.name] = { cat: cat === 'big' ? 'int' : cat, notNull: col.notNull, primary: col.primary }
+    columns[col.name] = { cat: cat === 'big' ? 'int' : cat, notNull: col.notNull, primary: col.primary, unique: col.isUnique }
   }
   const fks = c.foreignKeys.map((fk) => { const r = fk.reference(); return `${r.columns.map((x) => x.name).join(',')}->${pgConfig(r.foreignTable as PgTable).name}.${r.foreignColumns.map((x) => x.name).join(',')}` }).sort()
   const uniques = c.uniqueConstraints.map((u) => u.columns.map((x) => x.name).join(',')).sort()
-  return { columns, fks, uniques }
+  const indexes = c.indexes.map((i) => indexShape(i as IndexLike, (w) => pgDialect.sqlToQuery(w).sql)).sort()
+  return { columns, fks, uniques, indexes }
 }
 
 function shapeOfSqlite(t: SQLiteTable): Shape {
@@ -45,11 +58,12 @@ function shapeOfSqlite(t: SQLiteTable): Shape {
   const columns: Shape['columns'] = {}
   for (const col of c.columns) {
     const cat = category(col.columnType)
-    columns[col.name] = { cat: cat === 'big' ? 'int' : cat, notNull: col.notNull, primary: col.primary }
+    columns[col.name] = { cat: cat === 'big' ? 'int' : cat, notNull: col.notNull, primary: col.primary, unique: col.isUnique }
   }
   const fks = c.foreignKeys.map((fk) => { const r = fk.reference(); return `${r.columns.map((x) => x.name).join(',')}->${sqliteConfig(r.foreignTable as SQLiteTable).name}.${r.foreignColumns.map((x) => x.name).join(',')}` }).sort()
   const uniques = c.uniqueConstraints.map((u) => u.columns.map((x) => x.name).join(',')).sort()
-  return { columns, fks, uniques }
+  const indexes = c.indexes.map((i) => indexShape(i as IndexLike, (w) => sqliteDialect.sqlToQuery(w).sql)).sort()
+  return { columns, fks, uniques, indexes }
 }
 
 function tables<T>(mod: Record<string, unknown>, guard: (v: unknown) => v is T, nameOf: (t: T) => string): Map<string, T> {
@@ -75,6 +89,30 @@ describe('schema parity sqlite ↔ pg', () => {
       expect(shapeOfSqlite(sqliteTables.get(name)!)).toEqual(shapeOfPg(p!))
     })
   }
+  it('compares column-level uniques and indexes (guards against a parity blind spot)', () => {
+    const device = shapeOfPg(pgTables.get('device')!)
+    expect(device.columns['receipt_prefix']!.unique).toBe(true)
+    expect(shapeOfPg(pgTables.get('stock_movement')!).indexes.length).toBeGreaterThan(0)
+  })
+  it('naming rule: pg _usat columns are bigint; _satang/_milli/_bp/_months/qty/seq are integer', () => {
+    const INT_SUFFIX = /(_satang|_milli|_bp|_months)$/
+    const INT_EXACT = new Set(['qty', 'seq', 'chain_seq'])
+    const bad: string[] = []
+    let checked = 0
+    for (const [name, t] of pgTables) {
+      for (const col of pgConfig(t).columns) {
+        if (col.name.endsWith('_usat')) {
+          checked++
+          if (col.columnType !== 'PgBigInt53') bad.push(`${name}.${col.name} is ${col.columnType}, want PgBigInt53`)
+        } else if (INT_SUFFIX.test(col.name) || INT_EXACT.has(col.name)) {
+          checked++
+          if (col.columnType !== 'PgInteger') bad.push(`${name}.${col.name} is ${col.columnType}, want PgInteger`)
+        }
+      }
+    }
+    expect(bad).toEqual([])
+    expect(checked).toBeGreaterThan(40)
+  })
   it('every pg reference table has server_seq', () => {
     const refTables = ['user', 'device', 'setting', 'category', 'product', 'size', 'product_variant', 'sweetness_level', 'channel', 'price', 'recipe', 'recipe_line', 'item', 'purchase_unit', 'bom', 'bom_line', 'equipment', 'customer']
     for (const n of refTables) {

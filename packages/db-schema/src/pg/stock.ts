@@ -1,5 +1,6 @@
+import { CountStatus, MovementKind } from '@dayo/contracts'
 import { index, pgTable } from 'drizzle-orm/pg-core'
-import { big, id, int, serverReceivedAt, text } from './columns.js'
+import { big, id, int, serverReceivedAt, text, textEnum } from './columns.js'
 import { bom, device, item, purchaseUnit, user } from './reference.js'
 
 export const purchase = pgTable('purchase', {
@@ -45,7 +46,7 @@ export const productionBatch = pgTable('production_batch', {
 export const stockCount = pgTable('stock_count', {
   id: id(),
   businessDate: text('business_date').notNull(),
-  status: text('status').notNull(),
+  status: textEnum('status', CountStatus).notNull(),
   deviceId: text('device_id').references(() => device.id),
   createdBy: text('created_by').notNull().references(() => user.id),
   createdAt: text('created_at').notNull(),
@@ -70,7 +71,7 @@ export const stockCountLine = pgTable('stock_count_line', {
 export const stockMovement = pgTable('stock_movement', {
   id: id(),
   itemId: text('item_id').notNull().references(() => item.id),
-  kind: text('kind').notNull(),
+  kind: textEnum('kind', MovementKind).notNull(),
   qtyMilli: int('qty_milli').notNull(),
   unitCostUsat: big('unit_cost_usat').notNull(),
   refType: text('ref_type').notNull(),
