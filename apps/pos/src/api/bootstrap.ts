@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { PosError } from './errors'
@@ -36,22 +36,32 @@ export async function listActiveUsers(db: RemoteDb): Promise<UserDto[]> {
 }
 
 /**
- * spec §12 "ยังไม่ส่ง N รายการ": rows still waiting (status pending — plan 2 M8; dead rows are shown elsewhere by plan 5).
- * นับเป็นจำนวน "แถว" ใน outbox (บิลหนึ่งใบ ≈ 20+ แถว) ไม่ใช่จำนวนบิล — รอ Q3-26 ถ้าต้องเปลี่ยนไปนับบิล
+ * spec §12 "ยังไม่ส่ง N รายการ" (D50 Q3-26): counts bills, not outbox rows. Every pending row that belongs to an order
+ * (the order row itself, its lines, discount, payment, events, `refType = 'order'` stock movements and the VOID_REFUND
+ * cash movement) counts once per order; any other record (a shift, a paid-in/out, a non-sale stock movement) counts
+ * once per row id. Only status pending — plan 2 M8; dead rows are shown elsewhere by plan 5.
  */
-export async function countPendingOutbox(db: RemoteDb): Promise<number> {
-  const row = await db.select({ c: count() }).from(s.outbox).where(eq(s.outbox.status, 'pending')).get()
-  return row?.c ?? 0
+export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
+  const rows = await db.values<[number]>(sql`
+    select count(distinct case
+      when table_name = 'order' then 'order:' || json_extract(row_json, '$.id')
+      when table_name in ('order_line', 'payment', 'discount', 'order_event') then 'order:' || json_extract(row_json, '$.orderId')
+      when table_name = 'stock_movement' and json_extract(row_json, '$.refType') = 'order' then 'order:' || json_extract(row_json, '$.refId')
+      when table_name = 'cash_movement' and json_extract(row_json, '$.orderId') is not null then 'order:' || json_extract(row_json, '$.orderId')
+      else table_name || ':' || json_extract(row_json, '$.id')
+    end)
+    from outbox where status = 'pending'`)
+  return rows[0]?.[0] ?? 0
 }
 
 export async function bootstrap(db: RemoteDb): Promise<BootstrapState> {
-  if ((await localDeviceId(db)) === null) return { needsSetup: true, device: null, users: [], openShift: null, outboxPending: 0 }
+  if ((await localDeviceId(db)) === null) return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0 }
   const device = await requireDevice(db)
   return {
     needsSetup: false,
     device,
     users: await listActiveUsers(db),
     openShift: await currentOpenShift(db, device.id),
-    outboxPending: await countPendingOutbox(db),
+    pendingSyncItems: await countPendingSyncItems(db),
   }
 }

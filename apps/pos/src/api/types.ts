@@ -5,7 +5,7 @@ export const PIN_RE = /^\d{4,6}$/
 export type UserDto = { id: string; displayName: string; role: UserRole }
 export type DeviceDto = { id: string; name: string; receiptPrefix: string }
 export type ShiftDto = { id: string; businessDate: string; openedAt: string; openedBy: string; openingFloatSatang: number }
-export type BootstrapState = { needsSetup: boolean; device: DeviceDto | null; users: UserDto[]; openShift: ShiftDto | null; outboxPending: number }
+export type BootstrapState = { needsSetup: boolean; device: DeviceDto | null; users: UserDto[]; openShift: ShiftDto | null; pendingSyncItems: number }
 
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {

@@ -10,7 +10,7 @@ export function IndexRedirect(): JSX.Element {
   return (
     <main className="page">
       <h1 data-testid="app-name">{TH.appName}</h1>
-      <p className="badge">{TH.pendingSync(boot.data.outboxPending)}</p>
+      <p className="badge">{TH.pendingSync(boot.data.pendingSyncItems)}</p>
     </main>
   )
 }
