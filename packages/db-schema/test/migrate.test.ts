@@ -22,6 +22,7 @@ const seed: Seed = parseSeed(JSON.parse(readFileSync(fileURLToPath(new URL('../.
 const bigItem = {
   id: 'big', code: 'RM-BIG', name: 'big', kind: 'raw' as const, category: 'x', useUnit: 'g' as const, isTracked: true,
   reorderPointMilli: 0, standardCostUsat: BIG_USAT, shelfLifeHours: null, isActive: true, note: null,
+  updatedAt: '2026-09-18T00:00:00.000Z',
 }
 
 describe('migrations', () => {
@@ -117,7 +118,7 @@ describe('migrateSqlite: table-recreate migrations with foreign keys (M12)', () 
     const { db, raw } = await seededDb()
     const dir = folderWithExtra('0099_recreate_item', [
       'PRAGMA foreign_keys=OFF;',
-      "CREATE TABLE `__new_item` (`id` text PRIMARY KEY NOT NULL, `code` text NOT NULL, `name` text NOT NULL, `kind` text NOT NULL, `category` text NOT NULL, `use_unit` text NOT NULL, `is_tracked` integer NOT NULL, `reorder_point_milli` integer NOT NULL, `standard_cost_usat` integer NOT NULL, `shelf_life_hours` integer, `is_active` integer NOT NULL, `note` text);",
+      "CREATE TABLE `__new_item` (`id` text PRIMARY KEY NOT NULL, `code` text NOT NULL, `name` text NOT NULL, `kind` text NOT NULL, `category` text NOT NULL, `use_unit` text NOT NULL, `is_tracked` integer NOT NULL, `reorder_point_milli` integer NOT NULL, `standard_cost_usat` integer NOT NULL, `shelf_life_hours` integer, `is_active` integer NOT NULL, `note` text, `updated_at` text NOT NULL, `version` integer DEFAULT 1 NOT NULL);",
       'INSERT INTO `__new_item` SELECT * FROM `item`;',
       'DROP TABLE `item`;',
       'ALTER TABLE `__new_item` RENAME TO `item`;',
