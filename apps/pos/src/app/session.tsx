@@ -14,26 +14,44 @@ const SessionContext = createContext<Session | null>(null)
 /** Who is using the till right now. Memory only: a reload asks for the PIN again. */
 export function SessionProvider({ children }: { children: ReactNode }): JSX.Element {
   const [user, setUser] = useState<UserDto | null>(null)
-  const lastActivity = useRef(Date.now())
+  // Monotonic clock (review I-2): Date.now() can jump backwards (RTC/NTP correction), which would silently
+  // suspend the idle lock until the jump is caught up.
+  const lastActivity = useRef(performance.now())
 
   useEffect(() => {
-    const mark = (): void => {
-      lastActivity.current = Date.now()
+    // Locks (and reports whether it did) if the idle limit has already passed. Called before any refresh of
+    // lastActivity so a tap landing after the limit locks instead of silently resetting the timer, and also on
+    // visibilitychange — a suspended tab's timers (including the 15 s poll below) do not run while hidden, so the
+    // first check after the tab wakes must not wait for the next poll (review I-2).
+    const check = (): boolean => {
+      if (isIdleExpired(lastActivity.current, performance.now())) {
+        setUser(null)
+        return true
+      }
+      return false
     }
-    window.addEventListener('pointerdown', mark)
-    window.addEventListener('keydown', mark)
-    const timer = window.setInterval(() => {
-      if (isIdleExpired(lastActivity.current, Date.now())) setUser(null)
-    }, 15_000)
+    const mark = (): void => {
+      if (!check()) lastActivity.current = performance.now()
+    }
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') check()
+    }
+    // Capture phase: the lock (if any) is applied before the bubble-phase handler on whatever was tapped runs
+    // against the stale session.
+    window.addEventListener('pointerdown', mark, { capture: true })
+    window.addEventListener('keydown', mark, { capture: true })
+    document.addEventListener('visibilitychange', onVisible)
+    const timer = window.setInterval(check, 15_000)
     return () => {
-      window.removeEventListener('pointerdown', mark)
-      window.removeEventListener('keydown', mark)
+      window.removeEventListener('pointerdown', mark, { capture: true })
+      window.removeEventListener('keydown', mark, { capture: true })
+      document.removeEventListener('visibilitychange', onVisible)
       window.clearInterval(timer)
     }
   }, [])
 
   const signIn = useCallback((u: UserDto) => {
-    lastActivity.current = Date.now()
+    lastActivity.current = performance.now()
     setUser(u)
   }, [])
   const lock = useCallback(() => setUser(null), []) // CartProvider is a separate context, so locking keeps the cart as-is (D50 Q3-24)

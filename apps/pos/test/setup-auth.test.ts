@@ -145,4 +145,17 @@ describe('PIN lockout (D50 Q3-21)', () => {
     expect(audits.at(-1)).toMatchObject({ entity: 'user', actorUserId: null, afterJson: { fails: 5, lockSeconds: 30, lockedUntil: '2026-09-17T03:00:30.000Z' } })
     expect(JSON.stringify(audits)).not.toContain('9731')
   })
+
+  it('a clock moved backwards cannot stretch the wait past the scheduled cap (review I-1)', async () => {
+    const t = await ready()
+    for (let i = 0; i < 5; i++) await t.api.login(t.dcm.id, '0000').catch(() => undefined)
+    t.clock.advanceMs(-24 * 60 * 60 * 1000) // the tablet's clock is corrected a day backwards after the lockout
+    await expect(t.api.login(t.dcm.id, '222222')).rejects.toThrow(/^PIN_LOCKED: 30$/) // clamped to this fails-count's schedule, not ~86400 s
+  })
+
+  it('a corrupt guard row does not wedge login (review M-4)', async () => {
+    const t = await ready()
+    await t.db.insert(s.syncState).values({ key: `pin_guard.${t.dcm.id}`, value: 'not json' })
+    expect(await t.api.login(t.dcm.id, '222222')).toEqual(t.dcm) // treated as the default {fails:0, lockedUntil:null}
+  })
 })

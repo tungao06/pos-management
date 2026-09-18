@@ -20,15 +20,43 @@ export type PinGuardState = { fails: number; lockedUntil: string | null }
 /** Kept in the local-only sync_state table (never synced, survives a reload) — one row per user. */
 const guardKey = (userId: string): string => `pin_guard.${userId}`
 
-export async function readPinGuard(db: RemoteDb, userId: string): Promise<PinGuardState> {
-  const row = await db.select().from(s.syncState).where(eq(s.syncState.key, guardKey(userId))).get()
-  return row ? (JSON.parse(row.value) as PinGuardState) : { fails: 0, lockedUntil: null }
+/** Review M-4: only this module writes the key, but a corrupt or hand-edited row must not wedge login forever. */
+function isValidGuardState(v: unknown): v is PinGuardState {
+  if (typeof v !== 'object' || v === null) return false
+  const o = v as Record<string, unknown>
+  if (typeof o.fails !== 'number' || !Number.isInteger(o.fails) || o.fails < 0) return false
+  return o.lockedUntil === null || (typeof o.lockedUntil === 'string' && !Number.isNaN(Date.parse(o.lockedUntil)))
 }
 
-/** Throws PIN_LOCKED with the whole seconds left (rounded up) while the user is locked out. */
-export function assertNotLocked(state: PinGuardState, nowIso: string): void {
+export async function readPinGuard(db: RemoteDb, userId: string): Promise<PinGuardState> {
+  const row = await db.select().from(s.syncState).where(eq(s.syncState.key, guardKey(userId))).get()
+  if (!row) return { fails: 0, lockedUntil: null }
+  try {
+    const parsed: unknown = JSON.parse(row.value)
+    if (isValidGuardState(parsed)) return parsed
+  } catch {
+    // fall through — treat as the safe default below rather than throwing on every login (M-4)
+  }
+  return { fails: 0, lockedUntil: null }
+}
+
+/**
+ * Throws PIN_LOCKED with the whole seconds left (rounded up) while the user is locked out. Review I-1: the wait is
+ * clamped to what `state.fails` currently schedules (`pinLockMs`, ≤ PIN_LOCK_MAX_MS) — if the device clock moved
+ * backwards after the lockout was set, the stored `lockedUntil` could otherwise imply a wait past the 15-minute cap
+ * that D50 Q3-21 promises. When the clamp fires, the corrected `lockedUntil` is persisted so later reads agree.
+ */
+export async function assertNotLocked(db: RemoteDb, userId: string, state: PinGuardState, nowIso: string): Promise<void> {
   if (state.lockedUntil === null) return
-  const leftMs = Date.parse(state.lockedUntil) - Date.parse(nowIso)
+  const maxMs = pinLockMs(state.fails)
+  const rawLeftMs = Date.parse(state.lockedUntil) - Date.parse(nowIso)
+  let leftMs = rawLeftMs
+  if (rawLeftMs > maxMs) {
+    leftMs = maxMs
+    const lockedUntil = new Date(Date.parse(nowIso) + maxMs).toISOString()
+    const value = JSON.stringify({ fails: state.fails, lockedUntil } satisfies PinGuardState)
+    await db.insert(s.syncState).values({ key: guardKey(userId), value }).onConflictDoUpdate({ target: s.syncState.key, set: { value } })
+  }
   if (leftMs > 0) throw new PosError('PIN_LOCKED', String(Math.ceil(leftMs / 1000)))
 }
 
