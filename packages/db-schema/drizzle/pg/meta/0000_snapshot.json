@@ -1,5 +1,5 @@
 {
-  "id": "8a51226a-2890-4117-a49e-50ecd066984e",
+  "id": "4c743956-b8a3-4f7f-baa9-2cf136bd8d72",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -51,7 +51,24 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "bom_current_uq": {
+          "name": "bom_current_uq",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "is_current",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "bom_item_id_item_id_fk": {
           "name": "bom_item_id_item_id_fk",
@@ -658,7 +675,17 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "price_variant_id_channel_id_effective_from_unique": {
+          "name": "price_variant_id_channel_id_effective_from_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "variant_id",
+            "channel_id",
+            "effective_from"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -978,7 +1005,30 @@
           "notNull": true
         }
       },
-      "indexes": {},
+      "indexes": {
+        "recipe_current_uq": {
+          "name": "recipe_current_uq",
+          "columns": [
+            {
+              "expression": "variant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sweetness_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "is_current",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "recipe_variant_id_product_variant_id_fk": {
           "name": "recipe_variant_id_product_variant_id_fk",
@@ -1685,7 +1735,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "purchase_line_purchase_idx": {
+          "name": "purchase_line_purchase_idx",
+          "columns": [
+            {
+              "expression": "purchase_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "purchase_line_purchase_id_purchase_id_fk": {
           "name": "purchase_line_purchase_id_purchase_id_fk",
@@ -1948,7 +2014,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "stock_count_line_count_id_item_id_unique": {
+          "name": "stock_count_line_count_id_item_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "count_id",
+            "item_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -2072,6 +2147,42 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "stock_movement_item_date_idx": {
+          "name": "stock_movement_item_date_idx",
+          "columns": [
+            {
+              "expression": "item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "business_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "stock_movement_business_date_idx": {
+          "name": "stock_movement_business_date_idx",
+          "columns": [
+            {
+              "expression": "business_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -2173,7 +2284,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "cash_count_shift_idx": {
+          "name": "cash_count_shift_idx",
+          "columns": [
+            {
+              "expression": "shift_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "cash_count_shift_id_shift_id_fk": {
           "name": "cash_count_shift_id_shift_id_fk",
@@ -2267,7 +2394,38 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "cash_movement_shift_idx": {
+          "name": "cash_movement_shift_idx",
+          "columns": [
+            {
+              "expression": "shift_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "cash_movement_order_idx": {
+          "name": "cash_movement_order_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "cash_movement_shift_id_shift_id_fk": {
           "name": "cash_movement_shift_id_shift_id_fk",
@@ -2356,7 +2514,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "discount_order_idx": {
+          "name": "discount_order_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "discount_order_id_order_id_fk": {
           "name": "discount_order_id_order_id_fk",
@@ -2535,11 +2709,17 @@
         }
       },
       "indexes": {
-        "order_business_date_idx": {
-          "name": "order_business_date_idx",
+        "order_business_date_status_idx": {
+          "name": "order_business_date_status_idx",
           "columns": [
             {
               "expression": "business_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2555,6 +2735,21 @@
           "columns": [
             {
               "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "order_shift_idx": {
+          "name": "order_shift_idx",
+          "columns": [
+            {
+              "expression": "shift_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2988,7 +3183,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "order_payment_intent_order_idx": {
+          "name": "order_payment_intent_order_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "order_payment_intent_order_id_order_id_fk": {
           "name": "order_payment_intent_order_id_order_id_fk",
@@ -3081,7 +3292,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "payment_order_idx": {
+          "name": "payment_order_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "payment_order_id_order_id_fk": {
           "name": "payment_order_id_order_id_fk",

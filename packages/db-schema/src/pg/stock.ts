@@ -1,5 +1,5 @@
 import { CountStatus, MovementKind } from '@dayo/contracts'
-import { index, pgTable } from 'drizzle-orm/pg-core'
+import { index, pgTable, unique } from 'drizzle-orm/pg-core'
 import { big, id, int, serverReceivedAt, text, textEnum } from './columns.js'
 import { bom, device, item, purchaseUnit, user } from './reference.js'
 
@@ -25,7 +25,7 @@ export const purchaseLine = pgTable('purchase_line', {
   qtyUseMilli: int('qty_use_milli').notNull(),
   lineTotalSatang: int('line_total_satang').notNull(),
   serverReceivedAt: serverReceivedAt(),
-})
+}, (t) => [index('purchase_line_purchase_idx').on(t.purchaseId)])
 
 export const productionBatch = pgTable('production_batch', {
   id: id(),
@@ -66,7 +66,7 @@ export const stockCountLine = pgTable('stock_count_line', {
   varianceUseMilli: int('variance_use_milli').notNull(),
   varianceSatang: int('variance_satang').notNull(),
   serverReceivedAt: serverReceivedAt(),
-})
+}, (t) => [unique().on(t.countId, t.itemId)])
 
 export const stockMovement = pgTable('stock_movement', {
   id: id(),
@@ -81,7 +81,12 @@ export const stockMovement = pgTable('stock_movement', {
   createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),
   serverReceivedAt: serverReceivedAt(),
-}, (t) => [index('stock_movement_item_created_idx').on(t.itemId, t.createdAt), index('stock_movement_ref_idx').on(t.refType, t.refId)])
+}, (t) => [
+  index('stock_movement_item_created_idx').on(t.itemId, t.createdAt),
+  index('stock_movement_ref_idx').on(t.refType, t.refId),
+  index('stock_movement_item_date_idx').on(t.itemId, t.businessDate),
+  index('stock_movement_business_date_idx').on(t.businessDate),
+])
 
 export const itemCostState = pgTable('item_cost_state', {
   itemId: text('item_id').primaryKey().references(() => item.id),

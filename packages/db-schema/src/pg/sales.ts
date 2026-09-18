@@ -26,7 +26,7 @@ export const cashMovement = pgTable('cash_movement', {
   createdBy: text('created_by').notNull().references(() => user.id),
   createdAt: text('created_at').notNull(),
   serverReceivedAt: serverReceivedAt(),
-})
+}, (t) => [index('cash_movement_shift_idx').on(t.shiftId), index('cash_movement_order_idx').on(t.orderId)])
 
 export const cashCount = pgTable('cash_count', {
   id: id(),
@@ -39,7 +39,7 @@ export const cashCount = pgTable('cash_count', {
   countedBy: text('counted_by').notNull().references(() => user.id),
   createdAt: text('created_at').notNull(),
   serverReceivedAt: serverReceivedAt(),
-})
+}, (t) => [index('cash_count_shift_idx').on(t.shiftId)])
 
 export const zReport = pgTable('z_report', {
   id: id(),
@@ -74,7 +74,12 @@ export const order = pgTable('order', {
   readyAt: text('ready_at'),
   voidedAt: text('voided_at'),
   serverReceivedAt: serverReceivedAt(),
-}, (t) => [unique().on(t.deviceId, t.receiptNo), index('order_business_date_idx').on(t.businessDate), index('order_status_idx').on(t.status)])
+}, (t) => [
+  unique().on(t.deviceId, t.receiptNo),
+  index('order_business_date_status_idx').on(t.businessDate, t.status),
+  index('order_status_idx').on(t.status),
+  index('order_shift_idx').on(t.shiftId),
+])
 
 export const orderLine = pgTable('order_line', {
   id: id(),
@@ -105,7 +110,7 @@ export const payment = pgTable('payment', {
   createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),
   serverReceivedAt: serverReceivedAt(),
-})
+}, (t) => [index('payment_order_idx').on(t.orderId)])
 
 export const discount = pgTable('discount', {
   id: id(),
@@ -114,7 +119,7 @@ export const discount = pgTable('discount', {
   reason: text('reason').notNull(),
   approvedBy: text('approved_by').notNull().references(() => user.id),
   serverReceivedAt: serverReceivedAt(),
-})
+}, (t) => [index('discount_order_idx').on(t.orderId)])
 
 /** Append-only, hash-chained (spec §3.4, §4.9, D38). Every column from order_id to at is covered by `hash`. */
 export const orderEvent = pgTable('order_event', {
@@ -143,4 +148,4 @@ export const orderPaymentIntent = pgTable('order_payment_intent', {
   slipImageRef: text('slip_image_ref'),
   customerClaimedAt: text('customer_claimed_at'),
   serverReceivedAt: serverReceivedAt(),
-})
+}, (t) => [index('order_payment_intent_order_idx').on(t.orderId)])

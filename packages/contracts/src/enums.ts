@@ -42,3 +42,10 @@ export type CountStatus = z.infer<typeof CountStatus>
  */
 export const CashMovementKind = z.enum(['PAID_IN', 'PAID_OUT', 'DROP', 'VOID_REFUND'])
 export type CashMovementKind = z.infer<typeof CashMovementKind>
+
+/**
+ * outbox.status on the device (spec §6.1). `pending` = waiting or retrying · `sent` = the server accepted it ·
+ * `dead` = the server rejected it for good (dead-letter, shown on the settings screen, never retried automatically).
+ */
+export const OutboxStatus = z.enum(['pending', 'sent', 'dead'])
+export type OutboxStatus = z.infer<typeof OutboxStatus>

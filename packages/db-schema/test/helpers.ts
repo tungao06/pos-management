@@ -23,3 +23,20 @@ export async function openPglite(): Promise<{ db: PgliteDatabase; client: PGlite
   await client.waitReady
   return { db: drizzlePglite(client), client }
 }
+
+/** Seed options for tests: a plain counter id (positional; only for tests where id stability does not matter). */
+export function seedOpts() {
+  let n = 0
+  return { newId: () => `id-${String(++n).padStart(5, '0')}`, now: '2026-09-17T00:00:00.000Z', effectiveFrom: '2026-09-17T00:00:00.000Z' }
+}
+
+/** SQLSTATE of a rejected Postgres query (drizzle wraps the driver error in `cause`), or 'no error'. */
+export async function pgErrorCode(p: PromiseLike<unknown>): Promise<string> {
+  try {
+    await p
+    return 'no error'
+  } catch (e) {
+    const err = e as { code?: string; cause?: { code?: string } }
+    return err.cause?.code ?? err.code ?? String(e)
+  }
+}

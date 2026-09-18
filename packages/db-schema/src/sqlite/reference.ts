@@ -1,4 +1,5 @@
-import { sqliteTable, unique } from 'drizzle-orm/sqlite-core'
+import { sql } from 'drizzle-orm'
+import { sqliteTable, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { ItemKind, UseUnit, UserRole } from '@dayo/contracts'
 import { big, bool, id, int, json, text, textEnum } from './columns.js'
 
@@ -67,7 +68,7 @@ export const bom = sqliteTable('bom', {
   yieldMilli: int('yield_milli').notNull(),
   isCurrent: bool('is_current').notNull(),
   instructions: text('instructions'),
-})
+}, (t) => [uniqueIndex('bom_current_uq').on(t.itemId).where(sql`is_current`)])
 
 export const bomLine = sqliteTable('bom_line', {
   id: id(),
@@ -128,7 +129,7 @@ export const price = sqliteTable('price', {
   effectiveFrom: text('effective_from').notNull(),
   createdBy: text('created_by'),
   createdAt: text('created_at').notNull(),
-})
+}, (t) => [unique().on(t.variantId, t.channelId, t.effectiveFrom)])
 
 export const recipe = sqliteTable('recipe', {
   id: id(),
@@ -139,7 +140,10 @@ export const recipe = sqliteTable('recipe', {
   isCurrent: bool('is_current').notNull(),
   createdBy: text('created_by'),
   note: text('note'),
-}, (t) => [unique().on(t.variantId, t.sweetnessId, t.version)])
+}, (t) => [
+  unique().on(t.variantId, t.sweetnessId, t.version),
+  uniqueIndex('recipe_current_uq').on(t.variantId, t.sweetnessId).where(sql`is_current`), // one current version (M5)
+])
 
 export const recipeLine = sqliteTable('recipe_line', {
   id: id(),

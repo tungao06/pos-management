@@ -24,7 +24,7 @@ export const cashMovement = sqliteTable('cash_movement', {
   reason: text('reason'),
   createdBy: text('created_by').notNull().references(() => user.id),
   createdAt: text('created_at').notNull(),
-})
+}, (t) => [index('cash_movement_shift_idx').on(t.shiftId), index('cash_movement_order_idx').on(t.orderId)])
 
 export const cashCount = sqliteTable('cash_count', {
   id: id(),
@@ -36,7 +36,7 @@ export const cashCount = sqliteTable('cash_count', {
   linesJson: json('lines_json').notNull(),          // [{ denominationSatang, count }]
   countedBy: text('counted_by').notNull().references(() => user.id),
   createdAt: text('created_at').notNull(),
-})
+}, (t) => [index('cash_count_shift_idx').on(t.shiftId)])
 
 export const zReport = sqliteTable('z_report', {
   id: id(),
@@ -69,7 +69,12 @@ export const order = sqliteTable('order', {
   paidAt: text('paid_at'),
   readyAt: text('ready_at'),
   voidedAt: text('voided_at'),
-}, (t) => [unique().on(t.deviceId, t.receiptNo), index('order_business_date_idx').on(t.businessDate), index('order_status_idx').on(t.status)])
+}, (t) => [
+  unique().on(t.deviceId, t.receiptNo),
+  index('order_business_date_status_idx').on(t.businessDate, t.status),
+  index('order_status_idx').on(t.status),
+  index('order_shift_idx').on(t.shiftId),
+])
 
 export const orderLine = sqliteTable('order_line', {
   id: id(),
@@ -98,7 +103,7 @@ export const payment = sqliteTable('payment', {
   verifyStatus: textEnum('verify_status', VerifyStatus).notNull(),
   createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),
-})
+}, (t) => [index('payment_order_idx').on(t.orderId)])
 
 export const discount = sqliteTable('discount', {
   id: id(),
@@ -106,7 +111,7 @@ export const discount = sqliteTable('discount', {
   amountSatang: int('amount_satang').notNull(),
   reason: text('reason').notNull(),
   approvedBy: text('approved_by').notNull().references(() => user.id),
-})
+}, (t) => [index('discount_order_idx').on(t.orderId)])
 
 /** Append-only, hash-chained (spec §3.4, §4.9, D38). Every column from order_id to at is covered by `hash`. */
 export const orderEvent = sqliteTable('order_event', {
@@ -133,4 +138,4 @@ export const orderPaymentIntent = sqliteTable('order_payment_intent', {
   expiresAt: text('expires_at').notNull(),
   slipImageRef: text('slip_image_ref'),
   customerClaimedAt: text('customer_claimed_at'),
-})
+}, (t) => [index('order_payment_intent_order_idx').on(t.orderId)])

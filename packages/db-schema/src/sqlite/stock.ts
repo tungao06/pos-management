@@ -1,5 +1,5 @@
 import { CountStatus, MovementKind } from '@dayo/contracts'
-import { index, sqliteTable } from 'drizzle-orm/sqlite-core'
+import { index, sqliteTable, unique } from 'drizzle-orm/sqlite-core'
 import { big, id, int, text, textEnum } from './columns.js'
 import { bom, device, item, purchaseUnit, user } from './reference.js'
 
@@ -23,7 +23,7 @@ export const purchaseLine = sqliteTable('purchase_line', {
   qtyUnitsMilli: int('qty_units_milli').notNull(),
   qtyUseMilli: int('qty_use_milli').notNull(),
   lineTotalSatang: int('line_total_satang').notNull(),
-})
+}, (t) => [index('purchase_line_purchase_idx').on(t.purchaseId)])
 
 export const productionBatch = sqliteTable('production_batch', {
   id: id(),
@@ -61,7 +61,7 @@ export const stockCountLine = sqliteTable('stock_count_line', {
   expectedUseMilli: int('expected_use_milli').notNull(),
   varianceUseMilli: int('variance_use_milli').notNull(),
   varianceSatang: int('variance_satang').notNull(),
-})
+}, (t) => [unique().on(t.countId, t.itemId)])
 
 export const stockMovement = sqliteTable('stock_movement', {
   id: id(),
@@ -75,7 +75,12 @@ export const stockMovement = sqliteTable('stock_movement', {
   deviceId: text('device_id').references(() => device.id),
   createdBy: text('created_by').notNull(),      // user id or 'system'
   createdAt: text('created_at').notNull(),
-}, (t) => [index('stock_movement_item_created_idx').on(t.itemId, t.createdAt), index('stock_movement_ref_idx').on(t.refType, t.refId)])
+}, (t) => [
+  index('stock_movement_item_created_idx').on(t.itemId, t.createdAt),
+  index('stock_movement_ref_idx').on(t.refType, t.refId),
+  index('stock_movement_item_date_idx').on(t.itemId, t.businessDate),
+  index('stock_movement_business_date_idx').on(t.businessDate),
+])
 
 /** Cache rebuilt from stock_movement; never the source of truth. */
 export const itemCostState = sqliteTable('item_cost_state', {

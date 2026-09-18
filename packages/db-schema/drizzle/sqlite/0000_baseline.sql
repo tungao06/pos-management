@@ -8,6 +8,7 @@ CREATE TABLE `bom` (
 	FOREIGN KEY (`item_id`) REFERENCES `item`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `bom_current_uq` ON `bom` (`item_id`) WHERE is_current;--> statement-breakpoint
 CREATE TABLE `bom_line` (
 	`id` text PRIMARY KEY NOT NULL,
 	`bom_id` text NOT NULL,
@@ -98,6 +99,7 @@ CREATE TABLE `price` (
 	FOREIGN KEY (`channel_id`) REFERENCES `channel`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `price_variant_id_channel_id_effective_from_unique` ON `price` (`variant_id`,`channel_id`,`effective_from`);--> statement-breakpoint
 CREATE TABLE `product` (
 	`id` text PRIMARY KEY NOT NULL,
 	`code` text NOT NULL,
@@ -147,6 +149,7 @@ CREATE TABLE `recipe` (
 	FOREIGN KEY (`sweetness_id`) REFERENCES `sweetness_level`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `recipe_current_uq` ON `recipe` (`variant_id`,`sweetness_id`) WHERE is_current;--> statement-breakpoint
 CREATE UNIQUE INDEX `recipe_variant_id_sweetness_id_version_unique` ON `recipe` (`variant_id`,`sweetness_id`,`version`);--> statement-breakpoint
 CREATE TABLE `recipe_line` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -249,6 +252,7 @@ CREATE TABLE `purchase_line` (
 	FOREIGN KEY (`purchase_unit_id`) REFERENCES `purchase_unit`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE INDEX `purchase_line_purchase_idx` ON `purchase_line` (`purchase_id`);--> statement-breakpoint
 CREATE TABLE `stock_count` (
 	`id` text PRIMARY KEY NOT NULL,
 	`business_date` text NOT NULL,
@@ -278,6 +282,7 @@ CREATE TABLE `stock_count_line` (
 	FOREIGN KEY (`purchase_unit_id`) REFERENCES `purchase_unit`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `stock_count_line_count_id_item_id_unique` ON `stock_count_line` (`count_id`,`item_id`);--> statement-breakpoint
 CREATE TABLE `stock_movement` (
 	`id` text PRIMARY KEY NOT NULL,
 	`item_id` text NOT NULL,
@@ -296,6 +301,8 @@ CREATE TABLE `stock_movement` (
 --> statement-breakpoint
 CREATE INDEX `stock_movement_item_created_idx` ON `stock_movement` (`item_id`,`created_at`);--> statement-breakpoint
 CREATE INDEX `stock_movement_ref_idx` ON `stock_movement` (`ref_type`,`ref_id`);--> statement-breakpoint
+CREATE INDEX `stock_movement_item_date_idx` ON `stock_movement` (`item_id`,`business_date`);--> statement-breakpoint
+CREATE INDEX `stock_movement_business_date_idx` ON `stock_movement` (`business_date`);--> statement-breakpoint
 CREATE TABLE `cash_count` (
 	`id` text PRIMARY KEY NOT NULL,
 	`shift_id` text NOT NULL,
@@ -310,6 +317,7 @@ CREATE TABLE `cash_count` (
 	FOREIGN KEY (`counted_by`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE INDEX `cash_count_shift_idx` ON `cash_count` (`shift_id`);--> statement-breakpoint
 CREATE TABLE `cash_movement` (
 	`id` text PRIMARY KEY NOT NULL,
 	`shift_id` text NOT NULL,
@@ -324,6 +332,8 @@ CREATE TABLE `cash_movement` (
 	FOREIGN KEY (`created_by`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE INDEX `cash_movement_shift_idx` ON `cash_movement` (`shift_id`);--> statement-breakpoint
+CREATE INDEX `cash_movement_order_idx` ON `cash_movement` (`order_id`);--> statement-breakpoint
 CREATE TABLE `discount` (
 	`id` text PRIMARY KEY NOT NULL,
 	`order_id` text NOT NULL,
@@ -334,6 +344,7 @@ CREATE TABLE `discount` (
 	FOREIGN KEY (`approved_by`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE INDEX `discount_order_idx` ON `discount` (`order_id`);--> statement-breakpoint
 CREATE TABLE `order` (
 	`id` text PRIMARY KEY NOT NULL,
 	`origin` text NOT NULL,
@@ -363,8 +374,9 @@ CREATE TABLE `order` (
 	FOREIGN KEY (`customer_id`) REFERENCES `customer`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE INDEX `order_business_date_idx` ON `order` (`business_date`);--> statement-breakpoint
+CREATE INDEX `order_business_date_status_idx` ON `order` (`business_date`,`status`);--> statement-breakpoint
 CREATE INDEX `order_status_idx` ON `order` (`status`);--> statement-breakpoint
+CREATE INDEX `order_shift_idx` ON `order` (`shift_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `order_device_id_receipt_no_unique` ON `order` (`device_id`,`receipt_no`);--> statement-breakpoint
 CREATE TABLE `order_event` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -418,6 +430,7 @@ CREATE TABLE `order_payment_intent` (
 	FOREIGN KEY (`order_id`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE INDEX `order_payment_intent_order_idx` ON `order_payment_intent` (`order_id`);--> statement-breakpoint
 CREATE TABLE `payment` (
 	`id` text PRIMARY KEY NOT NULL,
 	`order_id` text NOT NULL,
@@ -432,6 +445,7 @@ CREATE TABLE `payment` (
 	FOREIGN KEY (`order_id`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
+CREATE INDEX `payment_order_idx` ON `payment` (`order_id`);--> statement-breakpoint
 CREATE TABLE `shift` (
 	`id` text PRIMARY KEY NOT NULL,
 	`device_id` text NOT NULL,
@@ -474,14 +488,16 @@ CREATE TABLE `outbox` (
 	`table_name` text NOT NULL,
 	`row_json` text NOT NULL,
 	`idempotency_key` text NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
 	`created_at` text NOT NULL,
 	`attempts` integer NOT NULL,
 	`last_error` text,
-	`sent_at` text
+	`sent_at` text,
+	`dead_at` text
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `outbox_idempotency_key_unique` ON `outbox` (`idempotency_key`);--> statement-breakpoint
-CREATE INDEX `outbox_pending_idx` ON `outbox` (`sent_at`,`created_at`);--> statement-breakpoint
+CREATE INDEX `outbox_pending_idx` ON `outbox` (`created_at`) WHERE status = 'pending';--> statement-breakpoint
 CREATE TABLE `sync_state` (
 	`key` text PRIMARY KEY NOT NULL,
 	`value` text NOT NULL

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "bf8a25f3-b88d-4318-be6e-03cac1b90997",
+  "id": "39ed9d55-9c11-494e-b738-eea8f105c0fb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bom": {
@@ -50,7 +50,16 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "bom_current_uq": {
+          "name": "bom_current_uq",
+          "columns": [
+            "item_id"
+          ],
+          "isUnique": true,
+          "where": "is_current"
+        }
+      },
       "foreignKeys": {
         "bom_item_id_item_id_fk": {
           "name": "bom_item_id_item_id_fk",
@@ -611,7 +620,17 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "price_variant_id_channel_id_effective_from_unique": {
+          "name": "price_variant_id_channel_id_effective_from_unique",
+          "columns": [
+            "variant_id",
+            "channel_id",
+            "effective_from"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "price_variant_id_product_variant_id_fk": {
           "name": "price_variant_id_product_variant_id_fk",
@@ -954,6 +973,15 @@
         }
       },
       "indexes": {
+        "recipe_current_uq": {
+          "name": "recipe_current_uq",
+          "columns": [
+            "variant_id",
+            "sweetness_id"
+          ],
+          "isUnique": true,
+          "where": "is_current"
+        },
         "recipe_variant_id_sweetness_id_version_unique": {
           "name": "recipe_variant_id_sweetness_id_version_unique",
           "columns": [
@@ -1644,7 +1672,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "purchase_line_purchase_idx": {
+          "name": "purchase_line_purchase_idx",
+          "columns": [
+            "purchase_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "purchase_line_purchase_id_purchase_id_fk": {
           "name": "purchase_line_purchase_id_purchase_id_fk",
@@ -1863,7 +1899,16 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "stock_count_line_count_id_item_id_unique": {
+          "name": "stock_count_line_count_id_item_id_unique",
+          "columns": [
+            "count_id",
+            "item_id"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "stock_count_line_count_id_stock_count_id_fk": {
           "name": "stock_count_line_count_id_stock_count_id_fk",
@@ -2006,6 +2051,21 @@
             "ref_id"
           ],
           "isUnique": false
+        },
+        "stock_movement_item_date_idx": {
+          "name": "stock_movement_item_date_idx",
+          "columns": [
+            "item_id",
+            "business_date"
+          ],
+          "isUnique": false
+        },
+        "stock_movement_business_date_idx": {
+          "name": "stock_movement_business_date_idx",
+          "columns": [
+            "business_date"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -2107,7 +2167,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "cash_count_shift_idx": {
+          "name": "cash_count_shift_idx",
+          "columns": [
+            "shift_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "cash_count_shift_id_shift_id_fk": {
           "name": "cash_count_shift_id_shift_id_fk",
@@ -2200,7 +2268,22 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "cash_movement_shift_idx": {
+          "name": "cash_movement_shift_idx",
+          "columns": [
+            "shift_id"
+          ],
+          "isUnique": false
+        },
+        "cash_movement_order_idx": {
+          "name": "cash_movement_order_idx",
+          "columns": [
+            "order_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "cash_movement_shift_id_shift_id_fk": {
           "name": "cash_movement_shift_id_shift_id_fk",
@@ -2285,7 +2368,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "discount_order_idx": {
+          "name": "discount_order_idx",
+          "columns": [
+            "order_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "discount_order_id_order_id_fk": {
           "name": "discount_order_id_order_id_fk",
@@ -2477,10 +2568,11 @@
         }
       },
       "indexes": {
-        "order_business_date_idx": {
-          "name": "order_business_date_idx",
+        "order_business_date_status_idx": {
+          "name": "order_business_date_status_idx",
           "columns": [
-            "business_date"
+            "business_date",
+            "status"
           ],
           "isUnique": false
         },
@@ -2488,6 +2580,13 @@
           "name": "order_status_idx",
           "columns": [
             "status"
+          ],
+          "isUnique": false
+        },
+        "order_shift_idx": {
+          "name": "order_shift_idx",
+          "columns": [
+            "shift_id"
           ],
           "isUnique": false
         },
@@ -2919,7 +3018,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "order_payment_intent_order_idx": {
+          "name": "order_payment_intent_order_idx",
+          "columns": [
+            "order_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "order_payment_intent_order_id_order_id_fk": {
           "name": "order_payment_intent_order_id_order_id_fk",
@@ -3013,7 +3120,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "payment_order_idx": {
+          "name": "payment_order_idx",
+          "columns": [
+            "order_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "payment_order_id_order_id_fk": {
           "name": "payment_order_id_order_id_fk",
@@ -3319,6 +3434,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -3346,6 +3469,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "dead_at": {
+          "name": "dead_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -3359,10 +3489,10 @@
         "outbox_pending_idx": {
           "name": "outbox_pending_idx",
           "columns": [
-            "sent_at",
             "created_at"
           ],
-          "isUnique": false
+          "isUnique": false,
+          "where": "status = 'pending'"
         }
       },
       "foreignKeys": {},

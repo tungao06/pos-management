@@ -1,4 +1,5 @@
-import { pgTable, unique } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import { pgTable, unique, uniqueIndex } from 'drizzle-orm/pg-core'
 import { ItemKind, UseUnit, UserRole } from '@dayo/contracts'
 import { big, bool, id, int, json, serverSeq, text, textEnum } from './columns.js'
 
@@ -74,7 +75,7 @@ export const bom = pgTable('bom', {
   isCurrent: bool('is_current').notNull(),
   instructions: text('instructions'),
   serverSeq: serverSeq(),
-})
+}, (t) => [uniqueIndex('bom_current_uq').on(t.itemId).where(sql`is_current`)])
 
 export const bomLine = pgTable('bom_line', {
   id: id(),
@@ -142,7 +143,7 @@ export const price = pgTable('price', {
   createdBy: text('created_by'),
   createdAt: text('created_at').notNull(),
   serverSeq: serverSeq(),
-})
+}, (t) => [unique().on(t.variantId, t.channelId, t.effectiveFrom)])
 
 export const recipe = pgTable('recipe', {
   id: id(),
@@ -154,7 +155,10 @@ export const recipe = pgTable('recipe', {
   createdBy: text('created_by'),
   note: text('note'),
   serverSeq: serverSeq(),
-}, (t) => [unique().on(t.variantId, t.sweetnessId, t.version)])
+}, (t) => [
+  unique().on(t.variantId, t.sweetnessId, t.version),
+  uniqueIndex('recipe_current_uq').on(t.variantId, t.sweetnessId).where(sql`is_current`), // one current version (M5)
+])
 
 export const recipeLine = pgTable('recipe_line', {
   id: id(),

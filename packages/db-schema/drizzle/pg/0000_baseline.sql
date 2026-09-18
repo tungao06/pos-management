@@ -99,7 +99,8 @@ CREATE TABLE "price" (
 	"effective_from" text NOT NULL,
 	"created_by" text,
 	"created_at" text NOT NULL,
-	"server_seq" bigserial NOT NULL
+	"server_seq" bigserial NOT NULL,
+	CONSTRAINT "price_variant_id_channel_id_effective_from_unique" UNIQUE("variant_id","channel_id","effective_from")
 );
 --> statement-breakpoint
 CREATE TABLE "product" (
@@ -268,7 +269,8 @@ CREATE TABLE "stock_count_line" (
 	"expected_use_milli" integer NOT NULL,
 	"variance_use_milli" integer NOT NULL,
 	"variance_satang" integer NOT NULL,
-	"server_received_at" text
+	"server_received_at" text,
+	CONSTRAINT "stock_count_line_count_id_item_id_unique" UNIQUE("count_id","item_id")
 );
 --> statement-breakpoint
 CREATE TABLE "stock_movement" (
@@ -511,8 +513,20 @@ ALTER TABLE "shift" ADD CONSTRAINT "shift_device_id_device_id_fk" FOREIGN KEY ("
 ALTER TABLE "shift" ADD CONSTRAINT "shift_opened_by_user_id_fk" FOREIGN KEY ("opened_by") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shift" ADD CONSTRAINT "shift_closed_by_user_id_fk" FOREIGN KEY ("closed_by") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "z_report" ADD CONSTRAINT "z_report_shift_id_shift_id_fk" FOREIGN KEY ("shift_id") REFERENCES "public"."shift"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "bom_current_uq" ON "bom" USING btree ("item_id") WHERE is_current;--> statement-breakpoint
+CREATE UNIQUE INDEX "recipe_current_uq" ON "recipe" USING btree ("variant_id","sweetness_id") WHERE is_current;--> statement-breakpoint
+CREATE INDEX "purchase_line_purchase_idx" ON "purchase_line" USING btree ("purchase_id");--> statement-breakpoint
 CREATE INDEX "stock_movement_item_created_idx" ON "stock_movement" USING btree ("item_id","created_at");--> statement-breakpoint
 CREATE INDEX "stock_movement_ref_idx" ON "stock_movement" USING btree ("ref_type","ref_id");--> statement-breakpoint
-CREATE INDEX "order_business_date_idx" ON "order" USING btree ("business_date");--> statement-breakpoint
+CREATE INDEX "stock_movement_item_date_idx" ON "stock_movement" USING btree ("item_id","business_date");--> statement-breakpoint
+CREATE INDEX "stock_movement_business_date_idx" ON "stock_movement" USING btree ("business_date");--> statement-breakpoint
+CREATE INDEX "cash_count_shift_idx" ON "cash_count" USING btree ("shift_id");--> statement-breakpoint
+CREATE INDEX "cash_movement_shift_idx" ON "cash_movement" USING btree ("shift_id");--> statement-breakpoint
+CREATE INDEX "cash_movement_order_idx" ON "cash_movement" USING btree ("order_id");--> statement-breakpoint
+CREATE INDEX "discount_order_idx" ON "discount" USING btree ("order_id");--> statement-breakpoint
+CREATE INDEX "order_business_date_status_idx" ON "order" USING btree ("business_date","status");--> statement-breakpoint
 CREATE INDEX "order_status_idx" ON "order" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "order_shift_idx" ON "order" USING btree ("shift_id");--> statement-breakpoint
+CREATE INDEX "order_payment_intent_order_idx" ON "order_payment_intent" USING btree ("order_id");--> statement-breakpoint
+CREATE INDEX "payment_order_idx" ON "payment" USING btree ("order_id");--> statement-breakpoint
 CREATE INDEX "audit_log_entity_idx" ON "audit_log" USING btree ("entity","entity_id");
