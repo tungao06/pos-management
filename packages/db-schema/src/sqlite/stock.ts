@@ -1,5 +1,6 @@
+import { sql } from 'drizzle-orm'
 import { CountStatus, MovementKind } from '@dayo/contracts'
-import { index, sqliteTable, unique } from 'drizzle-orm/sqlite-core'
+import { check, index, sqliteTable, unique } from 'drizzle-orm/sqlite-core'
 import { big, id, int, text, textEnum } from './columns.js'
 import { bom, device, item, purchaseUnit, user } from './reference.js'
 
@@ -80,6 +81,8 @@ export const stockMovement = sqliteTable('stock_movement', {
   index('stock_movement_ref_idx').on(t.refType, t.refId),
   index('stock_movement_item_date_idx').on(t.itemId, t.businessDate),
   index('stock_movement_business_date_idx').on(t.businessDate),
+  // D47 item 7: a movement that moves nothing is not a movement.
+  check('stock_movement_qty_nonzero_ck', sql`${t.qtyMilli} <> 0`),
 ])
 
 /** Cache rebuilt from stock_movement; never the source of truth. */

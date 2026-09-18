@@ -1,5 +1,6 @@
+import { sql } from 'drizzle-orm'
 import { ActorType, CashMovementKind, EventType, OrderOrigin, OrderStatus, PaymentMethod, ShiftStatus, VerifyStatus } from '@dayo/contracts'
-import { index, pgTable, unique } from 'drizzle-orm/pg-core'
+import { check, index, pgTable, unique, uniqueIndex } from 'drizzle-orm/pg-core'
 import { id, int, json, serverReceivedAt, serverSeq, text, textEnum } from './columns.js'
 import { channel, customer, device, productVariant, recipe, sweetnessLevel, user } from './reference.js'
 
@@ -14,7 +15,10 @@ export const shift = pgTable('shift', {
   closedBy: text('closed_by').references(() => user.id),
   closedAt: text('closed_at'),
   serverReceivedAt: serverReceivedAt(),
-})
+}, (t) => [
+  // D47 item 6: at most one open shift per device.
+  uniqueIndex('shift_open_uq').on(t.deviceId).where(sql`status = 'open'`),
+])
 
 export const cashMovement = pgTable('cash_movement', {
   id: id(),
@@ -26,7 +30,13 @@ export const cashMovement = pgTable('cash_movement', {
   createdBy: text('created_by').notNull().references(() => user.id),
   createdAt: text('created_at').notNull(),
   serverReceivedAt: serverReceivedAt(),
-}, (t) => [index('cash_movement_shift_idx').on(t.shiftId), index('cash_movement_order_idx').on(t.orderId)])
+}, (t) => [
+  index('cash_movement_shift_idx').on(t.shiftId),
+  index('cash_movement_order_idx').on(t.orderId),
+  // D47 item 7: VOID_REFUND always carries the voided order_id; no other kind does.
+  check('cash_movement_void_refund_order_ck', sql`(${t.kind} = 'VOID_REFUND') = (${t.orderId} is not null)`),
+  check('cash_movement_amount_positive_ck', sql`${t.amountSatang} > 0`),
+])
 
 export const cashCount = pgTable('cash_count', {
   id: id(),
@@ -77,9 +87,16 @@ export const order = pgTable('order', {
   serverSeq: serverSeq(),
 }, (t) => [
   unique().on(t.deviceId, t.receiptNo),
+  // D47 item 5: the queue number is unique per device per business day (not globally).
+  unique().on(t.deviceId, t.businessDate, t.queueNo),
   index('order_business_date_status_idx').on(t.businessDate, t.status),
   index('order_status_idx').on(t.status),
   index('order_shift_idx').on(t.shiftId),
+  // D47 item 7: totals are never negative, and the discount never exceeds the subtotal it applies to.
+  check('order_subtotal_nonneg_ck', sql`${t.subtotalSatang} >= 0`),
+  check('order_discount_nonneg_ck', sql`${t.discountSatang} >= 0`),
+  check('order_total_nonneg_ck', sql`${t.totalSatang} >= 0`),
+  check('order_discount_le_subtotal_ck', sql`${t.discountSatang} <= ${t.subtotalSatang}`),
 ])
 
 export const orderLine = pgTable('order_line', {
@@ -98,7 +115,10 @@ export const orderLine = pgTable('order_line', {
   unitCostSatang: int('unit_cost_satang').notNull(),
   serverReceivedAt: serverReceivedAt(),
   serverSeq: serverSeq(),
-}, (t) => [unique().on(t.orderId, t.lineNo)])
+}, (t) => [
+  unique().on(t.orderId, t.lineNo),
+  check('order_line_qty_positive_ck', sql`${t.qty} > 0`),
+])
 
 export const payment = pgTable('payment', {
   id: id(),
@@ -113,7 +133,10 @@ export const payment = pgTable('payment', {
   createdAt: text('created_at').notNull(),
   serverReceivedAt: serverReceivedAt(),
   serverSeq: serverSeq(),
-}, (t) => [index('payment_order_idx').on(t.orderId)])
+}, (t) => [
+  index('payment_order_idx').on(t.orderId),
+  check('payment_amount_positive_ck', sql`${t.amountSatang} > 0`),
+])
 
 export const discount = pgTable('discount', {
   id: id(),

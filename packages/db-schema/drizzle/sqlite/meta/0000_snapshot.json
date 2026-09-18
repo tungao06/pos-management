@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "39ed9d55-9c11-494e-b738-eea8f105c0fb",
+  "id": "f75cedc7-cb34-4926-9e95-51a76509068c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bom": {
@@ -26,7 +26,8 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": 1
         },
         "yield_milli": {
           "name": "yield_milli",
@@ -47,6 +48,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
           "autoincrement": false
         }
       },
@@ -109,6 +117,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {},
@@ -181,6 +204,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -234,6 +272,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -301,6 +354,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -354,6 +422,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -449,6 +532,21 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -551,6 +649,21 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -618,6 +731,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -728,6 +856,21 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -795,6 +938,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -890,6 +1048,21 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {},
@@ -941,7 +1114,8 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": 1
         },
         "effective_from": {
           "name": "effective_from",
@@ -969,6 +1143,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
           "autoincrement": false
         }
       },
@@ -1054,6 +1235,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {},
@@ -1095,7 +1291,7 @@
         "key": {
           "name": "key",
           "type": "text",
-          "primaryKey": true,
+          "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
@@ -1119,11 +1315,27 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {},
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
+      "compositePrimaryKeys": {
+        "setting_key_effective_from_pk": {
+          "columns": [
+            "key",
+            "effective_from"
+          ],
+          "name": "setting_key_effective_from_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -1164,6 +1376,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -1231,6 +1458,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {
@@ -1304,7 +1546,8 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": 1
         }
       },
       "indexes": {},
@@ -2098,7 +2341,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "stock_movement_qty_nonzero_ck": {
+          "name": "stock_movement_qty_nonzero_ck",
+          "value": "\"stock_movement\".\"qty_milli\" <> 0"
+        }
+      }
     },
     "cash_count": {
       "name": "cash_count",
@@ -2327,7 +2575,16 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "cash_movement_void_refund_order_ck": {
+          "name": "cash_movement_void_refund_order_ck",
+          "value": "(\"cash_movement\".\"kind\" = 'VOID_REFUND') = (\"cash_movement\".\"order_id\" is not null)"
+        },
+        "cash_movement_amount_positive_ck": {
+          "name": "cash_movement_amount_positive_ck",
+          "value": "\"cash_movement\".\"amount_satang\" > 0"
+        }
+      }
     },
     "discount": {
       "name": "discount",
@@ -2597,6 +2854,15 @@
             "receipt_no"
           ],
           "isUnique": true
+        },
+        "order_device_id_business_date_queue_no_unique": {
+          "name": "order_device_id_business_date_queue_no_unique",
+          "columns": [
+            "device_id",
+            "business_date",
+            "queue_no"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -2655,7 +2921,24 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "order_subtotal_nonneg_ck": {
+          "name": "order_subtotal_nonneg_ck",
+          "value": "\"order\".\"subtotal_satang\" >= 0"
+        },
+        "order_discount_nonneg_ck": {
+          "name": "order_discount_nonneg_ck",
+          "value": "\"order\".\"discount_satang\" >= 0"
+        },
+        "order_total_nonneg_ck": {
+          "name": "order_total_nonneg_ck",
+          "value": "\"order\".\"total_satang\" >= 0"
+        },
+        "order_discount_le_subtotal_ck": {
+          "name": "order_discount_le_subtotal_ck",
+          "value": "\"order\".\"discount_satang\" <= \"order\".\"subtotal_satang\""
+        }
+      }
     },
     "order_event": {
       "name": "order_event",
@@ -2963,7 +3246,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "order_line_qty_positive_ck": {
+          "name": "order_line_qty_positive_ck",
+          "value": "\"order_line\".\"qty\" > 0"
+        }
+      }
     },
     "order_payment_intent": {
       "name": "order_payment_intent",
@@ -3146,7 +3434,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "payment_amount_positive_ck": {
+          "name": "payment_amount_positive_ck",
+          "value": "\"payment\".\"amount_satang\" > 0"
+        }
+      }
     },
     "shift": {
       "name": "shift",
@@ -3215,7 +3508,16 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "shift_open_uq": {
+          "name": "shift_open_uq",
+          "columns": [
+            "device_id"
+          ],
+          "isUnique": true,
+          "where": "status = 'open'"
+        }
+      },
       "foreignKeys": {
         "shift_device_id_device_id_fk": {
           "name": "shift_device_id_device_id_fk",

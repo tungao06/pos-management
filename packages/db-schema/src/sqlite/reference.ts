@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { sqliteTable, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { primaryKey, sqliteTable, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { ItemKind, UseUnit, UserRole } from '@dayo/contracts'
 import { big, bool, id, int, json, text, textEnum } from './columns.js'
 
@@ -11,7 +11,7 @@ export const user = sqliteTable('user', {
   isActive: bool('is_active').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
-  version: int('version').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const device = sqliteTable('device', {
@@ -20,14 +20,18 @@ export const device = sqliteTable('device', {
   receiptPrefix: text('receipt_prefix').notNull().unique(),
   isSellingDevice: bool('is_selling_device').notNull(),
   registeredAt: text('registered_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
+/** D47 item 9: PK is (key, effective_from) — settings keep history, like price and recipe. */
 export const setting = sqliteTable('setting', {
-  key: text('key').primaryKey(),
+  key: text('key').notNull(),
   valueJson: json('value_json').notNull(),
   effectiveFrom: text('effective_from').notNull(),
   updatedAt: text('updated_at').notNull(),
-})
+  version: int('version').notNull().default(1),
+}, (t) => [primaryKey({ columns: [t.key, t.effectiveFrom] })])
 
 export const category = sqliteTable('category', {
   id: id(),
@@ -35,6 +39,8 @@ export const category = sqliteTable('category', {
   name: text('name').notNull(),
   sort: int('sort').notNull(),
   isActive: bool('is_active').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const item = sqliteTable('item', {
@@ -50,6 +56,8 @@ export const item = sqliteTable('item', {
   shelfLifeHours: int('shelf_life_hours'),
   isActive: bool('is_active').notNull(),
   note: text('note'),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const purchaseUnit = sqliteTable('purchase_unit', {
@@ -59,15 +67,20 @@ export const purchaseUnit = sqliteTable('purchase_unit', {
   qtyPerUnitMilli: int('qty_per_unit_milli').notNull(),
   isDefault: bool('is_default').notNull(),
   barcode: text('barcode'),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
+/** bom.version is the BOM's own revision number (a new row per revision), not a per-row edit counter — it already
+ * satisfies D47 item 8's "version int NOT NULL default 1"; only updated_at is added. */
 export const bom = sqliteTable('bom', {
   id: id(),
   itemId: text('item_id').notNull().references(() => item.id),
-  version: int('version').notNull(),
+  version: int('version').notNull().default(1),
   yieldMilli: int('yield_milli').notNull(),
   isCurrent: bool('is_current').notNull(),
   instructions: text('instructions'),
+  updatedAt: text('updated_at').notNull(),
 }, (t) => [uniqueIndex('bom_current_uq').on(t.itemId).where(sql`is_current`)])
 
 export const bomLine = sqliteTable('bom_line', {
@@ -75,6 +88,8 @@ export const bomLine = sqliteTable('bom_line', {
   bomId: text('bom_id').notNull().references(() => bom.id),
   componentItemId: text('component_item_id').notNull().references(() => item.id),
   qtyMilli: int('qty_milli').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const product = sqliteTable('product', {
@@ -87,6 +102,8 @@ export const product = sqliteTable('product', {
   isActive: bool('is_active').notNull(),
   prepGroup: text('prep_group'),
   soldOutUntil: text('sold_out_until'),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const size = sqliteTable('size', {
@@ -95,6 +112,8 @@ export const size = sqliteTable('size', {
   name: text('name').notNull(),
   sort: int('sort').notNull(),
   packagingItemId: text('packaging_item_id').notNull().references(() => item.id),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const productVariant = sqliteTable('product_variant', {
@@ -103,6 +122,8 @@ export const productVariant = sqliteTable('product_variant', {
   sizeId: text('size_id').notNull().references(() => size.id),
   sku: text('sku').notNull().unique(),
   isActive: bool('is_active').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 }, (t) => [unique().on(t.productId, t.sizeId)])
 
 export const sweetnessLevel = sqliteTable('sweetness_level', {
@@ -111,6 +132,8 @@ export const sweetnessLevel = sqliteTable('sweetness_level', {
   name: text('name').notNull(),
   sort: int('sort').notNull(),
   isDefault: bool('is_default').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const channel = sqliteTable('channel', {
@@ -119,6 +142,8 @@ export const channel = sqliteTable('channel', {
   name: text('name').notNull(),
   commissionBp: int('commission_bp').notNull(),
   isActive: bool('is_active').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const price = sqliteTable('price', {
@@ -129,17 +154,21 @@ export const price = sqliteTable('price', {
   effectiveFrom: text('effective_from').notNull(),
   createdBy: text('created_by'),
   createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 }, (t) => [unique().on(t.variantId, t.channelId, t.effectiveFrom)])
 
+/** recipe.version is the recipe's own revision number (a new row per revision) — see the note on bom.version above. */
 export const recipe = sqliteTable('recipe', {
   id: id(),
   variantId: text('variant_id').notNull().references(() => productVariant.id),
   sweetnessId: text('sweetness_id').notNull().references(() => sweetnessLevel.id),
-  version: int('version').notNull(),
+  version: int('version').notNull().default(1),
   effectiveFrom: text('effective_from').notNull(),
   isCurrent: bool('is_current').notNull(),
   createdBy: text('created_by'),
   note: text('note'),
+  updatedAt: text('updated_at').notNull(),
 }, (t) => [
   unique().on(t.variantId, t.sweetnessId, t.version),
   uniqueIndex('recipe_current_uq').on(t.variantId, t.sweetnessId).where(sql`is_current`), // one current version (M5)
@@ -150,6 +179,8 @@ export const recipeLine = sqliteTable('recipe_line', {
   recipeId: text('recipe_id').notNull().references(() => recipe.id),
   itemId: text('item_id').notNull().references(() => item.id),
   qtyMilli: int('qty_milli').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const equipment = sqliteTable('equipment', {
@@ -164,6 +195,8 @@ export const equipment = sqliteTable('equipment', {
   condition: text('condition'),
   owner: text('owner'),
   note: text('note'),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })
 
 export const customer = sqliteTable('customer', {
@@ -174,4 +207,6 @@ export const customer = sqliteTable('customer', {
   firstSeenAt: text('first_seen_at').notNull(),
   lastOrderAt: text('last_order_at'),
   isBlocked: bool('is_blocked').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  version: int('version').notNull().default(1),
 })

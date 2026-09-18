@@ -1,10 +1,11 @@
 CREATE TABLE "bom" (
 	"id" text PRIMARY KEY NOT NULL,
 	"item_id" text NOT NULL,
-	"version" integer NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"yield_milli" integer NOT NULL,
 	"is_current" boolean NOT NULL,
 	"instructions" text,
+	"updated_at" text NOT NULL,
 	"server_seq" bigserial NOT NULL
 );
 --> statement-breakpoint
@@ -13,6 +14,8 @@ CREATE TABLE "bom_line" (
 	"bom_id" text NOT NULL,
 	"component_item_id" text NOT NULL,
 	"qty_milli" integer NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL
 );
 --> statement-breakpoint
@@ -22,6 +25,8 @@ CREATE TABLE "category" (
 	"name" text NOT NULL,
 	"sort" integer NOT NULL,
 	"is_active" boolean NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "category_code_unique" UNIQUE("code")
 );
@@ -32,6 +37,8 @@ CREATE TABLE "channel" (
 	"name" text NOT NULL,
 	"commission_bp" integer NOT NULL,
 	"is_active" boolean NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "channel_code_unique" UNIQUE("code")
 );
@@ -44,6 +51,8 @@ CREATE TABLE "customer" (
 	"first_seen_at" text NOT NULL,
 	"last_order_at" text,
 	"is_blocked" boolean NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "customer_line_user_id_unique" UNIQUE("line_user_id")
 );
@@ -54,6 +63,8 @@ CREATE TABLE "device" (
 	"receipt_prefix" text NOT NULL,
 	"is_selling_device" boolean NOT NULL,
 	"registered_at" text NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "device_receipt_prefix_unique" UNIQUE("receipt_prefix")
 );
@@ -70,6 +81,8 @@ CREATE TABLE "equipment" (
 	"condition" text,
 	"owner" text,
 	"note" text,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "equipment_code_unique" UNIQUE("code")
 );
@@ -87,6 +100,8 @@ CREATE TABLE "item" (
 	"shelf_life_hours" integer,
 	"is_active" boolean NOT NULL,
 	"note" text,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "item_code_unique" UNIQUE("code")
 );
@@ -99,6 +114,8 @@ CREATE TABLE "price" (
 	"effective_from" text NOT NULL,
 	"created_by" text,
 	"created_at" text NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "price_variant_id_channel_id_effective_from_unique" UNIQUE("variant_id","channel_id","effective_from")
 );
@@ -113,6 +130,8 @@ CREATE TABLE "product" (
 	"is_active" boolean NOT NULL,
 	"prep_group" text,
 	"sold_out_until" text,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "product_code_unique" UNIQUE("code")
 );
@@ -123,6 +142,8 @@ CREATE TABLE "product_variant" (
 	"size_id" text NOT NULL,
 	"sku" text NOT NULL,
 	"is_active" boolean NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "product_variant_sku_unique" UNIQUE("sku"),
 	CONSTRAINT "product_variant_product_id_size_id_unique" UNIQUE("product_id","size_id")
@@ -135,6 +156,8 @@ CREATE TABLE "purchase_unit" (
 	"qty_per_unit_milli" integer NOT NULL,
 	"is_default" boolean NOT NULL,
 	"barcode" text,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL
 );
 --> statement-breakpoint
@@ -142,11 +165,12 @@ CREATE TABLE "recipe" (
 	"id" text PRIMARY KEY NOT NULL,
 	"variant_id" text NOT NULL,
 	"sweetness_id" text NOT NULL,
-	"version" integer NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"effective_from" text NOT NULL,
 	"is_current" boolean NOT NULL,
 	"created_by" text,
 	"note" text,
+	"updated_at" text NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "recipe_variant_id_sweetness_id_version_unique" UNIQUE("variant_id","sweetness_id","version")
 );
@@ -156,15 +180,19 @@ CREATE TABLE "recipe_line" (
 	"recipe_id" text NOT NULL,
 	"item_id" text NOT NULL,
 	"qty_milli" integer NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "setting" (
-	"key" text PRIMARY KEY NOT NULL,
+	"key" text NOT NULL,
 	"value_json" jsonb NOT NULL,
 	"effective_from" text NOT NULL,
 	"updated_at" text NOT NULL,
-	"server_seq" bigserial NOT NULL
+	"version" integer DEFAULT 1 NOT NULL,
+	"server_seq" bigserial NOT NULL,
+	CONSTRAINT "setting_key_effective_from_pk" PRIMARY KEY("key","effective_from")
 );
 --> statement-breakpoint
 CREATE TABLE "size" (
@@ -173,6 +201,8 @@ CREATE TABLE "size" (
 	"name" text NOT NULL,
 	"sort" integer NOT NULL,
 	"packaging_item_id" text NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "size_code_unique" UNIQUE("code")
 );
@@ -183,6 +213,8 @@ CREATE TABLE "sweetness_level" (
 	"name" text NOT NULL,
 	"sort" integer NOT NULL,
 	"is_default" boolean NOT NULL,
+	"updated_at" text NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "sweetness_level_code_unique" UNIQUE("code")
 );
@@ -195,7 +227,7 @@ CREATE TABLE "user" (
 	"is_active" boolean NOT NULL,
 	"created_at" text NOT NULL,
 	"updated_at" text NOT NULL,
-	"version" integer NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
 	"server_seq" bigserial NOT NULL
 );
 --> statement-breakpoint
@@ -286,7 +318,8 @@ CREATE TABLE "stock_movement" (
 	"device_id" text,
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
-	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
+	CONSTRAINT "stock_movement_qty_nonzero_ck" CHECK ("stock_movement"."qty_milli" <> 0)
 );
 --> statement-breakpoint
 CREATE TABLE "cash_count" (
@@ -311,7 +344,9 @@ CREATE TABLE "cash_movement" (
 	"reason" text,
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
-	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
+	CONSTRAINT "cash_movement_void_refund_order_ck" CHECK (("cash_movement"."kind" = 'VOID_REFUND') = ("cash_movement"."order_id" is not null)),
+	CONSTRAINT "cash_movement_amount_positive_ck" CHECK ("cash_movement"."amount_satang" > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "discount" (
@@ -348,7 +383,12 @@ CREATE TABLE "order" (
 	"voided_at" text,
 	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
 	"server_seq" bigserial NOT NULL,
-	CONSTRAINT "order_device_id_receipt_no_unique" UNIQUE("device_id","receipt_no")
+	CONSTRAINT "order_device_id_receipt_no_unique" UNIQUE("device_id","receipt_no"),
+	CONSTRAINT "order_device_id_business_date_queue_no_unique" UNIQUE("device_id","business_date","queue_no"),
+	CONSTRAINT "order_subtotal_nonneg_ck" CHECK ("order"."subtotal_satang" >= 0),
+	CONSTRAINT "order_discount_nonneg_ck" CHECK ("order"."discount_satang" >= 0),
+	CONSTRAINT "order_total_nonneg_ck" CHECK ("order"."total_satang" >= 0),
+	CONSTRAINT "order_discount_le_subtotal_ck" CHECK ("order"."discount_satang" <= "order"."subtotal_satang")
 );
 --> statement-breakpoint
 CREATE TABLE "order_event" (
@@ -387,7 +427,8 @@ CREATE TABLE "order_line" (
 	"unit_cost_satang" integer NOT NULL,
 	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
 	"server_seq" bigserial NOT NULL,
-	CONSTRAINT "order_line_order_id_line_no_unique" UNIQUE("order_id","line_no")
+	CONSTRAINT "order_line_order_id_line_no_unique" UNIQUE("order_id","line_no"),
+	CONSTRAINT "order_line_qty_positive_ck" CHECK ("order_line"."qty" > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "order_payment_intent" (
@@ -413,7 +454,8 @@ CREATE TABLE "payment" (
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
 	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
-	"server_seq" bigserial NOT NULL
+	"server_seq" bigserial NOT NULL,
+	CONSTRAINT "payment_amount_positive_ck" CHECK ("payment"."amount_satang" > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "shift" (
@@ -534,4 +576,5 @@ CREATE INDEX "order_status_idx" ON "order" USING btree ("status");--> statement-
 CREATE INDEX "order_shift_idx" ON "order" USING btree ("shift_id");--> statement-breakpoint
 CREATE INDEX "order_payment_intent_order_idx" ON "order_payment_intent" USING btree ("order_id");--> statement-breakpoint
 CREATE INDEX "payment_order_idx" ON "payment" USING btree ("order_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "shift_open_uq" ON "shift" USING btree ("device_id") WHERE status = 'open';--> statement-breakpoint
 CREATE INDEX "audit_log_entity_idx" ON "audit_log" USING btree ("entity","entity_id");

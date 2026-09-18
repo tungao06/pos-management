@@ -105,37 +105,38 @@ export function seedToRows(seed: Seed, o: SeedOpts): SeedRows {
   const channelId = new Map(seed.channels.map((x) => [x.code, id('channel', x.code)]))
 
   const rows: SeedRows = {
-    categories: seed.categories.map((c) => ({ id: must(catId, c.code, 'category'), code: c.code, name: c.name, sort: c.sort, isActive: true })),
+    categories: seed.categories.map((c) => ({ id: must(catId, c.code, 'category'), code: c.code, name: c.name, sort: c.sort, isActive: true, updatedAt: o.now, version: 1 })),
     items: seed.items.map((i) => ({
       id: must(itemId, i.code, 'item'), code: i.code, name: i.name, kind: i.kind, category: i.category, useUnit: i.useUnit,
       isTracked: i.isTracked, reorderPointMilli: i.reorderPointMilli, standardCostUsat: i.standardCostUsat, shelfLifeHours: i.shelfLifeHours, isActive: true, note: i.note,
+      updatedAt: o.now, version: 1,
     })),
-    purchaseUnits: seed.purchaseUnits.map((u) => ({ id: id('purchase_unit', `${u.itemCode}|${u.name}`), itemId: must(itemId, u.itemCode, 'item'), name: u.name, qtyPerUnitMilli: u.qtyPerUnitMilli, isDefault: u.isDefault, barcode: null })),
+    purchaseUnits: seed.purchaseUnits.map((u) => ({ id: id('purchase_unit', `${u.itemCode}|${u.name}`), itemId: must(itemId, u.itemCode, 'item'), name: u.name, qtyPerUnitMilli: u.qtyPerUnitMilli, isDefault: u.isDefault, barcode: null, updatedAt: o.now, version: 1 })),
     boms: [],
     bomLines: [],
-    sizes: seed.sizes.map((x) => ({ id: must(sizeId, x.code, 'size'), code: x.code, name: x.name, sort: x.sort, packagingItemId: must(itemId, x.packagingItemCode, 'item') })),
-    products: seed.products.map((p) => ({ id: must(productId, p.code, 'product'), code: p.code, nameTh: p.nameTh, nameEn: p.nameEn, categoryId: must(catId, p.categoryCode, 'category'), sort: p.sort, isActive: true, prepGroup: p.prepGroup, soldOutUntil: null })),
-    variants: seed.variants.map((v) => ({ id: must(variantId, `${v.productCode}|${v.sizeCode}`, 'variant'), productId: must(productId, v.productCode, 'product'), sizeId: must(sizeId, v.sizeCode, 'size'), sku: v.sku, isActive: true })),
-    sweetness: seed.sweetness.map((x) => ({ id: must(sweetId, x.code, 'sweetness'), code: x.code, name: x.name, sort: x.sort, isDefault: x.isDefault })),
-    channels: seed.channels.map((x) => ({ id: must(channelId, x.code, 'channel'), code: x.code, name: x.name, commissionBp: x.commissionBp, isActive: true })),
+    sizes: seed.sizes.map((x) => ({ id: must(sizeId, x.code, 'size'), code: x.code, name: x.name, sort: x.sort, packagingItemId: must(itemId, x.packagingItemCode, 'item'), updatedAt: o.now, version: 1 })),
+    products: seed.products.map((p) => ({ id: must(productId, p.code, 'product'), code: p.code, nameTh: p.nameTh, nameEn: p.nameEn, categoryId: must(catId, p.categoryCode, 'category'), sort: p.sort, isActive: true, prepGroup: p.prepGroup, soldOutUntil: null, updatedAt: o.now, version: 1 })),
+    variants: seed.variants.map((v) => ({ id: must(variantId, `${v.productCode}|${v.sizeCode}`, 'variant'), productId: must(productId, v.productCode, 'product'), sizeId: must(sizeId, v.sizeCode, 'size'), sku: v.sku, isActive: true, updatedAt: o.now, version: 1 })),
+    sweetness: seed.sweetness.map((x) => ({ id: must(sweetId, x.code, 'sweetness'), code: x.code, name: x.name, sort: x.sort, isDefault: x.isDefault, updatedAt: o.now, version: 1 })),
+    channels: seed.channels.map((x) => ({ id: must(channelId, x.code, 'channel'), code: x.code, name: x.name, commissionBp: x.commissionBp, isActive: true, updatedAt: o.now, version: 1 })),
     prices: seed.prices.map((p) => ({
       id: id('price', `${p.productCode}|${p.sizeCode}|${p.channelCode}`), variantId: must(variantId, `${p.productCode}|${p.sizeCode}`, 'variant'), channelId: must(channelId, p.channelCode, 'channel'),
-      priceSatang: p.priceSatang, effectiveFrom: o.effectiveFrom, createdBy: null, createdAt: o.now,
+      priceSatang: p.priceSatang, effectiveFrom: o.effectiveFrom, createdBy: null, createdAt: o.now, updatedAt: o.now, version: 1,
     })),
     recipes: [],
     recipeLines: [],
-    equipment: seed.equipment.map((e) => ({ id: id('equipment', e.code), code: e.code, name: e.name, purchasedAt: e.purchasedAt, priceSatang: e.priceSatang, qty: e.qty, supplier: e.supplier, lifeMonths: e.lifeMonths, condition: e.condition, owner: e.owner, note: e.note })),
+    equipment: seed.equipment.map((e) => ({ id: id('equipment', e.code), code: e.code, name: e.name, purchasedAt: e.purchasedAt, priceSatang: e.priceSatang, qty: e.qty, supplier: e.supplier, lifeMonths: e.lifeMonths, condition: e.condition, owner: e.owner, note: e.note, updatedAt: o.now, version: 1 })),
   }
   for (const b of seed.boms) {
     const bomId = id('bom', b.itemCode)
-    rows.boms.push({ id: bomId, itemId: must(itemId, b.itemCode, 'item'), version: 1, yieldMilli: b.yieldMilli, isCurrent: true, instructions: null })
-    for (const l of b.lines) rows.bomLines.push({ id: id('bom_line', `${b.itemCode}|${l.itemCode}`), bomId, componentItemId: must(itemId, l.itemCode, 'item'), qtyMilli: l.qtyMilli })
+    rows.boms.push({ id: bomId, itemId: must(itemId, b.itemCode, 'item'), version: 1, yieldMilli: b.yieldMilli, isCurrent: true, instructions: null, updatedAt: o.now })
+    for (const l of b.lines) rows.bomLines.push({ id: id('bom_line', `${b.itemCode}|${l.itemCode}`), bomId, componentItemId: must(itemId, l.itemCode, 'item'), qtyMilli: l.qtyMilli, updatedAt: o.now, version: 1 })
   }
   for (const r of seed.recipes) {
     const key = `${r.productCode}|${r.sizeCode}|${r.sweetnessCode}`
     const recipeId = id('recipe', key)
-    rows.recipes.push({ id: recipeId, variantId: must(variantId, `${r.productCode}|${r.sizeCode}`, 'variant'), sweetnessId: must(sweetId, r.sweetnessCode, 'sweetness'), version: 1, effectiveFrom: o.effectiveFrom, isCurrent: true, createdBy: null, note: null })
-    for (const l of r.lines) rows.recipeLines.push({ id: id('recipe_line', `${key}|${l.itemCode}`), recipeId, itemId: must(itemId, l.itemCode, 'item'), qtyMilli: l.qtyMilli })
+    rows.recipes.push({ id: recipeId, variantId: must(variantId, `${r.productCode}|${r.sizeCode}`, 'variant'), sweetnessId: must(sweetId, r.sweetnessCode, 'sweetness'), version: 1, effectiveFrom: o.effectiveFrom, isCurrent: true, createdBy: null, note: null, updatedAt: o.now })
+    for (const l of r.lines) rows.recipeLines.push({ id: id('recipe_line', `${key}|${l.itemCode}`), recipeId, itemId: must(itemId, l.itemCode, 'item'), qtyMilli: l.qtyMilli, updatedAt: o.now, version: 1 })
   }
   return rows
 }
