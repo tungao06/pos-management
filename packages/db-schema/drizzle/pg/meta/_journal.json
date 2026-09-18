@@ -15,6 +15,13 @@
       "when": 1789706164945,
       "tag": "0001_server_seq_bump",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789706235697,
+      "tag": "0002_append_only",
+      "breakpoints": true
     }
   ]
 }
