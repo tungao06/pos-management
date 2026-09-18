@@ -5,6 +5,8 @@ import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
 import { LoginScreen } from './screens/LoginScreen'
 import { OpenShiftScreen } from './screens/OpenShiftScreen'
+import { OrderDetailScreen } from './screens/OrderDetailScreen'
+import { OrdersScreen } from './screens/OrdersScreen'
 import { QrPayScreen } from './screens/QrPayScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
@@ -70,8 +72,24 @@ const doneRoute = createRoute({
     </RequireSession>
   ),
 })
-const ordersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/orders' })
-const orderDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: '/orders/$orderId' })
+const ordersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/orders',
+  component: () => (
+    <RequireSession>
+      <OrdersScreen />
+    </RequireSession>
+  ),
+})
+const orderDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/orders/$orderId',
+  component: () => (
+    <RequireSession>
+      <OrderDetailScreen />
+    </RequireSession>
+  ),
+})
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
