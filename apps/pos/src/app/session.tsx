@@ -14,9 +14,16 @@ const SessionContext = createContext<Session | null>(null)
 /** Who is using the till right now. Memory only: a reload asks for the PIN again. */
 export function SessionProvider({ children }: { children: ReactNode }): JSX.Element {
   const [user, setUser] = useState<UserDto | null>(null)
-  // Monotonic clock (review I-2): Date.now() can jump backwards (RTC/NTP correction), which would silently
-  // suspend the idle lock until the jump is caught up.
-  const lastActivity = useRef(performance.now())
+  // Two clocks (review I-1, I-2). performance.now() is monotonic, but Chrome/Android pause it while the device is
+  // suspended (Chromium's TimeTicks "stand still" when suspended; on Android/Linux it reads CLOCK_MONOTONIC, which
+  // stops during suspend) — so a nap that outlasts the idle limit would not be counted. Date.now() keeps advancing
+  // through suspend, but it can jump backwards (RTC/NTP correction), which would otherwise silently suspend the
+  // idle lock until the jump is caught up. Tracking both and locking when either says the limit passed covers both
+  // failure modes: sleep is caught by the wall clock, a backwards wall jump is caught by the monotonic clock (which
+  // keeps working — a negative wall delta never locks by itself), and a forward wall jump can only lock early,
+  // which is harmless.
+  const lastActivityMono = useRef(performance.now())
+  const lastActivityWall = useRef(Date.now())
 
   useEffect(() => {
     // Locks (and reports whether it did) if the idle limit has already passed. Called before any refresh of
@@ -24,14 +31,17 @@ export function SessionProvider({ children }: { children: ReactNode }): JSX.Elem
     // visibilitychange — a suspended tab's timers (including the 15 s poll below) do not run while hidden, so the
     // first check after the tab wakes must not wait for the next poll (review I-2).
     const check = (): boolean => {
-      if (isIdleExpired(lastActivity.current, performance.now())) {
+      if (isIdleExpired(lastActivityMono.current, performance.now()) || isIdleExpired(lastActivityWall.current, Date.now())) {
         setUser(null)
         return true
       }
       return false
     }
     const mark = (): void => {
-      if (!check()) lastActivity.current = performance.now()
+      if (!check()) {
+        lastActivityMono.current = performance.now()
+        lastActivityWall.current = Date.now()
+      }
     }
     const onVisible = (): void => {
       if (document.visibilityState === 'visible') check()
@@ -51,7 +61,8 @@ export function SessionProvider({ children }: { children: ReactNode }): JSX.Elem
   }, [])
 
   const signIn = useCallback((u: UserDto) => {
-    lastActivity.current = performance.now()
+    lastActivityMono.current = performance.now()
+    lastActivityWall.current = Date.now()
     setUser(u)
   }, [])
   const lock = useCallback(() => setUser(null), []) // CartProvider is a separate context, so locking keeps the cart as-is (D50 Q3-24)

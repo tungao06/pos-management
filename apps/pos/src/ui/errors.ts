@@ -25,8 +25,7 @@ const MESSAGES: Record<PosErrorCode, string> = {
 /**
  * Thai message for any error thrown by PosApi (BAD_INPUT keeps its technical detail for troubleshooting).
  * M10: an unrecognized code (a raw DrizzleError, a CHECK failure, …) must never leak English/SQL text onto the
- * screen — it is logged to the console and shown as a generic Thai message; the raw text stays available via
- * `errorDetail` for an optional `<details>` element.
+ * screen — it is logged to the console and shown as a generic Thai message.
  */
 export function errorMessage(e: unknown): string {
   const code = posErrorCode(e)
@@ -40,9 +39,4 @@ export function errorMessage(e: unknown): string {
     return Number.isInteger(seconds) && seconds > 0 ? TH.errPinLockedFor(seconds) : MESSAGES[code]
   }
   return code === 'BAD_INPUT' ? `${MESSAGES[code]} — ${raw.slice(code.length + 2)}` : MESSAGES[code]
-}
-
-/** Raw error text for an optional `<details>` next to `errorMessage` — never the primary on-screen message (M10). */
-export function errorDetail(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
 }

@@ -11,7 +11,6 @@ export const TH = {
   pendingSync: (n: number): string => `ยังไม่ส่งขึ้นเซิร์ฟเวอร์ ${n} รายการ`,
   storageNotPersistent: 'ข้อมูลในเครื่องยังไม่ถูกล็อกไว้ (อาจถูกล้าง) — ติดตั้งแอปลงหน้าจอหลัก',
   errUnexpected: 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง',
-  errorDetail: 'รายละเอียด (สำหรับแก้ปัญหา)',
 
   setupTitle: 'ตั้งค่าเครื่องครั้งแรก',
   setupDeviceName: 'ชื่อเครื่อง',

@@ -30,6 +30,16 @@ function mockClock(): { advance: (ms: number) => void } {
   return { advance: (ms: number) => (now += ms) }
 }
 
+/**
+ * Moves only `Date.now()`, leaving `performance.now()` untouched — like a tablet whose screen slept: Chrome/Android
+ * pause TimeTicks (performance.now) while suspended, but the wall clock keeps advancing (review I-1).
+ */
+function mockWallClock(): { advance: (ms: number) => void } {
+  let now = 0
+  vi.spyOn(Date, 'now').mockImplementation(() => now)
+  return { advance: (ms: number) => (now += ms) }
+}
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
@@ -75,5 +85,49 @@ describe('SessionProvider idle auto-lock (D50 spec §5, review I-2)', () => {
     clock.advance(IDLE_LOCK_MS - 1_000)
     act(() => window.dispatchEvent(new Event('pointerdown')))
     expect(screen.getByTestId('who').textContent).toBe('TungAo')
+  })
+
+  it('locks on the next tap when Date.now jumps past the limit while performance.now stands still (device slept; review I-1)', () => {
+    vi.spyOn(performance, 'now').mockReturnValue(0) // stands still, as it does while the device is suspended
+    const wall = mockWallClock()
+    render(
+      <SessionProvider>
+        <Probe />
+      </SessionProvider>,
+    )
+    act(() => screen.getByTestId('sign-in').click())
+    expect(screen.getByTestId('who').textContent).toBe('TungAo')
+    wall.advance(IDLE_LOCK_MS + 1_000)
+    act(() => window.dispatchEvent(new Event('pointerdown')))
+    expect(screen.getByTestId('who').textContent).toBe('locked')
+  })
+
+  it('locks on visibilitychange when Date.now jumps past the limit while performance.now stands still (device slept; review I-1)', () => {
+    vi.spyOn(performance, 'now').mockReturnValue(0)
+    const wall = mockWallClock()
+    render(
+      <SessionProvider>
+        <Probe />
+      </SessionProvider>,
+    )
+    act(() => screen.getByTestId('sign-in').click())
+    wall.advance(IDLE_LOCK_MS + 1_000)
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    expect(screen.getByTestId('who').textContent).toBe('locked')
+  })
+
+  it('a backwards wall-clock jump alone does not lock, and does not stop the monotonic check from working', () => {
+    vi.spyOn(performance, 'now').mockReturnValue(0)
+    const wall = mockWallClock()
+    render(
+      <SessionProvider>
+        <Probe />
+      </SessionProvider>,
+    )
+    act(() => screen.getByTestId('sign-in').click())
+    wall.advance(-IDLE_LOCK_MS - 1_000) // wall clock jumps backwards past "epoch" (negative elapsed)
+    act(() => window.dispatchEvent(new Event('pointerdown')))
+    expect(screen.getByTestId('who').textContent).toBe('TungAo') // negative wall elapsed must not lock by itself
   })
 })
