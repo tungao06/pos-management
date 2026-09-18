@@ -1,9 +1,9 @@
 :root {
-  /* DA-YO brand (D44). Orange and matcha are decoration only — never text (contrast 2.56:1 / 2.67:1 on cream). */
-  /* รอ Q3-23: matcha ใช้ในคลื่น (wave.svg) — README โลโก้ให้ matcha แค่ผิวน้ำชาในแก้วเท่านั้น · selected/muted/line/surface เป็นโทเค็นเพิ่มนอก D44 */
+  /* DA-YO brand (D44, D50 Q3-23). Orange is decoration only — never text (contrast 2.56:1 on cream).
+     Matcha lives only in the logo's tea; the wave (wave.svg) is orange on Deep Forest (#1E3B22 / #35613B).
+     The signage yellow is for shop signage only, never the app. selected/muted/line/surface are approved extra neutrals (D50). */
   --forest: #1e3b22;       /* Deep Forest: main text, bars, primary buttons */
   --cream: #f6f3e8;        /* Cream: page background, text on forest (11.09:1) */
-  --matcha: #7ea05f;       /* wave accent only */
   --orange: #ed7a13;       /* shop-signage orange: wave accent only */
   --selected: #e4ecd9;     /* pressed/selected background (forest text 10.15:1) */
   --muted: #5c6b5e;        /* secondary text on cream (5.08:1) */

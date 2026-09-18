@@ -1,7 +1,7 @@
 import type { JSX } from 'react'
 import { TH } from './th'
 
-/** Shop-signage header (D44): Deep Forest bar, cream text, reversed logo without slogan, orange/matcha wave. */
+/** Shop-signage header (D44): Deep Forest bar, cream text, reversed logo without slogan, orange/forest wave (D50 Q3-23). */
 export function BrandBar(): JSX.Element {
   return (
     <header className="brandbar">
