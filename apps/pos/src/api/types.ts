@@ -72,6 +72,20 @@ export type OrderDetailDto = OrderSummaryDto & {
   voidable: boolean
 }
 
+export type VoidOrderInput = {
+  orderId: string
+  /** Signed-in user who performs the void. */
+  actorUserId: string
+  /** Owner who approves with their PIN (spec §4.3). */
+  approverUserId: string
+  approverPin: string
+  reason: string
+  /** "ทำเครื่องดื่มไปแล้วหรือยัง" — true = made (waste), false = return ingredients. */
+  made: boolean
+  /** Required when the order was paid by PromptPay (D48 Q3-15). */
+  refundReference: string | null
+}
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -83,10 +97,11 @@ export interface PosApi {
   listOrders(): Promise<OrderSummaryDto[]>
   getOrder(orderId: string): Promise<OrderDetailDto>
   promptPayForAmount(amountSatang: number): Promise<string>
+  voidOrder(input: VoidOrderInput): Promise<OrderDetailDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
-export const POS_API_METHODS = ['bootstrap', 'setupShop', 'login', 'openShift', 'loadMenu', 'commitSale', 'listOrders', 'getOrder', 'promptPayForAmount'] as const
+export const POS_API_METHODS = ['bootstrap', 'setupShop', 'login', 'openShift', 'loadMenu', 'commitSale', 'listOrders', 'getOrder', 'promptPayForAmount', 'voidOrder'] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
 export const POS_API_METHODS_COMPLETE: [MissingMethods] extends [never] ? true : MissingMethods = true
