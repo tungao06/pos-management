@@ -77,8 +77,8 @@ export const purchaseUnit = pgTable('purchase_unit', {
   serverSeq: serverSeq(),
 })
 
-/** bom.version is the BOM's own revision number (a new row per revision), not a per-row edit counter — it already
- * satisfies D47 item 8's "version int NOT NULL default 1"; only updated_at is added. */
+/** bom.version is the revision number (a new row per revision), not a per-row edit counter. It does not change when
+ * is_current flips from true to false, so change detection must use server_seq / updated_at, not version. */
 export const bom = pgTable('bom', {
   id: id(),
   itemId: text('item_id').notNull().references(() => item.id),
@@ -172,7 +172,7 @@ export const price = pgTable('price', {
   serverSeq: serverSeq(),
 }, (t) => [unique().on(t.variantId, t.channelId, t.effectiveFrom)])
 
-/** recipe.version is the recipe's own revision number (a new row per revision) — see the note on bom.version above. */
+/** recipe.version is the revision number (a new row per revision); like bom.version it does not change when is_current flips. */
 export const recipe = pgTable('recipe', {
   id: id(),
   variantId: text('variant_id').notNull().references(() => productVariant.id),
