@@ -13,6 +13,7 @@ export type PosErrorCode =
   | 'NO_RECIPE'
   | 'TENDER_TOO_LOW'
   | 'DISCOUNT_TOO_BIG'
+  | 'PRICE_CHANGED' // D50 Q3-27 — detail "shown <X>, now <Y>"
   | 'NO_PROMPTPAY_ID'
   | 'ORDER_NOT_FOUND'
   | 'VOID_NOT_ALLOWED'

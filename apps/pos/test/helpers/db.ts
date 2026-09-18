@@ -4,7 +4,7 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import { nodeSqliteCallback, type NodeSqliteLike } from '@dayo/db-schema/testing'
 import type { ApiDeps } from '../../src/api/deps'
 import { createPosApi } from '../../src/api/pos-api'
-import type { DeviceDto, PosApi, SetupInput, ShiftDto, UserDto } from '../../src/api/types'
+import type { CommitSaleInput, DeviceDto, PosApi, SetupInput, ShiftDto, UserDto } from '../../src/api/types'
 import { initDatabase } from '../../src/db/init'
 
 /** Tiny argon2 cost so tests stay fast (production uses PROD_PIN_COST). */
@@ -70,4 +70,14 @@ export async function openReadyApi(): Promise<ReadyApi> {
   const other = boot.users.find((u) => u.displayName === 'DCm')!
   const shift = await t.api.openShift({ userId: owner.id, openingFloatSatang: 50_000 })
   return { ...t, owner, other, device: boot.device!, shift }
+}
+
+/**
+ * D50 Q3-27: the total the cart would show for these lines right now (menu price × qty − discount) — what a test
+ * passes as commitSale's expectedTotalSatang. Plain arithmetic on purpose: it must not share code with commitSale.
+ */
+export async function shownTotalSatang(t: TestApi, lines: CommitSaleInput['lines'], discount: CommitSaleInput['discount']): Promise<number> {
+  const menu = await t.api.loadMenu()
+  const price = (variantId: string): number => menu.variants.find((v) => v.id === variantId)?.priceSatang ?? 0
+  return lines.reduce((sum, l) => sum + price(l.variantId) * l.qty, 0) - (discount?.amountSatang ?? 0)
 }

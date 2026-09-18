@@ -26,6 +26,26 @@ export type MenuDto = {
   bestSellerProductIds: string[]
 }
 
+export type CommitSaleInput = {
+  /** Created when the cart starts; resending the same id returns the first result (decision T17). */
+  orderId: string
+  actorUserId: string
+  lines: { variantId: string; sweetnessId: string; qty: number }[]
+  discount: { amountSatang: number; reason: string } | null
+  payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' }
+  /** The total the customer was shown (cart / QR). commitSale refuses with PRICE_CHANGED if the DB re-price differs (I-7, D50 Q3-27). */
+  expectedTotalSatang: number
+}
+export type CommitSaleResult = {
+  orderId: string
+  receiptNo: string
+  queueNo: number
+  businessDate: string
+  totalSatang: number
+  changeSatang: number | null
+  method: 'CASH' | 'PROMPTPAY'
+}
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -33,10 +53,11 @@ export interface PosApi {
   login(userId: string, pin: string): Promise<UserDto>
   openShift(input: OpenShiftInput): Promise<ShiftDto>
   loadMenu(): Promise<MenuDto>
+  commitSale(input: CommitSaleInput): Promise<CommitSaleResult>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
-export const POS_API_METHODS = ['bootstrap', 'setupShop', 'login', 'openShift', 'loadMenu'] as const
+export const POS_API_METHODS = ['bootstrap', 'setupShop', 'login', 'openShift', 'loadMenu', 'commitSale'] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
 export const POS_API_METHODS_COMPLETE: [MissingMethods] extends [never] ? true : MissingMethods = true

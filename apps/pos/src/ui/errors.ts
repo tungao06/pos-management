@@ -16,6 +16,7 @@ const MESSAGES: Record<PosErrorCode, string> = {
   NO_RECIPE: TH.errNoRecipe,
   TENDER_TOO_LOW: TH.errTenderTooLow,
   DISCOUNT_TOO_BIG: TH.errDiscountTooBig,
+  PRICE_CHANGED: TH.errPriceChanged,
   NO_PROMPTPAY_ID: TH.errNoPromptPayId,
   ORDER_NOT_FOUND: TH.errOrderNotFound,
   VOID_NOT_ALLOWED: TH.errVoidNotAllowed,

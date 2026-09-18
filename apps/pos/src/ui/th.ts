@@ -104,6 +104,7 @@ export const TH = {
   errNoRecipe: 'เมนูนี้ยังไม่มีสูตร ขายไม่ได้',
   errTenderTooLow: 'รับเงินน้อยกว่ายอด',
   errDiscountTooBig: 'ส่วนลดต้องน้อยกว่ายอดรวม',
+  errPriceChanged: 'ราคาเปลี่ยนแล้ว — กำลังปรับราคาในตะกร้า',
   errReasonRequired: 'ต้องใส่เหตุผล',
   errNoPromptPayId: 'ยังไม่ได้ตั้งหมายเลขพร้อมเพย์',
   errOrderNotFound: 'ไม่พบบิล',
