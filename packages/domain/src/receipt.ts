@@ -12,3 +12,11 @@ export function parseReceiptNo(s: string): { prefix: string; counter: number } {
   if (!m) throw new RangeError(`bad receipt number "${s}"`)
   return { prefix: m[1]!, counter: Number(m[2]) }
 }
+
+/** Next receipt number for `prefix` given the device's latest one (spec §4.7: no gaps, no duplicates). */
+export function nextReceiptNo(prefix: string, lastReceiptNo: string | null): string {
+  if (lastReceiptNo === null) return formatReceiptNo(prefix, 1)
+  const last = parseReceiptNo(lastReceiptNo)
+  if (last.prefix !== prefix) throw new RangeError(`last receipt ${lastReceiptNo} does not belong to prefix ${prefix}`)
+  return formatReceiptNo(prefix, last.counter + 1)
+}
