@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": { "./seed/dayo-seed.json": "./seed/dayo-seed.json" },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
