@@ -1,0 +1,47 @@
+{
+  "name": "@dayo/pos",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@dayo/contracts": "workspace:*",
+    "@dayo/db-schema": "workspace:*",
+    "@dayo/domain": "workspace:*",
+    "@dayo/excel-import": "workspace:*",
+    "@noble/hashes": "2.4.0",
+    "@sqlite.org/sqlite-wasm": "3.53.4-build1",
+    "@tanstack/react-query": "5.103.1",
+    "@tanstack/react-router": "1.170.38",
+    "comlink": "4.4.2",
+    "drizzle-orm": "0.45.2",
+    "qrcode": "1.5.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "uuid": "14.0.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "jsdom": "30.1.0",
+    "typescript": "~5.9.0",
+    "vite": "8.3.0",
+    "vite-plugin-pwa": "1.3.0",
+    "vitest": "5.0.1",
+    "workbox-build": "7.4.1",
+    "workbox-window": "7.4.1"
+  }
+}

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DA-YO spike: SQLite WASM + OPFS</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; }
+      #status { font-size: 40px; font-weight: 700; margin-bottom: 12px; }
+      #status[data-verdict='PASS'] { color: #15803d; }
+      #status[data-verdict='FAIL'] { color: #b91c1c; }
+      pre { white-space: pre-wrap; font-size: 13px; background: #f4f4f5; padding: 12px; }
+    </style>
+  </head>
+  <body>
+    <div id="status" data-verdict="RUNNING">RUNNING</div>
+    <pre id="result"></pre>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

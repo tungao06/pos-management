@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "noEmit": true, "types": ["node"], "lib": ["ES2022"] },
-  "include": ["src", "test", "drizzle.config.sqlite.ts", "drizzle.config.pg.ts"]
+  "include": ["src", "test", "scripts", "drizzle.config.sqlite.ts", "drizzle.config.pg.ts"]
 }

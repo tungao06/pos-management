@@ -6,12 +6,15 @@
   "exports": {
     ".": "./src/index.ts",
     "./sqlite": "./src/sqlite/index.ts",
-    "./pg": "./src/pg/index.ts"
+    "./pg": "./src/pg/index.ts",
+    "./browser": "./src/browser/index.ts",
+    "./testing": "./src/testing/node-sqlite-callback.ts"
   },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "generate": "drizzle-kit generate --config drizzle.config.sqlite.ts && drizzle-kit generate --config drizzle.config.pg.ts"
+    "generate": "drizzle-kit generate --config drizzle.config.sqlite.ts && drizzle-kit generate --config drizzle.config.pg.ts && pnpm gen:browser",
+    "gen:browser": "tsx scripts/gen-sqlite-migrations.cli.ts"
   },
   "dependencies": {
     "@dayo/contracts": "workspace:*",
@@ -25,6 +28,7 @@
     "@types/sql.js": "^1.4.9",
     "drizzle-kit": "^0.31.0",
     "sql.js": "^1.14.0",
+    "tsx": "4.23.13",
     "typescript": "~5.9.0",
     "vitest": "^5.0.0"
   }
