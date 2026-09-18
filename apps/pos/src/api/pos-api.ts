@@ -3,7 +3,8 @@ import { login } from './auth'
 import { bootstrap } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { loadMenu } from './menu'
-import { commitSale } from './sale'
+import { getOrder, listOrders } from './orders'
+import { commitSale, promptPayForAmount } from './sale'
 import { createSerialQueue } from './serial'
 import { setupShop } from './setup'
 import { openShift } from './shift'
@@ -18,5 +19,8 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     openShift: (input) => serial(() => openShift(db, deps, input)),
     loadMenu: () => serial(() => loadMenu(db, deps)),
     commitSale: (input) => serial(() => commitSale(db, deps, input)),
+    listOrders: () => serial(() => listOrders(db)),
+    getOrder: (orderId) => serial(() => getOrder(db, orderId)),
+    promptPayForAmount: (amountSatang) => serial(() => promptPayForAmount(db, deps, amountSatang)),
   }
 }

@@ -46,6 +46,32 @@ export type CommitSaleResult = {
   method: 'CASH' | 'PROMPTPAY'
 }
 
+export type OrderSummaryDto = {
+  id: string
+  receiptNo: string
+  queueNo: number
+  status: 'paid' | 'voided'
+  totalSatang: number
+  method: 'CASH' | 'PROMPTPAY'
+  paidAt: string
+  cups: number
+}
+export type OrderLineDto = { lineNo: number; productName: string; sizeName: string; sweetnessName: string; qty: number; unitPriceSatang: number; lineTotalSatang: number }
+export type OrderEventDto = { seq: number; type: string; at: string; actorId: string; payload: unknown }
+export type OrderDetailDto = OrderSummaryDto & {
+  businessDate: string
+  shiftId: string | null
+  subtotalSatang: number
+  discountSatang: number
+  discountReason: string | null
+  tenderedSatang: number | null
+  changeSatang: number | null
+  voidedAt: string | null
+  lines: OrderLineDto[]
+  events: OrderEventDto[]
+  voidable: boolean
+}
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -54,10 +80,13 @@ export interface PosApi {
   openShift(input: OpenShiftInput): Promise<ShiftDto>
   loadMenu(): Promise<MenuDto>
   commitSale(input: CommitSaleInput): Promise<CommitSaleResult>
+  listOrders(): Promise<OrderSummaryDto[]>
+  getOrder(orderId: string): Promise<OrderDetailDto>
+  promptPayForAmount(amountSatang: number): Promise<string>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
-export const POS_API_METHODS = ['bootstrap', 'setupShop', 'login', 'openShift', 'loadMenu', 'commitSale'] as const
+export const POS_API_METHODS = ['bootstrap', 'setupShop', 'login', 'openShift', 'loadMenu', 'commitSale', 'listOrders', 'getOrder', 'promptPayForAmount'] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
 export const POS_API_METHODS_COMPLETE: [MissingMethods] extends [never] ? true : MissingMethods = true

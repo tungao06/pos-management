@@ -1,10 +1,12 @@
 import { DatabaseSync } from 'node:sqlite'
+import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import type { RemoteDb } from '@dayo/db-schema/browser'
+import * as s from '@dayo/db-schema/sqlite'
 import { nodeSqliteCallback, type NodeSqliteLike } from '@dayo/db-schema/testing'
 import type { ApiDeps } from '../../src/api/deps'
 import { createPosApi } from '../../src/api/pos-api'
-import type { CommitSaleInput, DeviceDto, PosApi, SetupInput, ShiftDto, UserDto } from '../../src/api/types'
+import type { CommitSaleInput, CommitSaleResult, DeviceDto, PosApi, SetupInput, ShiftDto, UserDto } from '../../src/api/types'
 import { initDatabase } from '../../src/db/init'
 
 /** Tiny argon2 cost so tests stay fast (production uses PROD_PIN_COST). */
@@ -80,4 +82,19 @@ export async function shownTotalSatang(t: TestApi, lines: CommitSaleInput['lines
   const menu = await t.api.loadMenu()
   const price = (variantId: string): number => menu.variants.find((v) => v.id === variantId)?.priceSatang ?? 0
   return lines.reduce((sum, l) => sum + price(l.variantId) * l.qty, 0) - (discount?.amountSatang ?? 0)
+}
+
+/** One-line sale at 50% sweetness by the first owner (test shortcut). */
+export async function sellSku(
+  t: ReadyApi,
+  sku: string,
+  qty: number,
+  payment: CommitSaleInput['payment'],
+  discount: CommitSaleInput['discount'] = null,
+): Promise<CommitSaleResult> {
+  const variant = await t.db.select().from(s.productVariant).where(eq(s.productVariant.sku, sku)).get()
+  const sweet = await t.db.select().from(s.sweetnessLevel).where(eq(s.sweetnessLevel.code, 'S050')).get()
+  if (!variant || !sweet) throw new Error(`no variant ${sku} or sweetness S050`)
+  const lines = [{ variantId: variant.id, sweetnessId: sweet.id, qty }]
+  return t.api.commitSale({ orderId: t.deps.newId(), actorUserId: t.owner.id, lines, discount, payment, expectedTotalSatang: await shownTotalSatang(t, lines, discount) })
 }

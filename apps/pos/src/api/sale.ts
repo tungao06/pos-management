@@ -1,13 +1,14 @@
 import { and, desc, eq, isNotNull, max } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { cashChangeSatang, nextReceiptNo, planSale, type SaleCartLine, type SaleContext, type SalePlan } from '@dayo/domain'
+import { cashChangeSatang, nextReceiptNo, planSale, promptPayPayload, type SaleCartLine, type SaleContext, type SalePlan } from '@dayo/domain'
 import { appendOrderEvents, type NewEvent } from '../db/events'
 import { enqueueOutbox } from '../db/outbox'
 import { insertMovements, loadSaleContext } from '../db/stock'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
+import { getSetting, PROMPTPAY_SETTING_KEY } from './setup'
 import type { CommitSaleInput, CommitSaleResult } from './types'
 
 async function lastReceiptNo(db: RemoteDb, deviceId: string): Promise<string | null> {
@@ -196,4 +197,12 @@ export async function commitSale(db: RemoteDb, deps: ApiDeps, input: CommitSaleI
 
     return { orderId: input.orderId, receiptNo, queueNo, businessDate: shift.businessDate, totalSatang, changeSatang, method: input.payment.method }
   })
+}
+
+/** EMVCo payload for the shop's PromptPay id with the bill amount (spec §5, D7 · D48 Q3-4). Built offline. */
+export async function promptPayForAmount(db: RemoteDb, deps: ApiDeps, amountSatang: number): Promise<string> {
+  if (!Number.isSafeInteger(amountSatang) || amountSatang <= 0) throw new PosError('BAD_INPUT', 'amount must be a positive whole number of satang')
+  const id = await getSetting(db, PROMPTPAY_SETTING_KEY, deps.now())
+  if (typeof id !== 'string' || id === '') throw new PosError('NO_PROMPTPAY_ID', 'set the PromptPay id first')
+  return promptPayPayload(id, amountSatang)
 }
