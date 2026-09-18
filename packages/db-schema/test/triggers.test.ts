@@ -78,7 +78,7 @@ const APPEND_ONLY = ['cash_movement', 'order_event', 'stock_movement', 'z_report
 function ledgerFixture(itemId: string, channelId: string) {
   return {
     user: { id: 'u1', displayName: 'Owner', role: 'owner' as const, pinHash: 'x', isActive: true, createdAt: NOW, updatedAt: NOW, version: 1 },
-    device: { id: 'd1', name: 'Tablet', receiptPrefix: 'A', isSellingDevice: true, registeredAt: NOW },
+    device: { id: 'd1', name: 'Tablet', receiptPrefix: 'A', isSellingDevice: true, registeredAt: NOW, updatedAt: NOW },
     shift: { id: 's1', deviceId: 'd1', businessDate: '2026-09-18', status: 'open' as const, openedBy: 'u1', openedAt: NOW, openingFloatSatang: 100_000 },
     order: {
       id: 'o1', origin: 'device' as const, deviceId: 'd1', businessDate: '2026-09-18', shiftId: 's1', channelId, status: 'open' as const, subtotalSatang: 0,
