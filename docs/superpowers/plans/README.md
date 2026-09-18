@@ -7,7 +7,7 @@ spec ครอบคลุมหลายระบบย่อย จึงแ�
 | # | แผน | ขั้นใน spec §11 | ผลลัพธ์ที่ใช้ได้ | สถานะ |
 |---|---|---|---|---|
 | 1 | [2026-09-17-01-foundation-domain.md](2026-09-17-01-foundation-domain.md) | 0–1 | monorepo + CI · `packages/domain` ครบทุกกฎ §4 พร้อม property test · `packages/contracts` · `packages/excel-import` + **golden test 360 สูตรตรงกับ Excel** | ✅ เสร็จ 2026-09-17 (CI ผ่านในเครื่อง · ยังไม่ push · [บันทึกการทำ](2026-09-17-01-บันทึกการทำแผน1.md)) |
-| 2 | [2026-09-17-02-db-schema.md](2026-09-17-02-db-schema.md) | 2 | `packages/db-schema` 2 dialect + parity test · migration · seed จาก Excel ลง SQLite/Postgres | 📝 เขียนแล้ว · แก้รอบ 5 (Task 0 + ตัวเลขใหม่ · [คำถามก่อนทำ](2026-09-17-02-คำถามก่อนทำ.md)) |
+| 2 | [2026-09-17-02-db-schema.md](2026-09-17-02-db-schema.md) | 2 | `packages/db-schema` 2 dialect + parity test · migration · seed จาก Excel ลง SQLite/Postgres | ✅ เสร็จ 2026-09-18 (merge เข้า main ในเครื่อง · [บันทึกการทำ](2026-09-17-02-บันทึกการทำแผน2.md)) |
 | 3 | [2026-09-17-03-pos-sell.md](2026-09-17-03-pos-sell.md) (spike SQLite WASM/OPFS ก่อน) | 0, 3 | แอปขายในเครื่อง: ตั้งค่าเครื่อง · ล็อกอิน · เปิดกะ · ขาย · เงินสด/QR · ตัดสต็อก · ประวัติ · ยกเลิก · แบรนด์ DA-YO (D44) | 📝 เขียนแล้ว · คำถาม Q3-1–19 ตอบแล้ว (D44, D46–D48) · Q3-20 รอคำตอบ ([คำถามก่อนทำ](2026-09-17-03-คำถามก่อนทำ.md)) |
 | 3b | 03b-pos-shift-close | 3 | ปิดกะ · นับเงินแยกธนบัตร · X/Z report · ปุ่มสำรองไฟล์ฐานข้อมูล — **ต้องเสร็จก่อนใช้ขายจริง** (D48 Q3-17) · ก่อนขายจริงต้อง deploy Cloudflare Pages ด้วย (งานเล็กแยก — D48 Q3-2) | รอ (เขียนแผนหลังแผน 3 เสร็จ) |
 | 4 | 04-pos-stock | 4 | ทำเบส · รับของ · นับ · ปรับ · หน้าสต็อก · เตือน | รอ |
