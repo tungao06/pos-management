@@ -17,6 +17,6 @@ spec ครอบคลุมหลายระบบย่อย จึงแ�
 
 กติกาทุกแผน
 - TDD: เขียนเทสต์ให้ตกก่อน แล้วค่อยเขียนโค้ด · commit บ่อย
-- ทุก commit ลงท้ายด้วยบรรทัดว่าง + `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
+- **commit:** ใช้ skill `committing-code` ทุกครั้ง · **ห้ามใส่** `Co-Authored-By: Claude…` หรือ trailer ของ AI ใด ๆ · stage เฉพาะไฟล์ที่ระบุชื่อ · เอกสาร `docs/**` ของโปรเจกต์นี้ commit ได้ (ข้อยกเว้นเฉพาะโปรเจกต์นี้ — D45)
 - โมเดล agent (D43): sonnet ขั้นต่ำสำหรับ implement/review ราย task · opus สำหรับ final review ของแผนและการเขียนแผน · ไม่ใช้ haiku
 - ห้ามแตะ `docs/` ยกเว้นติ๊ก checkbox ในแผนและเพิ่มบันทึกการตัดสินใจใหม่ใน `docs/design/00-บันทึกการตัดสินใจ.md`
