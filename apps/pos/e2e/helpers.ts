@@ -38,3 +38,11 @@ export async function firstRun(page: Page): Promise<void> {
   await login(page)
   await openShift(page)
 }
+
+export async function addItem(page: Page, productCode: string, opts: { category?: string; size?: string; sweet?: string } = {}): Promise<void> {
+  await page.getByTestId(`tab-${opts.category ?? 'THAI'}`).click()
+  await page.getByTestId(`product-${productCode}`).click()
+  if (opts.size !== undefined) await page.getByTestId(`size-${opts.size}`).click()
+  if (opts.sweet !== undefined) await page.getByTestId(`sweet-${opts.sweet}`).click()
+  await page.getByTestId('add-to-cart').click()
+}

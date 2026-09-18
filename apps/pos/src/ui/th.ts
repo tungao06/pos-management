@@ -62,6 +62,9 @@ export const TH = {
   qrTitle: 'สแกนจ่ายด้วยพร้อมเพย์',
   qrReceived: 'ได้รับเงินแล้ว',
 
+  priceChanged: (from: string, to: string): string => `ราคาเปลี่ยน: ยอดเดิม ${from} → ยอดใหม่ ${to} — ตรวจยอดแล้วกดยืนยันอีกครั้ง`,
+  qrRescan: 'ให้ลูกค้าสแกน QR ใหม่ที่ยอดใหม่',
+
   queue: 'คิว',
   receiptNo: 'เลขที่บิล',
   newSale: 'ขายต่อ',

@@ -1,8 +1,11 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { RequireSession } from './app/guards'
+import { CashPayScreen } from './screens/CashPayScreen'
+import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
 import { LoginScreen } from './screens/LoginScreen'
 import { OpenShiftScreen } from './screens/OpenShiftScreen'
+import { QrPayScreen } from './screens/QrPayScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
 import { BrandBar } from './ui/BrandBar'
@@ -39,9 +42,34 @@ const sellRoute = createRoute({
     </RequireSession>
   ),
 })
-const payCashRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pay/cash' })
-const payQrRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pay/qr' })
-const doneRoute = createRoute({ getParentRoute: () => rootRoute, path: '/done' })
+const payCashRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/pay/cash',
+  component: () => (
+    <RequireSession>
+      <CashPayScreen />
+    </RequireSession>
+  ),
+})
+const payQrRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/pay/qr',
+  component: () => (
+    <RequireSession>
+      <QrPayScreen />
+    </RequireSession>
+  ),
+})
+const doneRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/done',
+  validateSearch: (search: Record<string, unknown>): { orderId: string } => ({ orderId: typeof search['orderId'] === 'string' ? search['orderId'] : '' }),
+  component: () => (
+    <RequireSession>
+      <DoneScreen />
+    </RequireSession>
+  ),
+})
 const ordersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/orders' })
 const orderDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: '/orders/$orderId' })
 
