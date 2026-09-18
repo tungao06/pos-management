@@ -109,7 +109,7 @@ pos-management/
 
 ตารางแบ่ง 3 ประเภท (สำคัญต่อ sync)
 - **R = ข้อมูลอ้างอิง** (เซิร์ฟเวอร์เป็นเจ้าของ แก้ได้ มี `version` + `updated_at`) ไหลลงเครื่อง
-- **T = ธุรกรรม** (เครื่องเป็นเจ้าของ insert อย่างเดียว) ไหลขึ้นเซิร์ฟเวอร์
+- **T = ธุรกรรม** (เครื่องเป็นเจ้าของ insert อย่างเดียว) ไหลขึ้นเซิร์ฟเวอร์ · ตารางบัญชี `stock_movement` `order_event` `cash_movement` `z_report` ห้าม UPDATE/DELETE โดย DB บังคับด้วย trigger ทั้ง SQLite และ Postgres (แก้ด้วยการเพิ่มแถวใหม่เท่านั้น)
 - **L = เฉพาะในเครื่อง** ไม่ sync
 
 ### 3.1 ผู้ใช้และอุปกรณ์ (R)
@@ -129,7 +129,7 @@ pos-management/
 | `sweetness_level` | id · name (`50%`) · sort · is_default | 5 ระดับ · default 50% |
 | `price` | id · variant_id · channel_id · price_satang · effective_from · created_by | ราคาเป็นตัวเลขต่อขนาด ไม่ใช่ +บาท · ประวัติเก็บทุกแถว |
 | `channel` | id · name (`หน้าร้าน`, `LINE OA`, `Grab`, `LINE MAN`, `อื่นๆ`) · commission_bp · is_active | เฟส 1 ใช้ `หน้าร้าน` อย่างเดียว |
-| `recipe` | id · variant_id · sweetness_id · version · effective_from · created_by · note · **is_current** | 360 แถวต่อ version · แก้สูตร = สร้าง version ใหม่ ไม่แก้ทับ |
+| `recipe` | id · variant_id · sweetness_id · version · effective_from · created_by · note · **is_current** | 360 แถวต่อ version · แก้สูตร = สร้าง version ใหม่ ไม่แก้ทับ · DB บังคับ `is_current` ได้แถวเดียวต่อ (variant, ความหวาน) |
 | `recipe_line` | id · recipe_id · item_id · qty_milli | อ้าง item ทั้งเบส (prepared) และของดิบ (raw) |
 | `modifier_group` / `modifier_option` / `product_modifier_group` | — | เตรียมไว้ ว่างในเฟส 1 |
 
@@ -138,7 +138,7 @@ pos-management/
 |---|---|---|---|
 | `item` | R | id · code (`RM-TEA-01`) · name · kind (`raw`/`prepared`/`packaging_set`) · category · use_unit (`g`/`ml`/`ชิ้น`/`ชุด`) · is_tracked · reorder_point_milli · standard_cost_usat (ต้นทุนมาตรฐาน) · shelf_life_hours (prepared) · is_active · note | ต้นทุนมาตรฐาน (D34): ของดิบ = **ต้นทุนเฉลี่ยจากบันทึกซื้อ** (ชีต "สินค้าและสต็อก" คอลัมน์ "ต้นทุนเฉลี่ยต่อหน่วยซื้อ" ÷ หน่วยใช้) · เบสและชุดบรรจุภัณฑ์ = ค่า roll-up จาก BOM · `is_tracked=false` = ไม่นับสต็อก แต่ยังคิดต้นทุนด้วย standard_cost (D29: น้ำแข็ง น้ำสะอาด น้ำดื่มถัง เกลือ) |
 | `purchase_unit` | R | id · item_id · name (`ถุง`) · qty_per_unit_milli (400000) · is_default · barcode | มะนาว: `กิโลกรัม` = 250000 ml (yield) |
-| `bom` | R | id · item_id (prepared) · version · yield_milli · is_current · instructions | ชาไทยเบส yield 3,000,000 |
+| `bom` | R | id · item_id (prepared) · version · yield_milli · is_current · instructions | ชาไทยเบส yield 3,000,000 · DB บังคับ `is_current` ได้แถวเดียวต่อ item |
 | `bom_line` | R | id · bom_id · component_item_id · qty_milli | |
 | `purchase` | T | id · business_date · supplier · total_satang · receipt_image_ref · note · created_by · created_at | 1 ใบเสร็จ |
 | `purchase_line` | T | id · purchase_id · item_id · purchase_unit_id · qty_units_milli · qty_use_milli · line_total_satang | ระบบคำนวณ qty_use จาก unit |
@@ -171,10 +171,10 @@ pos-management/
 | ตาราง | ประเภท | ฟิลด์หลัก |
 |---|---|---|
 | `audit_log` | R (server) + L | id · entity · entity_id · action · before_json · after_json · actor_user_id · at — ใช้กับข้อมูลหลัก (ราคา สูตร สินค้า BOM ผู้ใช้ ตั้งค่า) |
-| `outbox` | L | id · table · row_json · idempotency_key · created_at · attempts · last_error · sent_at |
+| `outbox` | L | id · table · row_json · idempotency_key · **status** (`pending`/`sent`/`dead`) · created_at · attempts · last_error · sent_at · dead_at |
 | `sync_state` | L | key · value — cursor ล่าสุดของแต่ละตาราง R · เวลา sync ล่าสุด |
 | `idempotency_record` | server | key · first_seen_at · result_hash |
-| `server_cursor` | server | ทุกตาราง R มีคอลัมน์ `server_seq` (bigserial) สำหรับ pull แบบเพิ่ม |
+| `server_cursor` | server | คอลัมน์ `server_seq` (bigserial) สำหรับ pull แบบเพิ่ม อยู่ในทุกตาราง R **และ** ตาราง T ที่เครื่องต้อง pull (`order` `order_line` `order_event` `payment` `item_cost_state`) · INSERT ได้เลขจาก default · **UPDATE ได้เลขใหม่จาก trigger `bump_server_seq`** จึง pull เห็นการแก้ด้วย · ทุกตาราง T ฝั่ง pg มี `server_received_at` ที่ DB เติมเวลาเซิร์ฟเวอร์ (UTC) ให้เอง |
 | `invariant_run` | server | id · ran_at · results_json · has_failure |
 | `equipment` | R | id · code · name · purchased_at · price_satang · qty · supplier · life_months (จำนวนเต็ม = ปีในไฟล์ × 12 ไม่ปัดทิ้ง, D37) · condition · owner · note (นำเข้าจากไฟล์ ไม่กระทบต้นทุนต่อแก้ว) |
 
@@ -284,8 +284,8 @@ explode(item, need):
 
 ### 6.1 หลัก
 - SQLite ในเครื่องคือแหล่งความจริงของธุรกรรม · ทุกการเขียนเป็น transaction เดียว: แถวธุรกรรม + movement + event + แถว outbox
-- **push**: ส่ง outbox เป็นชุด (FIFO, ≤ 200 แถว) ไป `POST /sync/push` พร้อม `idempotency_key` ต่อแถว (= row id) · เซิร์ฟเวอร์ insert-if-absent, ตรวจโซ่แฮช, ตรวจยอดด้วย domain ซ้ำ, ตอบรายการที่รับแล้ว/ปฏิเสธ · ปฏิเสธ (เช่น schema ไม่ตรง) → ย้ายไป dead-letter แสดงในหน้าตั้งค่า **ไม่บล็อกรายการถัดไปที่ไม่เกี่ยวกัน**
-- **pull**: `GET /sync/pull?table=…&since=server_seq` ต่อตาราง R · เซิร์ฟเวอร์ชนะเสมอ (ข้อมูลหลักแก้ที่ back office ซึ่งเขียนตรงไปเซิร์ฟเวอร์เมื่อออนไลน์)
+- **push**: ส่ง outbox เป็นชุด (FIFO, ≤ 200 แถว) ไป `POST /sync/push` พร้อม `idempotency_key` ต่อแถว (= row id) · เซิร์ฟเวอร์ insert-if-absent, ตรวจโซ่แฮช, ตรวจยอดด้วย domain ซ้ำ, ตอบรายการที่รับแล้ว/ปฏิเสธ · ปฏิเสธ (เช่น schema ไม่ตรง) → ย้ายไป dead-letter (`outbox.status = dead` + `dead_at` + `last_error`, ไม่ส่งซ้ำอัตโนมัติ) แสดงในหน้าตั้งค่า **ไม่บล็อกรายการถัดไปที่ไม่เกี่ยวกัน**
+- **pull**: `GET /sync/pull?table=…&since=server_seq` ต่อตาราง R และตาราง T ที่เครื่องต้องดึง (ออเดอร์ LINE, event ที่เซิร์ฟเวอร์เขียน, `item_cost_state`) · แถวที่ถูก UPDATE ได้ `server_seq` ใหม่ จึงถูกดึงอีกครั้ง · เลข sequence จองตอนเขียนแต่เห็นตอน commit → endpoint ต้องอ่านไม่เกิน `pg_snapshot_xmin(pg_current_snapshot())` หรือยืนยันว่ามีผู้เขียนคนเดียว (แผน 4 เลือก) · เซิร์ฟเวอร์ชนะเสมอ (ข้อมูลหลักแก้ที่ back office ซึ่งเขียนตรงไปเซิร์ฟเวอร์เมื่อออนไลน์)
 - **แก้ข้อมูลหลักตอนออฟไลน์**: ไม่อนุญาตในเฟส 1 (ปุ่มจัดการเมนู/สินค้าต้องออนไลน์) — ตัดปัญหา conflict ทั้งหมด
 - ไม่ใช้ CRDT · ไม่มี last-write-wins บนธุรกรรม
 
