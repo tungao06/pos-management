@@ -7,6 +7,7 @@ const MESSAGES: Record<PosErrorCode, string> = {
   ALREADY_SET_UP: TH.errAlreadySetUp,
   BAD_INPUT: TH.errBadInput,
   PIN_WRONG: TH.errPinWrong,
+  PIN_LOCKED: TH.errPinLocked,
   NOT_OWNER: TH.errNotOwner,
   NO_OPEN_SHIFT: TH.errNoOpenShift,
   SHIFT_ALREADY_OPEN: TH.errShiftAlreadyOpen,
@@ -32,6 +33,10 @@ export function errorMessage(e: unknown): string {
   if (code === null || !(code in MESSAGES)) {
     console.error(e)
     return TH.errUnexpected
+  }
+  if (code === 'PIN_LOCKED') {
+    const seconds = Number(raw.slice(code.length + 2))
+    return Number.isInteger(seconds) && seconds > 0 ? TH.errPinLockedFor(seconds) : MESSAGES[code]
   }
   return code === 'BAD_INPUT' ? `${MESSAGES[code]} — ${raw.slice(code.length + 2)}` : MESSAGES[code]
 }

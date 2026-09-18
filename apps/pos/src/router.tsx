@@ -1,5 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { IndexRedirect } from './screens/IndexRedirect'
+import { LoginScreen } from './screens/LoginScreen'
+import { SetupScreen } from './screens/SetupScreen'
 import { BrandBar } from './ui/BrandBar'
 
 // Root layout: the brand bar (D44) above every screen.
@@ -14,8 +16,8 @@ const rootRoute = createRootRoute({
 
 // Every path of plan 3 is declared here; each screen task adds `component` to its route.
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: IndexRedirect })
-const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup' })
-const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login' })
+const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: SetupScreen })
+const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginScreen })
 const openShiftRoute = createRoute({ getParentRoute: () => rootRoute, path: '/shift/open' })
 const sellRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sell' })
 const payCashRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pay/cash' })

@@ -94,6 +94,8 @@ export const TH = {
   errPinFormat: 'PIN ต้องเป็นตัวเลข 4–6 หลัก',
   errPinMismatch: 'PIN สองช่องไม่ตรงกัน',
   errPinWrong: 'PIN ไม่ถูกต้อง',
+  errPinLocked: 'ใส่ PIN ผิดหลายครั้ง — รอสักครู่แล้วลองใหม่',
+  errPinLockedFor: (seconds: number): string => `ใส่ PIN ผิดหลายครั้ง — ลองใหม่ใน ${seconds} วินาที`,
   errNotOwner: 'ต้องเป็นเจ้าของร้านเท่านั้น',
   errNoOpenShift: 'ยังไม่ได้เปิดกะ',
   errShiftAlreadyOpen: 'มีกะเปิดอยู่แล้ว',

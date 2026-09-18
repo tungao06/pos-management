@@ -4,6 +4,7 @@ export type PosErrorCode =
   | 'ALREADY_SET_UP'
   | 'BAD_INPUT'
   | 'PIN_WRONG'
+  | 'PIN_LOCKED' // D50 Q3-21 — detail is the whole seconds left
   | 'NOT_OWNER'
   | 'NO_OPEN_SHIFT'
   | 'SHIFT_ALREADY_OPEN'
