@@ -4,6 +4,7 @@ import { bootstrap } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { createSerialQueue } from './serial'
 import { setupShop } from './setup'
+import { openShift } from './shift'
 import type { PosApi } from './types'
 
 export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
@@ -12,5 +13,6 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     bootstrap: () => serial(() => bootstrap(db)),
     setupShop: (input) => serial(() => setupShop(db, deps, input)),
     login: (userId, pin) => serial(() => login(db, deps, userId, pin)),
+    openShift: (input) => serial(() => openShift(db, deps, input)),
   }
 }

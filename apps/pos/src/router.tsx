@@ -1,6 +1,8 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
+import { RequireSession } from './app/guards'
 import { IndexRedirect } from './screens/IndexRedirect'
 import { LoginScreen } from './screens/LoginScreen'
+import { OpenShiftScreen } from './screens/OpenShiftScreen'
 import { SetupScreen } from './screens/SetupScreen'
 import { BrandBar } from './ui/BrandBar'
 
@@ -18,8 +20,25 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: IndexRedirect })
 const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: SetupScreen })
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginScreen })
-const openShiftRoute = createRoute({ getParentRoute: () => rootRoute, path: '/shift/open' })
-const sellRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sell' })
+const openShiftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/shift/open',
+  component: () => (
+    <RequireSession>
+      <OpenShiftScreen />
+    </RequireSession>
+  ),
+})
+// Guarded now so the reload test is meaningful; Task 9 swaps the placeholder for <SellScreen />.
+const sellRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sell',
+  component: () => (
+    <RequireSession>
+      <main className="page" data-testid="sell-placeholder" />
+    </RequireSession>
+  ),
+})
 const payCashRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pay/cash' })
 const payQrRoute = createRoute({ getParentRoute: () => rootRoute, path: '/pay/qr' })
 const doneRoute = createRoute({ getParentRoute: () => rootRoute, path: '/done' })

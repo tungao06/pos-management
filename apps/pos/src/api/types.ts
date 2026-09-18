@@ -7,16 +7,18 @@ export type DeviceDto = { id: string; name: string; receiptPrefix: string }
 export type ShiftDto = { id: string; businessDate: string; openedAt: string; openedBy: string; openingFloatSatang: number }
 export type BootstrapState = { needsSetup: boolean; device: DeviceDto | null; users: UserDto[]; openShift: ShiftDto | null; pendingSyncItems: number }
 export type SetupInput = { deviceName: string; receiptPrefix: string; owners: { displayName: string; pin: string }[]; promptPayId: string }
+export type OpenShiftInput = { userId: string; openingFloatSatang: number }
 
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
   setupShop(input: SetupInput): Promise<void>
   login(userId: string, pin: string): Promise<UserDto>
+  openShift(input: OpenShiftInput): Promise<ShiftDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
-export const POS_API_METHODS = ['bootstrap', 'setupShop', 'login'] as const
+export const POS_API_METHODS = ['bootstrap', 'setupShop', 'login', 'openShift'] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
 export const POS_API_METHODS_COMPLETE: [MissingMethods] extends [never] ? true : MissingMethods = true
