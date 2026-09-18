@@ -29,11 +29,32 @@ describe('voidOrder', () => {
     expect(detail.events.map((e) => e.type)).toEqual(['CREATED', 'LINE_ADDED', 'PAID', 'STOCK_DEDUCTED', 'VOIDED', 'STOCK_RETURNED'])
     expect(detail.events[4]!.payload).toMatchObject({ reason: 'กดผิดเมนู', made: false, waste: false, approvedBy: t.other.id, cashRefundSatang: 9000, refundReference: null })
 
+    // I-2: fixed by hand from packages/excel-import/seed/dayo-seed.json — Original / 16oz / S050 (sellSku always
+    // sells at S050) exploded through the PK-SET-16 BOM, qty 2, each at its standard_cost_usat (first movement of
+    // a fresh shift, so cost = standard, not yet an average — spec §4.2, D29/D34). Verified against a live dump
+    // of the SALE rows before writing this list; not read from the SALE rows at test time (review I-2).
+    const items = await t.db.select().from(s.item).all()
+    const idOf = (code: string): string => items.find((i) => i.code === code)!.id
+    const expectedReturns = [
+      [idOf('PB-TEA-THAI'), 260_000, 2_000_000],
+      [idOf('RM-MLK-02'), 92_000, 7_407_407],
+      [idOf('RM-MLK-03'), 32_000, 6_930_693],
+      [idOf('PB-SYRUP'), 33_200, 1_674_375],
+      [idOf('RM-WTR-01'), 480_000, 1_400_000],
+      [idOf('PK-CUP-01'), 2_000, 200_000_000],
+      [idOf('PK-LID-01'), 2_000, 100_000_000],
+      [idOf('PK-STR-01'), 2_000, 50_000_000],
+      [idOf('PK-LBL-01'), 2_000, 50_000_000],
+    ].sort(([a], [b]) => (a as string).localeCompare(b as string))
+
     const moves = await t.db.select().from(s.stockMovement).where(and(eq(s.stockMovement.refType, 'order'), eq(s.stockMovement.refId, sale.orderId))).all()
-    const sales = moves.filter((m) => m.kind === 'SALE')
     const returns = moves.filter((m) => m.kind === 'VOID_RETURN')
-    expect(returns.map((m) => [m.itemId, m.qtyMilli, m.unitCostUsat])).toEqual(sales.map((m) => [m.itemId, -m.qtyMilli, m.unitCostUsat]))
-    for (const st of await t.db.select().from(s.itemCostState).all()) expect(st.onHandMilli).toBe(0)
+    expect(returns.length).toBe(9) // every ingredient of a 2-cup Original-16oz, exploded through PK-SET-16
+    expect([...returns].map((m) => [m.itemId, m.qtyMilli, m.unitCostUsat]).sort(([a], [b]) => (a as string).localeCompare(b as string))).toEqual(expectedReturns)
+    for (const [itemId, , unitCostUsat] of expectedReturns) {
+      const st = await t.db.select().from(s.itemCostState).where(eq(s.itemCostState.itemId, itemId as string)).get()
+      expect(st).toMatchObject({ onHandMilli: 0, avgCostUsat: unitCostUsat })
+    }
 
     const cash = await t.db.select().from(s.cashMovement).all()
     expect(cash).toHaveLength(1)
@@ -52,9 +73,12 @@ describe('voidOrder', () => {
     const before = await t.db.select().from(s.stockMovement).all()
     const detail = await t.api.voidOrder(voidInput(t, sale.orderId, { made: true, reason: 'ทำผิดสูตร' }))
     expect(detail.events.map((e) => e.type).slice(-1)).toEqual(['VOIDED'])
-    expect(detail.events.at(-1)!.payload).toMatchObject({ made: true, waste: true })
+    const cash = await t.db.select().from(s.cashMovement).all()
+    expect(cash).toHaveLength(1)
+    // M-3: pin the full VOIDED payload — the void-report page (plan 3b) reads these fields.
+    expect(detail.events.at(-1)!.payload).toMatchObject({ made: true, waste: true, cashRefundSatang: 5000, cashMovementId: cash[0]!.id, approvedBy: t.other.id, reason: 'ทำผิดสูตร' })
     expect(await t.db.select().from(s.stockMovement).all()).toEqual(before)
-    expect((await t.db.select().from(s.cashMovement).all()).map((c) => c.amountSatang)).toEqual([5000])
+    expect(cash.map((c) => c.amountSatang)).toEqual([5000])
   })
 
   it('PromptPay needs a refund transfer reference and records no cash movement (D48 Q3-15)', async () => {
@@ -81,6 +105,50 @@ describe('voidOrder', () => {
     expect(counts(t)).toEqual(before)
     await t.api.voidOrder(voidInput(t, sale.orderId))
     await expect(t.api.voidOrder(voidInput(t, sale.orderId))).rejects.toThrow(/^VOID_NOT_ALLOWED: /)
+  })
+
+  // I-1: every failure above is thrown before the first write (reason/PIN/NOT_OWNER/ORDER_NOT_FOUND/QR BAD_INPUT
+  // all happen before db.transaction opens), so "nothing changed" would pass even without a transaction. Force a
+  // failure after the order update, the outbox rows, the VOID_RETURN movements, the cost cache upsert, the cash
+  // movement and the VOIDED event are already written, and prove the whole thing rolls back (sale.test.ts:166).
+  it('a failure after rows are written rolls back everything, including item_cost_state and the order status', async () => {
+    const t = await openReadyApi()
+    const sale = await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })
+    const before = counts(t)
+    const ics = t.raw.prepare('select * from item_cost_state order by item_id').all()
+    t.raw.exec("CREATE TRIGGER boom BEFORE INSERT ON order_event WHEN new.type = 'STOCK_RETURNED' BEGIN SELECT RAISE(ABORT, 'boom'); END;")
+    // drizzle-orm's sqlite-proxy wraps the driver error as DrizzleQueryError("Failed query: …") and keeps the
+    // original ("boom") on .cause — assert on the cause, not the wrapper's own message.
+    const err: unknown = await t.api.voidOrder(voidInput(t, sale.orderId)).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error & { cause?: unknown }).cause).toMatchObject({ message: expect.stringContaining('boom') })
+    expect(counts(t)).toEqual(before)
+    expect(t.raw.prepare('select * from item_cost_state order by item_id').all()).toEqual(ics)
+    expect((await t.api.getOrder(sale.orderId)).status).toBe('paid')
+    t.raw.exec('DROP TRIGGER boom')
+    expect((await t.api.voidOrder(voidInput(t, sale.orderId))).status).toBe('voided')
+  })
+
+  // M-2: PIN_LOCKED is covered for requireOwnerPin in setup-auth.test.ts:140-142 — this only guards the wiring.
+  it('voidOrder returns PIN_LOCKED once the approver PIN lockout trips and writes nothing', async () => {
+    const t = await openReadyApi()
+    const sale = await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })
+    for (let i = 0; i < 4; i++) await expect(t.api.voidOrder(voidInput(t, sale.orderId, { approverPin: '9999' }))).rejects.toThrow(/^PIN_WRONG: /)
+    const before = counts(t)
+    await expect(t.api.voidOrder(voidInput(t, sale.orderId, { approverPin: '9999' }))).rejects.toThrow(/^PIN_LOCKED: 30$/)
+    expect(counts(t)).toEqual(before)
+  })
+
+  // M-1: guards against someone later moving void work outside the serial queue (review probe already passes today).
+  it('a concurrent double void writes exactly one refund and one VOID_RETURN set', async () => {
+    const t = await openReadyApi()
+    const sale = await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })
+    const results = await Promise.allSettled([t.api.voidOrder(voidInput(t, sale.orderId)), t.api.voidOrder(voidInput(t, sale.orderId))])
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected'])
+    expect((results[1] as PromiseRejectedResult).reason).toMatchObject({ message: expect.stringMatching(/^VOID_NOT_ALLOWED: /) })
+    expect(await t.db.select().from(s.cashMovement).all()).toHaveLength(1)
+    // 9 ingredients (see the literal list above) come back exactly once, not twice.
+    expect(await t.db.select().from(s.stockMovement).where(and(eq(s.stockMovement.refId, sale.orderId), eq(s.stockMovement.kind, 'VOID_RETURN'))).all()).toHaveLength(9)
   })
 
   it('the signed-in owner may approve their own void, but only by typing their own PIN again (D50 Q3-22)', async () => {
