@@ -3,6 +3,7 @@
   "compilerOptions": {
     "noEmit": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "resolveJsonModule": true,
     "types": ["vite/client", "node"]
   },
   "include": ["src", "e2e", "vite.config.ts", "playwright.config.ts"]

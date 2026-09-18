@@ -11,7 +11,9 @@
     "spike:e2e": "playwright test"
   },
   "dependencies": {
+    "@dayo/contracts": "workspace:*",
     "@dayo/db-schema": "workspace:*",
+    "@dayo/excel-import": "workspace:*",
     "@noble/hashes": "2.4.0",
     "@sqlite.org/sqlite-wasm": "3.53.4-build1",
     "drizzle-orm": "0.45.2"

@@ -112,9 +112,15 @@ importers:
 
   apps/pos-spike:
     dependencies:
+      '@dayo/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@dayo/db-schema':
         specifier: workspace:*
         version: link:../../packages/db-schema
+      '@dayo/excel-import':
+        specifier: workspace:*
+        version: link:../../packages/excel-import
       '@noble/hashes':
         specifier: 2.4.0
         version: 2.4.0

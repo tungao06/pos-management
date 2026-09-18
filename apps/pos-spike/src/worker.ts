@@ -2,8 +2,10 @@ import sqlite3InitModule from '@sqlite.org/sqlite-wasm'
 import { argon2idAsync } from '@noble/hashes/argon2.js'
 import { eq, like, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
-import { migrateSqliteRemote, oo1Callback, SQLITE_TABLES, SQLITE_TRIGGERS, type Oo1Database } from '@dayo/db-schema/browser'
+import { parseSeed } from '@dayo/contracts'
+import { applySeedSqlite, canonicalSeedOpts, migrateSqliteRemote, oo1Callback, seedToRows, SQLITE_TABLES, SQLITE_TRIGGERS, type Oo1Database } from '@dayo/db-schema/browser'
 import { syncState } from '@dayo/db-schema/sqlite'
+import seedJson from '@dayo/excel-import/seed/dayo-seed.json'
 import type { CheckResult, SpikeReport, WorkerReply } from './types'
 
 const DB_FILE = '/dayo-spike.sqlite3'
@@ -64,11 +66,22 @@ async function run(): Promise<SpikeReport> {
   checks.push({ id: 'S2', title: 'migrations from @dayo/db-schema', required: true, pass: sameTables, detail: `tables=${tables.length}/${SQLITE_TABLES.length} triggers=${triggers.length}/${SQLITE_TRIGGERS.length} appliedNow=${applied.length}` })
   checks.push({ id: 'S7', title: 'cold start (wasm + open + migrate)', required: true, pass: since(t0) <= 3000, detail: `${since(t0)} ms` })
 
-  // I4 (seed timing) intentionally dropped from this spike — see task-1-report.md "Deviations" for why
-  // (`canonicalSeedOpts` from the brief's worker.ts does not exist anywhere in the repo, `applySeedSqlite`/
-  // `seedToRows` are exported only from db-schema's Node-only root entry per its own doc comment, and
-  // apps/pos-spike's package.json as given does not depend on @dayo/excel-import or @dayo/contracts). I4 is
-  // informational-only (not required for the S1-S10 gate), so it is safe to skip here.
+  // I4 seed timing (first run only): Task 4 added `canonicalSeedOpts`/`applySeedSqlite`/`seedToRows` to
+  // @dayo/db-schema/browser, so this now runs for real. Guard on `product` being empty — applySeedSqlite is a
+  // single transaction and NOT idempotent (same guard as apps/pos/src/db/init.ts's isSeeded) — so a reload does
+  // not try to re-seed. Informational only (not part of the required S1-S10 gate).
+  const t4 = performance.now()
+  const alreadySeeded = ((await db.values<[number]>(sql`select count(*) from product`))[0]?.[0] ?? 0) > 0
+  if (!alreadySeeded) {
+    await applySeedSqlite(db, seedToRows(parseSeed(seedJson), canonicalSeedOpts()))
+  }
+  checks.push({
+    id: 'I4',
+    title: 'seed catalog once (applySeedSqlite, canonical ids, from @dayo/db-schema/browser)',
+    required: false,
+    pass: true,
+    detail: alreadySeeded ? `skipped (already seeded), ${since(t4)} ms` : `seeded in ${since(t4)} ms`,
+  })
 
   // S5 boot counter (persistence across reloads)
   const prev = await db.select().from(syncState).where(eq(syncState.key, 'spike.boot_count')).get()
