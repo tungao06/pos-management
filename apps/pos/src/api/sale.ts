@@ -77,6 +77,16 @@ export async function commitSale(db: RemoteDb, deps: ApiDeps, input: CommitSaleI
   const done = await existingResult(db, input.orderId, input.lines)
   if (done !== null) return done
   if (input.lines.length === 0) throw new PosError('EMPTY_CART', 'cart has no lines')
+  // M-2: a bad qty must fail as BAD_INPUT, not reach planSale's assertSafeInt as a raw RangeError (which the UI
+  // shows as errUnexpected); a non-finite expectedTotalSatang must not be compared against as if it were money.
+  if (!input.lines.every((l) => Number.isSafeInteger(l.qty) && l.qty >= 1 && l.qty <= 999)) {
+    throw new PosError('BAD_INPUT', 'qty must be a whole number from 1 to 999')
+  }
+  // Not also requiring > 0 here: a deleted/missing price legitimately prices the cart at 0 before NO_PRICE is
+  // reached in the transaction below, and NO_PRICE is the more useful message for that case than BAD_INPUT.
+  if (!Number.isSafeInteger(input.expectedTotalSatang)) {
+    throw new PosError('BAD_INPUT', 'expectedTotalSatang must be a whole number of satang')
+  }
   const discount = input.discount === null ? null : { amountSatang: input.discount.amountSatang, reason: input.discount.reason.trim() }
   if (discount !== null && (!Number.isSafeInteger(discount.amountSatang) || discount.amountSatang <= 0 || discount.reason === '')) {
     throw new PosError('BAD_INPUT', 'a discount needs a positive whole satang amount and a reason')

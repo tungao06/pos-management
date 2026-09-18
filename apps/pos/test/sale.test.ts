@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { explodeNeeds, lineUnitCostSatang, requireItem, verifyChain } from '@dayo/domain'
+import { explodeNeeds, requireItem, verifyChain } from '@dayo/domain'
 import type { CommitSaleInput, CommitSaleResult } from '../src/api/types'
 import { loadDeviceChain } from '../src/db/events'
 import { insertMovements } from '../src/db/stock'
@@ -62,8 +62,8 @@ describe('commitSale', () => {
     const recipeLines = await t.db.select().from(s.recipeLine).where(eq(s.recipeLine.recipeId, recipe!.id)).all()
     const needs = explodeNeeds(recipeLines.map((l) => ({ itemId: l.itemId, qtyMilli: l.qtyMilli })), 1, catalog)
     const standard = (id: string) => requireItem(catalog, id).standardCostUsat
-    expect(line.unitCostSatang).toBe(lineUnitCostSatang(needs, standard, 1))
-    expect(Math.abs(line.unitCostSatang - 1475)).toBeLessThanOrEqual(1) // Excel golden value ±1 satang via the explode path
+    // I-2: pinned golden value (verified by the review's probe), not re-derived with the same production functions.
+    expect(line.unitCostSatang).toBe(1475)
     expect(order!.costSatang).toBe(line.unitCostSatang)
 
     const moves = await t.db.select().from(s.stockMovement).where(and(eq(s.stockMovement.refType, 'order'), eq(s.stockMovement.refId, r.orderId))).all()
@@ -151,9 +151,37 @@ describe('commitSale', () => {
     await expect(cashSale(t, 'Latte-16oz', 1, 10_000, { discount: { amountSatang: 100, reason: '   ' } })).rejects.toThrow(/^BAD_INPUT: /)
     await expect(cashSale(t, 'Latte-16oz', 1, 10_000, { lines: [] })).rejects.toThrow(/^EMPTY_CART: /)
     await expect(cashSale(t, 'Latte-16oz', 1, 10_000, { actorUserId: 'nobody' })).rejects.toThrow(/^BAD_INPUT: /)
+    // M-2: a bad qty or a non-finite expectedTotalSatang must fail as BAD_INPUT, not as a raw RangeError / a
+    // bogus PRICE_CHANGED (review probe 4: qty 0/1.5 threw a raw RangeError; expectedTotalSatang NaN threw
+    // "PRICE_CHANGED: shown NaN, now …", both of which the UI shows as errUnexpected).
+    await expect(cashSale(t, 'Latte-16oz', 0, 10_000)).rejects.toThrow(/^BAD_INPUT: /)
+    await expect(cashSale(t, 'Latte-16oz', 1.5, 10_000)).rejects.toThrow(/^BAD_INPUT: /)
+    await expect(cashSale(t, 'Latte-16oz', 1000, 10_000_000)).rejects.toThrow(/^BAD_INPUT: /)
+    await expect(cashSale(t, 'Latte-16oz', 1, 10_000, { expectedTotalSatang: NaN })).rejects.toThrow(/^BAD_INPUT: /)
     expect(tableCounts(t)).toEqual(before)
     const ok = await cashSale(t, 'Latte-16oz', 1, 5000)
     expect([ok.receiptNo, ok.queueNo]).toEqual(['A-000001', 1])
+  })
+
+  // I-1: every failure above is thrown before the first insert, so tableCounts staying the same would pass even
+  // without a transaction. Force a failure after order/line/discount/payment/movement/item_cost_state/order_event
+  // rows are already written, and prove the whole thing rolls back — including the item_cost_state cache — and
+  // that the receipt/queue counters are not consumed.
+  it('a failure after rows are written rolls back everything, including item_cost_state, and keeps the receipt number', async () => {
+    const t = await openReadyApi()
+    await cashSale(t, 'Original-16oz', 1, 4500)
+    const before = tableCounts(t)
+    const ics = t.raw.prepare('select * from item_cost_state order by item_id').all()
+    t.raw.exec("CREATE TRIGGER boom BEFORE INSERT ON order_event WHEN new.type = 'STOCK_DEDUCTED' BEGIN SELECT RAISE(ABORT, 'boom'); END;")
+    // drizzle-orm's sqlite-proxy wraps the driver error as DrizzleQueryError("Failed query: …") and keeps the
+    // original ("boom") on .cause — assert on the cause, not the wrapper's own message.
+    const err: unknown = await cashSale(t, 'Original-16oz', 1, 10_000, { discount: { amountSatang: 100, reason: 'r' } }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error & { cause?: unknown }).cause).toMatchObject({ message: expect.stringContaining('boom') })
+    expect(tableCounts(t)).toEqual(before)
+    expect(t.raw.prepare('select * from item_cost_state order by item_id').all()).toEqual(ics)
+    t.raw.exec('DROP TRIGGER boom')
+    expect((await cashSale(t, 'Original-16oz', 1, 4500)).receiptNo).toBe('A-000002')
   })
 
   // I-7 / D50 Q3-27: the cart and QR total must be the total recorded — a price that took effect after the cart was
@@ -204,11 +232,50 @@ describe('commitSale', () => {
         await loadCatalogSqlite(tx),
       )
     })
+    // I-2: on hand was 0, so applyMovement sets avg = the inbound cost outright.
+    const stateAfterInbound = (await t.db.select().from(s.itemCostState).where(eq(s.itemCostState.itemId, thai.id)).get())!
+    expect(stateAfterInbound.avgCostUsat).toBe(thai.standardCostUsat * 2)
     const r = await cashSale(t, 'Original-16oz', 1, 4500)
     const m = (await t.db.select().from(s.stockMovement).where(and(eq(s.stockMovement.refId, r.orderId), eq(s.stockMovement.itemId, thai.id))).get())!
     expect(m.unitCostUsat).toBe(thai.standardCostUsat * 2) // on hand was 0 → avg = inbound cost
     const line = (await t.db.select().from(s.orderLine).where(eq(s.orderLine.orderId, r.orderId)).get())!
-    expect(line.unitCostSatang).toBeGreaterThan(1476) // costlier base → costlier cup
+    // I-2: pinned golden value (1475 + 130 000 milli × 2 000 000 usat / 1e9 = 1475 + 260), not a loose bound.
+    expect(line.unitCostSatang).toBe(1735)
+  })
+
+  // I-2: a multi-line order, with two lines sharing a variant (different sweetness), to cover "SALE movements
+  // aggregated per item across the whole order" and "order cost = Σ line snapshots" at the app level.
+  it('a 3-line order aggregates SALE movements per item and sums line costs into the order cost', async () => {
+    const t = await openReadyApi()
+    const original = await variantId(t.db, 'Original-16oz')
+    const latte = await variantId(t.db, 'Latte-16oz')
+    const lines = [
+      { variantId: original, sweetnessId: await sweetnessId(t.db, 'S050'), qty: 1 },
+      { variantId: original, sweetnessId: await sweetnessId(t.db, 'S100'), qty: 3 },
+      { variantId: latte, sweetnessId: await sweetnessId(t.db, 'S050'), qty: 2 },
+    ]
+    const expectedTotalSatang = await shownTotalSatang(t, lines, null)
+    const r = await t.api.commitSale({ orderId: t.deps.newId(), actorUserId: t.owner.id, lines, discount: null, payment: { method: 'PROMPTPAY' }, expectedTotalSatang })
+    expect(r.totalSatang).toBe(28_000)
+
+    const order = (await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())!
+    expect(order.subtotalSatang).toBe(28_000)
+    expect(order.totalSatang).toBe(28_000)
+    expect(order.costSatang).toBe(8620)
+
+    const orderLines = await t.db.select().from(s.orderLine).where(eq(s.orderLine.orderId, r.orderId)).orderBy(s.orderLine.lineNo).all()
+    expect(orderLines.map((l) => l.unitCostSatang)).toEqual([1475, 1497, 1327])
+    expect(orderLines.reduce((sum, l) => sum + l.unitCostSatang * l.qty, 0)).toBe(8620)
+
+    const thai = (await t.db.select().from(s.item).where(eq(s.item.code, 'PB-TEA-THAI')).get())!
+    const cup = (await t.db.select().from(s.item).where(eq(s.item.code, 'PK-CUP-01')).get())!
+    const moves = await t.db.select().from(s.stockMovement).where(and(eq(s.stockMovement.refType, 'order'), eq(s.stockMovement.refId, r.orderId))).all()
+    // Lines 1 and 2 share the Original variant across two sweetness levels — exactly one SALE movement per item,
+    // not one per line, so no item is duplicated.
+    const itemIds = moves.map((m) => m.itemId)
+    expect(new Set(itemIds).size).toBe(itemIds.length)
+    expect(moves.find((m) => m.itemId === thai.id)?.qtyMilli).toBe(-780_000)
+    expect(moves.find((m) => m.itemId === cup.id)?.qtyMilli).toBe(-6_000)
   })
 
   // I-6: untracked raw items must always cost at standard_cost, never the cached average.
