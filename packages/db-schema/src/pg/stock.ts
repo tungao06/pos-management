@@ -1,6 +1,6 @@
 import { CountStatus, MovementKind } from '@dayo/contracts'
 import { index, pgTable, unique } from 'drizzle-orm/pg-core'
-import { big, id, int, serverReceivedAt, text, textEnum } from './columns.js'
+import { big, id, int, serverReceivedAt, serverSeq, text, textEnum } from './columns.js'
 import { bom, device, item, purchaseUnit, user } from './reference.js'
 
 export const purchase = pgTable('purchase', {
@@ -94,4 +94,5 @@ export const itemCostState = pgTable('item_cost_state', {
   avgCostUsat: big('avg_cost_usat').notNull(),
   asOfMovementId: text('as_of_movement_id'),
   updatedAt: text('updated_at').notNull(),
+  serverSeq: serverSeq(),
 })

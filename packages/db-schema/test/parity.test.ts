@@ -120,6 +120,11 @@ describe('schema parity sqlite ↔ pg', () => {
       expect(cols, n).toContain('server_seq')
     }
   })
+  it('pg transaction tables the device pulls also have server_seq (M7)', () => {
+    for (const n of ['order', 'order_line', 'order_event', 'payment', 'item_cost_state']) {
+      expect(pgConfig(pgTables.get(n)!).columns.map((c) => c.name), n).toContain('server_seq')
+    }
+  })
   it('every pg transaction table has server_received_at', () => {
     const txTables = ['purchase', 'purchase_line', 'production_batch', 'stock_count', 'stock_count_line', 'stock_movement', 'shift', 'cash_movement', 'cash_count', 'z_report', 'order', 'order_line', 'payment', 'discount', 'order_event', 'order_payment_intent']
     for (const n of txTables) {

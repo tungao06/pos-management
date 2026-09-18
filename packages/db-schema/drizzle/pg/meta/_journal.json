@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1789706063406,
+      "when": 1789706163178,
       "tag": "0000_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789706164945,
+      "tag": "0001_server_seq_bump",
       "breakpoints": true
     }
   ]

@@ -1,6 +1,6 @@
 import { ActorType, CashMovementKind, EventType, OrderOrigin, OrderStatus, PaymentMethod, ShiftStatus, VerifyStatus } from '@dayo/contracts'
 import { index, pgTable, unique } from 'drizzle-orm/pg-core'
-import { id, int, json, serverReceivedAt, text, textEnum } from './columns.js'
+import { id, int, json, serverReceivedAt, serverSeq, text, textEnum } from './columns.js'
 import { channel, customer, device, productVariant, recipe, sweetnessLevel, user } from './reference.js'
 
 export const shift = pgTable('shift', {
@@ -74,6 +74,7 @@ export const order = pgTable('order', {
   readyAt: text('ready_at'),
   voidedAt: text('voided_at'),
   serverReceivedAt: serverReceivedAt(),
+  serverSeq: serverSeq(),
 }, (t) => [
   unique().on(t.deviceId, t.receiptNo),
   index('order_business_date_status_idx').on(t.businessDate, t.status),
@@ -96,6 +97,7 @@ export const orderLine = pgTable('order_line', {
   lineTotalSatang: int('line_total_satang').notNull(),
   unitCostSatang: int('unit_cost_satang').notNull(),
   serverReceivedAt: serverReceivedAt(),
+  serverSeq: serverSeq(),
 }, (t) => [unique().on(t.orderId, t.lineNo)])
 
 export const payment = pgTable('payment', {
@@ -110,6 +112,7 @@ export const payment = pgTable('payment', {
   createdBy: text('created_by').notNull(),
   createdAt: text('created_at').notNull(),
   serverReceivedAt: serverReceivedAt(),
+  serverSeq: serverSeq(),
 }, (t) => [index('payment_order_idx').on(t.orderId)])
 
 export const discount = pgTable('discount', {
@@ -137,6 +140,7 @@ export const orderEvent = pgTable('order_event', {
   prevHash: text('prev_hash').notNull(),
   hash: text('hash').notNull(),
   serverReceivedAt: serverReceivedAt(),
+  serverSeq: serverSeq(),
 }, (t) => [unique().on(t.orderId, t.seq), unique().on(t.chainId, t.chainSeq)])
 
 export const orderPaymentIntent = pgTable('order_payment_intent', {

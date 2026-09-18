@@ -204,7 +204,8 @@ CREATE TABLE "item_cost_state" (
 	"on_hand_milli" integer NOT NULL,
 	"avg_cost_usat" bigint NOT NULL,
 	"as_of_movement_id" text,
-	"updated_at" text NOT NULL
+	"updated_at" text NOT NULL,
+	"server_seq" bigserial NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "production_batch" (
@@ -220,7 +221,7 @@ CREATE TABLE "production_batch" (
 	"device_id" text,
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "purchase" (
@@ -233,7 +234,7 @@ CREATE TABLE "purchase" (
 	"device_id" text,
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "purchase_line" (
@@ -244,7 +245,7 @@ CREATE TABLE "purchase_line" (
 	"qty_units_milli" integer NOT NULL,
 	"qty_use_milli" integer NOT NULL,
 	"line_total_satang" integer NOT NULL,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "stock_count" (
@@ -256,7 +257,7 @@ CREATE TABLE "stock_count" (
 	"created_at" text NOT NULL,
 	"closed_by" text,
 	"closed_at" text,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "stock_count_line" (
@@ -269,7 +270,7 @@ CREATE TABLE "stock_count_line" (
 	"expected_use_milli" integer NOT NULL,
 	"variance_use_milli" integer NOT NULL,
 	"variance_satang" integer NOT NULL,
-	"server_received_at" text,
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
 	CONSTRAINT "stock_count_line_count_id_item_id_unique" UNIQUE("count_id","item_id")
 );
 --> statement-breakpoint
@@ -285,7 +286,7 @@ CREATE TABLE "stock_movement" (
 	"device_id" text,
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "cash_count" (
@@ -298,7 +299,7 @@ CREATE TABLE "cash_count" (
 	"lines_json" jsonb NOT NULL,
 	"counted_by" text NOT NULL,
 	"created_at" text NOT NULL,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "cash_movement" (
@@ -310,7 +311,7 @@ CREATE TABLE "cash_movement" (
 	"reason" text,
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "discount" (
@@ -319,7 +320,7 @@ CREATE TABLE "discount" (
 	"amount_satang" integer NOT NULL,
 	"reason" text NOT NULL,
 	"approved_by" text NOT NULL,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "order" (
@@ -345,7 +346,8 @@ CREATE TABLE "order" (
 	"paid_at" text,
 	"ready_at" text,
 	"voided_at" text,
-	"server_received_at" text,
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
+	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "order_device_id_receipt_no_unique" UNIQUE("device_id","receipt_no")
 );
 --> statement-breakpoint
@@ -363,7 +365,8 @@ CREATE TABLE "order_event" (
 	"at" text NOT NULL,
 	"prev_hash" text NOT NULL,
 	"hash" text NOT NULL,
-	"server_received_at" text,
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
+	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "order_event_order_id_seq_unique" UNIQUE("order_id","seq"),
 	CONSTRAINT "order_event_chain_id_chain_seq_unique" UNIQUE("chain_id","chain_seq")
 );
@@ -382,7 +385,8 @@ CREATE TABLE "order_line" (
 	"qty" integer NOT NULL,
 	"line_total_satang" integer NOT NULL,
 	"unit_cost_satang" integer NOT NULL,
-	"server_received_at" text,
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
+	"server_seq" bigserial NOT NULL,
 	CONSTRAINT "order_line_order_id_line_no_unique" UNIQUE("order_id","line_no")
 );
 --> statement-breakpoint
@@ -394,7 +398,7 @@ CREATE TABLE "order_payment_intent" (
 	"expires_at" text NOT NULL,
 	"slip_image_ref" text,
 	"customer_claimed_at" text,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "payment" (
@@ -408,7 +412,8 @@ CREATE TABLE "payment" (
 	"verify_status" text NOT NULL,
 	"created_by" text NOT NULL,
 	"created_at" text NOT NULL,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
+	"server_seq" bigserial NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "shift" (
@@ -421,7 +426,7 @@ CREATE TABLE "shift" (
 	"opening_float_satang" integer NOT NULL,
 	"closed_by" text,
 	"closed_at" text,
-	"server_received_at" text
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "z_report" (
@@ -430,7 +435,7 @@ CREATE TABLE "z_report" (
 	"snapshot_json" jsonb NOT NULL,
 	"hash" text NOT NULL,
 	"created_at" text NOT NULL,
-	"server_received_at" text,
+	"server_received_at" text DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') NOT NULL,
 	CONSTRAINT "z_report_shift_id_unique" UNIQUE("shift_id")
 );
 --> statement-breakpoint
