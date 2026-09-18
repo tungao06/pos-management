@@ -1,0 +1,98 @@
+import { CountStatus, MovementKind } from '@dayo/contracts'
+import { index, pgTable, unique } from 'drizzle-orm/pg-core'
+import { big, id, int, serverReceivedAt, serverSeq, text, textEnum } from './columns.js'
+import { bom, device, item, purchaseUnit, user } from './reference.js'
+
+export const purchase = pgTable('purchase', {
+  id: id(),
+  businessDate: text('business_date').notNull(),
+  supplier: text('supplier'),
+  totalSatang: int('total_satang').notNull(),
+  receiptImageRef: text('receipt_image_ref'),
+  note: text('note'),
+  deviceId: text('device_id').references(() => device.id),
+  createdBy: text('created_by').notNull().references(() => user.id),
+  createdAt: text('created_at').notNull(),
+  serverReceivedAt: serverReceivedAt(),
+})
+
+export const purchaseLine = pgTable('purchase_line', {
+  id: id(),
+  purchaseId: text('purchase_id').notNull().references(() => purchase.id),
+  itemId: text('item_id').notNull().references(() => item.id),
+  purchaseUnitId: text('purchase_unit_id').references(() => purchaseUnit.id),
+  qtyUnitsMilli: int('qty_units_milli').notNull(),
+  qtyUseMilli: int('qty_use_milli').notNull(),
+  lineTotalSatang: int('line_total_satang').notNull(),
+  serverReceivedAt: serverReceivedAt(),
+}, (t) => [index('purchase_line_purchase_idx').on(t.purchaseId)])
+
+export const productionBatch = pgTable('production_batch', {
+  id: id(),
+  bomId: text('bom_id').notNull().references(() => bom.id),
+  itemId: text('item_id').notNull().references(() => item.id),
+  businessDate: text('business_date').notNull(),
+  scaleBp: int('scale_bp').notNull(),
+  yieldActualMilli: int('yield_actual_milli').notNull(),
+  unitCostUsat: big('unit_cost_usat').notNull(),
+  batchCostSatang: int('batch_cost_satang').notNull(),
+  expiresAt: text('expires_at'),
+  deviceId: text('device_id').references(() => device.id),
+  createdBy: text('created_by').notNull().references(() => user.id),
+  createdAt: text('created_at').notNull(),
+  serverReceivedAt: serverReceivedAt(),
+})
+
+export const stockCount = pgTable('stock_count', {
+  id: id(),
+  businessDate: text('business_date').notNull(),
+  status: textEnum('status', CountStatus).notNull(),
+  deviceId: text('device_id').references(() => device.id),
+  createdBy: text('created_by').notNull().references(() => user.id),
+  createdAt: text('created_at').notNull(),
+  closedBy: text('closed_by').references(() => user.id),
+  closedAt: text('closed_at'),
+  serverReceivedAt: serverReceivedAt(),
+})
+
+export const stockCountLine = pgTable('stock_count_line', {
+  id: id(),
+  countId: text('count_id').notNull().references(() => stockCount.id),
+  itemId: text('item_id').notNull().references(() => item.id),
+  purchaseUnitId: text('purchase_unit_id').references(() => purchaseUnit.id),
+  countedUnitsMilli: int('counted_units_milli').notNull(),
+  countedUseMilli: int('counted_use_milli').notNull(),
+  expectedUseMilli: int('expected_use_milli').notNull(),
+  varianceUseMilli: int('variance_use_milli').notNull(),
+  varianceSatang: int('variance_satang').notNull(),
+  serverReceivedAt: serverReceivedAt(),
+}, (t) => [unique().on(t.countId, t.itemId)])
+
+export const stockMovement = pgTable('stock_movement', {
+  id: id(),
+  itemId: text('item_id').notNull().references(() => item.id),
+  kind: textEnum('kind', MovementKind).notNull(),
+  qtyMilli: int('qty_milli').notNull(),
+  unitCostUsat: big('unit_cost_usat').notNull(),
+  refType: text('ref_type').notNull(),
+  refId: text('ref_id').notNull(),
+  businessDate: text('business_date').notNull(),
+  deviceId: text('device_id').references(() => device.id),
+  createdBy: text('created_by').notNull(),
+  createdAt: text('created_at').notNull(),
+  serverReceivedAt: serverReceivedAt(),
+}, (t) => [
+  index('stock_movement_item_created_idx').on(t.itemId, t.createdAt),
+  index('stock_movement_ref_idx').on(t.refType, t.refId),
+  index('stock_movement_item_date_idx').on(t.itemId, t.businessDate),
+  index('stock_movement_business_date_idx').on(t.businessDate),
+])
+
+export const itemCostState = pgTable('item_cost_state', {
+  itemId: text('item_id').primaryKey().references(() => item.id),
+  onHandMilli: int('on_hand_milli').notNull(),
+  avgCostUsat: big('avg_cost_usat').notNull(),
+  asOfMovementId: text('as_of_movement_id'),
+  updatedAt: text('updated_at').notNull(),
+  serverSeq: serverSeq(),
+})
