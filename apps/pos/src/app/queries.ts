@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useApi } from './api-context'
 
 export const bootstrapKey = ['bootstrap'] as const
+export const menuKey = ['menu'] as const
 
 export function useBootstrap() {
   const api = useApi()

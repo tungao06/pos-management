@@ -3,6 +3,7 @@ import { RequireSession } from './app/guards'
 import { IndexRedirect } from './screens/IndexRedirect'
 import { LoginScreen } from './screens/LoginScreen'
 import { OpenShiftScreen } from './screens/OpenShiftScreen'
+import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
 import { BrandBar } from './ui/BrandBar'
 
@@ -29,13 +30,12 @@ const openShiftRoute = createRoute({
     </RequireSession>
   ),
 })
-// Guarded now so the reload test is meaningful; Task 9 swaps the placeholder for <SellScreen />.
 const sellRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sell',
   component: () => (
     <RequireSession>
-      <main className="page" data-testid="sell-placeholder" />
+      <SellScreen />
     </RequireSession>
   ),
 })
