@@ -42,10 +42,22 @@ export function sha256Hex(s: string): string {
   return bytesToHex(sha256(utf8ToBytes(s)))
 }
 
+/**
+ * The hashed part of an `order_event` row (spec §4.9, D38). Every field here is a column of `order_event`
+ * and every one of them is covered by the hash, so editing any of them in the database breaks the chain.
+ *
+ * - `chainId` — which hash chain the event belongs to: the selling device's id, or `'server'` (spec §3.4).
+ * - `chainSeq` — 1, 2, 3, … within the chain; `verifyChain` requires it to be gap-free.
+ * - `orderId` — the order the event is about.
+ * - `seq` — 1, 2, 3, … within the order (unique per order in the database).
+ * - `deviceId` — the device that wrote the event, or `null` when the server wrote it.
+ */
 export type EventCore = {
   chainId: string
   chainSeq: number
   orderId: string
+  seq: number
+  deviceId: string | null
   type: string
   payload: unknown
   actorType: 'user' | 'customer' | 'system'
@@ -58,6 +70,8 @@ export function computeEventHash(prevHash: string, e: EventCore): string {
     chainId: e.chainId,
     chainSeq: e.chainSeq,
     orderId: e.orderId,
+    seq: e.seq,
+    deviceId: e.deviceId,
     type: e.type,
     payload: e.payload,
     actorType: e.actorType,

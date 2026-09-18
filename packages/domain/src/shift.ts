@@ -1,31 +1,32 @@
 import { canonicalJson, sha256Hex } from './hash.js'
 
 /**
- * Inputs to `expectedCashSatang`, one field per source of cash_movement / order rows (spec §4.3, §4.8).
+ * Inputs to `expectedCashSatang`, one field per source of shift / order / cash_movement rows (spec §4.3, §4.8, D36).
+ * Every cash_movement kind maps to exactly one field, so no row is ever counted twice.
  *
  * - `openingFloatSatang` — `shift.opening_float_satang`, recorded when the shift opens.
- * - `cashSalesSatang` — sum of `order.paid_amount_satang` for orders paid by CASH during the shift.
- * - `cashRefundsSatang` — sum of the **automatic** `cash_movement` rows of kind PAID_OUT that a cash-paid
- *   order void creates (spec §4.3: a cash void records a PAID_OUT automatically). These auto-void refunds
- *   are counted HERE, and ONLY here.
- * - `paidInSatang` — sum of **manual** `cash_movement` rows of kind PAID_IN (e.g. owner tops up the drawer).
- * - `paidOutSatang` — sum of **manual** `cash_movement` rows of kind PAID_OUT only (e.g. buying ice, petty
- *   cash). The caller MUST exclude the automatic void PAID_OUT rows already counted in `cashRefundsSatang`
- *   when summing this field — including them here as well double-counts every cash void and understates
- *   expected cash by the voided amount (decision: I3 in the plan-1 final review).
+ * - `cashSalesSatang` — sum of CASH `payment.amount_satang` for orders paid during the shift, including orders
+ *   voided later (the money came in; handing it back is a separate VOID_REFUND row).
+ * - `voidRefundsSatang` — sum of `cash_movement` rows of kind VOID_REFUND. The system writes one automatically
+ *   when a cash-paid order is voided (the cash handed back from the drawer); a person never enters it.
+ * - `paidInSatang` — sum of `cash_movement` rows of kind PAID_IN (entered by a person, e.g. topping up the drawer).
+ * - `paidOutSatang` — sum of `cash_movement` rows of kind PAID_OUT (entered by a person, e.g. buying ice).
+ *   Void refunds are never PAID_OUT rows (D36), so this is simply every PAID_OUT row of the shift.
  * - `dropsSatang` — sum of `cash_movement` rows of kind DROP (cash removed to the safe).
+ *
+ * expected = opening + cash_sales − void_refunds + paid_in − paid_out − drops
  */
 export type CashInputs = {
   openingFloatSatang: number
   cashSalesSatang: number
-  cashRefundsSatang: number
+  voidRefundsSatang: number
   paidInSatang: number
   paidOutSatang: number
   dropsSatang: number
 }
 
 export function expectedCashSatang(x: CashInputs): number {
-  return x.openingFloatSatang + x.cashSalesSatang - x.cashRefundsSatang + x.paidInSatang - x.paidOutSatang - x.dropsSatang
+  return x.openingFloatSatang + x.cashSalesSatang - x.voidRefundsSatang + x.paidInSatang - x.paidOutSatang - x.dropsSatang
 }
 
 export type ZInput = {

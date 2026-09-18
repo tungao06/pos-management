@@ -14127,7 +14127,7 @@
       "priceSatang": 12000,
       "qty": 1,
       "supplier": "Shopee Dcm",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "DCm",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14139,7 +14139,7 @@
       "priceSatang": 13800,
       "qty": 1,
       "supplier": "Mr. DIY",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14151,7 +14151,7 @@
       "priceSatang": 5500,
       "qty": 1,
       "supplier": "Lotus",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14163,7 +14163,7 @@
       "priceSatang": 4500,
       "qty": 1,
       "supplier": "Lotus",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14175,7 +14175,7 @@
       "priceSatang": 1000,
       "qty": 1,
       "supplier": "Gift Shop",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14187,7 +14187,7 @@
       "priceSatang": 16500,
       "qty": 1,
       "supplier": "Shopee",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "DCm",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14199,7 +14199,7 @@
       "priceSatang": 3500,
       "qty": 1,
       "supplier": "Gift Shop",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "DCm",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14211,7 +14211,7 @@
       "priceSatang": 23000,
       "qty": 1,
       "supplier": "Shopee",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14223,7 +14223,7 @@
       "priceSatang": 23900,
       "qty": 1,
       "supplier": "Shopee",
-      "lifeYears": 1,
+      "lifeMonths": 12,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาประมาณการ · แปรงไม้ไผ่สึกเร็ว อายุ 1 ปี"
@@ -14235,7 +14235,7 @@
       "priceSatang": 5000,
       "qty": 1,
       "supplier": "Gift Shop",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14247,7 +14247,7 @@
       "priceSatang": 1000,
       "qty": 1,
       "supplier": "Gift Shop",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาประมาณการ (ยังไม่มีใบเสร็จ)"
@@ -14259,7 +14259,7 @@
       "priceSatang": 13800,
       "qty": 1,
       "supplier": "Mr. DIY",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ซื้อ 9/9/2569"
@@ -14271,7 +14271,7 @@
       "priceSatang": 3700,
       "qty": 1,
       "supplier": "Mr. DIY",
-      "lifeYears": 2,
+      "lifeMonths": 24,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ซื้อ 9/9/2569"
@@ -14283,7 +14283,7 @@
       "priceSatang": 2500,
       "qty": 1,
       "supplier": "Mr. DIY",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ซื้อ 9/9/2569"
@@ -14295,7 +14295,7 @@
       "priceSatang": 1600,
       "qty": 1,
       "supplier": "Mr. DIY",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ซื้อ 9/9/2569"
@@ -14307,7 +14307,7 @@
       "priceSatang": 2633,
       "qty": 1,
       "supplier": "Shopee MAXIE",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿34 × ตัวคูณเกลี่ย SP-01 (แถว 60)"
@@ -14319,7 +14319,7 @@
       "priceSatang": 10686,
       "qty": 2,
       "supplier": "Shopee MAXIE",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿138 × ตัวคูณเกลี่ย SP-01 · ซื้อ 2 ใบ"
@@ -14331,7 +14331,7 @@
       "priceSatang": 3485,
       "qty": 1,
       "supplier": "Shopee MAXIE",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿45 × ตัวคูณเกลี่ย SP-01"
@@ -14343,7 +14343,7 @@
       "priceSatang": 2865,
       "qty": 1,
       "supplier": "Shopee MAXIE",
-      "lifeYears": 1,
+      "lifeMonths": 12,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿37 × ตัวคูณเกลี่ย SP-01 · ผ้ากรองสึกเร็ว ตั้งอายุ 1 ปี"
@@ -14355,7 +14355,7 @@
       "priceSatang": 2323,
       "qty": 2,
       "supplier": "Shopee MAXIE",
-      "lifeYears": 2,
+      "lifeMonths": 24,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿30 × ตัวคูณเกลี่ย SP-01 · ซื้อ 2 อัน แถมก้านหลอด"
@@ -14367,7 +14367,7 @@
       "priceSatang": 2227,
       "qty": 4,
       "supplier": "Shopee TIMECAFE",
-      "lifeYears": 2,
+      "lifeMonths": 24,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿29 × ตัวคูณเกลี่ย SP-02 (แถว 61) · รวม 2 รายการในออเดอร์ (3+1 ขวด)"
@@ -14379,7 +14379,7 @@
       "priceSatang": 2995,
       "qty": 1,
       "supplier": "Shopee TIMECAFE",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿39 × ตัวคูณเกลี่ย SP-02"
@@ -14391,7 +14391,7 @@
       "priceSatang": 4991,
       "qty": 1,
       "supplier": "Shopee TIMECAFE",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿65 × ตัวคูณเกลี่ย SP-02"
@@ -14403,7 +14403,7 @@
       "priceSatang": 2304,
       "qty": 1,
       "supplier": "Shopee TIMECAFE",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿30 × ตัวคูณเกลี่ย SP-02"
@@ -14415,7 +14415,7 @@
       "priceSatang": 7295,
       "qty": 1,
       "supplier": "Shopee TIMECAFE",
-      "lifeYears": 1,
+      "lifeMonths": 12,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿95 × ตัวคูณเกลี่ย SP-02 · ไม้ไผ่สึกเร็ว อายุ 1 ปี"
@@ -14427,7 +14427,7 @@
       "priceSatang": 6834,
       "qty": 1,
       "supplier": "Shopee TIMECAFE",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿89 × ตัวคูณเกลี่ย SP-02 · ใช้คุมอุณหภูมิต้มชา/สตีมนม"
@@ -14439,7 +14439,7 @@
       "priceSatang": 147000,
       "qty": 1,
       "supplier": "Shopee",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿2,100 × ตัวคูณเกลี่ย SP-03 (แถว 62) · อุปกรณ์หน้าร้านขาหน้าร้าน"
@@ -14451,7 +14451,7 @@
       "priceSatang": 82600,
       "qty": 1,
       "supplier": "Shopee",
-      "lifeYears": 5,
+      "lifeMonths": 60,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿1,180 × ตัวคูณเกลี่ย SP-04 (แถว 63)"
@@ -14463,7 +14463,7 @@
       "priceSatang": 9350,
       "qty": 2,
       "supplier": "Shopee Living&Cooking",
-      "lifeYears": 2,
+      "lifeMonths": 24,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿119 × ตัวคูณเกลี่ย SP-06 (แถว 65) · ซื้อ 2 ตัว"
@@ -14475,7 +14475,7 @@
       "priceSatang": 8400,
       "qty": 1,
       "supplier": "Shopee No.1เครื่องครัว",
-      "lifeYears": 2,
+      "lifeMonths": 24,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿110 × ตัวคูณเกลี่ย SP-07 (แถว 66) · สีฟ้า"
@@ -14487,7 +14487,7 @@
       "priceSatang": 8400,
       "qty": 1,
       "supplier": "Shopee No.1เครื่องครัว",
-      "lifeYears": 2,
+      "lifeMonths": 24,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿110 × ตัวคูณเกลี่ย SP-07 · สีชมพู"
@@ -14499,7 +14499,7 @@
       "priceSatang": 10900,
       "qty": 1,
       "supplier": "Shopee LOFTHOME",
-      "lifeYears": 3,
+      "lifeMonths": 36,
       "condition": "ใช้งานได้",
       "owner": "TungAo",
       "note": "ราคาป้าย ฿177 × ตัวคูณเกลี่ย SP-08 (แถว 67) · ต่างจาก EQ-013 ที่เป็นแบบมือหมุน"

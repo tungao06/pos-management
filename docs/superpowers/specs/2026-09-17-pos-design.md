@@ -1,8 +1,18 @@
 # DA-YO POS — เอกสารออกแบบ (Design Spec)
 
-วันที่: 17 ก.ย. 2026 · สถานะ: 🟢 **อนุมัติแล้ว 17 ก.ย. 2026** (D1–D33) · แผนการสร้างอยู่ที่ [../plans/](../plans/)
+วันที่: 17 ก.ย. 2026 · สถานะ: 🟢 **อนุมัติแล้ว 17 ก.ย. 2026** (D1–D33) · **แก้ไขรอบ 5** ตาม D34–D43 · แผนการสร้างอยู่ที่ [../plans/](../plans/)
 หมายเหตุหน่วย (D33): ต้นทุนต่อหน่วยใช้ที่เขียนว่า `unit_cost_milli` / `avg_cost_milli` / `standard_cost_milli_per_unit` ในเอกสารนี้ ให้อ่านเป็น **`_usat` = micro-satang ต่อหน่วยใช้** (1 บาท = 100,000,000 usat) · ต้นทุนเป็นสตางค์ = round(qty_milli × usat / 1,000,000,000)
-การตัดสินใจที่อ้างถึง (D1–D24): [../../design/00-บันทึกการตัดสินใจ.md](../../design/00-บันทึกการตัดสินใจ.md)
+การตัดสินใจที่อ้างถึง (D1–D43): [../../design/00-บันทึกการตัดสินใจ.md](../../design/00-บันทึกการตัดสินใจ.md)
+
+> **แก้ไขรอบ 5 (17 ก.ย. 2026 หลังทำแผน 1)** — ปรับ spec ให้ตรงกับ D34–D40 และโค้ดแผน 1 (ไม่มีการตัดสินใจใหม่ในรอบนี้)
+> - D34: ต้นทุนมาตรฐานของของดิบ = ต้นทุนเฉลี่ยจากบันทึกซื้อในไฟล์ · ก่อนมีของเข้าครั้งแรก avg = ต้นทุนมาตรฐาน · เบส/ชุดบรรจุภัณฑ์ใช้ค่า roll-up จาก BOM (§3.3, §4.4, §9)
+> - §4.2: ต้นทุนต่อแก้ว **ปัดเศษครั้งเดียวจากผลรวม** ห้ามปัดทีละวัตถุดิบ
+> - D36: `cash_movement` kind ใหม่ `VOID_REFUND` · ยกเลิกบิลเงินสดบันทึก VOID_REFUND (ไม่ใช่ PAID_OUT) · สูตรเงินสดคาดหวังใหม่ (§3.5, §4.3, §4.8)
+> - D37: `equipment.life_months` จำนวนเต็ม (§3.6)
+> - D38: แฮช `order_event` ครอบ order_id · seq ต่อบิล · device_id · chain_id · chain_seq และตารางมีคอลัมน์ครบ (§3.4, §4.9, §6.3)
+> - D39: ลบ `VOID_WASTE` · movement kind มี 11 ค่า (§3.3, §4.3)
+> - D40: §9 ตามไฟล์ล่าสุด — ของดิบ 35 · อุปกรณ์ 32 · ไม่นับสต็อกตาม D29
+> - §8: golden test ต้อง **ตรงเป๊ะ** ทุกสูตร (แผน 1 ทำได้แล้ว)
 ข้อมูลประกอบ: [../../research/](../../research/) โดยเฉพาะ 05 (โมเดลข้อมูล), 09 (เมนูจริง), 10 (โฮสติ้ง)
 
 ---
@@ -99,7 +109,7 @@ pos-management/
 
 ตารางแบ่ง 3 ประเภท (สำคัญต่อ sync)
 - **R = ข้อมูลอ้างอิง** (เซิร์ฟเวอร์เป็นเจ้าของ แก้ได้ มี `version` + `updated_at`) ไหลลงเครื่อง
-- **T = ธุรกรรม** (เครื่องเป็นเจ้าของ insert อย่างเดียว) ไหลขึ้นเซิร์ฟเวอร์
+- **T = ธุรกรรม** (เครื่องเป็นเจ้าของ insert อย่างเดียว) ไหลขึ้นเซิร์ฟเวอร์ · ตารางบัญชี `stock_movement` `order_event` `cash_movement` `z_report` ห้าม UPDATE/DELETE โดย DB บังคับด้วย trigger ทั้ง SQLite และ Postgres (แก้ด้วยการเพิ่มแถวใหม่เท่านั้น)
 - **L = เฉพาะในเครื่อง** ไม่ sync
 
 ### 3.1 ผู้ใช้และอุปกรณ์ (R)
@@ -119,23 +129,23 @@ pos-management/
 | `sweetness_level` | id · name (`50%`) · sort · is_default | 5 ระดับ · default 50% |
 | `price` | id · variant_id · channel_id · price_satang · effective_from · created_by | ราคาเป็นตัวเลขต่อขนาด ไม่ใช่ +บาท · ประวัติเก็บทุกแถว |
 | `channel` | id · name (`หน้าร้าน`, `LINE OA`, `Grab`, `LINE MAN`, `อื่นๆ`) · commission_bp · is_active | เฟส 1 ใช้ `หน้าร้าน` อย่างเดียว |
-| `recipe` | id · variant_id · sweetness_id · version · effective_from · created_by · note · **is_current** | 360 แถวต่อ version · แก้สูตร = สร้าง version ใหม่ ไม่แก้ทับ |
+| `recipe` | id · variant_id · sweetness_id · version · effective_from · created_by · note · **is_current** | 360 แถวต่อ version · แก้สูตร = สร้าง version ใหม่ ไม่แก้ทับ · DB บังคับ `is_current` ได้แถวเดียวต่อ (variant, ความหวาน) |
 | `recipe_line` | id · recipe_id · item_id · qty_milli | อ้าง item ทั้งเบส (prepared) และของดิบ (raw) |
 | `modifier_group` / `modifier_option` / `product_modifier_group` | — | เตรียมไว้ ว่างในเฟส 1 |
 
 ### 3.3 สินค้าและสต็อก
 | ตาราง | ประเภท | ฟิลด์หลัก | หมายเหตุ |
 |---|---|---|---|
-| `item` | R | id · code (`RM-TEA-01`) · name · kind (`raw`/`prepared`/`packaging_set`) · category · use_unit (`g`/`ml`/`ชิ้น`/`ชุด`) · is_tracked · reorder_point_milli · standard_cost_milli_per_unit (ราคาตั้งต้น) · shelf_life_hours (prepared) · is_active · note | `is_tracked=false` = ไม่นับสต็อก แต่ยังคิดต้นทุนด้วย standard_cost (น้ำแข็ง น้ำ) |
+| `item` | R | id · code (`RM-TEA-01`) · name · kind (`raw`/`prepared`/`packaging_set`) · category · use_unit (`g`/`ml`/`ชิ้น`/`ชุด`) · is_tracked · reorder_point_milli · standard_cost_usat (ต้นทุนมาตรฐาน) · shelf_life_hours (prepared) · is_active · note | ต้นทุนมาตรฐาน (D34): ของดิบ = **ต้นทุนเฉลี่ยจากบันทึกซื้อ** (ชีต "สินค้าและสต็อก" คอลัมน์ "ต้นทุนเฉลี่ยต่อหน่วยซื้อ" ÷ หน่วยใช้) · เบสและชุดบรรจุภัณฑ์ = ค่า roll-up จาก BOM · `is_tracked=false` = ไม่นับสต็อก แต่ยังคิดต้นทุนด้วย standard_cost (D29: น้ำแข็ง น้ำสะอาด น้ำดื่มถัง เกลือ) |
 | `purchase_unit` | R | id · item_id · name (`ถุง`) · qty_per_unit_milli (400000) · is_default · barcode | มะนาว: `กิโลกรัม` = 250000 ml (yield) |
-| `bom` | R | id · item_id (prepared) · version · yield_milli · is_current · instructions | ชาไทยเบส yield 3,000,000 |
+| `bom` | R | id · item_id (prepared) · version · yield_milli · is_current · instructions | ชาไทยเบส yield 3,000,000 · DB บังคับ `is_current` ได้แถวเดียวต่อ item |
 | `bom_line` | R | id · bom_id · component_item_id · qty_milli | |
 | `purchase` | T | id · business_date · supplier · total_satang · receipt_image_ref · note · created_by · created_at | 1 ใบเสร็จ |
 | `purchase_line` | T | id · purchase_id · item_id · purchase_unit_id · qty_units_milli · qty_use_milli · line_total_satang | ระบบคำนวณ qty_use จาก unit |
 | `production_batch` | T | id · bom_id · business_date · scale_bp (10000 = 1 batch) · yield_actual_milli · unit_cost_milli · expires_at · created_by · created_at | "ทำเบส" |
 | `stock_count` | T | id · business_date · status (`open`/`closed`) · created_by · closed_at | ใบนับ |
 | `stock_count_line` | T | id · count_id · item_id · counted_units_milli · purchase_unit_id · counted_use_milli · expected_use_milli · variance_use_milli · variance_satang | expected = ยอดตามบัญชี ณ เวลานับ |
-| `stock_movement` | T | id · item_id · kind · qty_milli (มีเครื่องหมาย) · unit_cost_milli · ref_type · ref_id · business_date · created_by · created_at | **บัญชีแยกประเภท** ห้ามแก้ · kind: `PURCHASE` `SALE` `VOID_RETURN` `VOID_WASTE` `PRODUCE_OUT` `PRODUCE_IN` `WASTE` `EXPIRED` `COUNT_ADJ` `TRIAL` `TRANSFER` `OPENING` |
+| `stock_movement` | T | id · item_id · kind · qty_milli (มีเครื่องหมาย) · unit_cost_milli · ref_type · ref_id · business_date · created_by · created_at | **บัญชีแยกประเภท** ห้ามแก้ · kind 11 ค่า (D39): `OPENING` `PURCHASE` `SALE` `VOID_RETURN` `PRODUCE_OUT` `PRODUCE_IN` `WASTE` `EXPIRED` `COUNT_ADJ` `TRIAL` `TRANSFER` · ของที่ทำแล้วโดนยกเลิกไม่มี movement (ดู §4.3) |
 | `item_cost_state` | L+server | item_id · on_hand_milli · avg_cost_milli · as_of_movement_id | **แคช** สร้างใหม่จาก movement ได้เสมอ |
 
 ### 3.4 การขาย (T)
@@ -146,14 +156,14 @@ pos-management/
 | `order_payment_intent` | id · order_id · promptpay_payload · amount_satang · expires_at · slip_image_ref · customer_claimed_at | QR ที่แสดงให้ลูกค้า LINE + สลิปที่แนบ (เฟส 2 ตรวจอัตโนมัติ) |
 | `order_line` | id · order_id · line_no · variant_id · sweetness_id · recipe_id (version ที่ใช้) · **snapshot:** product_name · size_name · sweetness_name · unit_price_satang · qty · line_total_satang · unit_cost_satang | แก้ราคา/สูตรภายหลังไม่กระทบบิลเก่า |
 | `payment` | id · order_id · method (`CASH`/`PROMPTPAY`) · amount_satang · tendered_satang · change_satang · reference (transRef เฟส 2) · verify_status (`manual`/`verified`/`pending`) · created_by · created_at | หลาย payment ต่อบิลได้ (เฟส 1 ใช้ 1) |
-| `order_event` | id · order_id · seq · type · payload_json · actor_type (`user`/`customer`/`system`) · actor_id · device_id · at · prev_hash · hash | type: `CREATED` `LINE_ADDED` `LINE_REMOVED` `DISCOUNT_APPLIED` `PAYMENT_CLAIMED` `PAID` `READY` `PICKED_UP` `CANCELLED` `REJECTED` `VOIDED` `STOCK_DEDUCTED` `STOCK_RETURNED` `NOTE` · hash = sha256(prev_hash ‖ canonical(payload)) ต่อ **ต้นทาง** (เครื่องขายแต่ละเครื่อง และ server เป็นอีกโซ่หนึ่ง) |
+| `order_event` | id · order_id · seq (ต่อบิล) · device_id (null เมื่อ server เขียน) · chain_id (device id หรือ `server`) · chain_seq (ต่อโซ่) · type · payload_json · actor_type (`user`/`customer`/`system`) · actor_id · at · prev_hash · hash · **unique (order_id, seq)** · **unique (chain_id, chain_seq)** | type: `CREATED` `LINE_ADDED` `LINE_REMOVED` `DISCOUNT_APPLIED` `PAYMENT_CLAIMED` `PAID` `READY` `PICKED_UP` `CANCELLED` `REJECTED` `VOIDED` `STOCK_DEDUCTED` `STOCK_RETURNED` `NOTE` · โซ่แฮชแยกต่อ **ต้นทาง** (เครื่องขายแต่ละเครื่อง และ server เป็นอีกโซ่หนึ่ง) · แฮชครอบทุกคอลัมน์ตั้งแต่ order_id ถึง at (D38, สูตรใน §4.9) |
 | `discount` | id · order_id · amount_satang · reason · approved_by | เฟส 1: ส่วนลดจำนวนเงินระดับบิล มีเหตุผล |
 
 ### 3.5 กะและเงินสด (T)
 | ตาราง | ฟิลด์หลัก |
 |---|---|
 | `shift` | id · device_id · business_date · opened_by · opened_at · opening_float_satang · closed_by · closed_at · status |
-| `cash_movement` | id · shift_id · kind (`PAID_IN`/`PAID_OUT`/`DROP`) · amount_satang · reason · created_by · created_at |
+| `cash_movement` | id · shift_id · kind (`PAID_IN`/`PAID_OUT`/`DROP`/`VOID_REFUND`) · amount_satang · order_id (เฉพาะ VOID_REFUND) · reason · created_by · created_at — `PAID_IN`/`PAID_OUT`/`DROP` คนบันทึกเอง · `VOID_REFUND` ระบบบันทึกอัตโนมัติตอนยกเลิกบิลเงินสด (D36) |
 | `cash_count` | id · shift_id · counted_satang · expected_satang · variance_satang · reason · lines_json (ธนบัตร/เหรียญ × จำนวน) · counted_by |
 | `z_report` | id · shift_id · snapshot_json · hash · created_at — **สร้างครั้งเดียว ไม่คำนวณใหม่** |
 
@@ -161,12 +171,12 @@ pos-management/
 | ตาราง | ประเภท | ฟิลด์หลัก |
 |---|---|---|
 | `audit_log` | R (server) + L | id · entity · entity_id · action · before_json · after_json · actor_user_id · at — ใช้กับข้อมูลหลัก (ราคา สูตร สินค้า BOM ผู้ใช้ ตั้งค่า) |
-| `outbox` | L | id · table · row_json · idempotency_key · created_at · attempts · last_error · sent_at |
+| `outbox` | L | id · table · row_json · idempotency_key · **status** (`pending`/`sent`/`dead`) · created_at · attempts · last_error · sent_at · dead_at |
 | `sync_state` | L | key · value — cursor ล่าสุดของแต่ละตาราง R · เวลา sync ล่าสุด |
 | `idempotency_record` | server | key · first_seen_at · result_hash |
-| `server_cursor` | server | ทุกตาราง R มีคอลัมน์ `server_seq` (bigserial) สำหรับ pull แบบเพิ่ม |
+| `server_cursor` | server | คอลัมน์ `server_seq` (bigserial) สำหรับ pull แบบเพิ่ม อยู่ในทุกตาราง R **และ** ตาราง T ที่เครื่องต้อง pull (`order` `order_line` `order_event` `payment` `item_cost_state`) · INSERT ได้เลขจาก default · **UPDATE ได้เลขใหม่จาก trigger `bump_server_seq`** จึง pull เห็นการแก้ด้วย · ทุกตาราง T ฝั่ง pg มี `server_received_at` ที่ DB เติมเวลาเซิร์ฟเวอร์ (UTC) ให้เอง |
 | `invariant_run` | server | id · ran_at · results_json · has_failure |
-| `equipment` | R | id · code · name · purchased_at · price_satang · qty · supplier · life_years · condition · owner · note (นำเข้าจากไฟล์ ไม่กระทบต้นทุนต่อแก้ว) |
+| `equipment` | R | id · code · name · purchased_at · price_satang · qty · supplier · life_months (จำนวนเต็ม = ปีในไฟล์ × 12 ไม่ปัดทิ้ง, D37) · condition · owner · note (นำเข้าจากไฟล์ ไม่กระทบต้นทุนต่อแก้ว) |
 
 ---
 
@@ -200,20 +210,21 @@ explode(item, need):
     movement(SALE, item, −need, item.is_tracked ? avg_cost : standard_cost)
 ```
 - เบส 7 ตัวเป็น `prepared` + `is_tracked=true` → ถ้าลืมบันทึกทำเบส สต็อกเบสจะติดลบ → **อนุญาตให้ติดลบ** แต่ขึ้นเตือนในหน้าสต็อกและรายงานส่วนต่าง (ห้ามบล็อกการขาย)
-- ต้นทุนต่อบรรทัด `unit_cost_satang = round(Σ need × cost / 1000 / qty)` บันทึกเป็น snapshot
+- ต้นทุนต่อบรรทัด `unit_cost_satang = round(Σ need_milli × cost_usat / 1,000,000,000 / qty)` บันทึกเป็น snapshot · **ปัดเศษครั้งเดียวจากผลรวมเต็มความละเอียด** (BigInt) ห้ามปัดทีละวัตถุดิบแล้วค่อยรวม และห้ามหาร qty ก่อนปัด — การปัดทีละวัตถุดิบทำให้ต่างจาก Excel ~1/3 ของสูตร
 - Invariant: ทุกบิล `paid` ต้องมี movement kind `SALE` ref ถึงบิล และ Σ ปริมาณตรงกับ recipe ที่ระบุ (ตรวจย้อนได้เพราะ recipe มี version)
 
 ### 4.3 ยกเลิกบิล
 - ก่อนชำระ: status `open` → ลบตะกร้าได้ (บันทึก event `LINE_REMOVED`; บิลที่ยังไม่ paid และไม่มีบรรทัดจะไม่ได้เลขที่บิล)
 - หลังชำระ: ต้องใส่เหตุผล + owner PIN + ตอบ "ทำเครื่องดื่มไปแล้วหรือยัง"
   - ยังไม่ทำ → movement `VOID_RETURN` (+ปริมาณเดิม ต้นทุนเดิม)
-  - ทำแล้ว → movement `VOID_WASTE` (ยอดสต็อกไม่เปลี่ยน แต่บันทึกเป็นของเสียเพื่อรายงาน) — จริง ๆ คือไม่มี movement เพิ่ม แต่มี `waste` marker ใน event
-- เงิน: ยกเลิกเงินสด = คืนเงินสดจากลิ้นชัก (บันทึก `cash_movement PAID_OUT` อัตโนมัติ) · ยกเลิก QR = บันทึกว่าโอนคืนแล้ว (อ้างอิงใส่เอง)
+  - ทำแล้ว → **ไม่มี movement เพิ่ม** (ของถูกใช้ไปแล้วตาม SALE เดิม) · event `VOIDED` มี marker `waste` เพื่อรายงานของเสีย (D39)
+- เงิน: ยกเลิกเงินสด = คืนเงินสดจากลิ้นชัก → ระบบบันทึก `cash_movement` kind **`VOID_REFUND`** อัตโนมัติ (อ้าง order_id ของบิล · แยกจาก `PAID_OUT` ที่คนบันทึกเอง, D36) · ยกเลิก QR = บันทึกว่าโอนคืนแล้ว (อ้างอิงใส่เอง)
 - บิลที่ยกเลิก **ยังคงอยู่ในรายงานยอดขายรวม (gross) และแยกเป็นยอดยกเลิก** ไม่หายไป
 
 ### 4.4 ต้นทุนถัวเฉลี่ยเคลื่อนที่
 - ของดิบ: เมื่อ `PURCHASE` เข้า `avg = (on_hand × avg + qty × unit_cost) / (on_hand + qty)` (ถ้า on_hand ≤ 0 ให้ avg = unit_cost ใหม่)
-- ก่อนมีการซื้อครั้งแรก: avg = `standard_cost` จากไฟล์
+- ต้นทุนมาตรฐาน (`standard_cost`) ของของดิบ = **ต้นทุนเฉลี่ยจากบันทึกซื้อในไฟล์ร้าน** (D34 · ตรงกับที่ Excel ใช้คิดทุกสูตร) · ของเบส/ชุดบรรจุภัณฑ์ = roll-up จาก BOM
+- **ก่อนมีของเข้าครั้งแรก** (ยังไม่มี movement ใดของ item นั้น): avg = `standard_cost` → ขาย/ทำเบสก่อนรับของก็คิดต้นทุนได้ถูก
 - ทำเบส (`production_batch`): `PRODUCE_OUT` ทุกส่วนประกอบที่ราคาเฉลี่ยขณะนั้น → `batch_cost = Σ` → `PRODUCE_IN` เบส qty = yield_actual, unit_cost = batch_cost / yield_actual → เข้าถัวเฉลี่ยของเบส
 - `item_cost_state` เป็นแคช · ฟังก์ชัน `rebuild(item)` ไล่ movement ตั้งแต่ต้น (ใช้ตรวจ invariant)
 
@@ -231,12 +242,14 @@ explode(item, need):
 - `business_date` = วันที่ของ shift ที่เปิดอยู่ (ไม่ใช่นาฬิกา) → ขายหลังเที่ยงคืนยังเป็นวันเดิม
 
 ### 4.8 กะ / X / Z
-- เปิดกะ: ใส่เงินทอน · ปิดกะ: นับธนบัตร → `expected = opening + cash_sales − cash_voids + paid_in − paid_out − drops` → variance · เกิน `cash.variance_alert_satang` ต้องใส่เหตุผล
+- เปิดกะ: ใส่เงินทอน · ปิดกะ: นับธนบัตร → `expected = opening + cash_sales − void_refunds + paid_in − paid_out − drops` (D36: `cash_sales` = ยอดรับเงินสดของบิลที่ชำระในกะ รวมบิลที่ยกเลิกภายหลัง · `void_refunds` = Σ `VOID_REFUND` · `paid_out` = Σ `PAID_OUT` ที่คนบันทึกเอง — แต่ละแถวนับครั้งเดียว) → variance · เกิน `cash.variance_alert_satang` ต้องใส่เหตุผล
 - X = คำนวณสดจากข้อมูลได้ตลอด · Z = snapshot JSON + hash ตอนปิดกะ ห้ามคำนวณใหม่ · Grand total สะสมอยู่ใน Z ถัดไป (Z(n).grand = Z(n−1).grand + ยอดกะนี้)
 - ห้ามเปิดกะใหม่ถ้ากะเดิมยังไม่ปิด · ห้ามขายถ้าไม่มีกะเปิด (ยกเว้น owner กด "เปิดกะด่วน" = เปิดด้วยเงินทอน 0 พร้อม event)
 
 ### 4.9 แฮชโซ่ของ event
-- `hash = sha256(prev_hash ‖ order_id ‖ seq ‖ type ‖ canonicalJSON(payload) ‖ actor ‖ at)` · `prev_hash` = hash ของ event ล่าสุดของ **เครื่องนั้น** (ทุกบิล) · เซิร์ฟเวอร์ตรวจโซ่ตอนรับ และงานรายคืนตรวจทั้งหมด
+- `hash = sha256hex(prev_hash + "\n" + canonicalJSON({ chain_id, chain_seq, order_id, seq, device_id, type, payload, actor_type, actor_id, at }))` (D38 · canonicalJSON เรียง key · ชื่อ key ในโค้ดเป็น camelCase ตาม `EventCore`) · event แรกของโซ่ใช้ `prev_hash` = `0` × 64
+- โซ่แยกตาม `chain_id` (เครื่องขายแต่ละเครื่อง / `server`) · `prev_hash` = hash ของ event ก่อนหน้า **ในโซ่เดียวกัน** (ทุกบิล) · `chain_seq` ต้องต่อเนื่อง 1, 2, 3, … ไม่มีช่องว่าง · `seq` นับต่อบิล
+- เซิร์ฟเวอร์ตรวจโซ่ตอนรับ และงานรายคืนตรวจทั้งหมด
 - ใครแก้แถวเก่าใน DB ตรง ๆ → โซ่ขาด → invariant fail → แจ้งเตือน
 
 ---
@@ -259,7 +272,7 @@ explode(item, need):
 | **รายงาน** | owner | ยอดขาย (วัน/สัปดาห์/เดือน/ช่วง) · ต่อเมนู/ขนาด/ความหวาน · margin · ยกเลิก/ส่วนลด · ส่วนต่างสต็อก · มูลค่าสต็อก · รายรับสะสม 12 เดือนเทียบเกณฑ์ 1.8 ล้าน · export CSV |
 | จัดการเมนู | owner | เมนู · ขนาด · ราคาต่อขนาด (มีผลวันที่) · เปิด/ปิดเมนู · แสดงต้นทุน/แก้วและ GP % ปัจจุบัน + เตือนต่ำกว่า 60/55% |
 | จัดการสูตร | owner | ตาราง 5 ระดับหวาน × วัตถุดิบ ต่อ (เมนู, ขนาด) · ปุ่ม "สร้าง 20/22 oz จาก 16 oz ด้วยตัวคูณ" · บันทึก = version ใหม่ |
-| จัดการสินค้า | owner | สินค้า · หน่วยซื้อ · จุดสั่งซื้อ · is_tracked · ราคาตั้งต้น · BOM เบส |
+| จัดการสินค้า | owner | สินค้า · หน่วยซื้อ · จุดสั่งซื้อ · is_tracked · ต้นทุนมาตรฐาน (D34) · BOM เบส |
 | ผู้ใช้/ตั้งค่า | owner | ผู้ใช้ + PIN · อุปกรณ์ · ตั้งค่า · สถานะ sync (ค้างส่งกี่รายการ · ล่าสุดเมื่อไร · dead-letter) |
 | อุปกรณ์ | owner | ทะเบียน + ค่าเสื่อม/เดือน (ข้อมูลประกอบ) |
 
@@ -271,8 +284,8 @@ explode(item, need):
 
 ### 6.1 หลัก
 - SQLite ในเครื่องคือแหล่งความจริงของธุรกรรม · ทุกการเขียนเป็น transaction เดียว: แถวธุรกรรม + movement + event + แถว outbox
-- **push**: ส่ง outbox เป็นชุด (FIFO, ≤ 200 แถว) ไป `POST /sync/push` พร้อม `idempotency_key` ต่อแถว (= row id) · เซิร์ฟเวอร์ insert-if-absent, ตรวจโซ่แฮช, ตรวจยอดด้วย domain ซ้ำ, ตอบรายการที่รับแล้ว/ปฏิเสธ · ปฏิเสธ (เช่น schema ไม่ตรง) → ย้ายไป dead-letter แสดงในหน้าตั้งค่า **ไม่บล็อกรายการถัดไปที่ไม่เกี่ยวกัน**
-- **pull**: `GET /sync/pull?table=…&since=server_seq` ต่อตาราง R · เซิร์ฟเวอร์ชนะเสมอ (ข้อมูลหลักแก้ที่ back office ซึ่งเขียนตรงไปเซิร์ฟเวอร์เมื่อออนไลน์)
+- **push**: ส่ง outbox เป็นชุด (FIFO, ≤ 200 แถว) ไป `POST /sync/push` พร้อม `idempotency_key` ต่อแถว (= row id) · เซิร์ฟเวอร์ insert-if-absent, ตรวจโซ่แฮช, ตรวจยอดด้วย domain ซ้ำ, ตอบรายการที่รับแล้ว/ปฏิเสธ · ปฏิเสธ (เช่น schema ไม่ตรง) → ย้ายไป dead-letter (`outbox.status = dead` + `dead_at` + `last_error`, ไม่ส่งซ้ำอัตโนมัติ) แสดงในหน้าตั้งค่า **ไม่บล็อกรายการถัดไปที่ไม่เกี่ยวกัน**
+- **pull**: `GET /sync/pull?table=…&since=server_seq` ต่อตาราง R และตาราง T ที่เครื่องต้องดึง (ออเดอร์ LINE, event ที่เซิร์ฟเวอร์เขียน, `item_cost_state`) · แถวที่ถูก UPDATE ได้ `server_seq` ใหม่ จึงถูกดึงอีกครั้ง · เลข sequence จองตอนเขียนแต่เห็นตอน commit → endpoint ต้องอ่านไม่เกิน `pg_snapshot_xmin(pg_current_snapshot())` หรือยืนยันว่ามีผู้เขียนคนเดียว (แผน 4 เลือก) · เซิร์ฟเวอร์ชนะเสมอ (ข้อมูลหลักแก้ที่ back office ซึ่งเขียนตรงไปเซิร์ฟเวอร์เมื่อออนไลน์)
 - **แก้ข้อมูลหลักตอนออฟไลน์**: ไม่อนุญาตในเฟส 1 (ปุ่มจัดการเมนู/สินค้าต้องออนไลน์) — ตัดปัญหา conflict ทั้งหมด
 - ไม่ใช้ CRDT · ไม่มี last-write-wins บนธุรกรรม
 
@@ -287,7 +300,7 @@ explode(item, need):
 - ป้องกันชนกัน: แท็บเล็ตจะรับออเดอร์ที่ status ≥ paid ไม่ได้ถ้าเซิร์ฟเวอร์ยกเลิกไปแล้ว → กด "รับเงินแล้ว" ต้องออนไลน์และให้เซิร์ฟเวอร์ยืนยันก่อน (เป็นข้อยกเว้นเดียวของ offline-first เพราะออเดอร์นี้มาจากเน็ตอยู่แล้ว)
 
 ### 6.3 นาฬิกา
-- ใช้ `created_at` ของเครื่อง + `server_received_at` ที่เซิร์ฟเวอร์ · ลำดับใช้ `seq` ต่อเครื่อง ไม่ใช้เวลาเปรียบเทียบ · เตือนถ้าเวลาเครื่องต่างจากเซิร์ฟเวอร์ > 5 นาที
+- ใช้ `created_at` ของเครื่อง + `server_received_at` ที่เซิร์ฟเวอร์ · ลำดับใช้ `chain_seq` ต่อโซ่ (เครื่อง) และ `seq` ต่อบิล ไม่ใช้เวลาเปรียบเทียบ · เตือนถ้าเวลาเครื่องต่างจากเซิร์ฟเวอร์ > 5 นาที
 
 ### 6.4 ติดตั้ง/กู้คืนเครื่องใหม่
 - เครื่องใหม่: ล็อกอิน owner → ลงทะเบียน device (prefix ใหม่) → pull ทุกตาราง R + `item_cost_state` ล่าสุด → พร้อมขาย · ไม่ดึงประวัติธุรกรรมทั้งหมดลงเครื่อง (ดึงแค่ 30 วันเพื่อหน้าประวัติ)
@@ -324,7 +337,7 @@ explode(item, need):
 | ระดับ | เครื่องมือ | ครอบคลุม |
 |---|---|---|
 | Property-based | Vitest + fast-check | ยอดบิล/ส่วนลด/VAT proration · การตัดสต็อกไม่สร้างหรือทำลายปริมาณ (Σ explode = Σ recipe) · ถัวเฉลี่ยไม่ติดลบ/ไม่ NaN · โซ่แฮชตรวจจับการแก้ 1 ไบต์ · counter เลขที่บิลไม่ซ้ำภายใต้ retry |
-| **Golden test จาก Excel** | Vitest | นำเข้า 360 สูตร + ราคาตั้งต้น → คำนวณต้นทุน/แก้วและ GP ทุกแถว **ต้องตรงกับคอลัมน์ในไฟล์ ±0.01 บาท** · ต้นทุนเบส 7 ตัวตรงกับชีต "ต้นทุนเบส" |
+| **Golden test จาก Excel** | Vitest | นำเข้า 360 สูตร + ต้นทุนมาตรฐาน (D34) → คำนวณต้นทุน/แก้วทุกแถว **ต้องตรงกับคอลัมน์ในไฟล์เป๊ะทุกสตางค์** (ปัดครั้งเดียวจากผลรวม §4.2 · ห้ามผ่อนเป็น ±) · ต้นทุนเบส 7 ตัวตรงกับชีต "ต้นทุนเบส" เป๊ะระดับ usat · ทำซ้ำหลัง seed ลงฐานข้อมูล (อ่านจาก DB แล้วต้องได้ค่าเดียวกัน) |
 | Schema parity | Vitest | Drizzle sqlite vs pg: ชื่อตาราง/คอลัมน์/ชนิด/NOT NULL/FK ตรงกันทุกตัว |
 | Unit | Vitest | NestJS services · sync push/pull idempotency (ส่งซ้ำ 3 ครั้งได้ผลเดียว) |
 | E2E | Playwright | ขาย → ชำระ → ตัดสต็อก → ยกเลิก → ปิดกะ → Z · ออฟไลน์ (route.abort) → ขายต่อ → ออนไลน์ → sync ครบ |
@@ -338,11 +351,11 @@ explode(item, need):
 |---|---|---|---|
 | Lists | category, size, sweetness_level, channel | — | หมวดหน้าจอกำหนดใหม่: ชาไทย / ชาเขียว / มัทฉะพรีเมียม (ดู Q23) |
 | ต้นทุนและราคา (ตารางล่าง) | product, product_variant, price | 24 / 72 / 72 | price channel = หน้าร้าน, effective_from = วันนำเข้า |
-| สินค้าและสต็อก | item (raw), purchase_unit | 32 / 32 | is_tracked=false สำหรับ RM-WTR-* (น้ำแข็ง น้ำ) และ PK-STR/PK-LBL ⚠️ (ถามใน Q26) |
-| ต้นทุนเบส (tblIng) | item (prepared / packaging_set) | 17 + 3 | ตัวแทน 1:1 (นมสด → RM-MLK-01) **ไม่สร้าง item ใหม่** ให้ recipe อ้างของดิบตรง |
-| ต้นทุนเบส (tblBOM) + เบสและซับสูตร | bom, bom_line | 7 + 3 ชุดบรรจุภัณฑ์ | yield/อายุจากชีตเบส |
-| ข้อมูลสูตร | recipe, recipe_line | 360 / ~1,800 | ข้ามค่า 0 · น้ำแข็ง/น้ำเป็น item raw is_tracked=false · บรรจุภัณฑ์อ้าง packaging_set ตามขนาด |
-| ทะเบียนอุปกรณ์ | equipment | 15 | |
+| สินค้าและสต็อก | item (raw), purchase_unit | 35 / 35 | standard_cost = คอลัมน์ "ต้นทุนเฉลี่ยต่อหน่วยซื้อ" ÷ หน่วยใช้ (D34) · **is_tracked=false (D29):** RM-WTR-01 น้ำแข็ง · RM-WTR-02 น้ำสะอาด · RM-WTR-03 น้ำดื่มถัง · RM-SEA-01 เกลือ · **นับสต็อก:** PK-STR-01 หลอด · PK-LBL-01 สติกเกอร์ และที่เหลือทั้งหมด รวม OT-SUP-01/02 ถุงมือ/ปากกา (D35) |
+| ต้นทุนเบส (tblIng) | item (prepared / packaging_set) | 7 + 3 | ตัวแทน 1:1 (นมสด → RM-MLK-01) **ไม่สร้าง item ใหม่** ให้ recipe อ้างของดิบตรง · เบส 7 ตัว is_tracked=true · ชุดบรรจุภัณฑ์ 3 ชุด is_tracked=false · standard_cost = roll-up จาก BOM (เช่น ชาไทยเบส 2,000,000 usat/ml) |
+| ต้นทุนเบส (tblBOM) + เบสและซับสูตร | bom, bom_line | 10 (7 เบส + 3 ชุดบรรจุภัณฑ์) / 33 | yield/อายุจากชีตเบส |
+| ข้อมูลสูตร | recipe, recipe_line | 360 / 2,211 | ข้ามค่า 0 · น้ำแข็ง/น้ำเป็น item raw is_tracked=false · บรรจุภัณฑ์อ้าง packaging_set ตามขนาด |
+| ทะเบียนอุปกรณ์ | equipment | 32 | life_months = ปี × 12 ต้องเป็นจำนวนเต็ม ไม่งั้นนำเข้าไม่ผ่าน (D37) |
 | Dashboard / R&D / SOP / มัทฉะพรีเมียม / เคล็ดลับ | ไม่นำเข้า | | |
 
 สคริปต์ต้อง idempotent (รันซ้ำได้ผลเดิม) และสร้างรายงานความต่างถ้าไฟล์เปลี่ยน

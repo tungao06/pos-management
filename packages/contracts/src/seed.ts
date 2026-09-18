@@ -42,7 +42,8 @@ export const SeedEquipment = z.object({
   priceSatang: nonneg,
   qty: pos,
   supplier: z.string().nullable(),
-  lifeYears: z.number().positive().nullable(),
+  /** Useful life in whole months (D37: file years × 12, never rounded). */
+  lifeMonths: pos.nullable(),
   condition: z.string().nullable(),
   owner: z.string().nullable(),
   note: z.string().nullable(),

@@ -19,7 +19,7 @@
 - **pin `typescript@~5.9`** (npm latest คือ 7.x ซึ่งเป็น native port ใหม่ ยังไม่ใช้กับ tooling นี้) · แพ็กเกจอื่นใช้เวอร์ชันล่าสุด ณ วันติดตั้ง: drizzle-orm ≥ 0.45, zod ≥ 4.6, vitest ≥ 5, fast-check ≥ 4.10, exceljs ≥ 4.4, @noble/hashes ≥ 2.4
 - รหัสอ้างอิงจาก Excel (product code เช่น `Original`, item code เช่น `RM-TEA-01`) ต้องคงตัวสะกดเดิม 100%
 - ไฟล์ Excel ต้นฉบับ: `C:\Users\chaya\OneDrive\Documents\DAYO\DA-YO_เมนู.xlsx` → คัดลอกเป็น fixture `packages/excel-import/fixtures/DA-YO_เมนู.xlsx` (repo ส่วนตัว เก็บได้)
-- ทุก commit ลงท้ายด้วย `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`
+- **commit:** ใช้ skill `committing-code` ทุกครั้ง · **ห้ามใส่** `Co-Authored-By: Claude…` หรือ trailer ของ AI ใด ๆ · stage เฉพาะไฟล์ที่ระบุชื่อ · เอกสาร `docs/**` ของโปรเจกต์นี้ commit ได้ (ข้อยกเว้นเฉพาะโปรเจกต์นี้ — D45)
 - เครื่องพัฒนาเป็น Windows 11 + Git Bash · ใช้ `nvm install 22 && nvm use 22` และ `corepack enable pnpm` ก่อนเริ่ม
 
 ---
@@ -255,7 +255,7 @@ Expected: turbo รัน `@dayo/domain#typecheck` และ `#test` ผ่า�
 
 ```bash
 git add package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json tsconfig.base.json .nvmrc .gitignore .github packages/domain
-git commit -m "chore: scaffold pnpm+turbo monorepo with domain package" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "chore: scaffold pnpm+turbo monorepo with domain package"
 ```
 
 ---
@@ -454,7 +454,7 @@ Expected: ทุกเทสต์ผ่าน (รวม property 100 รอบ
 
 ```bash
 git add packages/domain
-git commit -m "feat(domain): money and quantity primitives with exact rounding" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(domain): money and quantity primitives with exact rounding"
 ```
 
 ---
@@ -610,7 +610,7 @@ Expected: PASS
 
 ```bash
 git add packages/domain
-git commit -m "feat(domain): order totals with discount and VAT-inclusive allocation, price lookup" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(domain): order totals with discount and VAT-inclusive allocation, price lookup"
 ```
 
 ---
@@ -867,7 +867,7 @@ Expected: PASS (ถ้า import path `@noble/hashes/sha2.js` ไม่พบ �
 
 ```bash
 git add packages/domain
-git commit -m "feat(domain): receipt numbering and hash-chained order events" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(domain): receipt numbering and hash-chained order events"
 ```
 
 ---
@@ -1084,7 +1084,7 @@ Expected: PASS
 
 ```bash
 git add packages/domain
-git commit -m "feat(domain): catalog, standard cost roll-up and recipe explosion" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(domain): catalog, standard cost roll-up and recipe explosion"
 ```
 
 ---
@@ -1336,7 +1336,7 @@ Expected: PASS (ค่า 2_391_000 = 5,977,500,000,000 ÷ 2,500,000)
 
 ```bash
 git add packages/domain
-git commit -m "feat(domain): stock movements, moving-average costing and base production" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(domain): stock movements, moving-average costing and base production"
 ```
 
 ---
@@ -1535,7 +1535,7 @@ Expected: PASS · ตอนนี้ `domain` ครบทุกกฎใน spe
 
 ```bash
 git add packages/domain
-git commit -m "feat(domain): stock count variance and frozen Z report" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(domain): stock count variance and frozen Z report"
 ```
 
 ---
@@ -1780,7 +1780,7 @@ Expected: PASS (ถ้า `ctx.addIssue({ code: 'custom' })` type ไม่ผ�
 
 ```bash
 git add packages/contracts pnpm-lock.yaml
-git commit -m "feat(contracts): shared enums and Excel seed schema" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(contracts): shared enums and Excel seed schema"
 ```
 
 ---
@@ -2092,7 +2092,7 @@ Expected: PASS · ถ้า typecheck บ่นเรื่อง `import ExcelJ
 
 ```bash
 git add packages/excel-import tsconfig.base.json pnpm-lock.yaml
-git commit -m "feat(excel-import): workbook helpers, constants and item sheet parser" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(excel-import): workbook helpers, constants and item sheet parser"
 ```
 
 ---
@@ -2228,7 +2228,7 @@ Expected: PASS · ถ้า `yieldByName` ไม่มี "บรรจุภั
 
 ```bash
 git add packages/excel-import
-git commit -m "feat(excel-import): parse base and packaging BOMs" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(excel-import): parse base and packaging BOMs"
 ```
 
 ---
@@ -2480,7 +2480,7 @@ Expected: PASS ทั้ง 3 ไฟล์ · ถ้าเทสต์วัน�
 
 ```bash
 git add packages/excel-import
-git commit -m "feat(excel-import): parse products, prices, 360 recipes and equipment" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(excel-import): parse products, prices, 360 recipes and equipment"
 ```
 
 ---
@@ -2652,7 +2652,7 @@ Expected: `wrote packages/excel-import/seed/dayo-seed.json: 42 items, 360 recipe
 
 ```bash
 git add packages/excel-import
-git commit -m "feat(excel-import): build seed JSON from the shop workbook, golden-tested against Excel costs" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(excel-import): build seed JSON from the shop workbook, golden-tested against Excel costs"
 ```
 
 ---
@@ -2675,7 +2675,7 @@ Expected: workflow `ci` ผ่านทั้ง typecheck และ test บน
 ใน `docs/superpowers/plans/README.md` เปลี่ยนแถวแผน 1 จาก `📝 เขียนแล้ว` เป็น `✅ เสร็จ <วันที่>` แล้ว commit:
 ```bash
 git add docs/superpowers/plans/README.md
-git commit -m "docs: mark plan 1 complete" -m "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "docs: mark plan 1 complete"
 ```
 
 ---

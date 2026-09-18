@@ -36,5 +36,16 @@ export type ShiftStatus = z.infer<typeof ShiftStatus>
 export const CountStatus = z.enum(['open', 'closed'])
 export type CountStatus = z.infer<typeof CountStatus>
 
-export const CashMovementKind = z.enum(['PAID_IN', 'PAID_OUT', 'DROP'])
+/**
+ * cash_movement.kind (spec §3.5, D36). PAID_IN / PAID_OUT / DROP are entered by a person;
+ * VOID_REFUND is written automatically when a cash-paid order is voided (spec §4.3) and is never entered by hand.
+ */
+export const CashMovementKind = z.enum(['PAID_IN', 'PAID_OUT', 'DROP', 'VOID_REFUND'])
 export type CashMovementKind = z.infer<typeof CashMovementKind>
+
+/**
+ * outbox.status on the device (spec §6.1). `pending` = waiting or retrying · `sent` = the server accepted it ·
+ * `dead` = the server rejected it for good (dead-letter, shown on the settings screen, never retried automatically).
+ */
+export const OutboxStatus = z.enum(['pending', 'sent', 'dead'])
+export type OutboxStatus = z.infer<typeof OutboxStatus>
