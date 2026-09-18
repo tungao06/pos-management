@@ -1,0 +1,68 @@
+:root {
+  /* DA-YO brand (D44). Orange and matcha are decoration only — never text (contrast 2.56:1 / 2.67:1 on cream). */
+  /* รอ Q3-23: matcha ใช้ในคลื่น (wave.svg) — README โลโก้ให้ matcha แค่ผิวน้ำชาในแก้วเท่านั้น · selected/muted/line/surface เป็นโทเค็นเพิ่มนอก D44 */
+  --forest: #1e3b22;       /* Deep Forest: main text, bars, primary buttons */
+  --cream: #f6f3e8;        /* Cream: page background, text on forest (11.09:1) */
+  --matcha: #7ea05f;       /* wave accent only */
+  --orange: #ed7a13;       /* shop-signage orange: wave accent only */
+  --selected: #e4ecd9;     /* pressed/selected background (forest text 10.15:1) */
+  --muted: #5c6b5e;        /* secondary text on cream (5.08:1) */
+  --line: #d6d3c4;         /* borders */
+  --surface: #fffdf6;      /* cards, dialogs, cart */
+  --danger: #b91c1c;       /* errors on cream (5.82:1) */
+  --qr-bg: #ffffff;        /* M5: PromptPay QR quiet zone — scanners need a plain white background */
+  --backdrop: rgb(30 59 34 / 0.45); /* M5: dialog backdrop */
+  --brandbar-h: 68px;      /* 56 px bar + 12 px wave */
+  font-family: system-ui, 'Noto Sans Thai', sans-serif;
+  color: var(--forest);
+  background: var(--cream);
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button { font: inherit; color: var(--forest); min-height: 64px; min-width: 64px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); padding: 8px 16px; cursor: pointer; touch-action: manipulation; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:focus-visible { outline: 3px solid var(--forest); outline-offset: 2px; }
+button.primary { background: var(--forest); color: var(--cream); border-color: var(--forest); font-weight: 700; }
+button[aria-pressed='true'] { outline: 3px solid var(--forest); background: var(--selected); font-weight: 700; }
+input, textarea, select { font: inherit; color: var(--forest); background: var(--surface); min-height: 56px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; width: 100%; }
+input:focus-visible { outline: 3px solid var(--forest); }
+label { display: grid; gap: 4px; }
+fieldset { border: 1px solid var(--line); border-radius: 12px; }
+.brandbar { height: var(--brandbar-h); display: grid; grid-template-rows: 56px 12px; background: var(--forest); color: var(--cream); }
+.brandbar .bar { display: flex; align-items: center; gap: 12px; padding: 0 12px; }
+.brandbar .logo { height: 48px; width: auto; display: block; }
+.brandbar .name { font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
+.brandbar .wave { background: url('/brand/wave.svg') repeat-x left center / auto 12px; }
+.page { padding: 16px; max-width: 760px; margin: 0 auto; display: grid; gap: 12px; }
+.error { color: var(--danger); font-weight: 600; }
+.list { display: grid; gap: 8px; }
+.choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.sell { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: auto 1fr; height: calc(100dvh - var(--brandbar-h)); }
+.topbar { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--line); overflow-x: auto; background: var(--cream); }
+.topbar .spacer { flex: 1; }
+.badge { color: var(--muted); font-size: 14px; white-space: nowrap; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; padding: 10px; align-content: start; overflow-y: auto; }
+.product { display: flex; flex-direction: column; justify-content: center; min-height: 96px; }
+.product .th { font-size: 18px; font-weight: 700; }
+.product .en { font-size: 13px; color: var(--muted); }
+.cart { border-left: 1px solid var(--line); display: flex; flex-direction: column; padding: 10px; gap: 8px; overflow-y: auto; background: var(--surface); }
+.cart-line { display: grid; grid-template-columns: 1fr auto; gap: 4px; border-bottom: 1px dashed var(--line); padding-bottom: 6px; }
+.qty { display: flex; gap: 6px; align-items: center; }
+.totals { margin-top: auto; display: grid; gap: 4px; font-size: 18px; }
+.totals .total { font-size: 28px; font-weight: 800; }
+.pay { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.dialog-backdrop { position: fixed; inset: 0; background: var(--backdrop); display: grid; place-items: center; padding: 16px; }
+.dialog { background: var(--surface); border-radius: 16px; padding: 16px; width: min(680px, 100%); display: grid; gap: 10px; max-height: 100%; overflow-y: auto; border-top: 6px solid var(--orange); }
+.big-amount { font-size: 48px; font-weight: 800; }
+.done { display: grid; place-items: center; align-content: center; gap: 8px; min-height: calc(100dvh - var(--brandbar-h)); text-align: center; }
+.queue-no { font-size: 160px; font-weight: 900; line-height: 1; color: var(--forest); }
+.qr img { width: min(80vw, 560px); height: auto; image-rendering: pixelated; background: var(--qr-bg); }
+.pinpad { display: grid; gap: 10px; justify-items: center; }
+.pin-dots { font-size: 32px; letter-spacing: 8px; min-height: 40px; }
+.pin-grid { display: grid; grid-template-columns: repeat(3, 96px); gap: 10px; }
+.row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; text-align: left; width: 100%; }
+@media (max-width: 820px) {
+  .sell { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+  .cart { border-left: 0; border-top: 1px solid var(--line); max-height: 45dvh; }
+}
