@@ -1,7 +1,10 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { count, eq } from 'drizzle-orm'
+import { getTableConfig as pgConfig, PgTable } from 'drizzle-orm/pg-core'
+import { getTableConfig as sqliteConfig, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import { parseSeed, type Seed } from '@dayo/contracts'
 import { needsCostSatang, standardUnitCostUsat, type Catalog } from '@dayo/domain'
 import { migratePg } from '../src/migrate-pg.js'
@@ -10,15 +13,10 @@ import * as pg from '../src/pg/index.js'
 import * as sqlite from '../src/sqlite/index.js'
 import { applySeedPg, loadCatalogPg } from '../src/seed/apply-pg.js'
 import { applySeedSqlite, loadCatalogSqlite } from '../src/seed/apply-sqlite.js'
-import { seedToRows, type SeedOpts } from '../src/seed/rows.js'
-import { openPglite, openSqliteMemory, sqliteRows } from './helpers.js'
+import { deterministicSeedId, SEED_TABLES, seedToRows, type SeedRows } from '../src/seed/rows.js'
+import { openPglite, openSqliteMemory, openSqliteProxyMemory, pgErrorCode, seedOpts as opts, sqliteRows } from './helpers.js'
 
 const seed: Seed = parseSeed(JSON.parse(readFileSync(fileURLToPath(new URL('../../excel-import/seed/dayo-seed.json', import.meta.url)), 'utf8')))
-
-function opts(): SeedOpts {
-  let n = 0
-  return { newId: () => `id-${String(++n).padStart(5, '0')}`, now: '2026-09-17T00:00:00.000Z', effectiveFrom: '2026-09-17T00:00:00.000Z' }
-}
 
 /** Expected row counts for the committed seed (plan-1 notes §1, D40). Re-check all of them whenever the fixture changes (D41). */
 const EXPECTED = {
@@ -77,9 +75,70 @@ describe('seedToRows', () => {
   it('is deterministic for a deterministic newId', () => {
     expect(JSON.stringify(seedToRows(seed, opts()))).toBe(JSON.stringify(seedToRows(seed, opts())))
   })
+  it('ids depend on natural keys, not on array order (I2): a shuffled seed gives identical ids', () => {
+    const rev = <T>(xs: readonly T[]): T[] => [...xs].reverse()
+    const shuffled: Seed = {
+      ...seed,
+      categories: rev(seed.categories), sizes: rev(seed.sizes), sweetness: rev(seed.sweetness), channels: rev(seed.channels),
+      items: rev(seed.items), purchaseUnits: rev(seed.purchaseUnits), products: rev(seed.products), variants: rev(seed.variants),
+      prices: rev(seed.prices), equipment: rev(seed.equipment),
+      boms: rev(seed.boms).map((b) => ({ ...b, lines: rev(b.lines) })),
+      recipes: rev(seed.recipes).map((r) => ({ ...r, lines: rev(r.lines) })),
+    }
+    const a = seedToRows(seed, opts())
+    const b = seedToRows(shuffled, opts())
+    const byId = (rows: SeedRows) => Object.fromEntries(SEED_TABLES.map(({ key }) => [key, [...(rows[key] as { id: string }[])].sort((x, y) => x.id.localeCompare(y.id))]))
+    expect(byId(b)).toEqual(byId(a))
+    expect(b.items[0]!.id).not.toBe(a.items[0]!.id) // the arrays really were reordered
+  })
+  it('passes stable natural keys to newId', () => {
+    const rows = seedToRows(seed, opts())
+    const ns = (kind: string, key: string) => deterministicSeedId('test', kind, key)
+    expect(rows.items.find((i) => i.code === 'RM-TEA-01')!.id).toBe(ns('item', 'RM-TEA-01'))
+    const original16 = rows.variants.find((v) => v.sku === 'Original-16oz')!
+    expect(original16.id).toBe(ns('product_variant', 'Original|16oz'))
+    const s050 = rows.sweetness.find((x) => x.code === 'S050')!
+    expect(rows.recipes.find((r) => r.variantId === original16.id && r.sweetnessId === s050.id)!.id).toBe(ns('recipe', 'Original|16oz|S050'))
+    expect(rows.prices.find((p) => p.variantId === original16.id)!.id).toBe(ns('price', 'Original|16oz|STORE'))
+    const thaiBase = rows.items.find((i) => i.code === 'PB-TEA-THAI')!
+    expect(rows.boms.find((b) => b.itemId === thaiBase.id)!.id).toBe(ns('bom', 'PB-TEA-THAI'))
+  })
+  it('throws on a duplicate natural key', () => {
+    expect(() => seedToRows({ ...seed, items: [...seed.items, seed.items[0]!] }, opts())).toThrow(/duplicate item /)
+  })
   it('throws on a code that does not resolve', () => {
     const bad = { ...seed, prices: [{ ...seed.prices[0]!, productCode: 'NOPE' }] }
     expect(() => seedToRows(bad, opts())).toThrow(/unknown variant NOPE/)
+  })
+})
+
+describe('deterministicSeedId', () => {
+  it('is a UUIDv8 (RFC 9562) made from the first 16 bytes of SHA-256 over JSON [namespace, kind, key]', () => {
+    const id = deterministicSeedId('dayo', 'item', 'RM-TEA-01')
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    // independent re-computation with node:crypto
+    const b = createHash('sha256').update(JSON.stringify(['dayo', 'item', 'RM-TEA-01']), 'utf8').digest().subarray(0, 16)
+    b[6] = (b[6]! & 0x0f) | 0x80
+    b[8] = (b[8]! & 0x3f) | 0x80
+    const h = b.toString('hex')
+    expect(id).toBe(`${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`)
+  })
+  it('separates namespace, kind and key unambiguously', () => {
+    expect(deterministicSeedId('a', 'b|c', 'd')).not.toBe(deterministicSeedId('a', 'b', 'c|d'))
+    expect(deterministicSeedId('dayo', 'item', 'X')).not.toBe(deterministicSeedId('other', 'item', 'X'))
+    expect(deterministicSeedId('dayo', 'item', 'X')).not.toBe(deterministicSeedId('dayo', 'product', 'X'))
+  })
+})
+
+describe('SEED_TABLES', () => {
+  it('lists every SeedRows field once, with table names that exist in both dialects', () => {
+    expect(SEED_TABLES.map((t) => t.key).sort()).toEqual(Object.keys(seedToRows(seed, opts())).sort())
+    const sqliteNames = new Set(Object.values(sqlite).filter((v) => v instanceof SQLiteTable).map((t) => sqliteConfig(t as SQLiteTable).name))
+    const pgNames = new Set(Object.values(pg).filter((v) => v instanceof PgTable).map((t) => pgConfig(t as PgTable).name))
+    for (const { table } of SEED_TABLES) {
+      expect(sqliteNames.has(table), table).toBe(true)
+      expect(pgNames.has(table), table).toBe(true)
+    }
   })
 })
 
@@ -87,7 +146,7 @@ describe('apply seed', () => {
   it('sqlite: inserts everything, FK check clean, costs from the DB match Excel exactly', async () => {
     const { db, raw } = await openSqliteMemory()
     migrateSqlite(db)
-    applySeedSqlite(db, seedToRows(seed, opts()))
+    await applySeedSqlite(db, seedToRows(seed, opts()))
     expect(db.select({ c: count() }).from(sqlite.item).get()!.c).toBe(EXPECTED.items)
     expect(db.select({ c: count() }).from(sqlite.purchaseUnit).get()!.c).toBe(EXPECTED.purchaseUnits)
     expect(db.select({ c: count() }).from(sqlite.recipe).get()!.c).toBe(EXPECTED.recipes)
@@ -95,7 +154,7 @@ describe('apply seed', () => {
     expect(db.select({ c: count() }).from(sqlite.equipment).get()!.c).toBe(EXPECTED.equipment)
     expect(sqliteRows(raw, 'PRAGMA foreign_key_check')).toEqual([])
 
-    const catalog = loadCatalogSqlite(db)
+    const catalog = await loadCatalogSqlite(db)
     const thai = db.select().from(sqlite.item).where(eq(sqlite.item.code, 'PB-TEA-THAI')).get()!
     expect(thai.standardCostUsat).toBe(2_000_000)
     expect(standardUnitCostUsat(thai.id, catalog)).toBe(2_000_000)
@@ -139,6 +198,41 @@ describe('apply seed', () => {
         sweetness: await db.select().from(pg.sweetnessLevel),
       })
       expectEveryRecipeMatchesExcel(costs)
+    } finally {
+      await client.close()
+    }
+  })
+})
+
+describe('apply seed: async driver and re-apply', () => {
+  it('sqlite-proxy (async driver): the same helpers insert everything and load the catalog', async () => {
+    const { db, raw, syncDb } = await openSqliteProxyMemory()
+    migrateSqlite(syncDb)
+    await applySeedSqlite(db, seedToRows(seed, opts()))
+    expect(sqliteRows(raw, 'select count(*) as n from recipe_line')[0]!['n']).toBe(EXPECTED.recipeLines)
+    expect(sqliteRows(raw, 'PRAGMA foreign_key_check')).toEqual([])
+    const catalog = await loadCatalogSqlite(db)
+    const [thai] = await db.select().from(sqlite.item).where(eq(sqlite.item.code, 'PB-TEA-THAI'))
+    expect(standardUnitCostUsat(thai!.id, catalog)).toBe(2_000_000)
+  })
+  it('sqlite: applying the seed twice throws and leaves the first copy intact (not idempotent)', async () => {
+    const { db, raw } = await openSqliteMemory()
+    migrateSqlite(db)
+    const rows = seedToRows(seed, opts())
+    await applySeedSqlite(db, rows)
+    await expect(applySeedSqlite(db, rows)).rejects.toThrow()
+    expect(sqliteRows(raw, 'select count(*) as n from item')[0]!['n']).toBe(EXPECTED.items)
+    expect(sqliteRows(raw, 'select count(*) as n from recipe_line')[0]!['n']).toBe(EXPECTED.recipeLines)
+  })
+  it('pg: applying the seed twice throws and leaves the first copy intact (not idempotent)', async () => {
+    const { db, client } = await openPglite()
+    try {
+      await migratePg(db)
+      const rows = seedToRows(seed, opts())
+      await applySeedPg(db, rows)
+      expect(await pgErrorCode(applySeedPg(db, rows))).toBe('23505')
+      const [items] = await db.select({ c: count() }).from(pg.item)
+      expect(items!.c).toBe(EXPECTED.items)
     } finally {
       await client.close()
     }

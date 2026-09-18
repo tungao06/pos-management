@@ -39,6 +39,9 @@ importers:
       '@dayo/domain':
         specifier: workspace:*
         version: link:../domain
+      '@noble/hashes':
+        specifier: ^2.4.0
+        version: 2.4.0
       drizzle-orm:
         specifier: ^0.45.0
         version: 0.45.2(@electric-sql/pglite@0.5.8)(@types/sql.js@1.4.11)(sql.js@1.14.2)

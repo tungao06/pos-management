@@ -16,6 +16,7 @@
   "dependencies": {
     "@dayo/contracts": "workspace:*",
     "@dayo/domain": "workspace:*",
+    "@noble/hashes": "^2.4.0",
     "drizzle-orm": "^0.45.0"
   },
   "devDependencies": {

@@ -1,40 +1,38 @@
 import { eq } from 'drizzle-orm'
-import type { PgliteDatabase } from 'drizzle-orm/pglite'
+import type { PgDatabase, PgQueryResultHKT, PgTable } from 'drizzle-orm/pg-core'
 import { ItemKind } from '@dayo/contracts'
 import { buildCatalog, type Catalog } from '@dayo/domain'
 import * as p from '../pg/index.js'
-import type { SeedRows } from './rows.js'
+import { SEED_TABLES, type SeedRows, type SeedTable } from './rows.js'
 
+/** Chunks stay under Postgres' parameter limit. */
 const CHUNK = 500
 
-function chunks<T>(rows: readonly T[]): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < rows.length; i += CHUNK) out.push(rows.slice(i, i + CHUNK))
-  return out
-}
+/** pg table per SEED_TABLES entry (the compiler checks every entry has one). */
+const TABLES = {
+  category: p.category, item: p.item, purchase_unit: p.purchaseUnit, bom: p.bom, bom_line: p.bomLine, size: p.size,
+  product: p.product, product_variant: p.productVariant, sweetness_level: p.sweetnessLevel, channel: p.channel,
+  price: p.price, recipe: p.recipe, recipe_line: p.recipeLine, equipment: p.equipment,
+} satisfies Record<SeedTable, PgTable>
 
-/** Insert every seed row in one transaction, parents before children. Chunks stay under Postgres' parameter limit. */
-export async function applySeedPg(db: PgliteDatabase, rows: SeedRows): Promise<void> {
+/**
+ * Insert every seed row in one transaction, in SEED_TABLES order (parents before children). Any drizzle pg driver
+ * (PGlite in tests, node-postgres on the server). SeedRows are sqlite insert shapes; they fit pg because the pg-only
+ * columns (server_seq) have defaults.
+ * NOT idempotent: it is meant for an empty database. On a database that already holds the seed it throws on the first
+ * duplicate primary key and the transaction rolls back, leaving the existing rows untouched.
+ */
+export async function applySeedPg<H extends PgQueryResultHKT, S extends Record<string, unknown>>(db: PgDatabase<H, S>, rows: SeedRows): Promise<void> {
   await db.transaction(async (tx) => {
-    for (const c of chunks(rows.categories)) await tx.insert(p.category).values(c)
-    for (const c of chunks(rows.items)) await tx.insert(p.item).values(c)
-    for (const c of chunks(rows.purchaseUnits)) await tx.insert(p.purchaseUnit).values(c)
-    for (const c of chunks(rows.boms)) await tx.insert(p.bom).values(c)
-    for (const c of chunks(rows.bomLines)) await tx.insert(p.bomLine).values(c)
-    for (const c of chunks(rows.sizes)) await tx.insert(p.size).values(c)
-    for (const c of chunks(rows.products)) await tx.insert(p.product).values(c)
-    for (const c of chunks(rows.variants)) await tx.insert(p.productVariant).values(c)
-    for (const c of chunks(rows.sweetness)) await tx.insert(p.sweetnessLevel).values(c)
-    for (const c of chunks(rows.channels)) await tx.insert(p.channel).values(c)
-    for (const c of chunks(rows.prices)) await tx.insert(p.price).values(c)
-    for (const c of chunks(rows.recipes)) await tx.insert(p.recipe).values(c)
-    for (const c of chunks(rows.recipeLines)) await tx.insert(p.recipeLine).values(c)
-    for (const c of chunks(rows.equipment)) await tx.insert(p.equipment).values(c)
+    for (const { key, table } of SEED_TABLES) {
+      const all = rows[key] as unknown[]
+      for (let i = 0; i < all.length; i += CHUNK) await tx.insert(TABLES[table] as PgTable).values(all.slice(i, i + CHUNK) as never)
+    }
   })
 }
 
 /** Domain catalog from the DB (current BOM versions only). Catalog ids are item.id (UUIDs), not item codes. */
-export async function loadCatalogPg(db: PgliteDatabase): Promise<Catalog> {
+export async function loadCatalogPg<H extends PgQueryResultHKT, S extends Record<string, unknown>>(db: PgDatabase<H, S>): Promise<Catalog> {
   const items = (await db.select().from(p.item)).map((i) => ({ id: i.id, kind: ItemKind.parse(i.kind), isTracked: i.isTracked, standardCostUsat: i.standardCostUsat }))
   const boms = await db.select().from(p.bom).where(eq(p.bom.isCurrent, true))
   const lines = await db.select().from(p.bomLine)
