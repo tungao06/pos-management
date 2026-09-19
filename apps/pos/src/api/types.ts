@@ -139,17 +139,23 @@ export type CloseShiftInput = {
   acknowledgeZChainBroken: boolean
 }
 
-export type ZReportDto = { id: string; shiftId: string; createdAt: string; hash: string; hashOk: boolean; snapshot: ZSnapshot }
+/**
+ * `snapshot` is null when `snapshot_json` cannot be read as a Z snapshot — invalid JSON, or valid JSON missing
+ * `sales` (review I-1). `hashOk` is then always false: a snapshot the UI cannot read is never trusted. The UI
+ * (Task 9) must show "ไฟล์เสีย" rather than assume `snapshot` is present.
+ */
+export type ZReportDto = { id: string; shiftId: string; createdAt: string; hash: string; hashOk: boolean; snapshot: ZSnapshot | null }
+/** Summary fields are null when the underlying snapshot could not be read (review I-1) — `hashOk` says so; `shiftId` and `hashOk` are always readable from their own columns. */
 export type ZReportSummaryDto = {
   shiftId: string
-  businessDate: string
-  zNo: number
-  closedAt: string
-  netSalesSatang: number
-  cashVarianceSatang: number
-  openedQuick: boolean
+  businessDate: string | null
+  zNo: number | null
+  closedAt: string | null
+  netSalesSatang: number | null
+  cashVarianceSatang: number | null
+  openedQuick: boolean | null
   hashOk: boolean
-  /** This Z was closed after acknowledging a previous Z that failed its hash (Q3b-11 · D53). */
+  /** This Z was closed after acknowledging a previous Z that failed its hash (Q3b-11 · D53); false when unreadable. */
   chainWarning: boolean
 }
 

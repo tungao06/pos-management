@@ -13,29 +13,69 @@ import { REASON_MAX_LENGTH, type CloseShiftInput, type ZReportDto, type ZReportS
 /** audit_log action written when an owner acknowledges a previous Z that fails its hash (Q3b-11 · D53). */
 export const Z_CHAIN_ACK_ACTION = 'z_chain_broken_ack'
 
-type ZRow = typeof s.zReport.$inferSelect
+/** `snapshot_json` read as raw text, never through the column's own JSON decode (review I-1) — a hand-edited row
+ * can hold text that is not valid JSON at all, and letting the driver's `JSON.parse` run on it would throw before
+ * this module ever sees the row, crashing `listZReports` for every Z on the device, not just the broken one. */
+type ZRawRow = { id: string; shiftId: string; hash: string; createdAt: string; snapshotText: string }
 
-/** z_report.snapshot_json is written only by closeShift from buildZReport — read back as that shape; hashOk proves it is untouched. */
-function toZReportDto(row: ZRow): ZReportDto {
-  return { id: row.id, shiftId: row.shiftId, createdAt: row.createdAt, hash: row.hash, hashOk: zReportHash(row.snapshotJson) === row.hash, snapshot: row.snapshotJson as ZSnapshot }
+/** `undefined` (not a throw) when `text` is not valid JSON. */
+function tryParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
 }
 
-/** Newest first by `zNo` (the frozen snapshot), never by `created_at` — a device clock can be wrong and later
- * corrected, and the grand-total chain must not depend on it (see domain `buildZReport`). Exported for backup.ts. */
-export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRow[]> {
-  const rows = await db
-    .select({ z: s.zReport })
-    .from(s.zReport)
-    .innerJoin(s.shift, eq(s.shift.id, s.zReport.shiftId))
-    .where(eq(s.shift.deviceId, deviceId))
-    .orderBy(desc(sql`json_extract(${s.zReport.snapshotJson}, '$.zNo')`), desc(s.zReport.id))
-    .all()
-  return rows.map((r) => r.z)
+/** Narrows to "parsed enough to be treated as a snapshot": an object with a `sales` object (review I-1). Other
+ * missing/malformed fields of an otherwise-parseable snapshot are handled by the safe accessors below, but a
+ * missing `sales` is treated the same as unreadable JSON — the shape `listZReports` most depends on. */
+function hasSales(v: unknown): v is { sales: SalesSummary } {
+  return typeof v === 'object' && v !== null && typeof (v as { sales?: unknown }).sales === 'object' && (v as { sales?: unknown }).sales !== null
 }
 
 /** A number read from a snapshot that may have been edited by hand — null unless it is a safe integer. */
 function safeIntOrNull(v: unknown): number | null {
   return typeof v === 'number' && Number.isSafeInteger(v) ? v : null
+}
+
+/** A string read from a snapshot that may have been edited by hand — null unless it actually is one. */
+function safeStrOrNull(v: unknown): string | null {
+  return typeof v === 'string' ? v : null
+}
+
+/** A boolean read from a snapshot that may have been edited by hand — null unless it actually is one. */
+function safeBoolOrNull(v: unknown): boolean | null {
+  return typeof v === 'boolean' ? v : null
+}
+
+/**
+ * z_report.snapshot_json is written only by closeShift from buildZReport — read back as that shape, and `hashOk`
+ * proves it is untouched. Review I-1: a row a person edited by hand may hold invalid JSON, or JSON missing `sales`
+ * — `toZReportDto` never throws on either; it reports `hashOk: false` and `snapshot: null` instead, so a broken Z
+ * shows up as a flagged row rather than crashing the whole list (or `getZReport`) for every Z on the device.
+ */
+function toZReportDto(row: ZRawRow): ZReportDto {
+  const parsed = tryParseJson(row.snapshotText)
+  if (!hasSales(parsed)) return { id: row.id, shiftId: row.shiftId, createdAt: row.createdAt, hash: row.hash, hashOk: false, snapshot: null }
+  const snapshot = parsed as ZSnapshot
+  return { id: row.id, shiftId: row.shiftId, createdAt: row.createdAt, hash: row.hash, hashOk: zReportHash(snapshot) === row.hash, snapshot }
+}
+
+/** Newest first by `zNo` (the frozen snapshot), never by `created_at` — a device clock can be wrong and later
+ * corrected, and the grand-total chain must not depend on it (see domain `buildZReport`). Exported for backup.ts.
+ * `snapshot_json` is selected as raw text (review I-1): ordering by `json_extract` still needs a `json_valid`
+ * guard, because SQLite's `json_extract` raises a hard "malformed JSON" error (not just a NULL) on a row a person
+ * hand-edited into invalid JSON — unguarded, that one bad row would fail the whole query, not just its own decode. */
+export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRawRow[]> {
+  const zNo = sql`case when json_valid(${s.zReport.snapshotJson}) then json_extract(${s.zReport.snapshotJson}, '$.zNo') else null end`
+  return db
+    .select({ id: s.zReport.id, shiftId: s.zReport.shiftId, hash: s.zReport.hash, createdAt: s.zReport.createdAt, snapshotText: sql<string>`${s.zReport.snapshotJson}` })
+    .from(s.zReport)
+    .innerJoin(s.shift, eq(s.shift.id, s.zReport.shiftId))
+    .where(eq(s.shift.deviceId, deviceId))
+    .orderBy(desc(zNo), desc(s.zReport.id))
+    .all()
 }
 
 type ZChain = { prev: { zNo: number; grandTotalSatang: number } | null; broken: { shiftId: string; storedGrandTotalSatang: number | null } | null }
@@ -56,13 +96,13 @@ async function zChain(db: RemoteDb, deviceId: string): Promise<ZChain> {
   const last = rows[0]
   if (last === undefined) return { prev: null, broken: null }
   const dto = toZReportDto(last)
-  if (dto.hashOk) return { prev: { zNo: dto.snapshot.zNo, grandTotalSatang: dto.snapshot.grandTotalSatang }, broken: null }
+  if (dto.hashOk && dto.snapshot !== null) return { prev: { zNo: dto.snapshot.zNo, grandTotalSatang: dto.snapshot.grandTotalSatang }, broken: null }
   const snapshots = [...rows].reverse().map((r) => {
-    const snap = r.snapshotJson as { zNo?: unknown; sales?: SalesSummary } | null
+    const snap = tryParseJson(r.snapshotText) as { zNo?: unknown; sales?: SalesSummary } | undefined
     return { zNo: typeof snap?.zNo === 'number' ? snap.zNo : Number.NaN, sales: snap?.sales as SalesSummary } // a bad zNo also fails recomputeZChain's 1..n check
   })
-  const stored = (last.snapshotJson as { grandTotalSatang?: unknown } | null)?.grandTotalSatang
-  return { prev: recomputeZChain(snapshots), broken: { shiftId: last.shiftId, storedGrandTotalSatang: safeIntOrNull(stored) } }
+  const lastParsed = tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined
+  return { prev: recomputeZChain(snapshots), broken: { shiftId: last.shiftId, storedGrandTotalSatang: safeIntOrNull(lastParsed?.grandTotalSatang) } }
 }
 
 /**
@@ -193,31 +233,42 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     if (!shiftRow) throw new PosError('NO_OPEN_SHIFT', shift.id)
     await enqueueOutbox(tx, 'shift', shiftRow, at, deps.newId, 'closed')
 
-    return toZReportDto(zRow)
+    // Built straight from `z` (just produced by `buildZReport`), not read back through `toZReportDto`: its hash is
+    // correct by construction, and `snapshotText` above only exists to survive a hand-edited row from the DB.
+    return { id: zRow.id, shiftId: zRow.shiftId, createdAt: zRow.createdAt, hash: zRow.hash, hashOk: true, snapshot: z.snapshot }
   })
 }
 
-/** Z reports of this device, newest first (Q3b-5: view on screen, no export). */
+/** Z reports of this device, newest first (Q3b-5: view on screen, no export). Review I-1: a Z whose snapshot cannot
+ * be read (invalid JSON, or missing `sales`) still gets a row — `hashOk: false` and every snapshot-derived field
+ * null — instead of one bad Z crashing the whole list. */
 export async function listZReports(db: RemoteDb): Promise<ZReportSummaryDto[]> {
   const device = await requireDevice(db)
   return (await deviceZRows(db, device.id)).map((row) => {
     const z = toZReportDto(row)
+    const snap = z.snapshot
     return {
       shiftId: z.shiftId,
-      businessDate: z.snapshot.businessDate,
-      zNo: z.snapshot.zNo,
-      closedAt: z.snapshot.closedAt,
-      netSalesSatang: z.snapshot.sales.netSalesSatang,
-      cashVarianceSatang: z.snapshot.cashVarianceSatang,
-      openedQuick: z.snapshot.openedQuick,
+      businessDate: safeStrOrNull(snap?.businessDate),
+      zNo: safeIntOrNull(snap?.zNo),
+      closedAt: safeStrOrNull(snap?.closedAt),
+      netSalesSatang: safeIntOrNull(snap?.sales?.netSalesSatang),
+      cashVarianceSatang: safeIntOrNull(snap?.cashVarianceSatang),
+      openedQuick: safeBoolOrNull(snap?.openedQuick),
       hashOk: z.hashOk,
-      chainWarning: z.snapshot.chainWarning != null,
+      chainWarning: snap?.chainWarning != null,
     }
   })
 }
 
+/** Review I-1: reads `snapshot_json` as raw text, same as `deviceZRows` — a hand-edited row that is not valid JSON
+ * (or is missing `sales`) comes back as `hashOk: false` / `snapshot: null` rather than throwing. */
 export async function getZReport(db: RemoteDb, shiftId: string): Promise<ZReportDto> {
-  const row = await db.select().from(s.zReport).where(eq(s.zReport.shiftId, shiftId)).get()
+  const row = await db
+    .select({ id: s.zReport.id, shiftId: s.zReport.shiftId, hash: s.zReport.hash, createdAt: s.zReport.createdAt, snapshotText: sql<string>`${s.zReport.snapshotJson}` })
+    .from(s.zReport)
+    .where(eq(s.zReport.shiftId, shiftId))
+    .get()
   if (!row) throw new PosError('Z_NOT_FOUND', shiftId)
   return toZReportDto(row)
 }

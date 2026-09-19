@@ -50,9 +50,9 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
       chainWarning: null,
       grandTotalSatang: 4_000,
     })
-    expect(z.snapshot.countLines).toHaveLength(9)
-    expect(z.snapshot.voids.map((v) => [v.receiptNo, v.refundReference])).toEqual([['A-000001', null], ['A-000002', 'KBANK-1']])
-    expect(z.snapshot.voids[0]!.orderId).toBe(sc.cashVoided.orderId)
+    expect(z.snapshot!.countLines).toHaveLength(9)
+    expect(z.snapshot!.voids.map((v) => [v.receiptNo, v.refundReference])).toEqual([['A-000001', null], ['A-000002', 'KBANK-1']])
+    expect(z.snapshot!.voids[0]!.orderId).toBe(sc.cashVoided.orderId)
 
     const count = await t.db.select().from(s.cashCount).get()
     expect(count).toMatchObject({ shiftId: t.shift.id, countedSatang: 52_000, expectedSatang: 52_000, varianceSatang: 0, reason: null, countedBy: t.other.id })
@@ -119,7 +119,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     const x = await t.api.shiftReport()
     expect(x.expectedCashSatang).toBe(10_000) // float 0 + ฿100
     const z2 = await t.api.closeShift({ ...closeInput(t), countLines: [{ denominationSatang: 10_000, count: 1 }], shownExpectedCashSatang: 10_000 })
-    expect(z2.snapshot).toMatchObject({ businessDate: '2026-09-18', zNo: 2, openedQuick: true, grandTotalSatang: z1.snapshot.grandTotalSatang + 10_000 })
+    expect(z2.snapshot).toMatchObject({ businessDate: '2026-09-18', zNo: 2, openedQuick: true, grandTotalSatang: z1.snapshot!.grandTotalSatang + 10_000 })
     expect((await t.api.listZReports()).map((z) => z.businessDate)).toEqual(['2026-09-18', '2026-09-17'])
   })
 
@@ -133,7 +133,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
       await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
       await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
       const z = await t.api.closeShift({ ...closeInput(t), countLines: [], shownExpectedCashSatang: 0 })
-      expect(z.snapshot).toMatchObject({ zNo: n, grandTotalSatang: z1.snapshot.grandTotalSatang + 5_000 * (n - 1) })
+      expect(z.snapshot).toMatchObject({ zNo: n, grandTotalSatang: z1.snapshot!.grandTotalSatang + 5_000 * (n - 1) })
       t.clock.advanceMs(3_600_000)
     }
   })
@@ -147,7 +147,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     await expect(t.api.closeShift(closeInput(t, { bankQrTotalSatang: 10.5 }))).rejects.toThrow(/^BAD_INPUT: /)
     // acknowledging when nothing is broken changes nothing
     const z = await t.api.closeShift(closeInput(t, { bankQrTotalSatang: 4_500, acknowledgeZChainBroken: true }))
-    expect(z.snapshot.sales).toMatchObject({ qrSalesSatang: 10_000, qrRefundedSatang: 5_000, qrNetSatang: 5_000 })
+    expect(z.snapshot!.sales).toMatchObject({ qrSalesSatang: 10_000, qrRefundedSatang: 5_000, qrNetSatang: 5_000 })
     expect(z.snapshot).toMatchObject({ bankQrTotalSatang: 4_500, qrDifferenceSatang: -500, chainWarning: null })
   })
 
@@ -210,5 +210,85 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
     const z3 = await t.api.closeShift({ ...closeInput(t), countLines: [], shownExpectedCashSatang: 0 })
     expect(z3.snapshot).toMatchObject({ zNo: 3, grandTotalSatang: 9_000, chainWarning: null })
+  })
+
+  it('a snapshot that is not readable JSON, or is missing sales, is flagged rather than crashing list/get (review I-1)', async () => {
+    const t = await openReadyApi()
+    await sellVoidScenario(t)
+    const z = await t.api.closeShift(closeInput(t))
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+
+    t.raw.prepare(`update z_report set snapshot_json = 'not json' where shift_id = ?`).run(t.shift.id)
+    const gotInvalid = await t.api.getZReport(t.shift.id)
+    expect(gotInvalid).toEqual({ id: z.id, shiftId: t.shift.id, createdAt: z.createdAt, hash: z.hash, hashOk: false, snapshot: null })
+    expect(await t.api.listZReports()).toEqual([
+      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false },
+    ])
+
+    t.raw.prepare(`update z_report set snapshot_json = json_remove(?, '$.sales') where shift_id = ?`).run(JSON.stringify(z.snapshot), t.shift.id)
+    const gotNoSales = await t.api.getZReport(t.shift.id)
+    expect(gotNoSales).toEqual({ id: z.id, shiftId: t.shift.id, createdAt: z.createdAt, hash: z.hash, hashOk: false, snapshot: null })
+    expect(await t.api.listZReports()).toEqual([
+      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false },
+    ])
+  })
+
+  it('rolls back cash_count and outbox too when a later write in the same transaction fails (m-2)', async () => {
+    const t = await openReadyApi()
+    await sellVoidScenario(t)
+    t.raw.exec(`create trigger boom_before_z_report before insert on z_report begin select raise(abort, 'boom'); end`)
+    const before = counts(t)
+    const failure = await t.api.closeShift(closeInput(t)).catch((e: unknown) => e)
+    expect(String((failure as { cause?: unknown })?.cause ?? failure)).toMatch(/boom/)
+    expect(counts(t)).toEqual(before) // the earlier cash_count insert (and its outbox row) rolled back too
+
+    t.raw.exec('drop trigger boom_before_z_report')
+    const z = await t.api.closeShift(closeInput(t))
+    expect(z.snapshot).toMatchObject({ zNo: 1 })
+  })
+
+  it('the positive variance boundary needs no reason at +฿20 and does above it (m-3)', async () => {
+    const t = await openReadyApi()
+    await sellVoidScenario(t)
+    // ฿520 expected, ฿540 counted → +฿20, not above the ฿20 threshold: no reason needed
+    const zAt = await t.api.closeShift(closeInput(t, { countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 2_000, count: 2 }] }))
+    expect(zAt.snapshot).toMatchObject({ cashVarianceSatang: 2_000, varianceReason: null })
+
+    const u = await openReadyApi()
+    await sellVoidScenario(u)
+    // ฿541 counted → +฿21
+    const over = [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 2_000, count: 2 }, { denominationSatang: 100, count: 1 }]
+    await expect(u.api.closeShift(closeInput(u, { countLines: over }))).rejects.toThrow(/^VARIANCE_REASON_REQUIRED: /)
+    const zOver = await u.api.closeShift(closeInput(u, { countLines: over, varianceReason: 'เกินมา' }))
+    expect(zOver.snapshot).toMatchObject({ cashVarianceSatang: 2_100, varianceReason: 'เกินมา' })
+  })
+
+  it('a tampered middle Z is flagged in the list without blocking a later close (m-4)', async () => {
+    const t = await openReadyApi()
+    await sellVoidScenario(t)
+    await t.api.closeShift(closeInput(t)) // Z1, net ฿40
+    t.clock.set('2026-09-18T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    const z2 = await t.api.closeShift({ ...closeInput(t), countLines: [], shownExpectedCashSatang: 0 }) // Z2, net ฿50
+    t.clock.set('2026-09-19T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    await t.api.closeShift({ ...closeInput(t), countLines: [], shownExpectedCashSatang: 0 }) // Z3, net ฿50, chains fine
+
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.grandTotalSatang', 1) where shift_id = ?`).run(z2.shiftId)
+
+    expect((await t.api.listZReports()).map((z) => [z.zNo, z.hashOk])).toEqual([
+      [3, true],
+      [2, false],
+      [1, true],
+    ])
+
+    // the last Z (Z3) is intact, so closing again does not see the middle tamper at all
+    t.clock.set('2026-09-20T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    const z4 = await t.api.closeShift({ ...closeInput(t), countLines: [], shownExpectedCashSatang: 0 })
+    expect(z4.snapshot).toMatchObject({ zNo: 4, chainWarning: null })
   })
 })
