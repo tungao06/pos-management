@@ -11,6 +11,8 @@ import { OrdersScreen } from './screens/OrdersScreen'
 import { QrPayScreen } from './screens/QrPayScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
+import { ZListScreen } from './screens/ZListScreen'
+import { ZReportScreen } from './screens/ZReportScreen'
 import { BrandBar } from './ui/BrandBar'
 
 // Root layout: the brand bar (D44) above every screen.
@@ -102,6 +104,24 @@ const backupRoute = createRoute({
     </RequireSession>
   ),
 })
+const zListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/z',
+  component: () => (
+    <RequireSession>
+      <ZListScreen />
+    </RequireSession>
+  ),
+})
+const zReportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/z/$shiftId',
+  component: () => (
+    <RequireSession>
+      <ZReportScreen />
+    </RequireSession>
+  ),
+})
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -115,6 +135,8 @@ export const routeTree = rootRoute.addChildren([
   ordersRoute,
   orderDetailRoute,
   backupRoute,
+  zListRoute,
+  zReportRoute,
 ])
 
 export const router = createRouter({ routeTree })
