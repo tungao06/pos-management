@@ -1,4 +1,4 @@
-import type { UserRole } from '@dayo/contracts'
+import type { CashMovementKind, UserRole } from '@dayo/contracts'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -91,6 +91,10 @@ export type VoidOrderInput = {
   refundReference: string | null
 }
 
+/** A paid-in / paid-out / drop typed in by a person (spec §3.5 · Q3b-9 · D52). VOID_REFUND is written by voidOrder only. */
+export type CashMovementInput = { actorUserId: string; kind: 'PAID_IN' | 'PAID_OUT' | 'DROP'; amountSatang: number; reason: string }
+export type CashMovementDto = { id: string; kind: CashMovementKind; amountSatang: number; orderId: string | null; reason: string | null; createdBy: string; createdAt: string }
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -104,6 +108,7 @@ export interface PosApi {
   promptPayForAmount(amountSatang: number): Promise<string>
   voidOrder(input: VoidOrderInput): Promise<OrderDetailDto>
   quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
+  recordCashMovement(input: CashMovementInput): Promise<CashMovementDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -119,6 +124,7 @@ export const POS_API_METHODS = [
   'promptPayForAmount',
   'voidOrder',
   'quickOpenShift',
+  'recordCashMovement',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>

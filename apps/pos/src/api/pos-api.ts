@@ -1,6 +1,7 @@
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import { login } from './auth'
 import { bootstrap } from './bootstrap'
+import { recordCashMovement } from './cash'
 import type { ApiDeps } from './deps'
 import { loadMenu } from './menu'
 import { getOrder, listOrders } from './orders'
@@ -25,5 +26,6 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     promptPayForAmount: (amountSatang) => serial(() => promptPayForAmount(db, deps, amountSatang)),
     voidOrder: (input) => serial(() => voidOrder(db, deps, input)),
     quickOpenShift: (input) => serial(() => quickOpenShift(db, deps, input)),
+    recordCashMovement: (input) => serial(() => recordCashMovement(db, deps, input)),
   }
 }
