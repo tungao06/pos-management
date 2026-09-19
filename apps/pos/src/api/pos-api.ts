@@ -9,6 +9,7 @@ import { commitSale, promptPayForAmount } from './sale'
 import { createSerialQueue } from './serial'
 import { setupShop } from './setup'
 import { openShift, quickOpenShift } from './shift'
+import { shiftReport } from './shift-report'
 import type { PosApi } from './types'
 import { voidOrder } from './void'
 
@@ -27,5 +28,6 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     voidOrder: (input) => serial(() => voidOrder(db, deps, input)),
     quickOpenShift: (input) => serial(() => quickOpenShift(db, deps, input)),
     recordCashMovement: (input) => serial(() => recordCashMovement(db, deps, input)),
+    shiftReport: () => serial(() => shiftReport(db, deps)),
   }
 }

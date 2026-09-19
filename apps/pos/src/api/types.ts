@@ -1,4 +1,5 @@
 import type { CashMovementKind, UserRole } from '@dayo/contracts'
+import type { CashInputs, SalesSummary, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -95,6 +96,23 @@ export type VoidOrderInput = {
 export type CashMovementInput = { actorUserId: string; kind: 'PAID_IN' | 'PAID_OUT' | 'DROP'; amountSatang: number; reason: string }
 export type CashMovementDto = { id: string; kind: CashMovementKind; amountSatang: number; orderId: string | null; reason: string | null; createdBy: string; createdAt: string }
 
+/** A tracked base (prepared item) whose stock went negative — shown before closing the shift (D28). */
+export type NegativeBaseDto = { itemId: string; code: string; name: string; useUnit: string; onHandMilli: number }
+
+/** X report: the open shift computed live, any time (spec §4.8). */
+export type ShiftReportDto = {
+  shift: ShiftDto & { openedByName: string; openedQuick: boolean }
+  generatedAt: string
+  sales: SalesSummary
+  cash: CashInputs
+  expectedCashSatang: number
+  varianceAlertSatang: number
+  cashMovements: CashMovementDto[]
+  voids: ZVoid[]
+  negativeBases: NegativeBaseDto[]
+  pendingSyncItems: number
+}
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -109,6 +127,7 @@ export interface PosApi {
   voidOrder(input: VoidOrderInput): Promise<OrderDetailDto>
   quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
   recordCashMovement(input: CashMovementInput): Promise<CashMovementDto>
+  shiftReport(): Promise<ShiftReportDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -125,6 +144,7 @@ export const POS_API_METHODS = [
   'voidOrder',
   'quickOpenShift',
   'recordCashMovement',
+  'shiftReport',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
