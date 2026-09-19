@@ -1,5 +1,5 @@
 import type { CashMovementKind, UserRole } from '@dayo/contracts'
-import type { CashInputs, SalesSummary, ZVoid } from '@dayo/domain'
+import type { CashCountLine, CashInputs, SalesSummary, ZSnapshot, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -113,6 +113,36 @@ export type ShiftReportDto = {
   pendingSyncItems: number
 }
 
+export type CloseShiftInput = {
+  /** Signed-in user who counted the drawer. */
+  actorUserId: string
+  /** Owner who confirms the close with their PIN (spec §5 "ปิดวันต้อง owner" · Q3b-2 · D52). */
+  approverUserId: string
+  approverPin: string
+  countLines: CashCountLine[]
+  /** Expected cash the screen showed after the count — refused with SHIFT_CHANGED if the shift moved meanwhile. */
+  shownExpectedCashSatang: number
+  varianceReason: string | null
+  /** PromptPay total read from the bank app for this shift; optional, no threshold (Q3b-12 · D53). */
+  bankQrTotalSatang: number | null
+  /** true only after a Z_CHAIN_BROKEN refusal, when the owner re-enters their PIN to acknowledge it (Q3b-11 · D53). */
+  acknowledgeZChainBroken: boolean
+}
+
+export type ZReportDto = { id: string; shiftId: string; createdAt: string; hash: string; hashOk: boolean; snapshot: ZSnapshot }
+export type ZReportSummaryDto = {
+  shiftId: string
+  businessDate: string
+  zNo: number
+  closedAt: string
+  netSalesSatang: number
+  cashVarianceSatang: number
+  openedQuick: boolean
+  hashOk: boolean
+  /** This Z was closed after acknowledging a previous Z that failed its hash (Q3b-11 · D53). */
+  chainWarning: boolean
+}
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -128,6 +158,9 @@ export interface PosApi {
   quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
   recordCashMovement(input: CashMovementInput): Promise<CashMovementDto>
   shiftReport(): Promise<ShiftReportDto>
+  closeShift(input: CloseShiftInput): Promise<ZReportDto>
+  listZReports(): Promise<ZReportSummaryDto[]>
+  getZReport(shiftId: string): Promise<ZReportDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -145,6 +178,9 @@ export const POS_API_METHODS = [
   'quickOpenShift',
   'recordCashMovement',
   'shiftReport',
+  'closeShift',
+  'listZReports',
+  'getZReport',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
