@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { RequireSession } from './app/guards'
+import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
 import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
@@ -91,6 +92,17 @@ const orderDetailRoute = createRoute({
   ),
 })
 
+// แผน 3b: X report / close shift / Z / backup
+const backupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/backup',
+  component: () => (
+    <RequireSession>
+      <BackupScreen />
+    </RequireSession>
+  ),
+})
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
@@ -102,6 +114,7 @@ export const routeTree = rootRoute.addChildren([
   doneRoute,
   ordersRoute,
   orderDetailRoute,
+  backupRoute,
 ])
 
 export const router = createRouter({ routeTree })
