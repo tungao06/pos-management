@@ -51,15 +51,27 @@ export function CashMoveDialog({ onClose }: { onClose: () => void }): JSX.Elemen
     save.mutate({ actorUserId: user?.id ?? '', kind: k, amountSatang, reason })
   }
 
+  // Q3b-14 (review C-1/I-1): only paid-out / drop can overdraw the drawer, and the comparison is only safe once
+  // `expectedCashSatang` is both present and current — `report.isFetching` also covers a refetch still in flight
+  // after a *previous* move's `invalidateQueries`, when `report.data` is already set but to the stale figure. A
+  // local const (rather than repeated `report.data` reads) lets the type checker carry the "defined" narrowing
+  // through both this check and the comparison below.
+  const reportData = report.data
+  const drawerCheckPending = kind !== null && kind !== 'PAID_IN' && (reportData === undefined || report.isFetching)
+
   const submit = (): void => {
     const amountSatang = parseBahtInput(amountText)
     if (kind === null || amountSatang === null || amountSatang <= 0) return setError(TH.errBadInput)
     if (reason.trim() === '') return setError(TH.errReasonRequired)
     setError(null)
-    // Q3b-14: only paid-out / drop can overdraw the drawer, and only once the expected figure is known.
-    if (kind !== 'PAID_IN' && report.data !== undefined && amountSatang > report.data.expectedCashSatang) {
-      setOverDrawerWarning(true)
-      return
+    if (kind !== 'PAID_IN') {
+      // Defense in depth: `cash-save` is already disabled while `drawerCheckPending`, so this path should be
+      // unreachable — but never let a stale or missing figure silently skip the over-drawer check (review C-1).
+      if (reportData === undefined || report.isFetching) return
+      if (amountSatang > reportData.expectedCashSatang) {
+        setOverDrawerWarning(true)
+        return
+      }
     }
     doSave(kind, amountSatang)
   }
@@ -111,7 +123,7 @@ export function CashMoveDialog({ onClose }: { onClose: () => void }): JSX.Elemen
           <button type="button" onClick={onClose}>
             {TH.cancel}
           </button>
-          <button type="button" className="primary" data-testid="cash-save" disabled={save.isPending} onClick={submit}>
+          <button type="button" className="primary" data-testid="cash-save" disabled={save.isPending || drawerCheckPending} onClick={submit}>
             {TH.save}
           </button>
         </div>

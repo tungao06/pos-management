@@ -35,7 +35,10 @@ function SignedIn({ children }: { children: JSX.Element }): JSX.Element {
   return children
 }
 
-function mount(overrides: Partial<PosApi> = {}): { api: PosApi; onClose: ReturnType<typeof vi.fn>; queryClient: QueryClient } {
+function mount(
+  overrides: Partial<PosApi> = {},
+  queryClient: QueryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }),
+): { api: PosApi; onClose: ReturnType<typeof vi.fn>; queryClient: QueryClient } {
   const onClose = vi.fn()
   const api = {
     shiftReport: vi.fn(async () => REPORT),
@@ -52,7 +55,6 @@ function mount(overrides: Partial<PosApi> = {}): { api: PosApi; onClose: ReturnT
     ),
     ...overrides,
   } as unknown as PosApi
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
       <ApiProvider api={api}>
@@ -119,5 +121,52 @@ describe('CashMoveDialog — Q3b-14 · D54 blind over-drawer confirm', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
     expect(screen.queryByTestId('cash-over-drawer-warning')).toBeNull()
     expect(api.recordCashMovement).toHaveBeenCalledWith({ actorUserId: OWNER.id, kind: 'PAID_IN', amountSatang: 60_000, reason: 'เติมเงินทอน' })
+  })
+})
+
+describe('CashMoveDialog — review C-1/I-1: never compare against a missing or stale expected cash', () => {
+  it('a tap on cash-save while the shift report is still loading saves nothing and shows no warning (no bypass)', async () => {
+    let resolveReport!: (report: ShiftReportDto) => void
+    const reportPromise = new Promise<ShiftReportDto>((resolve) => (resolveReport = resolve))
+    const { api, onClose } = mount({ shiftReport: vi.fn(() => reportPromise) })
+
+    // picked before the shift-report query has any data at all — cash-save must not let this through
+    fireEvent.click(screen.getByTestId('cash-kind-PAID_OUT'))
+    fireEvent.change(screen.getByTestId('cash-amount'), { target: { value: '600' } })
+    fireEvent.change(screen.getByTestId('cash-reason'), { target: { value: 'ซื้อของ' } })
+    expect((screen.getByTestId('cash-save') as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByTestId('cash-save')) // a click on a disabled button never reaches submit()
+    expect(api.recordCashMovement).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('cash-over-drawer-warning')).toBeNull()
+    expect(onClose).not.toHaveBeenCalled()
+
+    resolveReport(REPORT)
+    await waitFor(() => expect((screen.getByTestId('cash-save') as HTMLButtonElement).disabled).toBe(false))
+    expect(api.recordCashMovement).not.toHaveBeenCalled() // still nothing saved just because the data arrived
+  })
+
+  it('stale cached data from a previous move keeps cash-save disabled until the refetch settles, then compares against the fresh figure', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    // a previous cash-move's invalidateQueries left this cached (stale) expected cash of ฿100
+    queryClient.setQueryData(shiftReportKey, { ...REPORT, expectedCashSatang: 10_000 })
+    let resolveReport!: (report: ShiftReportDto) => void
+    const reportPromise = new Promise<ShiftReportDto>((resolve) => (resolveReport = resolve))
+    const { api, onClose } = mount({ shiftReport: vi.fn(() => reportPromise) }, queryClient)
+
+    // the default staleTime (0) refetches on mount — data is present (stale) but isFetching is true
+    fireEvent.click(screen.getByTestId('cash-kind-PAID_OUT'))
+    fireEvent.change(screen.getByTestId('cash-amount'), { target: { value: '150' } }) // over the stale ฿100, under the real ฿500
+    fireEvent.change(screen.getByTestId('cash-reason'), { target: { value: 'ซื้อของ' } })
+    expect((screen.getByTestId('cash-save') as HTMLButtonElement).disabled).toBe(true)
+
+    resolveReport(REPORT) // settles the refetch at the real expected cash, ฿500
+    await waitFor(() => expect((screen.getByTestId('cash-save') as HTMLButtonElement).disabled).toBe(false))
+
+    // ฿150 would have warned against the stale ฿100 — no warning means the fresh ฿500 was used, and the
+    // ordinary warning/confirm flow (covered above) is otherwise untouched by this gating
+    fireEvent.click(screen.getByTestId('cash-save'))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(screen.queryByTestId('cash-over-drawer-warning')).toBeNull()
+    expect(api.recordCashMovement).toHaveBeenCalledWith({ actorUserId: OWNER.id, kind: 'PAID_OUT', amountSatang: 15_000, reason: 'ซื้อของ' })
   })
 })

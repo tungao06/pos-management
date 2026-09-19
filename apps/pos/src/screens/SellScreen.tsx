@@ -86,7 +86,7 @@ export function SellScreen(): JSX.Element {
         </p>
       )}
       {boot.data?.backupDue === true && (
-        <button type="button" className="error" data-testid="backup-due" onClick={() => void navigate({ to: '/backup' })}>
+        <button type="button" role="alert" className="error" data-testid="backup-due" onClick={() => void navigate({ to: '/backup' })}>
           {TH.backupDue}
         </button>
       )}
