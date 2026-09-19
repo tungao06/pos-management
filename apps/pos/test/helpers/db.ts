@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
@@ -40,12 +43,19 @@ export async function openTestDb(): Promise<{ raw: DatabaseSync; db: RemoteDb; i
   return { raw, db, init }
 }
 
+/** Test stand-in for opfs-sahpool `exportFile`: a consistent copy of the in-memory database via `VACUUM INTO`. */
+export function vacuumInto(raw: DatabaseSync): Uint8Array {
+  const file = join(mkdtempSync(join(tmpdir(), 'dayo-backup-')), 'copy.sqlite3')
+  raw.prepare('VACUUM INTO ?').run(file)
+  return new Uint8Array(readFileSync(file))
+}
+
 export type TestApi = { api: PosApi; db: RemoteDb; raw: DatabaseSync; clock: TestClock; deps: ApiDeps }
 
 export async function openTestApi(): Promise<TestApi> {
   const { raw, db } = await openTestDb()
   const clock = testClock()
-  const deps: ApiDeps = { now: clock.now, newId: sequentialIds(), pinCost: { ...TEST_PIN_COST } }
+  const deps: ApiDeps = { now: clock.now, newId: sequentialIds(), pinCost: { ...TEST_PIN_COST }, exportDbFile: async () => vacuumInto(raw) }
   return { api: createPosApi(db, deps), db, raw, clock, deps }
 }
 

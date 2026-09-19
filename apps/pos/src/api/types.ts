@@ -9,7 +9,17 @@ export const REASON_MAX_LENGTH = 200
 export type UserDto = { id: string; displayName: string; role: UserRole }
 export type DeviceDto = { id: string; name: string; receiptPrefix: string }
 export type ShiftDto = { id: string; businessDate: string; openedAt: string; openedBy: string; openingFloatSatang: number }
-export type BootstrapState = { needsSetup: boolean; device: DeviceDto | null; users: UserDto[]; openShift: ShiftDto | null; pendingSyncItems: number }
+export type BootstrapState = {
+  needsSetup: boolean
+  device: DeviceDto | null
+  users: UserDto[]
+  openShift: ShiftDto | null
+  pendingSyncItems: number
+  /** Export time of the last backup file an owner confirmed as saved (sync_state `local.last_backup_at`), or null. */
+  lastBackupAt: string | null
+  /** A Z report was closed after the last one a confirmed backup covered — compared by Z id, not time (Q3b-7 · D52). */
+  backupDue: boolean
+}
 export type SetupInput = { deviceName: string; receiptPrefix: string; owners: { displayName: string; pin: string }[]; promptPayId: string }
 export type OpenShiftInput = { userId: string; openingFloatSatang: number }
 /** "เปิดกะด่วน" (spec §4.8): owner only, float 0 (Q3b-10 · D52). */
@@ -143,6 +153,11 @@ export type ZReportSummaryDto = {
   chainWarning: boolean
 }
 
+/** The raw SQLite file of this device (spec §11 · spike I3 `exportFile`) and the latest Z it contains. */
+export type BackupFileDto = { fileName: string; bytes: Uint8Array; createdAt: string; lastZId: string | null }
+/** The owner saw the exported file in Downloads (review I-4) — echoes the BackupFileDto without its bytes. */
+export type ConfirmBackupInput = { actorUserId: string; fileName: string; byteLength: number; createdAt: string; lastZId: string | null }
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -161,6 +176,8 @@ export interface PosApi {
   closeShift(input: CloseShiftInput): Promise<ZReportDto>
   listZReports(): Promise<ZReportSummaryDto[]>
   getZReport(shiftId: string): Promise<ZReportDto>
+  exportBackup(actorUserId: string): Promise<BackupFileDto>
+  confirmBackupSaved(input: ConfirmBackupInput): Promise<void>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -181,6 +198,8 @@ export const POS_API_METHODS = [
   'closeShift',
   'listZReports',
   'getZReport',
+  'exportBackup',
+  'confirmBackupSaved',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>

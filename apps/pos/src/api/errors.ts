@@ -21,6 +21,7 @@ export type PosErrorCode =
   | 'VARIANCE_REASON_REQUIRED' // spec §4.8: over/short above cash.variance_alert_satang
   | 'Z_NOT_FOUND'
   | 'Z_CHAIN_BROKEN' // Q3b-11 · D53: the previous Z fails its hash — detail = its shiftId; retry with acknowledgeZChainBroken
+  | 'BACKUP_FAILED'
 
 /** Comlink forwards only name/message/stack, so the code travels as a "CODE: " message prefix. */
 export class PosError extends Error {

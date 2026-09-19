@@ -37,7 +37,8 @@ async function start(): Promise<PosApi> {
     raw.exec('PRAGMA foreign_keys = ON')
     const db = drizzle(oo1Callback(raw as unknown as Oo1Database))
     await initDatabase(db)
-    return createPosApi(db, { now: () => new Date().toISOString(), newId, pinCost: PROD_PIN_COST })
+    // spike I3: the pool copies the database file; PosApi calls it inside its serial queue (no open transaction).
+    return createPosApi(db, { now: () => new Date().toISOString(), newId, pinCost: PROD_PIN_COST, exportDbFile: () => pool.exportFile(DB_FILE) })
   } catch (e) {
     throw new PosError('DB_OPEN_FAILED', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
   }

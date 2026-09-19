@@ -23,6 +23,7 @@ const MESSAGES: Record<PosErrorCode, string> = {
   SHIFT_CHANGED: TH.errShiftChanged,
   VARIANCE_REASON_REQUIRED: TH.errVarianceReasonRequired,
   Z_NOT_FOUND: TH.errZNotFound,
+  BACKUP_FAILED: TH.errBackupFailed,
   Z_CHAIN_BROKEN: TH.errZChainBroken,
 }
 

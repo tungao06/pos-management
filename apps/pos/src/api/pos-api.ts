@@ -1,5 +1,6 @@
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import { login } from './auth'
+import { confirmBackupSaved, exportBackup } from './backup'
 import { bootstrap } from './bootstrap'
 import { recordCashMovement } from './cash'
 import { closeShift, getZReport, listZReports } from './close'
@@ -33,5 +34,7 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     closeShift: (input) => serial(() => closeShift(db, deps, input)),
     listZReports: () => serial(() => listZReports(db)),
     getZReport: (shiftId) => serial(() => getZReport(db, shiftId)),
+    exportBackup: (actorUserId) => serial(() => exportBackup(db, deps, actorUserId)),
+    confirmBackupSaved: (input) => serial(() => confirmBackupSaved(db, deps, input)),
   }
 }
