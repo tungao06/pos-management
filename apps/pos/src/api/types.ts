@@ -2,6 +2,9 @@ import type { UserRole } from '@dayo/contracts'
 
 export const PIN_RE = /^\d{4,6}$/
 
+/** Every free-text reason (void, discount, cash variance, paid-in/out) is at most this many characters (Task 13 M-4 of plan 3). */
+export const REASON_MAX_LENGTH = 200
+
 export type UserDto = { id: string; displayName: string; role: UserRole }
 export type DeviceDto = { id: string; name: string; receiptPrefix: string }
 export type ShiftDto = { id: string; businessDate: string; openedAt: string; openedBy: string; openingFloatSatang: number }

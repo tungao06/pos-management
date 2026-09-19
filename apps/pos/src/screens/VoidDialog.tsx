@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, type JSX } from 'react'
-import type { OrderDetailDto } from '../api/types'
+import { REASON_MAX_LENGTH, type OrderDetailDto } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, orderKey, ordersKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
@@ -62,7 +62,7 @@ export function VoidDialog({ order, onClose }: { order: OrderDetailDto; onClose:
         <h2>{TH.voidTitle(order.receiptNo)}</h2>
         <label>
           {TH.voidReason}
-          <input data-testid="void-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input data-testid="void-reason" maxLength={REASON_MAX_LENGTH} value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
         <div className="choices">
           {TH.voidReasonPresets.map((text, i) => (

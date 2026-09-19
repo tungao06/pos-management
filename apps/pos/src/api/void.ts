@@ -10,7 +10,7 @@ import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { getOrder } from './orders'
-import type { OrderDetailDto, VoidOrderInput } from './types'
+import { REASON_MAX_LENGTH, type OrderDetailDto, type VoidOrderInput } from './types'
 
 /**
  * spec §4.3 + D18/D36/D39: void a paid order of the open shift with a reason and an owner's PIN.
@@ -20,6 +20,7 @@ import type { OrderDetailDto, VoidOrderInput } from './types'
 export async function voidOrder(db: RemoteDb, deps: ApiDeps, input: VoidOrderInput): Promise<OrderDetailDto> {
   const reason = input.reason.trim()
   if (reason === '') throw new PosError('BAD_INPUT', 'a void needs a reason')
+  if (reason.length > REASON_MAX_LENGTH) throw new PosError('BAD_INPUT', `a reason is at most ${REASON_MAX_LENGTH} characters`)
   const actor = await db.select().from(s.user).where(eq(s.user.id, input.actorUserId)).get()
   if (!actor || !actor.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${input.actorUserId}`)
   // argon2 is slow — check the PIN before opening the transaction.
