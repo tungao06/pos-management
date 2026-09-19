@@ -4,23 +4,25 @@
 
 **Goal:** ทำให้แอปขายในเครื่อง (แผน 3) ปิดวันได้ครบก่อนใช้ขายจริง (D48 Q3-17): บันทึกเงินเข้า/จ่ายออก/นำเงินไปเก็บ → ดูรายงาน X สดได้ตลอดกะ → ปิดกะโดยนับธนบัตร/เหรียญแยกชนิด → เห็นยอดที่ควรมีและส่วนต่าง (ต้องใส่เหตุผลถ้าเกินเกณฑ์) → เจ้าของยืนยันด้วย PIN → ได้รายงาน Z ที่แช่แข็งด้วยแฮช (มี grand total สะสม + รายการบิลยกเลิกประจำวัน + เบสติดลบ) → กดสำรองไฟล์ฐานข้อมูลทั้งไฟล์ลงเครื่อง · พร้อม "เปิดกะด่วน" สำหรับเจ้าของ และงานส่งต่อจากแผน 3 (เพดานเหตุผล 200 ตัวอักษร)
 
-**Architecture:** ตรรกะเงินทั้งหมดอยู่ใน `packages/domain/src/shift.ts` (สรุปยอดขายของกะ · รวมเงินเข้า-ออกเป็น `CashInputs` ตาม D36 · นับเงินแยกชนิด · เกณฑ์ส่วนต่าง · `buildZReport` ที่ตรวจความสัมพันธ์ของตัวเลขทุกตัวก่อนแช่แข็ง) · ฝั่งแอปเพิ่มเมธอดของ `PosApi` ที่รันใน Worker ตามแบบแผน 3 (1 การกด = 1 transaction: แถวธุรกรรม + outbox) — `recordCashMovement`, `shiftReport` (X), `closeShift` (cash_count + z_report + shift closed), `listZReports`/`getZReport`, `quickOpenShift`, `exportBackup` (อ่านไฟล์ด้วย `pool.exportFile` ของ `opfs-sahpool` ที่ spike I3 พิสูจน์แล้ว ผ่าน `ApiDeps.exportDbFile`) · หน้าจอใหม่ 5 หน้า (`/shift` X · `/shift/close` · `/z` · `/z/$shiftId` · `/backup`) + หน้าต่างเงินเข้า-ออก บนหน้าขาย · ไม่แก้ schema (ตาราง `shift`, `cash_movement`, `cash_count`, `z_report`, `audit_log`, `sync_state` มีครบจากแผน 2)
+**Architecture:** ตรรกะเงินทั้งหมดอยู่ใน `packages/domain/src/shift.ts` (สรุปยอดขายของกะ รวมพร้อมเพย์รับ/โอนคืน/สุทธิ · รวมเงินเข้า-ออกเป็น `CashInputs` ตาม D36 · นับเงินแยกชนิด · เกณฑ์ส่วนต่าง · `buildZReport` ที่ตรวจความสัมพันธ์ของตัวเลขทุกตัวก่อนแช่แข็ง · `recomputeZChain` เมื่อ Z ใบก่อนแฮชไม่ตรง) · ฝั่งแอปเพิ่มเมธอดของ `PosApi` ที่รันใน Worker ตามแบบแผน 3 (1 การกด = 1 transaction: แถวธุรกรรม + outbox) — `recordCashMovement`, `shiftReport` (X), `closeShift` (cash_count + z_report + shift closed), `listZReports`/`getZReport`, `quickOpenShift`, `exportBackup` (อ่านไฟล์ด้วย `pool.exportFile` ของ `opfs-sahpool` ที่ spike I3 พิสูจน์แล้ว ผ่าน `ApiDeps.exportDbFile` — ไม่บันทึกอะไร) + `confirmBackupSaved` (บันทึกเมื่อเจ้าของกด "บันทึกไฟล์แล้ว") · หน้าจอใหม่ 5 หน้า (`/shift` X · `/shift/close` · `/z` · `/z/$shiftId` · `/backup`) + หน้าต่างเงินเข้า-ออก บนหน้าขาย · ปุ่ม "ปิดกะ" อยู่บนหน้าขาย ไม่ผ่านหน้า X และหน้า X ไม่แสดงเงินสดที่ควรมี → นับเงินแบบไม่เห็นยอดจริง (Q3b-3) · ไม่แก้ schema (ตาราง `shift`, `cash_movement`, `cash_count`, `z_report`, `audit_log`, `sync_state` มีครบจากแผน 2)
 
 **Tech Stack:** เหมือนแผน 3 ทุกตัว ไม่เพิ่ม dependency — Node 22 (≥ 22.16) · pnpm 10 · TypeScript ~5.9 · React 19.3.0 · Vite 8.3.0 · @tanstack/react-router 1.170.38 · @tanstack/react-query 5.103.1 · @sqlite.org/sqlite-wasm 3.53.4-build1 (`SAHPoolUtil.exportFile(name): Promise<Uint8Array>`) · drizzle-orm 0.45.2 · comlink 4.4.2 · Vitest 5.0.1 + fast-check · jsdom 30.1.0 · @playwright/test 1.63.0
 
-**Spec:** [../specs/2026-09-17-pos-design.md](../specs/2026-09-17-pos-design.md) §3.1 (`cash.variance_alert_satang`), §3.5 (shift / cash_movement / cash_count / z_report), §4.3 (บิลยกเลิกอยู่ใน gross และแยกเป็นยอดยกเลิก), §4.7 (business_date), §4.8 (กะ / X / Z / เปิดกะด่วน), §5 (หน้าเปิด/ปิดวัน: ตาราง 1000/500/100/50/20/10/5/2/1 · ปิดวันต้อง owner), §6.1–6.2 (outbox), §7 invariant 6 (แฮช Z), §8 (e2e "… → ปิดกะ → Z"), §11 (สำรองด้วย export ไฟล์ SQLite) · การตัดสินใจ: [../../design/00-บันทึกการตัดสินใจ.md](../../design/00-บันทึกการตัดสินใจ.md) โดยเฉพาะ D22, D28, D36, D42–D51 · งานส่งต่อ: [บันทึกการทำแผน 3 §5](2026-09-17-03-บันทึกการทำแผน3.md) และ [บันทึกการทำแผน 1 §4](2026-09-17-01-บันทึกการทำแผน1.md) · ผล spike I3: [2026-09-17-03-ผลspike.md](2026-09-17-03-ผลspike.md) · **คำถามก่อนทำ: [2026-09-17-03b-คำถามก่อนทำ.md](2026-09-17-03b-คำถามก่อนทำ.md) — Q3b-1 … Q3b-10 ยังรอคำตอบ** แผนนี้เขียนตามค่าแนะนำทุกข้อ และทำเครื่องหมาย `(รอ Q3b-N)` ทุกจุดที่ขึ้นกับคำตอบ
+**Spec:** [../specs/2026-09-17-pos-design.md](../specs/2026-09-17-pos-design.md) §3.1 (`cash.variance_alert_satang`), §3.5 (shift / cash_movement / cash_count / z_report), §4.3 (บิลยกเลิกอยู่ใน gross และแยกเป็นยอดยกเลิก), §4.7 (business_date), §4.8 (กะ / X / Z / เปิดกะด่วน), §5 (หน้าเปิด/ปิดวัน: ตาราง 1000/500/100/50/20/10/5/2/1 · ปิดวันต้อง owner), §6.1–6.2 (outbox), §7 invariant 6 (แฮช Z), §8 (e2e "… → ปิดกะ → Z"), §11 (สำรองด้วย export ไฟล์ SQLite) · การตัดสินใจ: [../../design/00-บันทึกการตัดสินใจ.md](../../design/00-บันทึกการตัดสินใจ.md) โดยเฉพาะ D22, D28, D36, D42–D53 · งานส่งต่อ: [บันทึกการทำแผน 3 §5](2026-09-17-03-บันทึกการทำแผน3.md) และ [บันทึกการทำแผน 1 §4](2026-09-17-01-บันทึกการทำแผน1.md) · ผล spike I3: [2026-09-17-03-ผลspike.md](2026-09-17-03-ผลspike.md) · **คำถามก่อนทำ: [2026-09-17-03b-คำถามก่อนทำ.md](2026-09-17-03b-คำถามก่อนทำ.md) — เจ้าของตอบครบ 13 ข้อแล้ว (19 ก.ย. "เห็นด้วย ทำต่อได้เลย" = ค่าแนะนำทุกข้อ): Q3b-1 … Q3b-10 → D52 · Q3b-11 … Q3b-13 (มาจาก review แผน) → D53** · จุดที่ใช้คำตอบอ้างไว้เป็น `Q3b-N · D52` / `Q3b-N · D53` (ตารางท้ายแผน)
 
 ## Global Constraints
 
-- **ห้ามเริ่ม Task 1 จนกว่าเจ้าของตอบ Q3b-1 … Q3b-10** (บันทึกเป็น D52) · ถ้าคำตอบต่างจากค่าแนะนำ ให้แก้โค้ดในแผนตรงจุดที่มีเครื่องหมาย `(รอ Q3b-N)` ก่อนทำ task นั้น (ตารางจุดที่ขึ้นกับคำตอบอยู่ท้ายแผน) และจดในบันทึกการทำแผน
+- **คำตอบของเจ้าของ:** Q3b-1 … Q3b-10 → D52 · Q3b-11 … Q3b-13 → D53 (ค่าแนะนำทุกข้อ 19 ก.ย.) · โค้ดในแผนเขียนตามคำตอบแล้ว (ตารางท้ายแผน) · ถ้าเจ้าของเปลี่ยนคำตอบภายหลัง ให้แก้จุดในตารางนั้นก่อนทำ task ที่เกี่ยวข้อง และจดในบันทึกการทำแผน
 - แผน 3 ต้อง merge อยู่ใน `main` แล้ว (commit `4a858d9` หรือใหม่กว่า) · branch ของแผนนี้คือ `plan-3b-shift-close` แตกจาก `plan-3b-draft` (ซึ่งต่อจาก `main` 4a858d9 และมีแผน/คำถาม/D52) (Task 1 Step 0)
 - **ต้องเสร็จก่อนใช้ขายจริง (D48 Q3-17)** · การทดสอบบนแท็บเล็ตจริงของแผนนี้ **ไม่ทำในแผนนี้** — รวมไว้ในรอบทดสอบแท็บเล็ตตอนท้ายสุด (D51) ทุกขั้นที่ต้องใช้แท็บเล็ตมีป้าย ⛔ HAND-OFF เจ้าของร้าน · **agent ห้ามกรอกผลแท็บเล็ตแทน และห้ามอ้างว่าผ่าน**
 - เงินเป็น **สตางค์** (integer) · ปริมาณเป็น **milli** · ต้นทุนเป็น **usat** (D33) · ห้ามทศนิยมในการคำนวณเงิน — ข้อความบาทแปลงด้วย `parseBahtInput`, จำนวนใบ/เหรียญแปลงด้วย `parseCountInput` เท่านั้น · ผลรวมเงินที่นับอยู่ในช่วง safe integer (≤ 99,999 ใบ × 9 ชนิด)
 - ตรรกะเงิน (สรุปยอด, เงินที่ควรมี, ส่วนต่าง, เกณฑ์, แฮช Z) **ต้องเรียกจาก `@dayo/domain`** ห้ามคำนวณซ้ำในแอป (spec §0 ข้อ 1) · ในแอปทำได้แค่รวมแถวที่อ่านมาแล้วส่งให้ domain
 - สูตรเงินสด (D36): `expected = opening + cash_sales − void_refunds + paid_in − paid_out − drops` · `cash_sales` = Σ payment CASH ของบิลที่ได้เลขในกะ **รวมบิลที่ยกเลิกภายหลัง** · `void_refunds` = Σ `VOID_REFUND` · แต่ละแถว `cash_movement` นับครั้งเดียว (`cashInputsFromMovements`)
 - **1 การกดของผู้ใช้ = 1 transaction** ที่เขียนแถวธุรกรรม + outbox ครบในคราวเดียว (spec §6.1) · PIN (argon2) ตรวจ **ก่อน** เปิด transaction แบบเดียวกับ `voidOrder`
-- **insert อย่างเดียว** · `cash_movement` และ `z_report` มี trigger ของแผน 2 ที่ abort ทุก UPDATE/DELETE — ห้ามเขียนโค้ดที่ UPDATE/DELETE สองตารางนี้ · UPDATE ที่อนุญาตเพิ่มในแผนนี้มี **ตัวเดียว**: `shift.status`/`closed_by`/`closed_at` ตอนปิดกะ (T3b-4) พร้อม outbox key `shift:<id>:closed` · `cash_count` insert อย่างเดียว · Z **สร้างครั้งเดียว ห้ามคำนวณใหม่** (spec §4.8) — หน้าจอ Z อ่าน snapshot ที่เก็บไว้ และตรวจแฮชทุกครั้งที่อ่าน
-- event ของบิลยังเขียนผ่าน `appendOrderEvents` (โซ่แฮช + outbox ใน transaction เดียว — D38) เท่านั้น · แผนนี้ **ไม่เพิ่ม event ของบิล** · การเปิดกะด่วนบันทึกเป็น `audit_log` + ธงใน Z (รอ Q3b-10)
+- **insert อย่างเดียว** · `cash_movement` และ `z_report` มี trigger ของแผน 2 ที่ abort ทุก UPDATE/DELETE — ห้ามเขียนโค้ดที่ UPDATE/DELETE สองตารางนี้ · UPDATE ที่อนุญาตเพิ่มในแผนนี้: `shift.status`/`closed_by`/`closed_at` ตอนปิดกะ (T3b-4) พร้อม outbox key `shift:<id>:closed` และ upsert คีย์ local-only ใน `sync_state` (`local.last_backup_at`, `local.last_backup_z_id`) ตอนเจ้าของยืนยันไฟล์สำรอง — ตารางบัญชียังห้าม UPDATE/DELETE · `cash_count` insert อย่างเดียว · Z **สร้างครั้งเดียว ห้ามคำนวณใหม่** (spec §4.8) — หน้าจอ Z อ่าน snapshot ที่เก็บไว้ และตรวจแฮชทุกครั้งที่อ่าน
+- **Z ใบก่อนแฮชไม่ตรง (Q3b-11 · D53)** ไม่บล็อกการปิดกะถาวร: `closeShift` ปฏิเสธด้วย `Z_CHAIN_BROKEN` (ไม่ใช่ `BAD_INPUT`) จนกว่าเจ้าของกรอก PIN ซ้ำเพื่อรับทราบ แล้ว Z ใหม่ต่อยอดจาก grand total ที่ **คำนวณใหม่** จาก snapshot ทุกใบเรียงตาม `zNo` (ไม่ใช่ค่าที่เก็บไว้) + ธง `chainWarning` ถาวรใน snapshot + แถว `audit_log` `z_chain_broken_ack`
+- **ไฟล์สำรอง (Q3b-13 · D53):** ในไฟล์มี `pin_hash` และหมายเลขพร้อมเพย์ของร้าน — เจ้าของยอมรับ ไม่เข้ารหัส แต่ `exportBackup`/`confirmBackupSaved` ให้เฉพาะเจ้าของ (`NOT_OWNER`) และหน้า `/backup` ไม่แสดงปุ่มดาวน์โหลดให้คนที่ไม่ใช่เจ้าของ · การสำรองนับว่าเสร็จเมื่อเจ้าของกด "บันทึกไฟล์แล้ว" หลังเห็นไฟล์ ไม่ใช่ตอน export (Q3b-7 · review I-4)
+- event ของบิลยังเขียนผ่าน `appendOrderEvents` (โซ่แฮช + outbox ใน transaction เดียว — D38) เท่านั้น · แผนนี้ **ไม่เพิ่ม event ของบิล** · การเปิดกะด่วนบันทึกเป็น `audit_log` + ธงใน Z (Q3b-10 · D52)
 - CHECK ของแผน 2 ที่แผนนี้ต้องเคารพ: `cash_movement` — `(kind = 'VOID_REFUND') = (order_id is not null)` และ `amount_satang > 0` → `PAID_IN`/`PAID_OUT`/`DROP` ใส่ `orderId: null` และยอด > 0 เสมอ · `z_report.shift_id` unique → ปิดกะเดียวกันซ้ำไม่ได้ · partial unique `shift_open_uq` → เปิดกะได้ครั้งละหนึ่งต่อเครื่อง
 - ค่า enum เป็นชนิดแคบ (`textEnum`) → แถวที่สร้างก่อน insert เขียน `satisfies typeof s.<table>.$inferInsert` · ห้าม cast enum ด้วย `as`
 - เหตุผลที่คนพิมพ์ (void · ส่วนลด · ส่วนต่างเงินสด · เงินเข้า-ออก) ต้องไม่ว่างหลัง trim และยาว **ไม่เกิน 200 ตัวอักษร** (`REASON_MAX_LENGTH` — งานส่งต่อ Task 13 M-4) ทั้งที่ API และ `maxLength` ของช่อง input
@@ -31,32 +33,34 @@
 - เครื่องพัฒนา Windows 11 + Git Bash · Node ≥ 22.16 · ทุกคำสั่งรันที่ root ของ worktree
 - **commit (D45):** ใช้ skill `committing-code` ก่อนทุก commit · conventional commit สั้น ๆ · **ห้ามมี trailer ของ AI** (`Co-Authored-By: …` หรืออื่นใด) · `git add` เฉพาะ path ที่ระบุชื่อใน step (ห้าม `git add -A` / `git add .`) · ไฟล์ทำงานชั่วคราว (`.superpowers/`, ledger, review, `.claude/`) ไม่เข้า git · เอกสาร `docs/**` ของโปรเจกต์นี้ commit ได้
 - **โมเดล agent (D43):** sonnet เป็นขั้นต่ำสำหรับ implement/review ราย task · task ที่มีป้าย **💰 review: opus** (เงิน/ความถูกต้องของยอด) ต้องให้ opus เป็นคน review · opus สำหรับ final review ทั้ง branch · ไม่ใช้ haiku
-- **ห้าม push ทุกกรณี (D49)** · merge เข้า `main` ในเครื่องแบบ `--no-ff` ได้เฉพาะใน Task 11 หลัง final review (opus) ผ่านและไม่มี issue ค้าง (D42)
-- ห้ามแตะ `docs/` ยกเว้น: ติ๊ก checkbox ในแผนนี้ · บันทึกการทำแผน 3b + README (Task 11) · เพิ่มคำถามใหม่ในไฟล์คำถาม 3b · เพิ่มบันทึกการตัดสินใจเมื่อเจ้าของตอบ
+- **ห้าม push ทุกกรณี (D49)** · merge เข้า `main` ในเครื่องแบบ `--no-ff` ได้เฉพาะใน Task 12 หลัง final review (opus) ผ่านและไม่มี issue ค้าง (D42)
+- ห้ามแตะ `docs/` ยกเว้น: ติ๊ก checkbox ในแผนนี้ · บันทึกการทำแผน 3b + README (Task 12) · เพิ่มคำถามใหม่ในไฟล์คำถาม 3b · เพิ่มบันทึกการตัดสินใจเมื่อเจ้าของตอบ
 
 ---
 
 ## File Structure
 
 ```
-packages/domain/src/shift.ts          แก้: + cashInputsFromMovements, CashKind, ShiftOrder, SalesSummary, summarizeShiftSales,
+packages/domain/src/shift.ts          แก้: + cashInputsFromMovements, CashKind, ShiftOrder, SalesSummary (+ QR รับ/โอนคืน/สุทธิ), summarizeShiftSales,
                                             assertSalesSummary, CASH_DENOMINATIONS_SATANG, MAX_PIECES_PER_DENOMINATION,
                                             CashCountLine, tallyCashCount, DEFAULT_VARIANCE_ALERT_SATANG, varianceNeedsReason,
-                                            ZVoid, zReportHash · ZInput/ZSnapshot รูปใหม่ · buildZReport ตรวจความสัมพันธ์ครบ
+                                            ZVoid, ZChainWarning, zReportHash, recomputeZChain · ZInput/ZSnapshot รูปใหม่ ·
+                                            buildZReport ตรวจความสัมพันธ์ครบ
 packages/domain/test/shift.test.ts    แทนทั้งไฟล์ (เคส expectedCash เดิมคงไว้ + property test)
 
 apps/pos/src/api/
 ├── types.ts           แก้: REASON_MAX_LENGTH · QuickOpenShiftInput · CashMovementInput/Dto · NegativeBaseDto · ShiftReportDto ·
-│                           CloseShiftInput · ZReportDto · ZReportSummaryDto · BackupFileDto · BootstrapState (+lastBackupAt, backupDue) ·
-│                           PosApi + 7 เมธอด · POS_API_METHODS
+│                           CloseShiftInput · ZReportDto · ZReportSummaryDto · BackupFileDto · ConfirmBackupInput ·
+│                           BootstrapState (+lastBackupAt, backupDue) · PosApi + 8 เมธอด · POS_API_METHODS
 ├── shift.ts           แทนทั้งไฟล์: insertOpenShift (ใช้ร่วม) · openShift · quickOpenShift · wasQuickOpened · QUICK_OPEN_ACTION
 ├── cash.ts            ใหม่: recordCashMovement · toCashMovementDto · MAX_CASH_MOVEMENT_SATANG
 ├── shift-report.ts    ใหม่: buildShiftReport (X และข้อมูลของ Z) · shiftReport · varianceAlertSatang · VARIANCE_ALERT_SETTING_KEY
-├── close.ts           ใหม่: closeShift · listZReports · getZReport · deviceZRows (export ให้ backup.ts ใช้)
-├── backup.ts          ใหม่: exportBackup · lastBackupAt · lastBackupZId · isBackupDue · isSqliteFile · LAST_BACKUP_KEY · LAST_BACKUP_Z_ID_KEY
+├── close.ts           ใหม่: closeShift · listZReports · getZReport · deviceZRows (export ให้ backup.ts ใช้) · Z_CHAIN_ACK_ACTION
+├── backup.ts          ใหม่: exportBackup · confirmBackupSaved · backupFileName · lastBackupAt · lastBackupZId · isBackupDue ·
+│                           isSqliteFile · LAST_BACKUP_KEY · LAST_BACKUP_Z_ID_KEY
 ├── bootstrap.ts       แก้: bootstrap เติม lastBackupAt, backupDue
 ├── deps.ts            แก้: ApiDeps.exportDbFile
-├── errors.ts          แก้: + SHIFT_CHANGED, VARIANCE_REASON_REQUIRED, Z_NOT_FOUND, BACKUP_FAILED
+├── errors.ts          แก้: + SHIFT_CHANGED, VARIANCE_REASON_REQUIRED, Z_NOT_FOUND, Z_CHAIN_BROKEN, BACKUP_FAILED
 ├── pos-api.ts         แก้: ต่อเมธอดใหม่เข้าคิว serial
 ├── sale.ts, void.ts   แก้: เพดานเหตุผล 200
 apps/pos/src/db/outbox.ts    แก้: OutboxTable + 'cash_count' | 'z_report'
@@ -67,11 +71,12 @@ apps/pos/src/ui/th.ts        แก้: ข้อความใหม่ · ui/
 apps/pos/src/ui/save-file.ts ใหม่: downloadBytes
 apps/pos/src/styles.css      แก้: + .figures
 apps/pos/src/screens/
-├── BackupScreen.tsx       ใหม่ (/backup)
-├── ShiftFigures.tsx       ใหม่: SalesTable, DrawerTable, VoidList, NegativeBaseList (ใช้ร่วม X / ปิดกะ / Z)
+├── BackupScreen.tsx       ใหม่ (/backup — เจ้าของเท่านั้น · ดาวน์โหลด → "บันทึกไฟล์แล้ว") + BackupScreen.test.tsx
+├── ShiftFigures.tsx       ใหม่: SalesTable, QrTable, DrawerTable (hideExpected), VoidList, NegativeBaseList (ใช้ร่วม X / ปิดกะ / Z)
 ├── ZReportScreen.tsx      ใหม่ (/z/$shiftId) · ZListScreen.tsx ใหม่ (/z)
-├── ShiftScreen.tsx        ใหม่ (/shift — รายงาน X) · CloseShiftScreen.tsx ใหม่ (/shift/close) · CashMoveDialog.tsx ใหม่
-├── SellScreen.tsx         แก้: ปุ่ม cash-move-open, nav-shift · แถบ shift-stale
+├── ShiftScreen.tsx        ใหม่ (/shift — รายงาน X ไม่มีเงินสดที่ควรมี ไม่มีปุ่มปิดกะ) · CashMoveDialog.tsx ใหม่
+├── CloseShiftScreen.tsx   ใหม่ (/shift/close — นับแบบไม่เห็นยอด · ยอดพร้อมเพย์ในแอปธนาคาร · รับทราบ Z เสีย) + CloseShiftScreen.test.tsx
+├── SellScreen.tsx         แก้: ปุ่ม cash-move-open, nav-shift (Task 10) · close-shift-open (Task 11) · แถบ shift-stale
 ├── OpenShiftScreen.tsx    แทนทั้งไฟล์: + ปุ่มเปิดกะด่วน · แถบ backup-due · ลิงก์ Z ย้อนหลัง/สำรองไฟล์
 ├── VoidDialog.tsx, DiscountDialog.tsx   แก้: maxLength 200
 apps/pos/src/router.tsx      แก้: + 5 route
@@ -79,11 +84,11 @@ apps/pos/test/helpers/db.ts  แก้: exportDbFile ในเทสต์ = vac
 apps/pos/test/helpers/shift.ts ใหม่: sellVoidScenario, COUNT_520
 apps/pos/test/  reason-limit · quick-open · cash-movement · shift-report · close-shift · backup (.test.ts) ใหม่ · init.test.ts แก้
 apps/pos/src/lib/clock-stamp.test.ts · src/ui/save-file.test.ts · src/ui/count-input.test.ts   ใหม่
-apps/pos/e2e/close-shift.spec.ts        ใหม่
-docs/superpowers/plans/2026-09-17-03b-บันทึกการทำแผน3b.md   ใหม่ (Task 11) · README.md แก้ (Task 11)
+apps/pos/e2e/shift-x.spec.ts (Task 10) · apps/pos/e2e/close-shift.spec.ts (Task 11)   ใหม่
+docs/superpowers/plans/2026-09-17-03b-บันทึกการทำแผน3b.md   ใหม่ (Task 12) · README.md แก้ (Task 12)
 ```
 
-ลำดับ task: domain (1) → งานส่งต่อเล็ก (2, 3) → API เงิน/X/ปิดกะ/สำรอง (4–7) → หน้าจอ (8–10 เรียงให้ทุก route ที่ลิงก์ถึงมีอยู่ก่อนเสมอ เพราะ router ของ TanStack ตรวจ path ด้วย type) → ตรวจ/บันทึก/review/merge (11)
+ลำดับ task: domain (1) → งานส่งต่อเล็ก (2, 3) → API เงิน/X/ปิดกะ/สำรอง (4–7) → หน้าจอ (8–11 เรียงให้ทุก route ที่ลิงก์ถึงมีอยู่ก่อนเสมอ เพราะ router ของ TanStack ตรวจ path ด้วย type — ปุ่ม `close-shift-open` จึงมาใน Task 11 พร้อม route `/shift/close`) → ตรวจ/บันทึก/review/merge (12)
 
 ---
 
@@ -99,13 +104,14 @@ docs/superpowers/plans/2026-09-17-03b-บันทึกการทำแผน
   - `type CashKind = 'PAID_IN' | 'PAID_OUT' | 'DROP' | 'VOID_REFUND'`
   - `cashInputsFromMovements(openingFloatSatang: number, cashSalesSatang: number, movements: readonly { kind: CashKind; amountSatang: number }[]): CashInputs`
   - `type ShiftOrder = { id; status: 'paid' | 'voided'; subtotalSatang; discountSatang; totalSatang; payments: readonly { method: 'CASH' | 'PROMPTPAY'; amountSatang }[] }`
-  - `type SalesSummary = { orderCount; voidCount; grossSalesSatang; discountSatang; voidedSatang; netSalesSatang; cashSalesSatang; qrSalesSatang }` (number ทุกช่อง)
+  - `type SalesSummary = { orderCount; voidCount; grossSalesSatang; discountSatang; voidedSatang; netSalesSatang; cashSalesSatang; qrSalesSatang; qrRefundedSatang; qrNetSatang }` (number ทุกช่อง · `qrRefundedSatang` = พร้อมเพย์ของบิลที่ยกเลิก = โอนคืน · `qrNetSatang` = qr − โอนคืน — Q3b-12 · D53)
   - `summarizeShiftSales(orders: readonly ShiftOrder[]): SalesSummary` · `assertSalesSummary(s: SalesSummary): void`
-  - `CASH_DENOMINATIONS_SATANG: readonly number[]` (รอ Q3b-1) · `MAX_PIECES_PER_DENOMINATION = 99_999` · `type CashCountLine = { denominationSatang: number; count: number }` · `tallyCashCount(lines): { lines: CashCountLine[]; totalSatang: number }`
+  - `CASH_DENOMINATIONS_SATANG: readonly number[]` (9 ชนิด ไม่มีเหรียญสตางค์ — Q3b-1 · D52) · `MAX_PIECES_PER_DENOMINATION = 99_999` · `type CashCountLine = { denominationSatang: number; count: number }` · `tallyCashCount(lines): { lines: CashCountLine[]; totalSatang: number }`
   - `DEFAULT_VARIANCE_ALERT_SATANG = 2_000` · `varianceNeedsReason(varianceSatang: number, alertSatang: number): boolean`
   - `type ZVoid = { orderId; receiptNo; totalSatang; method: 'CASH' | 'PROMPTPAY'; reason; made: boolean; approvedBy; approvedByName; refundReference: string | null; voidedAt }`
-  - `type ZInput = { shiftId; businessDate; deviceId; zNo: number; openedAt; openedBy; openedQuick: boolean; closedAt; closedBy; countedBy; sales: SalesSummary; cash: CashInputs; countLines: CashCountLine[]; countedCashSatang; varianceAlertSatang; varianceReason: string | null; voids: ZVoid[] }` · `type ZSnapshot = ZInput & { expectedCashSatang; cashVarianceSatang; grandTotalSatang }`
-  - `zReportHash(snapshot: unknown): string` · `buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatang: number } | null): { snapshot: ZSnapshot; hash: string }` — throw `RangeError` เมื่อข้อมูลไม่สอดคล้อง (chain บน `zNo` ของ Z ก่อนหน้า ไม่ใช้เวลา — นาฬิกาเครื่องเลื่อนได้)
+  - `type ZChainWarning = { brokenShiftId: string; storedGrandTotalSatang: number | null; recomputedGrandTotalSatang: number; acknowledgedBy: string }` (Q3b-11 · D53)
+  - `type ZInput = { shiftId; businessDate; deviceId; zNo: number; openedAt; openedBy; openedQuick: boolean; closedAt; closedBy; countedBy; sales: SalesSummary; cash: CashInputs; countLines: CashCountLine[]; countedCashSatang; varianceAlertSatang; varianceReason: string | null; voids: ZVoid[]; bankQrTotalSatang: number | null; chainWarning: ZChainWarning | null }` · `type ZSnapshot = ZInput & { expectedCashSatang; cashVarianceSatang; qrDifferenceSatang: number | null; grandTotalSatang }` (`qrDifferenceSatang` = แอปธนาคาร − พร้อมเพย์สุทธิ · null เมื่อไม่ได้กรอก — Q3b-12 · D53)
+  - `zReportHash(snapshot: unknown): string` · `recomputeZChain(netSalesSatang: readonly number[]): { zNo: number; grandTotalSatang: number }` (จำนวน Z และ Σ net ของ snapshot ทุกใบ — Q3b-11 · D53) · `buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatang: number } | null): { snapshot: ZSnapshot; hash: string }` — throw `RangeError` เมื่อข้อมูลไม่สอดคล้อง (chain บน `zNo` ของ Z ก่อนหน้า ไม่ใช้เวลา — นาฬิกาเครื่องเลื่อนได้ · Σ บิลยกเลิกเงินสด = `VOID_REFUND` · Σ บิลยกเลิกพร้อมเพย์ = `qrRefundedSatang` · มี `chainWarning` แล้ว `prev` ต้องเป็นค่าที่คำนวณใหม่)
 
 ทุกฟังก์ชันใหม่ throw `RangeError` เท่านั้น (ฝั่งแอปแปลงเป็น `BAD_INPUT`) · ไม่มีโค้ดอื่นใน repo ใช้ `ZInput`/`buildZReport` (ตรวจแล้ว: มีแค่คอมเมนต์ใน `db-schema/src/*/sales.ts`) จึงเปลี่ยนรูปได้ (T3b-12)
 
@@ -115,11 +121,11 @@ docs/superpowers/plans/2026-09-17-03b-บันทึกการทำแผน
 git status --short                       # ต้องว่าง
 git log --oneline -1 main                # 4a858d9 หรือใหม่กว่า (แผน 3 merge แล้ว)
 git merge-base --is-ancestor main plan-3b-draft && echo OK   # draft ต้องต่อจาก main ล่าสุด (ถ้าไม่ OK: rebase draft ก่อน)
-git checkout -b plan-3b-shift-close plan-3b-draft   # แตกจาก draft ที่มีแผน + ไฟล์คำถาม + D52 (ห้าม checkout main ใน worktree นี้ — main ถูก checkout อยู่ที่ D:/TungAo-Project/pos-management)
+git checkout -b plan-3b-shift-close plan-3b-draft   # แตกจาก draft ที่มีแผน + ไฟล์คำถาม + D52–D53 (ห้าม checkout main ใน worktree นี้ — main ถูก checkout อยู่ที่ D:/TungAo-Project/pos-management)
 pnpm install --frozen-lockfile
-grep -n "Q3b" docs/design/00-บันทึกการตัดสินใจ.md   # ต้องเจอ D52 (คำตอบ Q3b-1 … Q3b-10 commit ไว้บน plan-3b-draft) — ไม่เจอ = หยุด ถามเจ้าของ
+grep -n "Q3b" docs/design/00-บันทึกการตัดสินใจ.md   # ต้องเจอ D52 และ D53 (คำตอบ Q3b-1 … Q3b-13 commit ไว้บน plan-3b-draft) — ไม่เจอ = หยุด ถามเจ้าของ
 ```
-Expected: branch ใหม่ `plan-3b-shift-close` ต่อจาก `plan-3b-draft` · install ผ่าน · เจอ D52 · ถ้าคำตอบข้อใดต่างจากค่าแนะนำ ให้ปรับทุกจุด `(รอ Q3b-N)` ของข้อนั้นในแผนก่อน (ตารางท้ายแผน)
+Expected: branch ใหม่ `plan-3b-shift-close` ต่อจาก `plan-3b-draft` · install ผ่าน · เจอ D52 และ D53 (ตรงกับตาราง "คำตอบของเจ้าของที่แผนนี้ใช้" ท้ายแผน)
 
 - [ ] **Step 1: เขียนเทสต์ให้ตก (แทน `packages/domain/test/shift.test.ts` ทั้งไฟล์)**
 
@@ -132,6 +138,7 @@ import {
   CASH_DENOMINATIONS_SATANG,
   cashInputsFromMovements,
   expectedCashSatang,
+  recomputeZChain,
   summarizeShiftSales,
   tallyCashCount,
   varianceNeedsReason,
@@ -139,6 +146,7 @@ import {
   type CashInputs,
   type SalesSummary,
   type ShiftOrder,
+  type ZChainWarning,
   type ZInput,
 } from '../src/shift.js'
 
@@ -189,13 +197,23 @@ const paid = (id: string, subtotal: number, discount: number, method: 'CASH' | '
 })
 
 describe('summarizeShiftSales', () => {
-  it('keeps voided receipts in gross and separates them (spec §4.3); net = gross − discount − voided (รอ Q3b-4)', () => {
+  it('keeps voided receipts in gross and separates them (spec §4.3); net = gross − discount − voided (Q3b-4 · D52)', () => {
     const s = summarizeShiftSales([
       paid('o1', 10_500, 500, 'CASH'),
       paid('o2', 4_500, 0, 'PROMPTPAY'),
       { ...paid('o3', 9_000, 0, 'CASH'), status: 'voided' },
     ])
-    expect(s).toEqual({ orderCount: 3, voidCount: 1, grossSalesSatang: 24_000, discountSatang: 500, voidedSatang: 9_000, netSalesSatang: 14_500, cashSalesSatang: 19_000, qrSalesSatang: 4_500 })
+    expect(s).toEqual({
+      orderCount: 3, voidCount: 1, grossSalesSatang: 24_000, discountSatang: 500, voidedSatang: 9_000, netSalesSatang: 14_500,
+      cashSalesSatang: 19_000, qrSalesSatang: 4_500, qrRefundedSatang: 0, qrNetSatang: 4_500,
+    })
+  })
+
+  it('QR received / refunded / net: a voided PromptPay receipt was transferred back (Q3b-12 · D53)', () => {
+    const s = summarizeShiftSales([paid('o1', 4_500, 0, 'PROMPTPAY'), { ...paid('o2', 5_000, 0, 'PROMPTPAY'), status: 'voided' }, { ...paid('o3', 4_000, 0, 'CASH'), status: 'voided' }])
+    expect(s).toMatchObject({ qrSalesSatang: 9_500, qrRefundedSatang: 5_000, qrNetSatang: 4_500, voidedSatang: 9_000 })
+    expect(() => assertSalesSummary({ ...s, qrNetSatang: 4_501 })).toThrow(RangeError)
+    expect(() => assertSalesSummary({ ...s, qrRefundedSatang: 9_501, qrNetSatang: -1 })).toThrow(RangeError)
   })
 
   it('refuses an order whose payments or totals do not add up (spec §4.1)', () => {
@@ -204,10 +222,13 @@ describe('summarizeShiftSales', () => {
   })
 
   it('an empty shift is all zeros', () => {
-    expect(summarizeShiftSales([])).toEqual({ orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0 })
+    expect(summarizeShiftSales([])).toEqual({
+      orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0,
+      cashSalesSatang: 0, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0,
+    })
   })
 
-  it('property: the summary always satisfies assertSalesSummary and net = Σ total of receipts still paid', () => {
+  it('property: the summary always satisfies assertSalesSummary; net and QR net = Σ of the receipts still paid', () => {
     const orderArb = fc
       .record({ subtotal: fc.integer({ min: 1, max: 1_000_000 }), discountPct: fc.integer({ min: 0, max: 99 }), voided: fc.boolean(), cash: fc.boolean(), n: fc.nat() })
       .map(({ subtotal, discountPct, voided, cash, n }): ShiftOrder => {
@@ -218,14 +239,16 @@ describe('summarizeShiftSales', () => {
       fc.property(fc.array(orderArb, { maxLength: 60 }), (orders) => {
         const s = summarizeShiftSales(orders)
         assertSalesSummary(s)
-        expect(s.netSalesSatang).toBe(orders.filter((o) => o.status === 'paid').reduce((a, o) => a + o.totalSatang, 0))
+        const kept = orders.filter((o) => o.status === 'paid')
+        expect(s.netSalesSatang).toBe(kept.reduce((a, o) => a + o.totalSatang, 0))
+        expect(s.qrNetSatang).toBe(kept.filter((o) => o.payments[0]!.method === 'PROMPTPAY').reduce((a, o) => a + o.totalSatang, 0))
       }),
     )
   })
 })
 
 describe('tallyCashCount / varianceNeedsReason', () => {
-  it('uses the 9 denominations of spec §5 (รอ Q3b-1), largest first, missing = 0', () => {
+  it('uses the 9 denominations of spec §5, no satang coins (Q3b-1 · D52), largest first, missing = 0', () => {
     expect(CASH_DENOMINATIONS_SATANG).toEqual([100_000, 50_000, 10_000, 5_000, 2_000, 1_000, 500, 200, 100])
     const t = tallyCashCount([{ denominationSatang: 100, count: 3 }, { denominationSatang: 100_000, count: 2 }])
     expect(t.totalSatang).toBe(200_300)
@@ -250,8 +273,23 @@ describe('tallyCashCount / varianceNeedsReason', () => {
   })
 })
 
+describe('recomputeZChain (Q3b-11 · D53)', () => {
+  it('Z count and Σ net of every earlier snapshot', () => {
+    expect(recomputeZChain([])).toEqual({ zNo: 0, grandTotalSatang: 0 })
+    expect(recomputeZChain([4_000, 0, 10_000])).toEqual({ zNo: 3, grandTotalSatang: 14_000 })
+  })
+
+  it('refuses a net that is not a whole, non-negative number', () => {
+    expect(() => recomputeZChain([4_000, -1])).toThrow(RangeError)
+    expect(() => recomputeZChain([Number.NaN])).toThrow(RangeError)
+  })
+})
+
 describe('buildZReport', () => {
-  const sales: SalesSummary = { orderCount: 3, voidCount: 1, grossSalesSatang: 24_000, discountSatang: 500, voidedSatang: 9_000, netSalesSatang: 14_500, cashSalesSatang: 19_000, qrSalesSatang: 4_500 }
+  const sales: SalesSummary = {
+    orderCount: 3, voidCount: 1, grossSalesSatang: 24_000, discountSatang: 500, voidedSatang: 9_000, netSalesSatang: 14_500,
+    cashSalesSatang: 19_000, qrSalesSatang: 4_500, qrRefundedSatang: 0, qrNetSatang: 4_500,
+  }
   const zCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 19_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0 }
   // expected = 50_000 + 19_000 − 9_000 − 2_000 = 58_000
   const input: ZInput = {
@@ -263,6 +301,8 @@ describe('buildZReport', () => {
     varianceAlertSatang: 2_000,
     varianceReason: null,
     voids: [{ orderId: 'o3', receiptNo: 'A-000003', totalSatang: 9_000, method: 'CASH', reason: 'กดผิดเมนู', made: false, approvedBy: 'u1', approvedByName: 'TungAo', refundReference: null, voidedAt: '2026-09-17T05:00:00.000Z' }],
+    bankQrTotalSatang: null,
+    chainWarning: null,
   }
 
   it('computes expected cash, variance and running grand total; normalizes the count lines', () => {
@@ -270,6 +310,7 @@ describe('buildZReport', () => {
     expect(z.snapshot.expectedCashSatang).toBe(58_000)
     expect(z.snapshot.cashVarianceSatang).toBe(0)
     expect(z.snapshot.grandTotalSatang).toBe(10_014_500)
+    expect(z.snapshot.qrDifferenceSatang).toBeNull()
     expect(z.snapshot.countLines).toHaveLength(9)
     expect(z.hash).toBe(zReportHash(z.snapshot))
     expect(z.hash).toHaveLength(64)
@@ -290,6 +331,23 @@ describe('buildZReport', () => {
     expect(z.snapshot).toMatchObject({ cashVarianceSatang: -3_000, varianceReason: 'ทอนผิด' })
   })
 
+  it('freezes the bank-app QR total and the QR difference = bank − QR net (Q3b-12 · D53)', () => {
+    expect(buildZReport({ ...input, bankQrTotalSatang: 4_000 }, null).snapshot).toMatchObject({ bankQrTotalSatang: 4_000, qrDifferenceSatang: -500 })
+    expect(buildZReport({ ...input, bankQrTotalSatang: 4_500 }, null).snapshot.qrDifferenceSatang).toBe(0)
+    expect(() => buildZReport({ ...input, bankQrTotalSatang: -1 }, null)).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, bankQrTotalSatang: 0.5 }, null)).toThrow(RangeError)
+  })
+
+  it('a chain warning is frozen into the Z and must match the recomputed chain it chains from (Q3b-11 · D53)', () => {
+    const w: ZChainWarning = { brokenShiftId: 's0', storedGrandTotalSatang: 999, recomputedGrandTotalSatang: 4_000, acknowledgedBy: 'u1' }
+    const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
+    expect(z.snapshot).toMatchObject({ chainWarning: w, grandTotalSatang: 18_500 })
+    expect(z.hash).toBe(zReportHash(z.snapshot))
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 999 })).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, chainWarning: w }, null)).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, acknowledgedBy: '' } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+  })
+
   it('refuses inconsistent inputs (Plan 1 notes §4)', () => {
     expect(() => buildZReport({ ...input, sales: { ...sales, netSalesSatang: 14_501 } }, null)).toThrow(RangeError)
     expect(() => buildZReport({ ...input, sales: { ...sales, qrSalesSatang: 4_501 } }, null)).toThrow(RangeError)
@@ -298,12 +356,15 @@ describe('buildZReport', () => {
     expect(() => buildZReport({ ...input, voids: [] }, null)).toThrow(RangeError)
     expect(() => buildZReport(input, { zNo: 0, grandTotalSatang: -1 })).toThrow(RangeError)
     expect(() => buildZReport({ ...input, zNo: 3 }, { zNo: 1, grandTotalSatang: 0 })).toThrow(RangeError)
+    // the void list ties to the cash drawer (VOID_REFUND rows) and to the QR refunds
+    expect(() => buildZReport({ ...input, cash: { ...zCash, voidRefundsSatang: 8_999 } }, null)).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, voids: [{ ...input.voids[0]!, method: 'PROMPTPAY' }] }, null)).toThrow(RangeError)
   })
 })
 ```
 
 Run: `pnpm --filter @dayo/domain exec vitest run shift`
-Expected: FAIL — `cashInputsFromMovements is not a function` / `summarizeShiftSales is not a function` (ฟังก์ชันยังไม่มี) และเคส `buildZReport` ตกเพราะรูป `ZInput` ใหม่
+Expected: FAIL — `cashInputsFromMovements is not a function` / `summarizeShiftSales is not a function` / `recomputeZChain is not a function` (ฟังก์ชันยังไม่มี) และเคส `buildZReport` ตกเพราะรูป `ZInput` ใหม่
 
 - [ ] **Step 2: เขียน `packages/domain/src/shift.ts` ใหม่ทั้งไฟล์**
 
@@ -383,9 +444,11 @@ export type ShiftOrder = {
  * - `orderCount` — every receipt of the shift, voided ones included · `voidCount` — the voided ones.
  * - `grossSalesSatang` — Σ subtotal of every receipt (voided included, spec §4.3) · `discountSatang` — Σ discount of the same.
  * - `voidedSatang` — Σ total of the voided receipts.
- * - `netSalesSatang` = gross − discount − voided = Σ total of the receipts still paid (รอ Q3b-4).
+ * - `netSalesSatang` = gross − discount − voided = Σ total of the receipts still paid (Q3b-4 · D52).
  * - `cashSalesSatang` / `qrSalesSatang` — money received by method, voided receipts included (the refund is a
  *   separate VOID_REFUND / transfer back), so cash + qr = gross − discount.
+ * - `qrRefundedSatang` — PromptPay money of the voided receipts, transferred back to the customer (D48 Q3-15) ·
+ *   `qrNetSatang` = qr − qr refunded: what the bank app should show for the shift (Q3b-12 · D53).
  */
 export type SalesSummary = {
   orderCount: number
@@ -396,10 +459,23 @@ export type SalesSummary = {
   netSalesSatang: number
   cashSalesSatang: number
   qrSalesSatang: number
+  qrRefundedSatang: number
+  qrNetSatang: number
 }
 
 export function summarizeShiftSales(orders: readonly ShiftOrder[]): SalesSummary {
-  const s: SalesSummary = { orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0 }
+  const s: SalesSummary = {
+    orderCount: 0,
+    voidCount: 0,
+    grossSalesSatang: 0,
+    discountSatang: 0,
+    voidedSatang: 0,
+    netSalesSatang: 0,
+    cashSalesSatang: 0,
+    qrSalesSatang: 0,
+    qrRefundedSatang: 0,
+    qrNetSatang: 0,
+  }
   for (const o of orders) {
     assertNonNegInt(o.subtotalSatang, 'subtotalSatang')
     assertNonNegInt(o.discountSatang, 'discountSatang')
@@ -410,7 +486,10 @@ export function summarizeShiftSales(orders: readonly ShiftOrder[]): SalesSummary
       assertNonNegInt(p.amountSatang, 'payment amountSatang')
       paid += p.amountSatang
       if (p.method === 'CASH') s.cashSalesSatang += p.amountSatang
-      else s.qrSalesSatang += p.amountSatang
+      else {
+        s.qrSalesSatang += p.amountSatang
+        if (o.status === 'voided') s.qrRefundedSatang += p.amountSatang
+      }
     }
     if (paid !== o.totalSatang) throw new RangeError(`order ${o.id}: payments ${paid} ≠ total ${o.totalSatang} (spec §4.1)`)
     s.orderCount += 1
@@ -421,7 +500,8 @@ export function summarizeShiftSales(orders: readonly ShiftOrder[]): SalesSummary
       s.voidedSatang += o.totalSatang
     }
   }
-  s.netSalesSatang = s.grossSalesSatang - s.discountSatang - s.voidedSatang // (รอ Q3b-4)
+  s.netSalesSatang = s.grossSalesSatang - s.discountSatang - s.voidedSatang // Q3b-4 · D52
+  s.qrNetSatang = s.qrSalesSatang - s.qrRefundedSatang // Q3b-12 · D53
   return s
 }
 
@@ -430,11 +510,13 @@ export function assertSalesSummary(s: SalesSummary): void {
   for (const [k, v] of Object.entries(s)) assertNonNegInt(v, k)
   if (s.voidCount > s.orderCount) throw new RangeError('voidCount > orderCount')
   if (s.discountSatang > s.grossSalesSatang) throw new RangeError('discount > gross')
-  if (s.netSalesSatang !== s.grossSalesSatang - s.discountSatang - s.voidedSatang) throw new RangeError('net ≠ gross − discount − voided') // (รอ Q3b-4)
+  if (s.netSalesSatang !== s.grossSalesSatang - s.discountSatang - s.voidedSatang) throw new RangeError('net ≠ gross − discount − voided') // Q3b-4 · D52
   if (s.cashSalesSatang + s.qrSalesSatang !== s.grossSalesSatang - s.discountSatang) throw new RangeError('cash + qr ≠ gross − discount')
+  if (s.qrRefundedSatang > s.qrSalesSatang || s.qrRefundedSatang > s.voidedSatang) throw new RangeError('qr refunded > qr sales or > voided')
+  if (s.qrNetSatang !== s.qrSalesSatang - s.qrRefundedSatang) throw new RangeError('qr net ≠ qr − qr refunded') // Q3b-12 · D53
 }
 
-/** Notes and coins counted at shift close, largest first, in satang — spec §5 table 1000/500/100/50/20/10/5/2/1 (รอ Q3b-1). */
+/** Notes and coins counted at shift close, largest first, in satang — spec §5 table 1000/500/100/50/20/10/5/2/1, no satang coins (Q3b-1 · D52). */
 export const CASH_DENOMINATIONS_SATANG: readonly number[] = [100_000, 50_000, 10_000, 5_000, 2_000, 1_000, 500, 200, 100]
 export const MAX_PIECES_PER_DENOMINATION = 99_999
 
@@ -479,6 +561,21 @@ export type ZVoid = {
   voidedAt: string
 }
 
+/**
+ * Q3b-11 · D53: the previous Z of this device failed its hash check, and an owner acknowledged it with their PIN.
+ * Frozen into the new Z for good (it is part of the hashed snapshot) and shown wherever that Z is shown.
+ */
+export type ZChainWarning = {
+  /** Shift of the previous Z whose snapshot no longer matches its hash. */
+  brokenShiftId: string
+  /** The grand total that broken snapshot claims (not trusted — null if it is not even a whole number). */
+  storedGrandTotalSatang: number | null
+  /** Σ net of every earlier Z snapshot of this device, in `zNo` order (`recomputeZChain`) — what this Z chains from. */
+  recomputedGrandTotalSatang: number
+  /** The owner who acknowledged the broken chain with their PIN. */
+  acknowledgedBy: string
+}
+
 export type ZInput = {
   shiftId: string
   businessDate: string
@@ -487,10 +584,10 @@ export type ZInput = {
   zNo: number
   openedAt: string
   openedBy: string
-  /** "เปิดกะด่วน" (spec §4.8, รอ Q3b-10). */
+  /** "เปิดกะด่วน" (spec §4.8 · Q3b-10 · D52). */
   openedQuick: boolean
   closedAt: string
-  /** The owner who confirmed the close (รอ Q3b-2). */
+  /** The owner who confirmed the close with their PIN (Q3b-2 · D52). */
   closedBy: string
   /** The signed-in user who counted the drawer. */
   countedBy: string
@@ -501,9 +598,19 @@ export type ZInput = {
   varianceAlertSatang: number
   varianceReason: string | null
   voids: ZVoid[]
+  /** PromptPay total the owner read from the bank app for this shift, or null when not entered (Q3b-12 · D53). */
+  bankQrTotalSatang: number | null
+  /** Set when the previous Z failed its hash check (Q3b-11 · D53); null otherwise. */
+  chainWarning: ZChainWarning | null
 }
 
-export type ZSnapshot = ZInput & { expectedCashSatang: number; cashVarianceSatang: number; grandTotalSatang: number }
+export type ZSnapshot = ZInput & {
+  expectedCashSatang: number
+  cashVarianceSatang: number
+  /** bank − net QR (Q3b-12 · D53) · null when no bank total was entered. */
+  qrDifferenceSatang: number | null
+  grandTotalSatang: number
+}
 
 /** Hash of a Z snapshot (or of any JSON read back from `z_report.snapshot_json`) — invariant 6 of spec §7. */
 export function zReportHash(snapshot: unknown): string {
@@ -511,10 +618,26 @@ export function zReportHash(snapshot: unknown): string {
 }
 
 /**
+ * Q3b-11 · D53: when the previous Z fails its hash, the chain is rebuilt from every earlier Z snapshot of the device
+ * (in `zNo` order): the Z count and Σ net. A healthy chain gives exactly the stored values of the last Z
+ * (Z(n).grand = Σ net of Z1…Zn, Z(n).zNo = n), so this only differs where a snapshot's stored total was edited.
+ */
+export function recomputeZChain(netSalesSatang: readonly number[]): { zNo: number; grandTotalSatang: number } {
+  let grand = 0
+  for (const [i, net] of netSalesSatang.entries()) {
+    assertNonNegInt(net, `net of Z #${i + 1}`)
+    grand += net
+  }
+  assertSafeInt(grand, 'grandTotalSatang')
+  return { zNo: netSalesSatang.length, grandTotalSatang: grand }
+}
+
+/**
  * Frozen Z report: computed once at shift close, never recomputed (spec §4.8). Refuses an inconsistent input
- * (Plan 1 notes §4): sales relations, cash sales on both sides, the count total, the void list, and a missing reason
- * when the variance is above the alert threshold. Z(n).grand = Z(n−1).grand + net of this shift, chained on `zNo`
- * (the previous Z's snapshot), never on the clock — a device clock can be wrong and later corrected.
+ * (Plan 1 notes §4): sales relations, cash sales on both sides, the count total, the void list (count, total, cash
+ * voids = VOID_REFUND rows, QR voids = QR refunded), and a missing reason when the variance is above the alert
+ * threshold. Z(n).grand = Z(n−1).grand + net of this shift, chained on `zNo` (the previous Z's snapshot), never on the
+ * clock — a device clock can be wrong and later corrected. With a `chainWarning`, `prev` is the recomputed chain.
  */
 export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatang: number } | null): { snapshot: ZSnapshot; hash: string } {
   const prevZNo = prev?.zNo ?? 0
@@ -529,6 +652,16 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
   if (tally.totalSatang !== input.countedCashSatang) throw new RangeError('countedCashSatang must equal the sum of countLines')
   if (input.voids.length !== input.sales.voidCount) throw new RangeError('voids must list every voided receipt')
   if (input.voids.reduce((a, v) => a + v.totalSatang, 0) !== input.sales.voidedSatang) throw new RangeError('Σ voids.totalSatang must equal sales.voidedSatang')
+  const voidSum = (method: ZVoid['method']): number => input.voids.filter((v) => v.method === method).reduce((a, v) => a + v.totalSatang, 0)
+  if (voidSum('CASH') !== input.cash.voidRefundsSatang) throw new RangeError('Σ cash voids must equal cash.voidRefundsSatang (D36)')
+  if (voidSum('PROMPTPAY') !== input.sales.qrRefundedSatang) throw new RangeError('Σ PromptPay voids must equal sales.qrRefundedSatang')
+  if (input.bankQrTotalSatang !== null) assertNonNegInt(input.bankQrTotalSatang, 'bankQrTotalSatang')
+  const w = input.chainWarning
+  if (w !== null) {
+    if (w.brokenShiftId === '' || w.acknowledgedBy === '') throw new RangeError('chainWarning needs the broken shift and the acknowledging owner')
+    if (w.storedGrandTotalSatang !== null) assertSafeInt(w.storedGrandTotalSatang, 'chainWarning.storedGrandTotalSatang')
+    if (prev === null || w.recomputedGrandTotalSatang !== prevGrand) throw new RangeError('with a chainWarning, prev must be the recomputed chain')
+  }
   const expected = expectedCashSatang(input.cash)
   const variance = input.countedCashSatang - expected
   const reason = input.varianceReason?.trim() ?? ''
@@ -541,6 +674,7 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     varianceReason: reason === '' ? null : reason,
     expectedCashSatang: expected,
     cashVarianceSatang: variance,
+    qrDifferenceSatang: input.bankQrTotalSatang === null ? null : input.bankQrTotalSatang - input.sales.qrNetSatang,
     grandTotalSatang: prevGrand + input.sales.netSalesSatang,
   }
   return { snapshot, hash: zReportHash(snapshot) }
@@ -550,7 +684,7 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
 - [ ] **Step 3: รันให้ผ่าน**
 
 Run: `pnpm --filter @dayo/domain test && pnpm --filter @dayo/domain typecheck`
-Expected: PASS ทุกไฟล์ (เดิม 99 เทสต์ → 110) · typecheck สะอาด
+Expected: PASS ทุกไฟล์ (เดิม 99 เทสต์ → 115) · typecheck สะอาด
 
 - [ ] **Step 4: Commit**
 
@@ -570,7 +704,7 @@ git commit -m "feat(domain): shift sales summary, drawer count and a validated z
 
 **Interfaces:**
 - Consumes: `voidOrder` (แผน 3 Task 13) · `commitSale` (แผน 3 Task 10) · test helpers `openReadyApi`, `sellSku`, `PINS`
-- Produces: `REASON_MAX_LENGTH = 200` (export จาก `apps/pos/src/api/types.ts`) — Task 4, 6, 10 ใช้ต่อ · `voidOrder`/`commitSale` throw `BAD_INPUT` เมื่อเหตุผลหลัง trim ยาวเกิน 200
+- Produces: `REASON_MAX_LENGTH = 200` (export จาก `apps/pos/src/api/types.ts`) — Task 4, 6, 10, 11 ใช้ต่อ · `voidOrder`/`commitSale` throw `BAD_INPUT` เมื่อเหตุผลหลัง trim ยาวเกิน 200
 
 - [ ] **Step 1: เขียนเทสต์ให้ตก**
 
@@ -658,7 +792,7 @@ git commit -m "fix(pos): cap void and discount reasons at 200 characters"
 
 ---
 
-### Task 3: เปิดกะด่วน — เจ้าของเท่านั้น · เงินทอน 0 · บันทึกแยก (spec §4.8 · M18 · รอ Q3b-10)
+### Task 3: เปิดกะด่วน — เจ้าของเท่านั้น · เงินทอน 0 · บันทึกแยก (spec §4.8 · M18 · Q3b-10 · D52)
 
 **Files:**
 - Modify: `apps/pos/src/api/shift.ts` (แทนทั้งไฟล์), `apps/pos/src/api/types.ts`, `apps/pos/src/api/pos-api.ts`
@@ -680,7 +814,7 @@ import * as s from '@dayo/db-schema/sqlite'
 import { hashPin } from '../src/lib/pin'
 import { openTestApi, TEST_PIN_COST, TEST_SETUP } from './helpers/db'
 
-describe('quickOpenShift (spec §4.8 "เปิดกะด่วน" · plan 3 M18 · รอ Q3b-10)', () => {
+describe('quickOpenShift (spec §4.8 "เปิดกะด่วน" · plan 3 M18 · Q3b-10 · D52)', () => {
   it('an owner opens with a 0 float; a quick_open audit row is written in the same transaction; the shift syncs like any other', async () => {
     const t = await openTestApi()
     await t.api.setupShop(TEST_SETUP)
@@ -729,7 +863,7 @@ import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import type { OpenShiftInput, QuickOpenShiftInput, ShiftDto } from './types'
 
-/** audit_log action that marks a "เปิดกะด่วน" (spec §4.8 · plan 3 M18 · รอ Q3b-10). */
+/** audit_log action that marks a "เปิดกะด่วน" (spec §4.8 · plan 3 M18 · Q3b-10 · D52). */
 export const QUICK_OPEN_ACTION = 'quick_open'
 
 async function requireActiveUser(db: RemoteDb, userId: string): Promise<typeof s.user.$inferSelect> {
@@ -774,7 +908,7 @@ export async function openShift(db: RemoteDb, deps: ApiDeps, input: OpenShiftInp
 /**
  * spec §4.8 "เปิดกะด่วน": an owner opens the shift with a 0 float without counting the drawer. The shift row is the
  * same as a normal one; the separate record is an audit_log row `shift / quick_open` in the same transaction, and the
- * Z report of this shift carries `openedQuick: true` (รอ Q3b-10).
+ * Z report of this shift carries `openedQuick: true` (Q3b-10 · D52).
  */
 export async function quickOpenShift(db: RemoteDb, deps: ApiDeps, input: QuickOpenShiftInput): Promise<ShiftDto> {
   const device = await requireDevice(db)
@@ -812,7 +946,7 @@ export async function wasQuickOpened(db: RemoteDb, shiftId: string): Promise<boo
 แก้ `apps/pos/src/api/types.ts`:
 - ต่อจากบรรทัด `export type OpenShiftInput = { userId: string; openingFloatSatang: number }` เพิ่ม:
 ```ts
-/** "เปิดกะด่วน" (spec §4.8): owner only, float 0 (รอ Q3b-10). */
+/** "เปิดกะด่วน" (spec §4.8): owner only, float 0 (Q3b-10 · D52). */
 export type QuickOpenShiftInput = { userId: string }
 ```
 - ใน `interface PosApi` ต่อจาก `voidOrder(input: VoidOrderInput): Promise<OrderDetailDto>` เพิ่ม `quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>`
@@ -843,7 +977,7 @@ export const POS_API_METHODS = [
 - [ ] **Step 4: รันให้ผ่าน**
 
 Run: `pnpm --filter @dayo/pos test && pnpm --filter @dayo/pos typecheck`
-Expected: PASS ทั้งหมด รวม `shift.test.ts` เดิม 4 เทสต์ (พฤติกรรม `openShift` ไม่เปลี่ยน)
+Expected: PASS ทั้งหมด (96 เทสต์) รวม `shift.test.ts` เดิม 4 เทสต์ (พฤติกรรม `openShift` ไม่เปลี่ยน)
 
 - [ ] **Step 5: Commit**
 
@@ -855,7 +989,7 @@ git commit -m "feat(pos): quick shift open for owners with a zero float and an a
 
 ---
 
-### Task 4: บันทึกเงินเข้า / จ่ายออก / นำเงินไปเก็บ (`recordCashMovement` — spec §3.5 · รอ Q3b-9) 💰 review: opus
+### Task 4: บันทึกเงินเข้า / จ่ายออก / นำเงินไปเก็บ (`recordCashMovement` — spec §3.5 · Q3b-9 · D52) 💰 review: opus
 
 **Files:**
 - Create: `apps/pos/src/api/cash.ts`
@@ -880,7 +1014,7 @@ import { openReadyApi, openTestApi, TEST_SETUP, type ReadyApi } from './helpers/
 
 const input = (t: ReadyApi, patch: Partial<CashMovementInput> = {}): CashMovementInput => ({ actorUserId: t.owner.id, kind: 'PAID_OUT', amountSatang: 12_000, reason: 'ซื้อน้ำแข็ง', ...patch })
 
-describe('recordCashMovement (spec §3.5 · รอ Q3b-9)', () => {
+describe('recordCashMovement (spec §3.5 · Q3b-9 · D52)', () => {
   it('writes PAID_IN / PAID_OUT / DROP into the open shift with its outbox row', async () => {
     const t = await openReadyApi()
     const out = await t.api.recordCashMovement(input(t, { reason: '  ซื้อน้ำแข็ง  ' }))
@@ -945,7 +1079,7 @@ export function toCashMovementDto(r: typeof s.cashMovement.$inferSelect): CashMo
 }
 
 /**
- * spec §3.5: PAID_IN / PAID_OUT / DROP are typed in by a person, with a reason, into the open shift (รอ Q3b-9).
+ * spec §3.5: PAID_IN / PAID_OUT / DROP are typed in by a person, with a reason, into the open shift (Q3b-9 · D52).
  * VOID_REFUND is never accepted here — voidOrder writes it (D36). One transaction: cash_movement + outbox.
  */
 export async function recordCashMovement(db: RemoteDb, deps: ApiDeps, input: CashMovementInput): Promise<CashMovementDto> {
@@ -987,7 +1121,7 @@ export async function recordCashMovement(db: RemoteDb, deps: ApiDeps, input: Cas
 - แทนบรรทัดแรก `import type { UserRole } from '@dayo/contracts'` ด้วย `import type { CashMovementKind, UserRole } from '@dayo/contracts'`
 - เหนือคอมเมนต์ `/** Everything the UI may ask of the on-device database. …` เพิ่ม:
 ```ts
-/** A paid-in / paid-out / drop typed in by a person (spec §3.5 · รอ Q3b-9). VOID_REFUND is written by voidOrder only. */
+/** A paid-in / paid-out / drop typed in by a person (spec §3.5 · Q3b-9 · D52). VOID_REFUND is written by voidOrder only. */
 export type CashMovementInput = { actorUserId: string; kind: 'PAID_IN' | 'PAID_OUT' | 'DROP'; amountSatang: number; reason: string }
 export type CashMovementDto = { id: string; kind: CashMovementKind; amountSatang: number; orderId: string | null; reason: string | null; createdBy: string; createdAt: string }
 
@@ -1005,7 +1139,7 @@ export type CashMovementDto = { id: string; kind: CashMovementKind; amountSatang
 - [ ] **Step 4: รันให้ผ่าน**
 
 Run: `pnpm --filter @dayo/pos test && pnpm --filter @dayo/pos typecheck`
-Expected: PASS ทั้งหมด · ถ้า insert ตกด้วย CHECK `cash_movement_void_refund_order_ck` แปลว่าส่ง `orderId` ไม่เป็น `null` — แก้โค้ด ห้ามแก้ schema
+Expected: PASS ทั้งหมด (98 เทสต์) · ถ้า insert ตกด้วย CHECK `cash_movement_void_refund_order_ck` แปลว่าส่ง `orderId` ไม่เป็น `null` — แก้โค้ด ห้ามแก้ schema
 
 - [ ] **Step 5: Commit**
 
@@ -1076,7 +1210,7 @@ import { openReadyApi, openTestApi, TEST_SETUP } from './helpers/db'
 import { sellVoidScenario } from './helpers/shift'
 
 describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)', () => {
-  it('sums sales, cash and voids of the open shift exactly (D36 · spec §4.3 · รอ Q3b-4)', async () => {
+  it('sums sales, cash and voids of the open shift exactly (D36 · spec §4.3 · Q3b-4 · D52)', async () => {
     const t = await openReadyApi()
     const sc = await sellVoidScenario(t)
     const before = await t.db.select().from(s.outbox).all()
@@ -1085,7 +1219,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
 
     expect(x.shift).toMatchObject({ id: t.shift.id, openedByName: 'TungAo', openedQuick: false, openingFloatSatang: 50_000 })
     expect(x.generatedAt).toBe('2026-09-17T03:01:00.000Z')
-    expect(x.sales).toEqual({ orderCount: 3, voidCount: 2, grossSalesSatang: 18_500, discountSatang: 500, voidedSatang: 14_000, netSalesSatang: 4_000, cashSalesSatang: 13_000, qrSalesSatang: 5_000 })
+    expect(x.sales).toEqual({ orderCount: 3, voidCount: 2, grossSalesSatang: 18_500, discountSatang: 500, voidedSatang: 14_000, netSalesSatang: 4_000, cashSalesSatang: 13_000, qrSalesSatang: 5_000, qrRefundedSatang: 5_000, qrNetSatang: 0 })
     expect(x.cash).toEqual({ openingFloatSatang: 50_000, cashSalesSatang: 13_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0 })
     expect(x.expectedCashSatang).toBe(52_000)
     expect(x.varianceAlertSatang).toBe(2_000) // spec §3.1 default — no setting row yet
@@ -1114,7 +1248,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
     expect(x.voids).toEqual([])
   })
 
-  it('shows a quick-opened shift (รอ Q3b-10) and needs an open shift', async () => {
+  it('shows a quick-opened shift (Q3b-10 · D52) and needs an open shift', async () => {
     const t = await openTestApi()
     await t.api.setupShop(TEST_SETUP)
     const { users } = await t.api.bootstrap()
@@ -1294,7 +1428,7 @@ export type ShiftReportDto = {
 - [ ] **Step 4: รันให้ผ่าน**
 
 Run: `pnpm --filter @dayo/pos test && pnpm --filter @dayo/pos typecheck`
-Expected: PASS ทั้งหมด · ตัวเลขใน `sellVoidScenario` คิดมือแล้ว: gross 185 · ส่วนลด 5 · ยกเลิก 140 · net 40 · เงินสด 130 · QR 50 · ควรมี 500 + 130 − 90 − 20 = ฿520 · ถ้าเบสติดลบไม่ตรง `PB-SYRUP −47200` / `PB-TEA-THAI −260000` ให้ตรวจสูตรใน seed (`Original`/`Latte` 16oz 50%) ก่อนแก้โค้ด
+Expected: PASS ทั้งหมด (102 เทสต์) · ตัวเลขใน `sellVoidScenario` คิดมือแล้ว: gross 185 · ส่วนลด 5 · ยกเลิก 140 · net 40 · เงินสด 130 · QR 50 (โอนคืน 50 · สุทธิ 0) · ควรมี 500 + 130 − 90 − 20 = ฿520 · ถ้าเบสติดลบไม่ตรง `PB-SYRUP −47200` / `PB-TEA-THAI −260000` ให้ตรวจสูตรใน seed (`Original`/`Latte` 16oz 50%) ก่อนแก้โค้ด
 
 - [ ] **Step 5: Commit**
 
@@ -1314,12 +1448,13 @@ git commit -m "feat(pos): live x report with drawer cash, daily voids and negati
 - Test: `apps/pos/test/close-shift.test.ts` (ใหม่)
 
 **Interfaces:**
-- Consumes: `buildZReport`, `tallyCashCount`, `varianceNeedsReason`, `zReportHash`, `ZSnapshot`, `CashCountLine` (Task 1) · `buildShiftReport` (Task 5) · `requireOwnerPin` (แผน 3 — ตัวนับ PIN ผิด D50 Q3-21) · `REASON_MAX_LENGTH` (Task 2) · `enqueueOutbox` · `sellVoidScenario`, `COUNT_520` (Task 5)
+- Consumes: `buildZReport`, `recomputeZChain`, `tallyCashCount`, `varianceNeedsReason`, `zReportHash`, `ZSnapshot`, `ZChainWarning`, `CashCountLine` (Task 1) · `buildShiftReport` (Task 5) · `requireOwnerPin` (แผน 3 — ตัวนับ PIN ผิด D50 Q3-21) · `REASON_MAX_LENGTH` (Task 2) · `enqueueOutbox` · `sellVoidScenario`, `COUNT_520` (Task 5)
 - Produces:
-  - `types.ts`: `CloseShiftInput = { actorUserId; approverUserId; approverPin; countLines: CashCountLine[]; shownExpectedCashSatang: number; varianceReason: string | null }` · `ZReportDto = { id; shiftId; createdAt; hash; hashOk: boolean; snapshot: ZSnapshot }` · `ZReportSummaryDto = { shiftId; businessDate; zNo; closedAt; netSalesSatang; cashVarianceSatang; openedQuick; hashOk }` · `PosApi.closeShift(input): Promise<ZReportDto>` · `listZReports(): Promise<ZReportSummaryDto[]>` (เรียงตาม `zNo` ไม่ใช้เวลา) · `getZReport(shiftId): Promise<ZReportDto>`
-  - `errors.ts`: `SHIFT_CHANGED` (detail `shown <X>, now <Y>`) · `VARIANCE_REASON_REQUIRED` · `Z_NOT_FOUND`
+  - `types.ts`: `CloseShiftInput = { actorUserId; approverUserId; approverPin; countLines: CashCountLine[]; shownExpectedCashSatang: number; varianceReason: string | null; bankQrTotalSatang: number | null; acknowledgeZChainBroken: boolean }` · `ZReportDto = { id; shiftId; createdAt; hash; hashOk: boolean; snapshot: ZSnapshot }` · `ZReportSummaryDto = { shiftId; businessDate; zNo; closedAt; netSalesSatang; cashVarianceSatang; openedQuick; hashOk; chainWarning: boolean }` · `PosApi.closeShift(input): Promise<ZReportDto>` · `listZReports(): Promise<ZReportSummaryDto[]>` (เรียงตาม `zNo` ไม่ใช้เวลา) · `getZReport(shiftId): Promise<ZReportDto>`
+  - `errors.ts`: `SHIFT_CHANGED` (detail `shown <X>, now <Y>`) · `VARIANCE_REASON_REQUIRED` · `Z_NOT_FOUND` · `Z_CHAIN_BROKEN` (detail = shiftId ของ Z ที่แฮชไม่ตรง — Q3b-11 · D53)
+  - `close.ts`: `closeShift` · `listZReports` · `getZReport` · `deviceZRows(db, deviceId)` (Task 7 ใช้) · `Z_CHAIN_ACK_ACTION = 'z_chain_broken_ack'`
   - `outbox.ts`: `OutboxTable` + `'cash_count' | 'z_report'`
-  - ผลใน DB (1 transaction): `cash_count` + outbox `cash_count:<id>` · `z_report` (snapshot + hash) + outbox `z_report:<id>` · UPDATE `shift` → `closed` + outbox `shift:<id>:closed` · ลำดับตรวจ: นับเงิน → ความยาวเหตุผล → ผู้ใช้ → PIN เจ้าของ (นอก transaction) → กะเปิด → `SHIFT_CHANGED` → เหตุผลส่วนต่าง → Z ก่อนหน้าแฮชตรง → `buildZReport`
+  - ผลใน DB (1 transaction): `cash_count` + outbox `cash_count:<id>` · `z_report` (snapshot + hash) + outbox `z_report:<id>` · (ถ้ารับทราบ Z เสีย) `audit_log { entity: 'z_report', entityId: <z id>, action: 'z_chain_broken_ack', beforeJson: { brokenShiftId, storedGrandTotalSatang }, afterJson: { zNo, recomputedGrandTotalSatang }, actorUserId: <เจ้าของ> }` · UPDATE `shift` → `closed` + outbox `shift:<id>:closed` · ลำดับตรวจ: นับเงิน → ยอดแอปธนาคาร → ความยาวเหตุผล → ผู้ใช้ → PIN เจ้าของ (นอก transaction) → กะเปิด → `SHIFT_CHANGED` → เหตุผลส่วนต่าง → Z ก่อนหน้า (แฮชไม่ตรงและยังไม่รับทราบ → `Z_CHAIN_BROKEN`) → `buildZReport`
 
 - [ ] **Step 1: เขียนเทสต์ให้ตก**
 
@@ -1335,7 +1470,7 @@ import { openReadyApi, PINS, sellSku, TEST_PIN_COST, type ReadyApi } from './hel
 import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
 function closeInput(t: ReadyApi, patch: Partial<CloseShiftInput> = {}): CloseShiftInput {
-  return { actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, countLines: COUNT_520, shownExpectedCashSatang: 52_000, varianceReason: null, ...patch }
+  return { actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, countLines: COUNT_520, shownExpectedCashSatang: 52_000, varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: false, ...patch }
 }
 
 function counts(t: ReadyApi): Record<string, number> {
@@ -1365,13 +1500,16 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
       closedAt: '2026-09-17T13:05:00.000Z',
       closedBy: t.owner.id,
       countedBy: t.other.id,
-      sales: { orderCount: 3, voidCount: 2, grossSalesSatang: 18_500, discountSatang: 500, voidedSatang: 14_000, netSalesSatang: 4_000, cashSalesSatang: 13_000, qrSalesSatang: 5_000 },
+      sales: { orderCount: 3, voidCount: 2, grossSalesSatang: 18_500, discountSatang: 500, voidedSatang: 14_000, netSalesSatang: 4_000, cashSalesSatang: 13_000, qrSalesSatang: 5_000, qrRefundedSatang: 5_000, qrNetSatang: 0 },
       cash: { openingFloatSatang: 50_000, cashSalesSatang: 13_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0 },
       countedCashSatang: 52_000,
       expectedCashSatang: 52_000,
       cashVarianceSatang: 0,
       varianceAlertSatang: 2_000,
       varianceReason: null,
+      bankQrTotalSatang: null,
+      qrDifferenceSatang: null,
+      chainWarning: null,
       grandTotalSatang: 4_000,
     })
     expect(z.snapshot.countLines).toHaveLength(9)
@@ -1390,7 +1528,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     const boot = await t.api.bootstrap()
     expect(boot.openShift).toBeNull()
     expect(await t.api.getZReport(t.shift.id)).toEqual(z)
-    expect(await t.api.listZReports()).toEqual([{ shiftId: t.shift.id, businessDate: '2026-09-17', zNo: 1, closedAt: '2026-09-17T13:05:00.000Z', netSalesSatang: 4_000, cashVarianceSatang: 0, openedQuick: false, hashOk: true }])
+    expect(await t.api.listZReports()).toEqual([{ shiftId: t.shift.id, businessDate: '2026-09-17', zNo: 1, closedAt: '2026-09-17T13:05:00.000Z', netSalesSatang: 4_000, cashVarianceSatang: 0, openedQuick: false, hashOk: true, chainWarning: false }])
     // after the close: no selling, no void, no second close (spec §4.8, D47 ข้อ 2)
     await expect(sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })).rejects.toThrow(/^NO_OPEN_SHIFT: /)
     await expect(t.api.voidOrder({ orderId: sc.cashKept.orderId, actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, reason: 'x', made: false, refundReference: null })).rejects.toThrow(/^VOID_NOT_ALLOWED: /)
@@ -1462,6 +1600,19 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     }
   })
 
+
+  it('freezes the bank-app PromptPay total and the QR difference — optional, never blocks (Q3b-12 · D53)', async () => {
+    const t = await openReadyApi()
+    await sellVoidScenario(t) // QR ฿50 received and ฿50 transferred back
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // + ฿50 → received ฿100 · refunded ฿50 · net ฿50
+    await expect(t.api.closeShift(closeInput(t, { bankQrTotalSatang: -1 }))).rejects.toThrow(/^BAD_INPUT: /)
+    await expect(t.api.closeShift(closeInput(t, { bankQrTotalSatang: 10.5 }))).rejects.toThrow(/^BAD_INPUT: /)
+    // acknowledging when nothing is broken changes nothing
+    const z = await t.api.closeShift(closeInput(t, { bankQrTotalSatang: 4_500, acknowledgeZChainBroken: true }))
+    expect(z.snapshot.sales).toMatchObject({ qrSalesSatang: 10_000, qrRefundedSatang: 5_000, qrNetSatang: 5_000 })
+    expect(z.snapshot).toMatchObject({ bankQrTotalSatang: 4_500, qrDifferenceSatang: -500, chainWarning: null })
+  })
+
   it('the Z report is append-only in the DB, and a tampered snapshot fails its hash (spec §7 invariant 6)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
@@ -1472,10 +1623,55 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     t.raw.exec('DROP TRIGGER z_report_no_update')
     t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.sales.netSalesSatang', 1)`).run()
     expect((await t.api.getZReport(t.shift.id)).hashOk).toBe(false)
-    // and the next close refuses to chain its grand total onto it
+    expect(await t.api.listZReports()).toMatchObject([{ hashOk: false, chainWarning: false }])
+  })
+
+  it('a previous Z that fails its hash: Z_CHAIN_BROKEN until an owner acknowledges with their PIN, then the new Z chains from the recomputed total and is flagged for good (Q3b-11 · D53)', async () => {
+    const t = await openReadyApi()
+    await sellVoidScenario(t)
+    const z1 = await t.api.closeShift(closeInput(t)) // net ฿40 → grand ฿40
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.grandTotalSatang', 999)`).run() // the stored total is edited
+
     t.clock.set('2026-09-18T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await expect(t.api.closeShift({ ...closeInput(t), countLines: [], shownExpectedCashSatang: 0 })).rejects.toThrow(/^BAD_INPUT: .*hash/)
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // net ฿50
+    const next = { ...closeInput(t), countLines: [], shownExpectedCashSatang: 0 }
+    const before = counts(t)
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z1.shiftId}$`))
+    await expect(t.api.closeShift({ ...next, acknowledgeZChainBroken: true, approverPin: '9999' })).rejects.toThrow(/^PIN_WRONG: /)
+    expect(counts(t)).toEqual(before) // nothing written until the owner acknowledges with a correct PIN
+
+    const z2 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    expect(z2.hashOk).toBe(true)
+    expect(z2.snapshot).toMatchObject({
+      zNo: 2,
+      grandTotalSatang: 4_000 + 5_000, // recomputed Σ net of the earlier snapshots (฿40), never the edited 999
+      chainWarning: { brokenShiftId: z1.shiftId, storedGrandTotalSatang: 999, recomputedGrandTotalSatang: 4_000, acknowledgedBy: t.owner.id },
+    })
+    const ack = (await t.db.select().from(s.auditLog).all()).filter((a) => a.action === 'z_chain_broken_ack')
+    expect(ack).toEqual([
+      {
+        id: expect.any(String),
+        entity: 'z_report',
+        entityId: z2.id,
+        action: 'z_chain_broken_ack',
+        beforeJson: { brokenShiftId: z1.shiftId, storedGrandTotalSatang: 999 },
+        afterJson: { zNo: 2, recomputedGrandTotalSatang: 4_000 },
+        actorUserId: t.owner.id,
+        at: '2026-09-18T02:00:00.000Z',
+      },
+    ])
+    expect((await t.api.listZReports()).map((z) => [z.zNo, z.hashOk, z.chainWarning])).toEqual([
+      [2, true, true],
+      [1, false, false],
+    ])
+
+    // the flagged Z itself is intact, so the next close chains from it normally, without a new warning
+    t.clock.set('2026-09-19T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    const z3 = await t.api.closeShift({ ...closeInput(t), countLines: [], shownExpectedCashSatang: 0 })
+    expect(z3.snapshot).toMatchObject({ zNo: 3, grandTotalSatang: 9_000, chainWarning: null })
   })
 })
 ```
@@ -1490,6 +1686,7 @@ Expected: FAIL — `t.api.closeShift is not a function`
   | 'SHIFT_CHANGED' // closeShift: the expected cash moved after the screen showed it — detail "shown <X>, now <Y>"
   | 'VARIANCE_REASON_REQUIRED' // spec §4.8: over/short above cash.variance_alert_satang
   | 'Z_NOT_FOUND'
+  | 'Z_CHAIN_BROKEN' // Q3b-11 · D53: the previous Z fails its hash — detail = its shiftId; retry with acknowledgeZChainBroken
 ```
 
 แก้ `apps/pos/src/ui/th.ts` — ต่อจากบรรทัด `  errRefundRefRequired: 'ต้องใส่เลขอ้างอิงการโอนคืน',` เพิ่ม:
@@ -1497,6 +1694,7 @@ Expected: FAIL — `t.api.closeShift is not a function`
   errShiftChanged: 'ยอดในกะเปลี่ยนระหว่างนับเงิน — ดูยอดใหม่แล้วยืนยันอีกครั้ง',
   errVarianceReasonRequired: 'เงินขาด/เกินเกินเกณฑ์ ต้องใส่เหตุผล',
   errZNotFound: 'ไม่พบรายงาน Z',
+  errZChainBroken: 'รายงาน Z ใบก่อนหน้าถูกแก้ไขหรือไฟล์เสีย (ลายเซ็นไม่ตรง) — เจ้าของกรอก PIN อีกครั้งเพื่อรับทราบ แล้วปิดกะต่อได้ (Z ใบนี้จะมีป้ายเตือนถาวร)',
 ```
 
 แก้ `apps/pos/src/ui/errors.ts` — ใน `MESSAGES` ต่อจาก `  VOID_NOT_ALLOWED: TH.errVoidNotAllowed,` เพิ่ม:
@@ -1504,6 +1702,7 @@ Expected: FAIL — `t.api.closeShift is not a function`
   SHIFT_CHANGED: TH.errShiftChanged,
   VARIANCE_REASON_REQUIRED: TH.errVarianceReasonRequired,
   Z_NOT_FOUND: TH.errZNotFound,
+  Z_CHAIN_BROKEN: TH.errZChainBroken,
 ```
 
 แก้ `apps/pos/src/db/outbox.ts` — แทนบรรทัด `export type OutboxTable = …` ด้วย:
@@ -1517,7 +1716,7 @@ export type OutboxTable = 'order' | 'order_line' | 'payment' | 'discount' | 'ord
 import { desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { buildZReport, tallyCashCount, varianceNeedsReason, zReportHash, type ZSnapshot } from '@dayo/domain'
+import { buildZReport, recomputeZChain, tallyCashCount, varianceNeedsReason, zReportHash, type ZChainWarning, type ZSnapshot } from '@dayo/domain'
 import { enqueueOutbox } from '../db/outbox'
 import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
@@ -1525,6 +1724,9 @@ import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { buildShiftReport } from './shift-report'
 import { REASON_MAX_LENGTH, type CloseShiftInput, type ZReportDto, type ZReportSummaryDto } from './types'
+
+/** audit_log action written when an owner acknowledges a previous Z that fails its hash (Q3b-11 · D53). */
+export const Z_CHAIN_ACK_ACTION = 'z_chain_broken_ack'
 
 type ZRow = typeof s.zReport.$inferSelect
 
@@ -1534,7 +1736,7 @@ function toZReportDto(row: ZRow): ZReportDto {
 }
 
 /** Newest first by `zNo` (the frozen snapshot), never by `created_at` — a device clock can be wrong and later
- * corrected, and the grand-total chain must not depend on it (see domain `buildZReport`). Exported for Task 7. */
+ * corrected, and the grand-total chain must not depend on it (see domain `buildZReport`). Exported for backup.ts. */
 export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRow[]> {
   const rows = await db
     .select({ z: s.zReport })
@@ -1546,21 +1748,40 @@ export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRow[
   return rows.map((r) => r.z)
 }
 
-/** Z(n).zNo = Z(n−1).zNo + 1 and Z(n).grand = Z(n−1).grand + net (spec §4.8) — the previous Z of this device, or
- * null for the first one. */
-async function previousZ(db: RemoteDb, deviceId: string): Promise<{ zNo: number; grandTotalSatang: number } | null> {
-  const last = (await deviceZRows(db, deviceId))[0]
-  if (last === undefined) return null
+/** A number read from a snapshot that may have been edited by hand — null unless it is a safe integer. */
+function safeIntOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isSafeInteger(v) ? v : null
+}
+
+type ZChain = { prev: { zNo: number; grandTotalSatang: number } | null; broken: { shiftId: string; storedGrandTotalSatang: number | null } | null }
+
+/**
+ * Z(n).zNo = Z(n−1).zNo + 1 and Z(n).grand = Z(n−1).grand + net (spec §4.8) — the previous Z of this device, or null
+ * for the first one. Q3b-11 · D53: if that Z fails its hash, its stored numbers are not trusted — the chain is
+ * recomputed from every snapshot of this device in `zNo` order (`recomputeZChain`) and `broken` says which Z it was.
+ */
+async function zChain(db: RemoteDb, deviceId: string): Promise<ZChain> {
+  const rows = await deviceZRows(db, deviceId)
+  const last = rows[0]
+  if (last === undefined) return { prev: null, broken: null }
   const dto = toZReportDto(last)
-  if (!dto.hashOk) throw new PosError('BAD_INPUT', `the previous Z report of shift ${last.shiftId} fails its hash check`)
-  return { zNo: dto.snapshot.zNo, grandTotalSatang: dto.snapshot.grandTotalSatang }
+  if (dto.hashOk) return { prev: { zNo: dto.snapshot.zNo, grandTotalSatang: dto.snapshot.grandTotalSatang }, broken: null }
+  const nets = [...rows].reverse().map((r) => {
+    const snap = r.snapshotJson as { sales?: { netSalesSatang?: unknown } } | null
+    return safeIntOrNull(snap?.sales?.netSalesSatang) ?? Number.NaN // NaN → RangeError in recomputeZChain
+  })
+  const stored = (last.snapshotJson as { grandTotalSatang?: unknown } | null)?.grandTotalSatang
+  return { prev: recomputeZChain(nets), broken: { shiftId: last.shiftId, storedGrandTotalSatang: safeIntOrNull(stored) } }
 }
 
 /**
  * spec §4.8 + D22 + D36: close the open shift. One transaction writes cash_count, the frozen z_report (snapshot +
  * hash, never recomputed) and the shift status change, each with its outbox row (spec §6.1). The drawer count is by
- * denomination (รอ Q3b-1); a variance above `cash.variance_alert_satang` needs a reason; an owner confirms with their
- * PIN (รอ Q3b-2); if the shift changed after the screen showed the expected cash, nothing is written (SHIFT_CHANGED).
+ * denomination (Q3b-1); a variance above `cash.variance_alert_satang` needs a reason; an owner confirms with their
+ * PIN (Q3b-2); if the shift changed after the screen showed the expected cash, nothing is written (SHIFT_CHANGED).
+ * The bank-app QR total is optional and frozen with its difference (Q3b-12). A previous Z that fails its hash stops the
+ * close with Z_CHAIN_BROKEN until the owner acknowledges it by entering their PIN again (Q3b-11 · D53): the new Z then
+ * chains from the recomputed total, carries `chainWarning` for good, and an audit row records the acknowledgement.
  */
 export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftInput): Promise<ZReportDto> {
   let tally: ReturnType<typeof tallyCashCount>
@@ -1570,6 +1791,9 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     throw new PosError('BAD_INPUT', e instanceof Error ? e.message : String(e))
   }
   if (!Number.isSafeInteger(input.shownExpectedCashSatang)) throw new PosError('BAD_INPUT', 'shownExpectedCashSatang must be whole satang')
+  if (input.bankQrTotalSatang !== null && (!Number.isSafeInteger(input.bankQrTotalSatang) || input.bankQrTotalSatang < 0)) {
+    throw new PosError('BAD_INPUT', 'bankQrTotalSatang must be a whole number of satang >= 0, or null')
+  }
   const reason = input.varianceReason?.trim() ?? ''
   if (reason.length > REASON_MAX_LENGTH) throw new PosError('BAD_INPUT', `a reason is at most ${REASON_MAX_LENGTH} characters`)
   const actor = await db.select().from(s.user).where(eq(s.user.id, input.actorUserId)).get()
@@ -1591,15 +1815,32 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
       throw new PosError('VARIANCE_REASON_REQUIRED', `variance ${variance} is above ${report.varianceAlertSatang}`)
     }
 
+    let chain: ZChain
+    try {
+      chain = await zChain(tx, device.id)
+    } catch (e) {
+      if (e instanceof RangeError) throw new PosError('BAD_INPUT', e.message)
+      throw e
+    }
+    if (chain.broken !== null && !input.acknowledgeZChainBroken) throw new PosError('Z_CHAIN_BROKEN', chain.broken.shiftId)
+    const chainWarning: ZChainWarning | null =
+      chain.broken === null
+        ? null
+        : {
+            brokenShiftId: chain.broken.shiftId,
+            storedGrandTotalSatang: chain.broken.storedGrandTotalSatang,
+            recomputedGrandTotalSatang: chain.prev?.grandTotalSatang ?? 0,
+            acknowledgedBy: approver.id,
+          }
+
     let z: ReturnType<typeof buildZReport>
     try {
-      const prev = await previousZ(tx, device.id)
       z = buildZReport(
         {
           shiftId: shift.id,
           businessDate: shift.businessDate,
           deviceId: device.id,
-          zNo: (prev?.zNo ?? 0) + 1,
+          zNo: (chain.prev?.zNo ?? 0) + 1,
           openedAt: shift.openedAt,
           openedBy: shift.openedBy,
           openedQuick: report.shift.openedQuick,
@@ -1613,8 +1854,10 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
           varianceAlertSatang: report.varianceAlertSatang,
           varianceReason: reason === '' ? null : reason,
           voids: report.voids,
+          bankQrTotalSatang: input.bankQrTotalSatang,
+          chainWarning,
         },
-        prev,
+        chain.prev,
       )
     } catch (e) {
       if (e instanceof RangeError) throw new PosError('BAD_INPUT', e.message)
@@ -1640,7 +1883,20 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     await tx.insert(s.zReport).values(zRow)
     await enqueueOutbox(tx, 'z_report', zRow, at, deps.newId)
 
-    // The only UPDATE of this plan: shift open → closed (spec §3.5 columns closed_by/closed_at/status; no trigger on shift).
+    if (chainWarning !== null) {
+      await tx.insert(s.auditLog).values({
+        id: deps.newId(),
+        entity: 'z_report',
+        entityId: zRow.id,
+        action: Z_CHAIN_ACK_ACTION,
+        beforeJson: { brokenShiftId: chainWarning.brokenShiftId, storedGrandTotalSatang: chainWarning.storedGrandTotalSatang },
+        afterJson: { zNo: z.snapshot.zNo, recomputedGrandTotalSatang: chainWarning.recomputedGrandTotalSatang },
+        actorUserId: approver.id,
+        at,
+      })
+    }
+
+    // The only UPDATE of shift in this plan: open → closed (spec §3.5 columns closed_by/closed_at/status; no trigger on shift).
     await tx.update(s.shift).set({ status: 'closed', closedBy: approver.id, closedAt: at }).where(eq(s.shift.id, shift.id))
     const shiftRow = await tx.select().from(s.shift).where(eq(s.shift.id, shift.id)).get()
     if (!shiftRow) throw new PosError('NO_OPEN_SHIFT', shift.id)
@@ -1650,7 +1906,7 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
   })
 }
 
-/** Z reports of this device, newest first (รอ Q3b-5: view on screen, no export). */
+/** Z reports of this device, newest first (Q3b-5: view on screen, no export). */
 export async function listZReports(db: RemoteDb): Promise<ZReportSummaryDto[]> {
   const device = await requireDevice(db)
   return (await deviceZRows(db, device.id)).map((row) => {
@@ -1664,6 +1920,7 @@ export async function listZReports(db: RemoteDb): Promise<ZReportSummaryDto[]> {
       cashVarianceSatang: z.snapshot.cashVarianceSatang,
       openedQuick: z.snapshot.openedQuick,
       hashOk: z.hashOk,
+      chainWarning: z.snapshot.chainWarning != null,
     }
   })
 }
@@ -1684,17 +1941,32 @@ export async function getZReport(db: RemoteDb, shiftId: string): Promise<ZReport
 export type CloseShiftInput = {
   /** Signed-in user who counted the drawer. */
   actorUserId: string
-  /** Owner who confirms the close with their PIN (spec §5 "ปิดวันต้อง owner" · รอ Q3b-2). */
+  /** Owner who confirms the close with their PIN (spec §5 "ปิดวันต้อง owner" · Q3b-2 · D52). */
   approverUserId: string
   approverPin: string
   countLines: CashCountLine[]
   /** Expected cash the screen showed after the count — refused with SHIFT_CHANGED if the shift moved meanwhile. */
   shownExpectedCashSatang: number
   varianceReason: string | null
+  /** PromptPay total read from the bank app for this shift; optional, no threshold (Q3b-12 · D53). */
+  bankQrTotalSatang: number | null
+  /** true only after a Z_CHAIN_BROKEN refusal, when the owner re-enters their PIN to acknowledge it (Q3b-11 · D53). */
+  acknowledgeZChainBroken: boolean
 }
 
 export type ZReportDto = { id: string; shiftId: string; createdAt: string; hash: string; hashOk: boolean; snapshot: ZSnapshot }
-export type ZReportSummaryDto = { shiftId: string; businessDate: string; zNo: number; closedAt: string; netSalesSatang: number; cashVarianceSatang: number; openedQuick: boolean; hashOk: boolean }
+export type ZReportSummaryDto = {
+  shiftId: string
+  businessDate: string
+  zNo: number
+  closedAt: string
+  netSalesSatang: number
+  cashVarianceSatang: number
+  openedQuick: boolean
+  hashOk: boolean
+  /** This Z was closed after acknowledging a previous Z that failed its hash (Q3b-11 · D53). */
+  chainWarning: boolean
+}
 
 ```
 - ใน `interface PosApi` ต่อจาก `shiftReport(): Promise<ShiftReportDto>` เพิ่ม:
@@ -1717,32 +1989,32 @@ export type ZReportSummaryDto = { shiftId: string; businessDate: string; zNo: nu
 - [ ] **Step 5: รันให้ผ่าน**
 
 Run: `pnpm --filter @dayo/pos test && pnpm --filter @dayo/pos typecheck`
-Expected: PASS ทั้งหมด · เทสต์ "append-only" ยืนยันว่า trigger ของแผน 2 กัน UPDATE/DELETE `z_report` · ถ้า `update shift` ตกด้วย trigger แปลว่ามีคนเพิ่ม trigger ให้ `shift` → หยุดและแจ้ง (T3b-4 ต้องตัดสินใหม่)
+Expected: PASS ทั้งหมด (110 เทสต์ — `close-shift` 8) · เทสต์ "append-only" ยืนยันว่า trigger ของแผน 2 กัน UPDATE/DELETE `z_report` · ถ้า `update shift` ตกด้วย trigger แปลว่ามีคนเพิ่ม trigger ให้ `shift` → หยุดและแจ้ง (T3b-4 ต้องตัดสินใหม่)
 
 - [ ] **Step 6: Commit**
 
 ใช้ skill `committing-code` แล้ว:
 ```bash
 git add apps/pos/src/api/close.ts apps/pos/src/api/types.ts apps/pos/src/api/errors.ts apps/pos/src/api/pos-api.ts apps/pos/src/db/outbox.ts apps/pos/src/ui/errors.ts apps/pos/src/ui/th.ts apps/pos/test/close-shift.test.ts
-git commit -m "feat(pos): close the shift with a denomination count and a hash-frozen z report"
+git commit -m "feat(pos): close the shift with a denomination count, bank qr total and a hash-frozen z report"
 ```
 
 ---
 
-### Task 7: สำรองไฟล์ฐานข้อมูล — `exportBackup` + `backupDue` + เวลาไทยสำหรับชื่อไฟล์/กะค้างข้ามวัน
+### Task 7: สำรองไฟล์ฐานข้อมูล — `exportBackup` (เจ้าของเท่านั้น) + `confirmBackupSaved` + `backupDue` + เวลาไทยสำหรับชื่อไฟล์/กะค้างข้ามวัน
 
 **Files:**
 - Create: `apps/pos/src/api/backup.ts`, `apps/pos/src/lib/clock-stamp.test.ts`, `apps/pos/test/backup.test.ts`
 - Modify: `apps/pos/src/api/types.ts`, `apps/pos/src/api/deps.ts`, `apps/pos/src/api/errors.ts`, `apps/pos/src/api/bootstrap.ts`, `apps/pos/src/api/pos-api.ts`, `apps/pos/src/db/worker.ts`, `apps/pos/src/lib/clock.ts`, `apps/pos/src/ui/errors.ts`, `apps/pos/src/ui/th.ts`, `apps/pos/test/helpers/db.ts`, `apps/pos/test/init.test.ts`
 
 **Interfaces:**
-- Consumes: `SAHPoolUtil.exportFile(filename): Promise<Uint8Array>` ของ `@sqlite.org/sqlite-wasm` (spike I3 — ได้ 1,531,904 ไบต์บน desktop) · `requireDevice` · `bangkokDate` · `closeShift` (Task 6, ใช้ในเทสต์) · `COUNT_520`, `sellVoidScenario` (Task 5)
+- Consumes: `SAHPoolUtil.exportFile(filename): Promise<Uint8Array>` ของ `@sqlite.org/sqlite-wasm` (spike I3 — ได้ 1,531,904 ไบต์บน desktop) · `requireDevice` · `bangkokDate` · `deviceZRows`, `closeShift` (Task 6 — `closeShift` ใช้ในเทสต์) · `COUNT_520`, `sellVoidScenario` (Task 5)
 - Produces:
   - `deps.ts`: `ApiDeps.exportDbFile: () => Promise<Uint8Array>` (Worker = `pool.exportFile(DB_FILE)` · เทสต์ = `vacuumInto(raw)`)
-  - `types.ts`: `BootstrapState` + `lastBackupAt: string | null` + `backupDue: boolean` · `BackupFileDto = { fileName: string; bytes: Uint8Array; createdAt: string }` · `PosApi.exportBackup(actorUserId: string): Promise<BackupFileDto>`
+  - `types.ts`: `BootstrapState` + `lastBackupAt: string | null` + `backupDue: boolean` · `BackupFileDto = { fileName: string; bytes: Uint8Array; createdAt: string; lastZId: string | null }` · `ConfirmBackupInput = { actorUserId: string; fileName: string; byteLength: number; createdAt: string; lastZId: string | null }` · `PosApi.exportBackup(actorUserId: string): Promise<BackupFileDto>` · `PosApi.confirmBackupSaved(input: ConfirmBackupInput): Promise<void>`
   - `errors.ts`: `BACKUP_FAILED`
-  - `backup.ts`: `LAST_BACKUP_KEY = 'local.last_backup_at'` · `LAST_BACKUP_Z_ID_KEY = 'local.last_backup_z_id'` · `isSqliteFile(bytes): boolean` · `lastBackupAt(db)` · `lastBackupZId(db)` · `isBackupDue(db, deviceId, lastBackupZId)` — chain บน id ของ Z ล่าสุด ไม่ใช้เวลา (รอ Q3b-7) · `exportBackup(db, deps, actorUserId)` — ชื่อไฟล์ `dayo-pos-<prefix>-<YYYYMMDD-HHmmss เวลาไทย>.sqlite3` (รอ Q3b-6)
-  - `clock.ts`: `bangkokStamp(iso): string` · `STALE_SHIFT_CUTOFF_HOURS = 5` · `isShiftStale(businessDate, nowIso, cutoffHours?): boolean` (รอ Q3b-8 — Task 10 ใช้)
+  - `backup.ts`: `LAST_BACKUP_KEY = 'local.last_backup_at'` · `LAST_BACKUP_Z_ID_KEY = 'local.last_backup_z_id'` · `isSqliteFile(bytes): boolean` · `backupFileName(device, atIso)` — `dayo-pos-<prefix>-<YYYYMMDD-HHmmss เวลาไทย>.sqlite3` (Q3b-6 · D52) · `lastBackupAt(db)` · `lastBackupZId(db)` · `isBackupDue(db, deviceId, lastBackupZId)` — เทียบ id ของ Z ล่าสุด ไม่ใช้เวลา (Q3b-7 · D52) · `exportBackup(db, deps, actorUserId)` — เจ้าของเท่านั้น (`NOT_OWNER` — Q3b-13 · D53) · คืนไฟล์ + id ของ Z ล่าสุดในไฟล์ · **ไม่บันทึกอะไร** (review I-4) · `confirmBackupSaved(db, deps, input)` — เจ้าของเท่านั้น · ตรวจว่าชื่อไฟล์ตรงกับเครื่องและเวลา export · Z เป็นของเครื่องนี้ · แล้วบันทึก `sync_state` 2 คีย์ + `audit_log` `backup` ใน transaction เดียว
+  - `clock.ts`: `bangkokStamp(iso): string` · `STALE_SHIFT_CUTOFF_HOURS = 5` · `isShiftStale(businessDate, nowIso, cutoffHours?): boolean` (Q3b-8 · D52 — Task 10 ใช้)
   - `test/helpers/db.ts`: `vacuumInto(raw: DatabaseSync): Uint8Array`
 
 - [ ] **Step 1: เขียนเทสต์ให้ตก**
@@ -1759,7 +2031,7 @@ describe('bangkokStamp', () => {
   })
 })
 
-describe('isShiftStale (รอ Q3b-8)', () => {
+describe('isShiftStale (Q3b-8 · D52)', () => {
   it('after-midnight sales stay on the same business day until 05:00 Thai time (spec §4.7)', () => {
     expect(STALE_SHIFT_CUTOFF_HOURS).toBe(5)
     expect(isShiftStale('2026-09-17', '2026-09-17T16:59:00.000Z')).toBe(false) // 23:59 on the 17th
@@ -1780,17 +2052,27 @@ import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { createPosApi } from '../src/api/pos-api'
 import { isSqliteFile } from '../src/api/backup'
-import { openReadyApi, PINS } from './helpers/db'
+import type { BackupFileDto, CloseShiftInput, ConfirmBackupInput } from '../src/api/types'
+import { hashPin } from '../src/lib/pin'
+import { openReadyApi, PINS, TEST_PIN_COST, type ReadyApi } from './helpers/db'
 import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
-describe('exportBackup (spec §11 · spike I3 · รอ Q3b-6/7)', () => {
-  it('returns a complete SQLite copy named by device and Thai time, and records when', async () => {
+const close520 = (t: ReadyApi): CloseShiftInput => ({
+  actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, countLines: COUNT_520, shownExpectedCashSatang: 52_000,
+  varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: false,
+})
+const confirmOf = (t: ReadyApi, file: BackupFileDto): ConfirmBackupInput => ({ actorUserId: t.owner.id, fileName: file.fileName, byteLength: file.bytes.byteLength, createdAt: file.createdAt, lastZId: file.lastZId })
+const backupAudit = async (t: ReadyApi) => (await t.db.select().from(s.auditLog).all()).filter((a) => a.action === 'backup')
+
+describe('exportBackup / confirmBackupSaved (spec §11 · spike I3 · Q3b-6/7 · D52 · review I-4)', () => {
+  it('exports a complete SQLite copy named by device and Thai time, and records nothing until the owner confirms it', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
     t.clock.set('2026-09-17T13:10:00.000Z')
     const file = await t.api.exportBackup(t.owner.id)
     expect(file.fileName).toBe('dayo-pos-A-20260917-201000.sqlite3')
     expect(file.createdAt).toBe('2026-09-17T13:10:00.000Z')
+    expect(file.lastZId).toBeNull() // no Z yet
     expect(isSqliteFile(file.bytes)).toBe(true)
 
     // the copy opens as a database holding every bill and the hash-chained events
@@ -1805,30 +2087,64 @@ describe('exportBackup (spec §11 · spike I3 · รอ Q3b-6/7)', () => {
     expect((copy.prepare('select count(*) as c from order_event').get() as { c: number }).c).toBeGreaterThan(0)
     copy.close()
 
-    expect((await t.api.bootstrap()).lastBackupAt).toBe('2026-09-17T13:10:00.000Z')
-    const audit = (await t.db.select().from(s.auditLog).all()).filter((a) => a.action === 'backup')
-    expect(audit).toEqual([{ id: expect.any(String), entity: 'device', entityId: t.device.id, action: 'backup', beforeJson: null, afterJson: { fileName: file.fileName, bytes: file.bytes.byteLength }, actorUserId: t.owner.id, at: '2026-09-17T13:10:00.000Z' }])
+    // I-4: a download gives no success signal — the export alone is not a backup
+    expect((await t.api.bootstrap()).lastBackupAt).toBeNull()
+    expect(await backupAudit(t)).toEqual([])
+
+    t.clock.set('2026-09-17T13:12:00.000Z')
+    await t.api.confirmBackupSaved(confirmOf(t, file))
+    expect((await t.api.bootstrap()).lastBackupAt).toBe('2026-09-17T13:10:00.000Z') // the time of the data in the file
+    expect(await backupAudit(t)).toEqual([
+      {
+        id: expect.any(String),
+        entity: 'device',
+        entityId: t.device.id,
+        action: 'backup',
+        beforeJson: null,
+        afterJson: { fileName: file.fileName, bytes: file.bytes.byteLength, exportedAt: file.createdAt, lastZId: null },
+        actorUserId: t.owner.id,
+        at: '2026-09-17T13:12:00.000Z',
+      },
+    ])
   })
 
-  it('backupDue: false before any Z, true after a close, false again after a backup (รอ Q3b-7)', async () => {
+  it('backupDue: false before any Z, true after a close, still true after an export alone, false once confirmed (Q3b-7 · D52)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
+    const early = await t.api.exportBackup(t.owner.id) // taken before the close
     expect((await t.api.bootstrap()).backupDue).toBe(false)
-    await t.api.closeShift({ actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, countLines: COUNT_520, shownExpectedCashSatang: 52_000, varianceReason: null })
+    const z = await t.api.closeShift(close520(t))
+    expect((await t.api.bootstrap()).backupDue).toBe(true)
+    await t.api.confirmBackupSaved(confirmOf(t, early)) // a file without the latest Z does not clear the banner
     expect((await t.api.bootstrap()).backupDue).toBe(true)
     t.clock.advanceMs(1_000)
-    await t.api.exportBackup(t.owner.id)
+    const file = await t.api.exportBackup(t.owner.id)
+    expect(file.lastZId).toBe(z.id)
+    expect((await t.api.bootstrap()).backupDue).toBe(true)
+    await t.api.confirmBackupSaved(confirmOf(t, file))
     expect((await t.api.bootstrap()).backupDue).toBe(false)
   })
 
-  it('a failing or non-SQLite export is BACKUP_FAILED and records nothing', async () => {
+  it('owner only (Q3b-13 · D53); a failing or non-SQLite export is BACKUP_FAILED; a confirmation must match an export — nothing recorded', async () => {
     const t = await openReadyApi()
+    t.raw
+      .prepare('insert into "user" (id, display_name, role, pin_hash, is_active, created_at, updated_at, version) values (?, ?, ?, ?, 1, ?, ?, 1)')
+      .run('staff-1', 'พนักงาน', 'staff', await hashPin('3333', TEST_PIN_COST), t.clock.now(), t.clock.now())
+    await expect(t.api.exportBackup('staff-1')).rejects.toThrow(/^NOT_OWNER: /)
+    await expect(t.api.exportBackup('nobody')).rejects.toThrow(/^BAD_INPUT: /)
     const broken = createPosApi(t.db, { ...t.deps, exportDbFile: async () => { throw new Error('NotReadableError') } })
     await expect(broken.exportBackup(t.owner.id)).rejects.toThrow(/^BACKUP_FAILED: /)
     const garbage = createPosApi(t.db, { ...t.deps, exportDbFile: async () => new Uint8Array(4096) })
     await expect(garbage.exportBackup(t.owner.id)).rejects.toThrow(/^BACKUP_FAILED: /)
-    await expect(t.api.exportBackup('nobody')).rejects.toThrow(/^BAD_INPUT: /)
+
+    const ok = confirmOf(t, await t.api.exportBackup(t.owner.id))
+    await expect(t.api.confirmBackupSaved({ ...ok, actorUserId: 'staff-1' })).rejects.toThrow(/^NOT_OWNER: /)
+    await expect(t.api.confirmBackupSaved({ ...ok, fileName: 'dayo-pos-B-20260917-100000.sqlite3' })).rejects.toThrow(/^BAD_INPUT: /)
+    await expect(t.api.confirmBackupSaved({ ...ok, createdAt: 'yesterday' })).rejects.toThrow(/^BAD_INPUT: /)
+    await expect(t.api.confirmBackupSaved({ ...ok, byteLength: 0 })).rejects.toThrow(/^BAD_INPUT: /)
+    await expect(t.api.confirmBackupSaved({ ...ok, lastZId: 'no-such-z' })).rejects.toThrow(/^BAD_INPUT: /)
     expect((await t.api.bootstrap()).lastBackupAt).toBeNull()
+    expect(await backupAudit(t)).toEqual([])
   })
 })
 ```
@@ -1856,11 +2172,11 @@ export function bangkokStamp(iso: string): string {
   return `${bangkokDate(iso).replaceAll('-', '')}-${BANGKOK_TIME.format(new Date(iso)).replaceAll(':', '')}`
 }
 
-/** รอ Q3b-8: 05:00 Thai time. */
+/** Q3b-8 · D52: 05:00 Thai time. */
 export const STALE_SHIFT_CUTOFF_HOURS = 5
 
 /**
- * รอ Q3b-8: the open shift is "stale" once the Thai clock, shifted back by `cutoffHours`, is on a later date than the
+ * Q3b-8 · D52: the open shift is "stale" once the Thai clock, shifted back by `cutoffHours`, is on a later date than the
  * shift's business date — after-midnight sales stay on the same day (spec §4.7) until the cutoff hour.
  */
 export function isShiftStale(businessDate: string, nowIso: string, cutoffHours: number = STALE_SHIFT_CUTOFF_HOURS): boolean {
@@ -1916,12 +2232,12 @@ import { requireDevice } from './bootstrap'
 import { deviceZRows } from './close'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import type { BackupFileDto } from './types'
+import type { BackupFileDto, ConfirmBackupInput, DeviceDto } from './types'
 
-/** sync_state key (local only, never synced) holding the time of the last exported backup. */
+/** sync_state key (local only, never synced): when the last backup file the owner confirmed as saved was exported. */
 export const LAST_BACKUP_KEY = 'local.last_backup_at'
-/** sync_state key (local only) holding the id of the last Z report a backup covered — `isBackupDue` chains on this
- * id, not on a timestamp, because a device clock can be wrong and later corrected (see domain `buildZReport`). */
+/** sync_state key (local only) holding the id of the last Z report a confirmed backup covered — `isBackupDue` chains on
+ * this id, not on a timestamp, because a device clock can be wrong and later corrected (see domain `buildZReport`). */
 export const LAST_BACKUP_Z_ID_KEY = 'local.last_backup_z_id'
 
 /** Every SQLite 3 database file starts with these 16 bytes ("SQLite format 3\0"). */
@@ -1931,6 +2247,11 @@ export function isSqliteFile(bytes: Uint8Array): boolean {
   if (bytes.byteLength < 100) return false
   for (let i = 0; i < SQLITE_HEADER.length; i++) if (bytes[i] !== SQLITE_HEADER.charCodeAt(i)) return false
   return true
+}
+
+/** "dayo-pos-A-20260917-201000.sqlite3" — receipt prefix + Thai local time of the export (Q3b-6 · D52). */
+export function backupFileName(device: DeviceDto, atIso: string): string {
+  return `dayo-pos-${device.receiptPrefix}-${bangkokStamp(atIso)}.sqlite3`
 }
 
 export async function lastBackupAt(db: RemoteDb): Promise<string | null> {
@@ -1943,24 +2264,32 @@ export async function lastBackupZId(db: RemoteDb): Promise<string | null> {
   return row?.value ?? null
 }
 
-/** รอ Q3b-7: a backup is due when a Z report of this device was closed after the last one a backup covered (or none
- * was ever backed up). Compares the latest Z's id, not a timestamp — a device clock can be wrong and later
- * corrected, and a Z stamped in the future must not keep this banner on after a real backup. */
+/** Q3b-7 · D52: a backup is due when a Z report of this device was closed after the last one a confirmed backup
+ * covered (or none was ever confirmed). Compares the latest Z's id, not a timestamp — a device clock can be wrong and
+ * later corrected, and a Z stamped in the future must not keep this banner on after a real backup. */
 export async function isBackupDue(db: RemoteDb, deviceId: string, lastBackupZId: string | null): Promise<boolean> {
   const last = (await deviceZRows(db, deviceId))[0]
   return last !== undefined && last.id !== lastBackupZId
 }
 
+/** Q3b-13 · D53: the file holds every PIN hash and the shop's PromptPay id — only an active owner may export or confirm it. */
+async function requireActiveOwner(db: RemoteDb, userId: string): Promise<typeof s.user.$inferSelect> {
+  const u = await db.select().from(s.user).where(eq(s.user.id, userId)).get()
+  if (!u || !u.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${userId}`)
+  if (u.role !== 'owner') throw new PosError('NOT_OWNER', `${u.displayName} is not an owner`)
+  return u
+}
+
 /**
- * spec §11 "สำรองข้อมูลด้วย export ไฟล์ SQLite" + spike I3: copies the whole database file (opfs-sahpool
- * `exportFile` in the Worker) and returns it for the UI to save (รอ Q3b-6). Runs inside the PosApi serial queue, so
- * no transaction is half-way when the file is read. Records the time and the covered Z id in sync_state, and an
- * audit_log row — all after the copy, so the file itself does not contain them.
+ * spec §11 "สำรองข้อมูลด้วย export ไฟล์ SQLite" + spike I3: copies the whole database file (opfs-sahpool `exportFile`
+ * in the Worker) and returns it for the UI to download (Q3b-6). Runs inside the PosApi serial queue, so no transaction
+ * is half-way when the file is read. Records nothing: the browser gives no signal that the download reached the
+ * Downloads folder, so the backup only counts once the owner confirms it (`confirmBackupSaved` — review I-4).
  */
 export async function exportBackup(db: RemoteDb, deps: ApiDeps, actorUserId: string): Promise<BackupFileDto> {
   const device = await requireDevice(db)
-  const actor = await db.select().from(s.user).where(eq(s.user.id, actorUserId)).get()
-  if (!actor || !actor.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${actorUserId}`)
+  await requireActiveOwner(db, actorUserId)
+  const lastZ = (await deviceZRows(db, device.id))[0]
   let bytes: Uint8Array
   try {
     bytes = await deps.exportDbFile()
@@ -1969,16 +2298,41 @@ export async function exportBackup(db: RemoteDb, deps: ApiDeps, actorUserId: str
   }
   if (!isSqliteFile(bytes)) throw new PosError('BACKUP_FAILED', `exported ${bytes.byteLength} bytes that are not an SQLite file`)
   const at = deps.now()
-  const fileName = `dayo-pos-${device.receiptPrefix}-${bangkokStamp(at)}.sqlite3`
-  const lastZ = (await deviceZRows(db, device.id))[0]
+  return { fileName: backupFileName(device, at), bytes, createdAt: at, lastZId: lastZ?.id ?? null }
+}
+
+/**
+ * Q3b-7 · D52 + review I-4: the owner saw the file in Downloads and tapped "บันทึกไฟล์แล้ว". Records the export time and
+ * the Z the file covers in sync_state, and an audit_log `backup` row, in one transaction. The input must describe a
+ * file this device could have exported (its name matches the device and export time; the Z belongs to this device).
+ */
+export async function confirmBackupSaved(db: RemoteDb, deps: ApiDeps, input: ConfirmBackupInput): Promise<void> {
+  const device = await requireDevice(db)
+  const actor = await requireActiveOwner(db, input.actorUserId)
+  if (Number.isNaN(Date.parse(input.createdAt)) || input.fileName !== backupFileName(device, input.createdAt)) {
+    throw new PosError('BAD_INPUT', `${input.fileName} is not a backup file name of this device for ${input.createdAt}`)
+  }
+  if (!Number.isSafeInteger(input.byteLength) || input.byteLength <= 0) throw new PosError('BAD_INPUT', 'byteLength must be a whole number > 0')
+  if (input.lastZId !== null && !(await deviceZRows(db, device.id)).some((z) => z.id === input.lastZId)) {
+    throw new PosError('BAD_INPUT', `z report ${input.lastZId} is not on this device`)
+  }
+  const at = deps.now()
   await db.transaction(async (tx) => {
-    await tx.insert(s.syncState).values({ key: LAST_BACKUP_KEY, value: at }).onConflictDoUpdate({ target: s.syncState.key, set: { value: at } })
-    if (lastZ !== undefined) {
-      await tx.insert(s.syncState).values({ key: LAST_BACKUP_Z_ID_KEY, value: lastZ.id }).onConflictDoUpdate({ target: s.syncState.key, set: { value: lastZ.id } })
+    await tx.insert(s.syncState).values({ key: LAST_BACKUP_KEY, value: input.createdAt }).onConflictDoUpdate({ target: s.syncState.key, set: { value: input.createdAt } })
+    if (input.lastZId !== null) {
+      await tx.insert(s.syncState).values({ key: LAST_BACKUP_Z_ID_KEY, value: input.lastZId }).onConflictDoUpdate({ target: s.syncState.key, set: { value: input.lastZId } })
     }
-    await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: device.id, action: 'backup', beforeJson: null, afterJson: { fileName, bytes: bytes.byteLength }, actorUserId: actor.id, at })
+    await tx.insert(s.auditLog).values({
+      id: deps.newId(),
+      entity: 'device',
+      entityId: device.id,
+      action: 'backup',
+      beforeJson: null,
+      afterJson: { fileName: input.fileName, bytes: input.byteLength, exportedAt: input.createdAt, lastZId: input.lastZId },
+      actorUserId: actor.id,
+      at,
+    })
   })
-  return { fileName, bytes, createdAt: at }
 }
 ```
 
@@ -2004,7 +2358,7 @@ export async function exportBackup(db: RemoteDb, deps: ApiDeps, actorUserId: str
     backupDue: await isBackupDue(db, device.id, lastZId),
 ```
 
-แก้ `apps/pos/src/api/errors.ts` — ต่อจาก `  | 'Z_NOT_FOUND'` เพิ่ม `  | 'BACKUP_FAILED'`
+แก้ `apps/pos/src/api/errors.ts` — เหนือบรรทัด `  | 'Z_CHAIN_BROKEN' …` เพิ่ม `  | 'BACKUP_FAILED'`
 แก้ `apps/pos/src/ui/th.ts` — ต่อจาก `  errZNotFound: 'ไม่พบรายงาน Z',` เพิ่ม `  errBackupFailed: 'สำรองไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง',`
 แก้ `apps/pos/src/ui/errors.ts` — ต่อจาก `  Z_NOT_FOUND: TH.errZNotFound,` เพิ่ม `  BACKUP_FAILED: TH.errBackupFailed,`
 
@@ -2017,39 +2371,46 @@ export type BootstrapState = {
   users: UserDto[]
   openShift: ShiftDto | null
   pendingSyncItems: number
-  /** When this device last exported a backup file (sync_state `local.last_backup_at`), or null. */
+  /** Export time of the last backup file an owner confirmed as saved (sync_state `local.last_backup_at`), or null. */
   lastBackupAt: string | null
-  /** A Z report was closed after the last one a backup covered — compared by Z id, not time (รอ Q3b-7). */
+  /** A Z report was closed after the last one a confirmed backup covered — compared by Z id, not time (Q3b-7 · D52). */
   backupDue: boolean
 }
 ```
-- ต่อจาก `export type ZReportSummaryDto = …` เพิ่ม:
+- ต่อจาก `export type ZReportSummaryDto = { … }` เพิ่ม:
 ```ts
 
-/** The raw SQLite file of this device (spec §11 · spike I3 `exportFile`). */
-export type BackupFileDto = { fileName: string; bytes: Uint8Array; createdAt: string }
+/** The raw SQLite file of this device (spec §11 · spike I3 `exportFile`) and the latest Z it contains. */
+export type BackupFileDto = { fileName: string; bytes: Uint8Array; createdAt: string; lastZId: string | null }
+/** The owner saw the exported file in Downloads (review I-4) — echoes the BackupFileDto without its bytes. */
+export type ConfirmBackupInput = { actorUserId: string; fileName: string; byteLength: number; createdAt: string; lastZId: string | null }
 ```
-- ใน `interface PosApi` ต่อจาก `getZReport(shiftId: string): Promise<ZReportDto>` เพิ่ม `exportBackup(actorUserId: string): Promise<BackupFileDto>`
-- ใน `POS_API_METHODS` ต่อจาก `'getZReport',` เพิ่ม `'exportBackup',`
+- ใน `interface PosApi` ต่อจาก `getZReport(shiftId: string): Promise<ZReportDto>` เพิ่ม:
+```ts
+  exportBackup(actorUserId: string): Promise<BackupFileDto>
+  confirmBackupSaved(input: ConfirmBackupInput): Promise<void>
+```
+- ใน `POS_API_METHODS` ต่อจาก `'getZReport',` เพิ่ม `'exportBackup',` และ `'confirmBackupSaved',` (บรรทัดละตัว)
 
 แก้ `apps/pos/src/api/pos-api.ts`:
-- ต่อจาก `import { login } from './auth'` เพิ่ม `import { exportBackup } from './backup'`
+- ต่อจาก `import { login } from './auth'` เพิ่ม `import { confirmBackupSaved, exportBackup } from './backup'`
 - ต่อจากบรรทัด `getZReport: …` เพิ่ม:
 ```ts
     exportBackup: (actorUserId) => serial(() => exportBackup(db, deps, actorUserId)),
+    confirmBackupSaved: (input) => serial(() => confirmBackupSaved(db, deps, input)),
 ```
 
 - [ ] **Step 6: รันให้ผ่าน**
 
 Run: `pnpm --filter @dayo/pos test && pnpm --filter @dayo/pos typecheck`
-Expected: PASS ทั้งหมด · เทสต์ backup เปิดไฟล์ที่ได้ด้วย `node:sqlite` แล้วเห็นบิล 3 ใบ (ยืนยันว่าไฟล์สำรองกู้ข้อมูลได้จริง) · ของจริงใน Worker ตรวจด้วย e2e (Task 10) บน Chromium + OPFS
+Expected: PASS ทั้งหมด (115 เทสต์ — `clock-stamp` 2 + `backup` 3) · เทสต์ backup เปิดไฟล์ที่ได้ด้วย `node:sqlite` แล้วเห็นบิล 3 ใบ (ยืนยันว่าไฟล์สำรองกู้ข้อมูลได้จริง) · export อย่างเดียวไม่บันทึกอะไร ต้อง `confirmBackupSaved` (review I-4) · ของจริงใน Worker ตรวจด้วย e2e (Task 11) บน Chromium + OPFS
 
 - [ ] **Step 7: Commit**
 
 ใช้ skill `committing-code` แล้ว:
 ```bash
 git add apps/pos/src/api/backup.ts apps/pos/src/api/types.ts apps/pos/src/api/deps.ts apps/pos/src/api/errors.ts apps/pos/src/api/bootstrap.ts apps/pos/src/api/pos-api.ts apps/pos/src/db/worker.ts apps/pos/src/lib/clock.ts apps/pos/src/lib/clock-stamp.test.ts apps/pos/src/ui/errors.ts apps/pos/src/ui/th.ts apps/pos/test/helpers/db.ts apps/pos/test/init.test.ts apps/pos/test/backup.test.ts
-git commit -m "feat(pos): export the database file as a backup and flag when one is due"
+git commit -m "feat(pos): owner-only database backup that counts once confirmed, and flag when one is due"
 ```
 
 ---
@@ -2057,15 +2418,15 @@ git commit -m "feat(pos): export the database file as a backup and flag when one
 ### Task 8: หน้าสำรองไฟล์ (`/backup`) + ข้อความไทยของหน้าจอแผน 3b
 
 **Files:**
-- Create: `apps/pos/src/ui/save-file.ts`, `apps/pos/src/ui/save-file.test.ts`, `apps/pos/src/screens/BackupScreen.tsx`
+- Create: `apps/pos/src/ui/save-file.ts`, `apps/pos/src/ui/save-file.test.ts`, `apps/pos/src/screens/BackupScreen.tsx`, `apps/pos/src/screens/BackupScreen.test.tsx`
 - Modify: `apps/pos/src/ui/th.ts`, `apps/pos/src/router.tsx`
 
 **Interfaces:**
-- Consumes: `PosApi.exportBackup` (Task 7) · `BootstrapState.lastBackupAt` · `useApi`, `useBootstrap`, `bootstrapKey`, `useSession` · `errorMessage`
+- Consumes: `PosApi.exportBackup`, `PosApi.confirmBackupSaved`, `ConfirmBackupInput`, `BackupFileDto` (Task 7) · `BootstrapState.lastBackupAt` · `useApi`, `useBootstrap`, `bootstrapKey`, `useSession` · `errorMessage`
 - Produces:
-  - `downloadBytes(fileName: string, bytes: Uint8Array, mime?: string): void` — ดาวน์โหลดผ่าน `<a download>` + blob (รอ Q3b-6)
-  - route `/backup` (`BackupScreen`) ภายใต้ `RequireSession` · testid: `backup-last`, `backup-download`, `backup-done`, `nav-home`
-  - `TH` คีย์ใหม่ทั้งหมดของหน้าจอแผน 3b (Task 9, 10 ใช้) — ดู Step 2
+  - `downloadBytes(fileName: string, bytes: Uint8Array, mime?: string): void` — ดาวน์โหลดผ่าน `<a download>` + blob (Q3b-6 · D52)
+  - route `/backup` (`BackupScreen`) ภายใต้ `RequireSession` · testid: `backup-last`, `backup-download`, `backup-file`, `backup-confirm`, `backup-done`, `backup-owner-only`, `nav-home` · เจ้าของ: ดาวน์โหลด → เห็นชื่อไฟล์ → กด `backup-confirm` ("บันทึกไฟล์แล้ว") จึงเรียก `confirmBackupSaved` (Q3b-7 · review I-4) · คนที่ไม่ใช่เจ้าของเห็นแค่ `backup-owner-only` (Q3b-13 · D53)
+  - `TH` คีย์ใหม่ทั้งหมดของหน้าจอแผน 3b (Task 9–11 ใช้) — ดู Step 2
 
 - [ ] **Step 1: เทสต์ `downloadBytes` ให้ตก**
 
@@ -2098,15 +2459,90 @@ describe('downloadBytes', () => {
 })
 ```
 
-Run: `pnpm --filter @dayo/pos exec vitest run save-file`
-Expected: FAIL — `Failed to resolve import "./save-file"`
+`apps/pos/src/screens/BackupScreen.test.tsx`
+```tsx
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { useEffect, type JSX } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { BackupFileDto, PosApi, UserDto } from '../api/types'
+import { ApiProvider } from '../app/api-context'
+import { SessionProvider, useSession } from '../app/session'
+import { BackupScreen } from './BackupScreen'
+
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  useNavigate: () => vi.fn(),
+}))
+const downloads = vi.hoisted(() => [] as string[])
+vi.mock('../ui/save-file', () => ({ downloadBytes: (name: string) => downloads.push(name) }))
+
+afterEach(() => {
+  cleanup()
+  downloads.length = 0
+})
+
+const OWNER: UserDto = { id: 'u1', displayName: 'TungAo', role: 'owner' }
+const STAFF: UserDto = { id: 'u9', displayName: 'พนักงาน', role: 'staff' }
+const FILE: BackupFileDto = { fileName: 'dayo-pos-A-20260917-201000.sqlite3', bytes: new Uint8Array(4096), createdAt: '2026-09-17T13:10:00.000Z', lastZId: 'z-1' }
+
+function SignedIn({ user }: { user: UserDto }): JSX.Element {
+  const { signIn } = useSession()
+  useEffect(() => signIn(user), [signIn, user])
+  return <BackupScreen />
+}
+
+function mount(user: UserDto): PosApi {
+  const api = {
+    bootstrap: vi.fn(async () => ({ needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: true })),
+    exportBackup: vi.fn(async () => FILE),
+    confirmBackupSaved: vi.fn(async () => undefined),
+  } as unknown as PosApi
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ApiProvider api={api}>
+        <SessionProvider>
+          <SignedIn user={user} />
+        </SessionProvider>
+      </ApiProvider>
+    </QueryClientProvider>,
+  )
+  return api
+}
+
+describe('BackupScreen', () => {
+  it('owner: download, then the backup counts only after "บันทึกไฟล์แล้ว" (review I-4 · Q3b-7)', async () => {
+    const api = mount(OWNER)
+    act(() => screen.getByTestId('backup-download').click())
+    await waitFor(() => expect(screen.getByTestId('backup-file').textContent).toContain(FILE.fileName))
+    expect(downloads).toEqual([FILE.fileName])
+    expect(api.confirmBackupSaved).not.toHaveBeenCalled()
+    act(() => screen.getByTestId('backup-confirm').click())
+    await waitFor(() => expect(screen.getByTestId('backup-done')).toBeTruthy())
+    expect(api.confirmBackupSaved).toHaveBeenCalledWith({ actorUserId: OWNER.id, fileName: FILE.fileName, byteLength: 4096, createdAt: FILE.createdAt, lastZId: 'z-1' })
+    expect(screen.queryByTestId('backup-confirm')).toBeNull()
+  })
+
+  it('staff: no download button (Q3b-13 · D53)', async () => {
+    const api = mount(STAFF)
+    await waitFor(() => expect(screen.getByTestId('backup-owner-only')).toBeTruthy())
+    expect(screen.queryByTestId('backup-download')).toBeNull()
+    expect(api.exportBackup).not.toHaveBeenCalled()
+  })
+})
+```
+
+Run: `pnpm --filter @dayo/pos exec vitest run save-file BackupScreen`
+Expected: FAIL — `Failed to resolve import "./save-file"` และ `Failed to resolve import "./BackupScreen"`
 
 - [ ] **Step 2: `downloadBytes` + ข้อความไทย**
 
 `apps/pos/src/ui/save-file.ts`
 ```ts
 /**
- * Saves bytes as a file through the browser's download (Android Chrome → the Downloads folder) — รอ Q3b-6.
+ * Saves bytes as a file through the browser's download (Android Chrome → the Downloads folder) — Q3b-6 · D52.
  * The object URL is revoked a minute later, after the download has surely started.
  */
 export function downloadBytes(fileName: string, bytes: Uint8Array, mime = 'application/vnd.sqlite3'): void {
@@ -2123,7 +2559,7 @@ export function downloadBytes(fileName: string, bytes: Uint8Array, mime = 'appli
 }
 ```
 
-แก้ `apps/pos/src/ui/th.ts` — ต่อจากบรรทัด `  errBackupFailed: 'สำรองไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง',` เพิ่มทั้งบล็อก (ข้อความของ Task 8–10 รวมไว้ที่เดียว):
+แก้ `apps/pos/src/ui/th.ts` — ต่อจากบรรทัด `  errBackupFailed: 'สำรองไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง',` เพิ่มทั้งบล็อก (ข้อความของ Task 8–11 รวมไว้ที่เดียว):
 ```ts
   errCountFormat: 'จำนวนต้องเป็นตัวเลขจำนวนเต็ม 0–99999',
   errCountFirst: 'กด "นับเสร็จ" ก่อน',
@@ -2131,6 +2567,7 @@ export function downloadBytes(fileName: string, bytes: Uint8Array, mime = 'appli
   // แผน 3b — กะ / X / Z / เงินเข้า-ออก / สำรองไฟล์
   shiftMenu: 'กะ / รายงาน X',
   xTitle: 'รายงาน X (ยอดสด ณ ตอนนี้)',
+  xExpectedHidden: 'เงินสดที่ควรมีแสดงหลังนับเงินตอนปิดกะเท่านั้น (นับแบบไม่เห็นยอด)',
   shiftInfo: (date: string, name: string): string => `วันทำการ ${date} · เปิดกะโดย ${name}`,
   quickOpenBadge: 'เปิดกะด่วน',
   salesTitle: 'ยอดขาย',
@@ -2141,7 +2578,13 @@ export function downloadBytes(fileName: string, bytes: Uint8Array, mime = 'appli
   voidedSales: 'ยอดบิลยกเลิก',
   netSales: 'ยอดขายสุทธิ',
   cashSales: 'รับเงินสด',
+  qrSummaryTitle: 'พร้อมเพย์ (เทียบกับแอปธนาคาร)',
   qrSales: 'รับพร้อมเพย์',
+  qrRefunded: 'โอนคืน (บิลยกเลิก)',
+  qrNet: 'พร้อมเพย์สุทธิ',
+  bankQrTotal: 'ยอดพร้อมเพย์ในแอปธนาคาร (บาท · ไม่บังคับ)',
+  bankQrNotEntered: 'ไม่ได้กรอก',
+  qrDifference: 'ส่วนต่าง (แอปธนาคาร − พร้อมเพย์สุทธิ)',
   drawerTitle: 'เงินสดในลิ้นชัก',
   openingFloat: 'เงินทอนตั้งต้น',
   voidRefunds: 'คืนเงินบิลยกเลิก',
@@ -2170,6 +2613,7 @@ export function downloadBytes(fileName: string, bytes: Uint8Array, mime = 'appli
   varianceReasonHint: (limit: string): string => `ขาดหรือเกินมากกว่า ${limit} ต้องใส่เหตุผล`,
   closeApprover: 'เจ้าของที่ยืนยันปิดกะ',
   cartNotEmpty: 'ยังมีรายการค้างในตะกร้า — ขายหรือล้างตะกร้าก่อนปิดกะ',
+  zChainAck: 'Z ใบก่อนหน้าลายเซ็นไม่ตรง — เจ้าของกรอก PIN อีกครั้งเพื่อรับทราบ ระบบจะคิดยอดสะสมใหม่จาก Z ทุกใบ และติดป้ายเตือนถาวรใน Z ใบนี้',
   zTitle: 'รายงาน Z',
   zList: 'Z ย้อนหลัง',
   noZ: 'ยังไม่มีรายงาน Z',
@@ -2177,14 +2621,19 @@ export function downloadBytes(fileName: string, bytes: Uint8Array, mime = 'appli
   zGrandTotal: 'ยอดขายสุทธิสะสม (grand total)',
   zHashOk: 'ตรวจลายเซ็นแล้ว ข้อมูลไม่ถูกแก้',
   zHashBad: 'ลายเซ็นไม่ตรง — ข้อมูลอาจถูกแก้',
+  zChainWarning: 'Z ใบนี้ปิดหลังพบว่า Z ใบก่อนหน้าลายเซ็นไม่ตรง — ยอดสะสมคิดใหม่จาก Z ทุกใบ (เจ้าของรับทราบด้วย PIN แล้ว)',
+  zChainWarningShort: 'Z ก่อนหน้าลายเซ็นไม่ตรง',
   zDone: 'เสร็จ',
   backupTitle: 'สำรองไฟล์ฐานข้อมูล',
   backupHint: 'ไฟล์จะลงในโฟลเดอร์ดาวน์โหลดของแท็บเล็ต — ย้ายไปเก็บที่ Google Drive หรือคอมพิวเตอร์ทุกวัน',
   backupNow: 'ดาวน์โหลดไฟล์สำรอง',
   backupNever: 'ยังไม่เคยสำรอง',
   backupLast: (at: string): string => `สำรองล่าสุด ${at}`,
-  backupDone: (name: string): string => `บันทึกไฟล์ ${name} แล้ว`,
-  backupDue: 'ปิดกะแล้วแต่ยังไม่ได้สำรองไฟล์ — กดสำรองก่อนปิดเครื่อง',
+  backupCheckFile: (name: string): string => `ตรวจว่าเห็นไฟล์ ${name} ในโฟลเดอร์ดาวน์โหลดแล้ว จึงกด "บันทึกไฟล์แล้ว"`,
+  backupConfirm: 'บันทึกไฟล์แล้ว',
+  backupDone: (name: string): string => `ยืนยันไฟล์สำรอง ${name} แล้ว`,
+  backupOwnerOnly: 'สำรองไฟล์ได้เฉพาะเจ้าของร้าน (ในไฟล์มี PIN ที่เข้ารหัสแล้วและหมายเลขพร้อมเพย์ของร้าน)',
+  backupDue: 'ปิดกะแล้วแต่ยังไม่ได้ยืนยันไฟล์สำรอง — สำรองแล้วกด "บันทึกไฟล์แล้ว" ก่อนปิดเครื่อง',
   shiftStale: (date: string): string => `กะของวันที่ ${date} ยังไม่ปิด — ปิดกะก่อนเริ่มวันใหม่`,
   quickOpen: 'เปิดกะด่วน (เงินทอน 0 · เจ้าของเท่านั้น)',
   cashMove: 'เงินเข้า-ออก',
@@ -2202,6 +2651,7 @@ export function downloadBytes(fileName: string, bytes: Uint8Array, mime = 'appli
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
+import type { ConfirmBackupInput } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
@@ -2211,21 +2661,34 @@ import { TH } from '../ui/th'
 
 const DATE_TIME = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' })
 
-/** spec §11: back up the whole SQLite file to the tablet's Downloads (รอ Q3b-6), prompted after each close (รอ Q3b-7). */
+/**
+ * spec §11: back up the whole SQLite file to the tablet's Downloads (Q3b-6 · D52). Owners only (Q3b-13 · D53). The
+ * download gives no success signal, so the backup counts only after the owner taps "บันทึกไฟล์แล้ว" (Q3b-7 · review I-4).
+ */
 export function BackupScreen(): JSX.Element {
   const api = useApi()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const boot = useBootstrap()
   const { user } = useSession()
-  const [saved, setSaved] = useState<string | null>(null)
+  const [pending, setPending] = useState<ConfirmBackupInput | null>(null)
+  const [confirmed, setConfirmed] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const backup = useMutation({
     mutationFn: () => api.exportBackup(user?.id ?? ''),
-    onSuccess: async (file) => {
+    onSuccess: (file) => {
       downloadBytes(file.fileName, file.bytes)
-      setSaved(file.fileName)
+      setConfirmed(null)
+      setPending({ actorUserId: user?.id ?? '', fileName: file.fileName, byteLength: file.bytes.byteLength, createdAt: file.createdAt, lastZId: file.lastZId })
+    },
+    onError: (e) => setError(errorMessage(e)),
+  })
+  const confirm = useMutation({
+    mutationFn: (input: ConfirmBackupInput) => api.confirmBackupSaved(input),
+    onSuccess: async (_done, input) => {
+      setPending(null)
+      setConfirmed(input.fileName)
       await queryClient.invalidateQueries({ queryKey: bootstrapKey })
     },
     onError: (e) => setError(errorMessage(e)),
@@ -2242,28 +2705,53 @@ export function BackupScreen(): JSX.Element {
       <h1>{TH.backupTitle}</h1>
       <p>{TH.backupHint}</p>
       <p data-testid="backup-last">{last === null ? TH.backupNever : TH.backupLast(DATE_TIME.format(new Date(last)))}</p>
-      {error !== null && (
-        <p role="alert" className="error">
-          {error}
+      {user?.role !== 'owner' ? (
+        <p role="alert" className="error" data-testid="backup-owner-only">
+          {TH.backupOwnerOnly}
         </p>
+      ) : (
+        <>
+          {error !== null && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+          {confirmed !== null && (
+            <p className="badge" data-testid="backup-done">
+              {TH.backupDone(confirmed)}
+            </p>
+          )}
+          {pending !== null && (
+            <>
+              <p data-testid="backup-file">{TH.backupCheckFile(pending.fileName)}</p>
+              <button
+                type="button"
+                className="primary"
+                data-testid="backup-confirm"
+                disabled={confirm.isPending}
+                onClick={() => {
+                  setError(null)
+                  confirm.mutate(pending)
+                }}
+              >
+                {TH.backupConfirm}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className={pending === null ? 'primary' : undefined}
+            data-testid="backup-download"
+            disabled={backup.isPending}
+            onClick={() => {
+              setError(null)
+              backup.mutate()
+            }}
+          >
+            {TH.backupNow}
+          </button>
+        </>
       )}
-      {saved !== null && (
-        <p className="badge" data-testid="backup-done">
-          {TH.backupDone(saved)}
-        </p>
-      )}
-      <button
-        type="button"
-        className="primary"
-        data-testid="backup-download"
-        disabled={backup.isPending}
-        onClick={() => {
-          setError(null)
-          backup.mutate()
-        }}
-      >
-        {TH.backupNow}
-      </button>
     </main>
   )
 }
@@ -2290,19 +2778,19 @@ const backupRoute = createRoute({
 - [ ] **Step 4: รันให้ผ่าน**
 
 Run: `pnpm --filter @dayo/pos test && pnpm --filter @dayo/pos typecheck && pnpm --filter @dayo/pos build`
-Expected: PASS · build ผ่าน (หน้าจอนี้ตรวจด้วย e2e ใน Task 10 — ต้องเข้าได้จาก Z/หน้าเปิดกะซึ่งมาทีหลัง)
+Expected: PASS (118 เทสต์ — `save-file` 1 + `BackupScreen` 2) · build ผ่าน (การดาวน์โหลดจริงตรวจด้วย e2e ใน Task 11 — ต้องเข้าได้จาก Z/หน้าเปิดกะซึ่งมาทีหลัง)
 
 - [ ] **Step 5: Commit**
 
 ใช้ skill `committing-code` แล้ว:
 ```bash
-git add apps/pos/src/ui/save-file.ts apps/pos/src/ui/save-file.test.ts apps/pos/src/ui/th.ts apps/pos/src/screens/BackupScreen.tsx apps/pos/src/router.tsx
-git commit -m "feat(pos): backup screen that downloads the database file"
+git add apps/pos/src/ui/save-file.ts apps/pos/src/ui/save-file.test.ts apps/pos/src/ui/th.ts apps/pos/src/screens/BackupScreen.tsx apps/pos/src/screens/BackupScreen.test.tsx apps/pos/src/router.tsx
+git commit -m "feat(pos): owner-only backup screen that downloads the database file and confirms it was saved"
 ```
 
 ---
 
-### Task 9: หน้ารายงาน Z (`/z/$shiftId`) + Z ย้อนหลัง (`/z`) + ชิ้นส่วนตัวเลขที่ใช้ร่วม
+### Task 9: หน้ารายงาน Z (`/z/$shiftId`) + Z ย้อนหลัง (`/z`) + ชิ้นส่วนตัวเลขที่ใช้ร่วม (รวมตารางพร้อมเพย์)
 
 **Files:**
 - Create: `apps/pos/src/screens/ShiftFigures.tsx`, `apps/pos/src/screens/ZReportScreen.tsx`, `apps/pos/src/screens/ZListScreen.tsx`
@@ -2312,8 +2800,8 @@ git commit -m "feat(pos): backup screen that downloads the database file"
 - Consumes: `getZReport`, `listZReports` (Task 6) · `ZVoid`, `SalesSummary`, `CashInputs` (Task 1) · `NegativeBaseDto` (Task 5) · `BootstrapState.backupDue` (Task 7) · route `/backup` (Task 8) · `TH` บล็อกของ Task 8
 - Produces:
   - `queries.ts`: `zListKey = ['z-list']` · `zKey(shiftId) = ['z', shiftId]`
-  - `ShiftFigures.tsx`: `SalesTable({ sales, p })` · `DrawerTable({ cash, expectedSatang, p })` · `VoidList({ voids, p })` · `NegativeBaseList({ items })` — testid ขึ้นต้นด้วย `p` (`x` / `z`): `<p>-orders`, `-voids`, `-gross`, `-discount`, `-voided`, `-net`, `-cash-sales`, `-qr-sales`, `-opening`, `-drawer-cash-sales`, `-void-refunds`, `-paid-in`, `-paid-out`, `-drops`, `-expected`, `-void-<receiptNo>` · `neg-base-<code>`
-  - route `/z` (`ZListScreen`: testid `z-row-<i>`, `nav-home`) · `/z/$shiftId` (`ZReportScreen`: testid `z-hash` มี `data-ok`, `z-counted`, `z-variance`, `z-reason`, `z-grand`, `backup-due`, `nav-z-list`, `nav-backup`, `z-done`)
+  - `ShiftFigures.tsx`: `SalesTable({ sales, p })` · `QrTable({ sales, p, bank? })` (Q3b-12 · D53) · `DrawerTable({ cash, expectedSatang, p, hideExpected? })` (`hideExpected` = หน้า X ไม่แสดงเงินสดที่ควรมี — Q3b-3 · D52) · `VoidList({ voids, p })` · `NegativeBaseList({ items })` — testid ขึ้นต้นด้วย `p` (`x` / `close` / `z`): `<p>-orders`, `-voids`, `-gross`, `-discount`, `-voided`, `-net`, `-cash-sales`, `-qr-sales`, `-qr-refunded`, `-qr-net`, `-bank-qr`, `-qr-diff` (สองตัวหลังเฉพาะเมื่อส่ง `bank`), `-opening`, `-drawer-cash-sales`, `-void-refunds`, `-paid-in`, `-paid-out`, `-drops`, `-expected` (หรือ `-expected-hidden` เมื่อ `hideExpected`), `-void-<receiptNo>` · `neg-base-<code>`
+  - route `/z` (`ZListScreen`: testid `z-row-<i>`, `z-warn-<i>` (Z ที่ปิดหลังรับทราบ Z เสีย — Q3b-11 · D53), `nav-home`) · `/z/$shiftId` (`ZReportScreen`: testid `z-hash` มี `data-ok`, `z-chain-warning`, `z-counted`, `z-variance`, `z-reason`, `z-grand`, `backup-due`, `nav-z-list`, `nav-backup`, `z-done` + testid `z-*` ของ `ShiftFigures`)
   - `styles.css`: class `.figures` (ตารางตัวเลข ใช้ token สีเดิม `--line` เท่านั้น)
 
 - [ ] **Step 1: query keys + CSS**
@@ -2356,7 +2844,7 @@ function Row({ label, value, testId }: { label: string; value: string; testId: s
   )
 }
 
-/** Sales block shared by the X report, the close screen and the Z report (`p` = testid prefix: x / close / z). */
+/** Sales block shared by the X report and the Z report (`p` = testid prefix: x / z). */
 export function SalesTable({ sales, p }: { sales: SalesSummary; p: string }): JSX.Element {
   return (
     <section>
@@ -2370,15 +2858,42 @@ export function SalesTable({ sales, p }: { sales: SalesSummary; p: string }): JS
           <Row label={TH.voidedSales} value={`−${formatBaht(sales.voidedSatang)}`} testId={`${p}-voided`} />
           <Row label={TH.netSales} value={formatBaht(sales.netSalesSatang)} testId={`${p}-net`} />
           <Row label={TH.cashSales} value={formatBaht(sales.cashSalesSatang)} testId={`${p}-cash-sales`} />
-          <Row label={TH.qrSales} value={formatBaht(sales.qrSalesSatang)} testId={`${p}-qr-sales`} />
         </tbody>
       </table>
     </section>
   )
 }
 
-/** D36: expected = opening + cash sales − void refunds + paid in − paid out − drops. */
-export function DrawerTable({ cash, expectedSatang, p }: { cash: CashInputs; expectedSatang: number; p: string }): JSX.Element {
+/**
+ * Q3b-12 · D53: PromptPay received / transferred back / net — the figure to compare with the bank app. With `bank`
+ * (the Z report) also the bank-app total the owner typed and the frozen difference (bank − net).
+ */
+export function QrTable({ sales, p, bank }: { sales: SalesSummary; p: string; bank?: { totalSatang: number | null; differenceSatang: number | null } }): JSX.Element {
+  return (
+    <section>
+      <h2>{TH.qrSummaryTitle}</h2>
+      <table className="figures">
+        <tbody>
+          <Row label={TH.qrSales} value={formatBaht(sales.qrSalesSatang)} testId={`${p}-qr-sales`} />
+          <Row label={TH.qrRefunded} value={`−${formatBaht(sales.qrRefundedSatang)}`} testId={`${p}-qr-refunded`} />
+          <Row label={TH.qrNet} value={formatBaht(sales.qrNetSatang)} testId={`${p}-qr-net`} />
+          {bank !== undefined && (
+            <>
+              <Row label={TH.bankQrTotal} value={bank.totalSatang === null ? TH.bankQrNotEntered : formatBaht(bank.totalSatang)} testId={`${p}-bank-qr`} />
+              <Row label={TH.qrDifference} value={bank.differenceSatang === null ? '—' : formatBaht(bank.differenceSatang)} testId={`${p}-qr-diff`} />
+            </>
+          )}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
+/**
+ * D36: expected = opening + cash sales − void refunds + paid in − paid out − drops. `hideExpected` (the X report of an
+ * open shift) leaves the expected line out so the drawer is counted blind at close (Q3b-3 · D52 · review I-2).
+ */
+export function DrawerTable({ cash, expectedSatang, p, hideExpected = false }: { cash: CashInputs; expectedSatang: number; p: string; hideExpected?: boolean }): JSX.Element {
   return (
     <section>
       <h2>{TH.drawerTitle}</h2>
@@ -2390,9 +2905,10 @@ export function DrawerTable({ cash, expectedSatang, p }: { cash: CashInputs; exp
           <Row label={TH.paidIn} value={`+${formatBaht(cash.paidInSatang)}`} testId={`${p}-paid-in`} />
           <Row label={TH.paidOut} value={`−${formatBaht(cash.paidOutSatang)}`} testId={`${p}-paid-out`} />
           <Row label={TH.drops} value={`−${formatBaht(cash.dropsSatang)}`} testId={`${p}-drops`} />
-          <Row label={TH.expectedCash} value={formatBaht(expectedSatang)} testId={`${p}-expected`} />
+          {!hideExpected && <Row label={TH.expectedCash} value={formatBaht(expectedSatang)} testId={`${p}-expected`} />}
         </tbody>
       </table>
+      {hideExpected && <p data-testid={`${p}-expected-hidden`}>{TH.xExpectedHidden}</p>}
     </section>
   )
 }
@@ -2446,11 +2962,11 @@ import { useBootstrap, zKey } from '../app/queries'
 import { errorMessage } from '../ui/errors'
 import { formatBaht } from '../ui/format'
 import { TH } from '../ui/th'
-import { DrawerTable, SalesTable, VoidList } from './ShiftFigures'
+import { DrawerTable, QrTable, SalesTable, VoidList } from './ShiftFigures'
 
 const DATE_TIME = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' })
 
-/** A frozen Z report exactly as stored (spec §4.8) — shown on screen, never recomputed (รอ Q3b-5). */
+/** A frozen Z report exactly as stored (spec §4.8) — shown on screen, never recomputed (Q3b-5 · D52). */
 export function ZReportScreen(): JSX.Element {
   const { shiftId } = useParams({ from: '/z/$shiftId' })
   const api = useApi()
@@ -2479,12 +2995,18 @@ export function ZReportScreen(): JSX.Element {
       <p data-testid="z-hash" data-ok={z.data.hashOk ? 'true' : 'false'} className={z.data.hashOk ? 'badge' : 'error'}>
         {z.data.hashOk ? TH.zHashOk : TH.zHashBad} · {z.data.hash.slice(0, 12)}
       </p>
+      {snap.chainWarning != null && (
+        <p role="alert" className="error" data-testid="z-chain-warning">
+          {TH.zChainWarning}
+        </p>
+      )}
       {boot.data?.backupDue === true && (
         <p role="alert" className="error" data-testid="backup-due">
           {TH.backupDue}
         </p>
       )}
       <SalesTable sales={snap.sales} p="z" />
+      <QrTable sales={snap.sales} p="z" bank={{ totalSatang: snap.bankQrTotalSatang ?? null, differenceSatang: snap.qrDifferenceSatang ?? null }} />
       <DrawerTable cash={snap.cash} expectedSatang={snap.expectedCashSatang} p="z" />
       <table className="figures">
         <tbody>
@@ -2544,7 +3066,7 @@ import { errorMessage } from '../ui/errors'
 import { formatBaht } from '../ui/format'
 import { TH } from '../ui/th'
 
-/** Past Z reports of this device, newest first (รอ Q3b-5). */
+/** Past Z reports of this device, newest first (Q3b-5 · D52) — hash state and the chain warning on every row (Q3b-11 · D53). */
 export function ZListScreen(): JSX.Element {
   const api = useApi()
   const navigate = useNavigate()
@@ -2575,6 +3097,11 @@ export function ZListScreen(): JSX.Element {
               {TH.variance} {formatBaht(z.cashVarianceSatang)}
             </span>
             <span className={z.hashOk ? 'badge' : 'error'}>{z.hashOk ? TH.zHashOk : TH.zHashBad}</span>
+            {z.chainWarning && (
+              <span className="error" data-testid={`z-warn-${i}`}>
+                {TH.zChainWarningShort}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -2617,7 +3144,7 @@ const zReportRoute = createRoute({
 - [ ] **Step 5: ตรวจ**
 
 Run: `pnpm --filter @dayo/pos test && pnpm --filter @dayo/pos typecheck && pnpm --filter @dayo/pos build`
-Expected: PASS · `test/brand.test.ts` ยังผ่าน (ไม่มี hex ใหม่ใน `styles.css`) · หน้าจอทั้งสองตรวจด้วย e2e ใน Task 10
+Expected: PASS (118 เทสต์ ไม่เพิ่ม) · `test/brand.test.ts` ยังผ่าน (ไม่มี hex ใหม่ใน `styles.css`) · หน้าจอทั้งสองตรวจด้วย e2e ใน Task 11
 
 - [ ] **Step 6: Commit**
 
@@ -2629,26 +3156,25 @@ git commit -m "feat(pos): z report and past z screens"
 
 ---
 
-### Task 10: หน้า X (`/shift`) · ปิดกะ (`/shift/close`) · เงินเข้า-ออก · เปิดกะด่วน · แถบเตือน + e2e ปิดกะ
+### Task 10: หน้า X (`/shift`) ที่ไม่แสดงเงินสดที่ควรมี · เงินเข้า-ออกบนหน้าขาย · แถบกะค้างข้ามวัน + e2e รายงาน X
 
 **Files:**
-- Create: `apps/pos/e2e/close-shift.spec.ts`, `apps/pos/src/ui/count-input.test.ts`, `apps/pos/src/screens/ShiftScreen.tsx`, `apps/pos/src/screens/CloseShiftScreen.tsx`, `apps/pos/src/screens/CashMoveDialog.tsx`
-- Modify: `apps/pos/src/ui/format.ts`, `apps/pos/src/app/queries.ts`, `apps/pos/src/screens/SellScreen.tsx`, `apps/pos/src/screens/OpenShiftScreen.tsx` (แทนทั้งไฟล์), `apps/pos/src/router.tsx`
+- Create: `apps/pos/e2e/shift-x.spec.ts`, `apps/pos/src/screens/ShiftScreen.tsx`, `apps/pos/src/screens/CashMoveDialog.tsx`
+- Modify: `apps/pos/src/app/queries.ts`, `apps/pos/src/screens/SellScreen.tsx`, `apps/pos/src/router.tsx`
 
 **Interfaces:**
-- Consumes: `shiftReport`, `closeShift`, `recordCashMovement`, `quickOpenShift` (Task 3–6) · `CASH_DENOMINATIONS_SATANG`, `tallyCashCount`, `varianceNeedsReason`, `CashCountLine` (Task 1) · `isShiftStale` (Task 7) · `SalesTable`, `DrawerTable`, `VoidList`, `NegativeBaseList`, `zListKey` (Task 9) · routes `/z`, `/z/$shiftId`, `/backup` · `useCart` (แผน 3) · `PinPad` (แผน 3) · e2e helpers `addItem`, `enterPin`, `firstRun`, `OWNER`
+- Consumes: `shiftReport`, `recordCashMovement` (Task 4–5) · `isShiftStale` (Task 7) · `SalesTable`, `QrTable`, `DrawerTable`, `VoidList`, `NegativeBaseList` (Task 9) · routes `/z`, `/backup` (Task 8–9) · `REASON_MAX_LENGTH` (Task 2) · `parseBahtInput` (แผน 3) · e2e helpers `addItem`, `firstRun`
 - Produces:
-  - `parseCountInput(text): number | null` ใน `ui/format.ts` · `shiftReportKey = ['shift-report']`
-  - route `/shift` (`ShiftScreen` — testid `x-*` ของ `ShiftFigures`, `x-shift`, `x-quick`, `x-move-<id>`, `close-shift-open`, `nav-backup`, `nav-z-list`, `nav-sell`) · `/shift/close` (`CloseShiftScreen` — `count-<denominationSatang>`, `close-counted`, `count-done`, `count-edit`, `close-expected`, `close-variance`, `close-reason`, `close-pending`, `close-cart-not-empty`, `close-approver-<displayName>` + PinPad `pin-*`)
-  - หน้าขาย: `cash-move-open`, `nav-shift`, `shift-stale` · `CashMoveDialog`: `cash-kind-<KIND>`, `cash-amount`, `cash-reason`, `cash-save` · หน้าเปิดกะ: `shift-quick-open` (เฉพาะ owner), `backup-due`, `nav-z-list`, `nav-backup`
+  - `queries.ts`: `shiftReportKey = ['shift-report']` (Task 11 ใช้)
+  - route `/shift` (`ShiftScreen` — testid `x-*` ของ `ShiftFigures` โดย **ไม่มี `x-expected`** มีแต่ `x-expected-hidden` (Q3b-3 · D52 · review I-2), `x-shift`, `x-quick`, `x-move-<id>`, `nav-z-list`, `nav-backup`, `nav-sell` · **ไม่มีปุ่มปิดกะ** — ปิดกะเริ่มจากหน้าขาย (Task 11))
+  - หน้าขาย: `cash-move-open`, `nav-shift`, `shift-stale` (Q3b-8 · D52) · `CashMoveDialog`: `cash-kind-<KIND>`, `cash-amount`, `cash-reason`, `cash-save` (ทุกคนที่ล็อกอิน · บังคับเหตุผล — Q3b-9 · D52)
 
 - [ ] **Step 1: เขียน e2e ให้ตก**
 
-`apps/pos/e2e/close-shift.spec.ts`
+`apps/pos/e2e/shift-x.spec.ts`
 ```ts
-import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
-import { addItem, enterPin, firstRun, OWNER } from './helpers'
+import { addItem, firstRun } from './helpers'
 
 async function sellCash(page: Page, productCode: string): Promise<void> {
   await addItem(page, productCode)
@@ -2659,126 +3185,47 @@ async function sellCash(page: Page, productCode: string): Promise<void> {
   await expect(page).toHaveURL(/\/sell$/)
 }
 
-test('X report → paid-out → blind count → variance reason → owner PIN → Z → backup file → next shift (spec §4.8, §11)', async ({ page }) => {
+test('paid-out from the sell screen → X report live, without the expected cash (spec §4.8 · Q3b-3/9 · D52)', async ({ page }) => {
   await firstRun(page) // float ฿500
   await sellCash(page, 'Original') // ฿45
   await sellCash(page, 'Original') // ฿45
 
-  // paid-out ฿20 for ice (รอ Q3b-9)
+  // paid-out ฿20 for ice — anyone signed in, with a reason (Q3b-9)
   await page.getByTestId('cash-move-open').click()
   await page.getByTestId('cash-kind-PAID_OUT').click()
   await page.getByTestId('cash-amount').fill('20')
+  await page.getByTestId('cash-save').click()
+  await expect(page.getByRole('alert')).toBeVisible() // no reason yet → refused on screen
   await page.getByTestId('cash-reason').fill('ซื้อน้ำแข็ง')
   await page.getByTestId('cash-save').click()
+  await expect(page.getByTestId('cash-save')).toHaveCount(0)
 
-  // X report: live, anytime (spec §4.8)
   await page.getByTestId('nav-shift').click()
   await expect(page.getByTestId('x-net')).toHaveText('฿90')
+  await expect(page.getByTestId('x-opening')).toHaveText('฿500')
+  await expect(page.getByTestId('x-drawer-cash-sales')).toHaveText('+฿90')
   await expect(page.getByTestId('x-paid-out')).toHaveText('−฿20')
-  await expect(page.getByTestId('x-expected')).toHaveText('฿570') // 500 + 90 − 20
-
-  // close: count first, expected shown only after "นับเสร็จ" (รอ Q3b-3)
-  await page.getByTestId('close-shift-open').click()
-  await expect(page.getByTestId('close-expected')).toHaveCount(0)
-  await page.getByTestId('count-50000').fill('1') // ฿500
-  await page.getByTestId('count-2000').fill('2') // ฿40 → ฿540 counted, −฿30
-  await expect(page.getByTestId('close-counted')).toHaveText('฿540')
-  await page.getByTestId('count-done').click()
-  await expect(page.getByTestId('close-expected')).toHaveText('฿570')
-  await expect(page.getByTestId('close-variance')).toHaveText('-฿30')
-  await expect(page.getByTestId('neg-base-PB-TEA-THAI')).toBeVisible() // D28
-
-  await enterPin(page, OWNER.pin) // no reason yet → refused on screen, nothing sent
-  await expect(page.getByRole('alert')).toBeVisible()
-  await page.getByTestId('close-reason').fill('ทอนเงินผิด')
-  await enterPin(page, OWNER.pin)
-
-  await expect(page).toHaveURL(/\/z\//)
-  await expect(page.getByTestId('z-hash')).toHaveAttribute('data-ok', 'true')
-  await expect(page.getByTestId('z-net')).toHaveText('฿90')
-  await expect(page.getByTestId('z-counted')).toHaveText('฿540')
-  await expect(page.getByTestId('z-variance')).toHaveText('-฿30')
-  await expect(page.getByTestId('z-reason')).toHaveText('ทอนเงินผิด')
-  await expect(page.getByTestId('backup-due')).toBeVisible()
-
-  // backup: the whole SQLite file lands in Downloads (รอ Q3b-6)
-  await page.getByTestId('nav-backup').click()
-  const downloadPromise = page.waitForEvent('download')
-  await page.getByTestId('backup-download').click()
-  const download = await downloadPromise
-  expect(download.suggestedFilename()).toMatch(/^dayo-pos-A-\d{8}-\d{6}\.sqlite3$/)
-  const bytes = readFileSync(await download.path())
-  expect(bytes.subarray(0, 16).toString('latin1')).toBe('SQLite format 3\u0000')
-  await expect(page.getByTestId('backup-done')).toBeVisible()
-
-  // next day: the sell screen needs a new shift; the past Z is listed
-  await page.getByTestId('nav-home').click()
-  await expect(page).toHaveURL(/\/shift\/open$/)
-  await expect(page.getByTestId('backup-due')).toHaveCount(0)
-  await page.getByTestId('nav-z-list').click()
-  await expect(page.getByTestId('z-row-0')).toBeVisible()
-})
-
-test('quick open (spec §4.8): an owner opens with a 0 float and the X report marks it', async ({ page }) => {
-  await firstRun(page)
-  // close the first shift with an exact count so we reach the open-shift screen again
-  await page.getByTestId('nav-shift').click()
-  await page.getByTestId('close-shift-open').click()
-  await page.getByTestId('count-50000').fill('1')
-  await page.getByTestId('count-done').click()
-  await enterPin(page, OWNER.pin)
-  await expect(page).toHaveURL(/\/z\//)
-  await page.getByTestId('z-done').click()
-
-  await page.getByTestId('shift-quick-open').click()
+  await expect(page.getByTestId('x-qr-net')).toHaveText('฿0')
+  // blind count (review I-2): the X report never shows the expected cash, and closing is not reached from here
+  await expect(page.getByTestId('x-expected')).toHaveCount(0)
+  await expect(page.getByTestId('x-expected-hidden')).toBeVisible()
+  await expect(page.getByTestId('close-shift-open')).toHaveCount(0)
+  await page.getByTestId('nav-sell').click()
   await expect(page).toHaveURL(/\/sell$/)
-  await page.getByTestId('nav-shift').click()
-  await expect(page.getByTestId('x-quick')).toBeVisible()
-  await expect(page.getByTestId('x-opening')).toHaveText('฿0')
 })
 ```
 
-Run: `pnpm --filter @dayo/pos e2e -- close-shift`
+Run: `pnpm --filter @dayo/pos exec playwright test shift-x`
 Expected: FAIL — หา `getByTestId('cash-move-open')` ไม่เจอ (timeout)
 
-- [ ] **Step 2: `parseCountInput` + query key**
-
-`apps/pos/src/ui/count-input.test.ts`
-```ts
-import { describe, expect, it } from 'vitest'
-import { parseCountInput } from './format'
-
-describe('parseCountInput', () => {
-  it('empty is 0; whole numbers up to 99999', () => {
-    expect(parseCountInput('')).toBe(0)
-    expect(parseCountInput('  ')).toBe(0)
-    expect(parseCountInput('7')).toBe(7)
-    expect(parseCountInput(' 012 ')).toBe(12)
-    expect(parseCountInput('99999')).toBe(99_999)
-  })
-  it('rejects anything else', () => {
-    for (const bad of ['-1', '1.5', 'abc', '100000', '1,000']) expect(parseCountInput(bad)).toBeNull()
-  })
-})
-```
-
-แก้ `apps/pos/src/ui/format.ts` — ต่อท้ายไฟล์:
-```ts
-
-/** Pieces of one note/coin typed at shift close: "" → 0 · "12" → 12 · anything else (or over 99999) → null. */
-export function parseCountInput(text: string): number | null {
-  const t = text.trim()
-  if (t === '') return 0
-  return /^\d{1,5}$/.test(t) ? Number(t) : null
-}
-```
+- [ ] **Step 2: query key**
 
 แก้ `apps/pos/src/app/queries.ts` — ต่อจาก `export const zKey = …` เพิ่ม:
 ```ts
 export const shiftReportKey = ['shift-report'] as const
 ```
 
-- [ ] **Step 3: หน้า X, หน้าต่างเงินเข้า-ออก, หน้าปิดกะ**
+- [ ] **Step 3: หน้า X และหน้าต่างเงินเข้า-ออก**
 
 `apps/pos/src/screens/ShiftScreen.tsx`
 ```tsx
@@ -2790,9 +3237,13 @@ import { shiftReportKey, useBootstrap } from '../app/queries'
 import { errorMessage } from '../ui/errors'
 import { formatBaht } from '../ui/format'
 import { TH } from '../ui/th'
-import { DrawerTable, NegativeBaseList, SalesTable, VoidList } from './ShiftFigures'
+import { DrawerTable, NegativeBaseList, QrTable, SalesTable, VoidList } from './ShiftFigures'
 
-/** X report (spec §4.8): the open shift computed live — nothing is written. Entry to close / backup / past Z. */
+/**
+ * X report (spec §4.8): the open shift computed live — nothing is written. Viewable any time, but it is not the way to
+ * close: "ปิดกะ" lives on the sell screen and the expected cash is left out here, so the drawer is counted blind
+ * (Q3b-3 · D52 · review I-2).
+ */
 export function ShiftScreen(): JSX.Element {
   const api = useApi()
   const navigate = useNavigate()
@@ -2829,7 +3280,8 @@ export function ShiftScreen(): JSX.Element {
         )}
       </p>
       <SalesTable sales={r.sales} p="x" />
-      <DrawerTable cash={r.cash} expectedSatang={r.expectedCashSatang} p="x" />
+      <QrTable sales={r.sales} p="x" />
+      <DrawerTable cash={r.cash} expectedSatang={r.expectedCashSatang} p="x" hideExpected />
       <section>
         <h2>{TH.cashMovesTitle}</h2>
         <ul className="list">
@@ -2849,9 +3301,6 @@ export function ShiftScreen(): JSX.Element {
         </button>
         <button type="button" data-testid="nav-backup" onClick={() => void navigate({ to: '/backup' })}>
           {TH.backupTitle}
-        </button>
-        <button type="button" className="primary" data-testid="close-shift-open" onClick={() => void navigate({ to: '/shift/close' })}>
-          {TH.closeShift}
         </button>
       </div>
     </main>
@@ -2873,7 +3322,7 @@ import { TH } from '../ui/th'
 
 const KINDS: CashMovementInput['kind'][] = ['PAID_IN', 'PAID_OUT', 'DROP']
 
-/** spec §3.5: paid-in / paid-out / drop typed in by whoever is signed in, with a reason (รอ Q3b-9). */
+/** spec §3.5: paid-in / paid-out / drop typed in by whoever is signed in, with a reason (Q3b-9 · D52). */
 export function CashMoveDialog({ onClose }: { onClose: () => void }): JSX.Element {
   const api = useApi()
   const queryClient = useQueryClient()
@@ -2938,26 +3387,381 @@ export function CashMoveDialog({ onClose }: { onClose: () => void }): JSX.Elemen
 }
 ```
 
+- [ ] **Step 4: หน้าขาย · route**
+
+แก้ `apps/pos/src/screens/SellScreen.tsx`:
+- ต่อจาก `import { useSession } from '../app/session'` เพิ่ม `import { isShiftStale } from '../lib/clock'`
+- ต่อจาก `import { CartPanel } from './CartPanel'` เพิ่ม `import { CashMoveDialog } from './CashMoveDialog'`
+- ต่อจาก `const [discountOpen, setDiscountOpen] = useState(false)` เพิ่ม `const [cashMoveOpen, setCashMoveOpen] = useState(false)`
+- ต่อจากปุ่ม `data-testid="nav-orders"` (หลัง `</button>` ของมัน) เพิ่ม:
+```tsx
+        <button type="button" data-testid="cash-move-open" onClick={() => setCashMoveOpen(true)}>
+          {TH.cashMove}
+        </button>
+        <button type="button" data-testid="nav-shift" onClick={() => void navigate({ to: '/shift' })}>
+          {TH.shiftMenu}
+        </button>
+```
+- ระหว่าง `</header>` กับ `<main className="grid">` เพิ่ม (Q3b-8 · D52):
+```tsx
+      {boot.data?.openShift != null && isShiftStale(boot.data.openShift.businessDate, new Date().toISOString()) && (
+        <p role="alert" className="error" data-testid="shift-stale">
+          {TH.shiftStale(boot.data.openShift.businessDate)}
+        </p>
+      )}
+```
+- ต่อจากบรรทัด `{discountOpen && <DiscountDialog onClose={() => setDiscountOpen(false)} />}` เพิ่ม:
+```tsx
+      {cashMoveOpen && <CashMoveDialog onClose={() => setCashMoveOpen(false)} />}
+```
+
+แก้ `apps/pos/src/router.tsx`:
+- ต่อจาก `import { SetupScreen } from './screens/SetupScreen'` เพิ่ม `import { ShiftScreen } from './screens/ShiftScreen'`
+- ต่อจาก `const zReportRoute = createRoute({ … })` เพิ่ม:
+```tsx
+const shiftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/shift',
+  component: () => (
+    <RequireSession>
+      <ShiftScreen />
+    </RequireSession>
+  ),
+})
+```
+- ใน `rootRoute.addChildren([...])` ต่อจาก `zReportRoute,` เพิ่ม `shiftRoute,`
+
+- [ ] **Step 5: รันให้ผ่าน**
+
+Run:
+```bash
+pnpm --filter @dayo/pos test
+pnpm --filter @dayo/pos typecheck
+pnpm --filter @dayo/pos e2e
+```
+Expected: unit/integration 118 ผ่าน (ไม่เพิ่ม) · e2e **7 เทสต์ผ่าน** (6 เดิม + `shift-x`) · ถ้า e2e เดิม (`sell-cash`, `offline`) ตกเพราะหาปุ่มใน topbar ไม่เจอ ให้ตรวจว่าเพิ่มปุ่มใหม่ **หลัง** `nav-orders` ไม่ได้แทนที่ของเดิม
+
+- [ ] **Step 6: Commit**
+
+ใช้ skill `committing-code` แล้ว:
+```bash
+git add apps/pos/e2e/shift-x.spec.ts apps/pos/src/app/queries.ts apps/pos/src/screens/ShiftScreen.tsx apps/pos/src/screens/CashMoveDialog.tsx apps/pos/src/screens/SellScreen.tsx apps/pos/src/router.tsx
+git commit -m "feat(pos): x report without expected cash, cash moves and stale shift banner"
+```
+
+---
+
+### Task 11: ปิดกะ (`/shift/close`) นับแบบไม่เห็นยอด · ยอดพร้อมเพย์ในแอปธนาคาร · รับทราบ Z เสีย · ปุ่มปิดกะบนหน้าขาย · เปิดกะด่วน + e2e ปิดกะ 💰 review: opus
+
+**Files:**
+- Create: `apps/pos/e2e/close-shift.spec.ts`, `apps/pos/src/ui/count-input.test.ts`, `apps/pos/src/screens/CloseShiftScreen.tsx`, `apps/pos/src/screens/CloseShiftScreen.test.tsx`
+- Modify: `apps/pos/src/ui/format.ts`, `apps/pos/src/screens/SellScreen.tsx`, `apps/pos/src/screens/OpenShiftScreen.tsx` (แทนทั้งไฟล์), `apps/pos/src/router.tsx`
+
+**Interfaces:**
+- Consumes: `closeShift`, `quickOpenShift`, `shiftReport` (Task 3–6) · `posErrorCode` (`api/errors.ts` แผน 3) · `CASH_DENOMINATIONS_SATANG`, `tallyCashCount`, `varianceNeedsReason`, `CashCountLine` (Task 1) · `QrTable`, `NegativeBaseList`, `zListKey` (Task 9) · `shiftReportKey` (Task 10) · routes `/z`, `/z/$shiftId`, `/backup` · `useCart`, `PinPad`, `parseBahtInput` (แผน 3) · e2e helpers `addItem`, `enterPin`, `firstRun`, `OWNER`
+- Produces:
+  - `parseCountInput(text): number | null` ใน `ui/format.ts`
+  - route `/shift/close` (`CloseShiftScreen` — `count-<denominationSatang>`, `close-counted`, `count-done`, `count-edit`, `close-expected` และ `close-variance` **เฉพาะหลังกด `count-done`** (Q3b-3 · D52), `close-reason`, `close-qr-sales` / `close-qr-refunded` / `close-qr-net` + ช่อง `close-bank-qr` (ไม่บังคับ ไม่มีเกณฑ์ — Q3b-12 · D53), `close-chain-broken` (หลังได้ `Z_CHAIN_BROKEN` — PIN ครั้งถัดไปส่ง `acknowledgeZChainBroken: true` — Q3b-11 · D53), `close-pending`, `close-cart-not-empty`, `close-approver-<displayName>` + PinPad `pin-*`, `nav-sell`)
+  - หน้าขาย: `close-shift-open` (ข้าง `nav-shift` — ทางเดียวที่เข้าหน้าปิดกะ) · หน้าเปิดกะ: `shift-quick-open` (เฉพาะ owner — Q3b-10 · D52), `backup-due`, `nav-z-list`, `nav-backup`
+
+- [ ] **Step 1: เขียนเทสต์ให้ตก (component + e2e)**
+
+`apps/pos/src/ui/count-input.test.ts`
+```ts
+import { describe, expect, it } from 'vitest'
+import { parseCountInput } from './format'
+
+describe('parseCountInput', () => {
+  it('empty is 0; whole numbers up to 99999', () => {
+    expect(parseCountInput('')).toBe(0)
+    expect(parseCountInput('  ')).toBe(0)
+    expect(parseCountInput('7')).toBe(7)
+    expect(parseCountInput(' 012 ')).toBe(12)
+    expect(parseCountInput('99999')).toBe(99_999)
+  })
+  it('rejects anything else', () => {
+    for (const bad of ['-1', '1.5', 'abc', '100000', '1,000']) expect(parseCountInput(bad)).toBeNull()
+  })
+})
+```
+
+`apps/pos/src/screens/CloseShiftScreen.test.tsx`
+```tsx
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useEffect, type JSX } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PosError } from '../api/errors'
+import type { CloseShiftInput, PosApi, ShiftReportDto, UserDto, ZReportDto } from '../api/types'
+import { ApiProvider } from '../app/api-context'
+import { CartProvider } from '../app/cart-context'
+import { SessionProvider, useSession } from '../app/session'
+import { CloseShiftScreen } from './CloseShiftScreen'
+
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  useNavigate: () => vi.fn(),
+  Navigate: () => null,
+}))
+
+afterEach(() => cleanup())
+
+const OWNER: UserDto = { id: 'u1', displayName: 'TungAo', role: 'owner' }
+const SHIFT = { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T01:00:00.000Z', openedBy: 'u1', openingFloatSatang: 50_000 }
+const REPORT: ShiftReportDto = {
+  shift: { ...SHIFT, openedByName: 'TungAo', openedQuick: false },
+  generatedAt: '2026-09-17T13:00:00.000Z',
+  sales: { orderCount: 2, voidCount: 0, grossSalesSatang: 9_500, discountSatang: 0, voidedSatang: 0, netSalesSatang: 9_500, cashSalesSatang: 4_500, qrSalesSatang: 5_000, qrRefundedSatang: 0, qrNetSatang: 5_000 },
+  cash: { openingFloatSatang: 50_000, cashSalesSatang: 4_500, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 2_500, dropsSatang: 0 },
+  expectedCashSatang: 52_000,
+  varianceAlertSatang: 2_000,
+  cashMovements: [],
+  voids: [],
+  negativeBases: [],
+  pendingSyncItems: 3,
+}
+
+function SignedIn(): JSX.Element {
+  const { signIn } = useSession()
+  useEffect(() => signIn(OWNER), [signIn])
+  return <CloseShiftScreen />
+}
+
+function mount(closeShift: (input: CloseShiftInput) => Promise<ZReportDto>): PosApi {
+  const api = {
+    bootstrap: vi.fn(async () => ({ needsSetup: false, device: null, users: [OWNER], openShift: SHIFT, pendingSyncItems: 3, lastBackupAt: null, backupDue: false })),
+    shiftReport: vi.fn(async () => REPORT),
+    closeShift: vi.fn(closeShift),
+  } as unknown as PosApi
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ApiProvider api={api}>
+        <SessionProvider>
+          <CartProvider initial={{ orderId: 'o', lines: [], discount: null }}>
+            <SignedIn />
+          </CartProvider>
+        </SessionProvider>
+      </ApiProvider>
+    </QueryClientProvider>,
+  )
+  return api
+}
+
+async function countAndConfirm(): Promise<void> {
+  await waitFor(() => expect(screen.getByTestId('count-50000')).toBeTruthy())
+  fireEvent.change(screen.getByTestId('count-50000'), { target: { value: '1' } })
+  fireEvent.change(screen.getByTestId('count-2000'), { target: { value: '1' } })
+  act(() => screen.getByTestId('count-done').click())
+  act(() => screen.getByTestId('close-approver-TungAo').click())
+}
+
+function enterPin(pin: string): void {
+  for (const d of pin) act(() => screen.getByTestId(`pin-${d}`).click())
+  act(() => screen.getByTestId('pin-ok').click())
+}
+
+const inputOf = (api: PosApi, call: number): CloseShiftInput => (api.closeShift as unknown as ReturnType<typeof vi.fn>).mock.calls[call]![0] as CloseShiftInput
+
+describe('CloseShiftScreen', () => {
+  it('counts blind: the expected cash appears only after "นับเสร็จ" (Q3b-3 · D52 · review I-2)', async () => {
+    mount(async () => ({}) as ZReportDto)
+    await waitFor(() => expect(screen.getByTestId('count-50000')).toBeTruthy())
+    expect(screen.queryByTestId('close-expected')).toBeNull()
+    expect(screen.queryByTestId('close-variance')).toBeNull()
+    await countAndConfirm()
+    expect(screen.getByTestId('close-counted').textContent).toBe('฿520')
+    expect(screen.getByTestId('close-expected').textContent).toBe('฿520')
+    expect(screen.getByTestId('close-variance').textContent).toBe('฿0')
+    expect(screen.getByTestId('close-qr-net').textContent).toBe('฿50')
+  })
+
+  it('sends the bank-app PromptPay total when typed, null when left empty (Q3b-12 · D53)', async () => {
+    let calls = 0
+    const api = mount(async () => {
+      calls += 1
+      if (calls === 1) throw new PosError('PIN_WRONG', 'wrong user or PIN') // stay on the screen for a second try
+      return { shiftId: 's1' } as ZReportDto
+    })
+    await countAndConfirm()
+    enterPin('1111')
+    await waitFor(() => expect(api.closeShift).toHaveBeenCalledTimes(1))
+    expect(inputOf(api, 0)).toMatchObject({ bankQrTotalSatang: null, acknowledgeZChainBroken: false, approverUserId: OWNER.id, shownExpectedCashSatang: 52_000 })
+    fireEvent.change(screen.getByTestId('close-bank-qr'), { target: { value: '45.50' } })
+    enterPin('1111')
+    await waitFor(() => expect(api.closeShift).toHaveBeenCalledTimes(2))
+    expect(inputOf(api, 1).bankQrTotalSatang).toBe(4_550)
+  })
+
+  it('after Z_CHAIN_BROKEN the owner enters the PIN again to acknowledge (Q3b-11 · D53)', async () => {
+    let calls = 0
+    const api = mount(async () => {
+      calls += 1
+      if (calls === 1) throw new PosError('Z_CHAIN_BROKEN', 's0')
+      return { shiftId: 's1' } as ZReportDto
+    })
+    await countAndConfirm()
+    expect(screen.queryByTestId('close-chain-broken')).toBeNull()
+    enterPin('1111')
+    await waitFor(() => expect(screen.getByTestId('close-chain-broken')).toBeTruthy())
+    expect(inputOf(api, 0).acknowledgeZChainBroken).toBe(false)
+    enterPin('1111')
+    await waitFor(() => expect(api.closeShift).toHaveBeenCalledTimes(2))
+    expect(inputOf(api, 1).acknowledgeZChainBroken).toBe(true)
+  })
+})
+```
+
+`apps/pos/e2e/close-shift.spec.ts`
+```ts
+import { readFileSync } from 'node:fs'
+import { expect, test, type Page } from '@playwright/test'
+import { addItem, enterPin, firstRun, OWNER } from './helpers'
+
+async function sellCash(page: Page, productCode: string): Promise<void> {
+  await addItem(page, productCode)
+  await page.getByTestId('pay-cash').click()
+  await page.getByTestId('tender-exact').click()
+  await page.getByTestId('confirm-cash').click()
+  await page.getByTestId('done-new-sale').click()
+  await expect(page).toHaveURL(/\/sell$/)
+}
+
+async function sellQr(page: Page, productCode: string): Promise<void> {
+  await addItem(page, productCode)
+  await page.getByTestId('pay-qr').click()
+  await page.getByTestId('qr-received').click()
+  await page.getByTestId('done-new-sale').click()
+  await expect(page).toHaveURL(/\/sell$/)
+}
+
+test('blind count from the sell screen → variance reason → owner PIN → Z with QR vs bank → backup confirmed → next shift (spec §4.8, §11)', async ({ page }) => {
+  await firstRun(page) // float ฿500
+  await sellCash(page, 'Original') // ฿45
+  await sellCash(page, 'Original') // ฿45
+  await sellQr(page, 'Latte') // ฿50 PromptPay
+  await page.getByTestId('cash-move-open').click() // paid-out ฿20 (Q3b-9)
+  await page.getByTestId('cash-kind-PAID_OUT').click()
+  await page.getByTestId('cash-amount').fill('20')
+  await page.getByTestId('cash-reason').fill('ซื้อน้ำแข็ง')
+  await page.getByTestId('cash-save').click()
+  await expect(page.getByTestId('cash-save')).toHaveCount(0)
+
+  // close from the sell screen: count first, the expected cash appears only after "นับเสร็จ" (Q3b-3 · D52)
+  await page.getByTestId('close-shift-open').click()
+  await expect(page.getByTestId('count-50000')).toBeVisible()
+  await expect(page.getByTestId('close-expected')).toHaveCount(0)
+  await page.getByTestId('count-50000').fill('1') // ฿500
+  await page.getByTestId('count-2000').fill('2') // ฿40 → ฿540 counted
+  await expect(page.getByTestId('close-counted')).toHaveText('฿540')
+  await page.getByTestId('count-done').click()
+  await expect(page.getByTestId('close-expected')).toHaveText('฿570') // 500 + 90 − 20
+  await expect(page.getByTestId('close-variance')).toHaveText('-฿30')
+  await expect(page.getByTestId('close-qr-net')).toHaveText('฿50') // Q3b-12
+  await page.getByTestId('close-bank-qr').fill('50')
+  await expect(page.getByTestId('neg-base-PB-TEA-THAI')).toBeVisible() // D28
+
+  await enterPin(page, OWNER.pin) // no reason yet → refused on screen, nothing sent
+  await expect(page.getByRole('alert')).toBeVisible()
+  await page.getByTestId('close-reason').fill('ทอนเงินผิด')
+  await enterPin(page, OWNER.pin)
+
+  await expect(page).toHaveURL(/\/z\//)
+  await expect(page.getByTestId('z-hash')).toHaveAttribute('data-ok', 'true')
+  await expect(page.getByTestId('z-chain-warning')).toHaveCount(0)
+  await expect(page.getByTestId('z-net')).toHaveText('฿140')
+  await expect(page.getByTestId('z-qr-net')).toHaveText('฿50')
+  await expect(page.getByTestId('z-bank-qr')).toHaveText('฿50')
+  await expect(page.getByTestId('z-qr-diff')).toHaveText('฿0')
+  await expect(page.getByTestId('z-expected')).toHaveText('฿570')
+  await expect(page.getByTestId('z-counted')).toHaveText('฿540')
+  await expect(page.getByTestId('z-variance')).toHaveText('-฿30')
+  await expect(page.getByTestId('z-reason')).toHaveText('ทอนเงินผิด')
+  await expect(page.getByTestId('backup-due')).toBeVisible()
+
+  // backup: the whole SQLite file lands in Downloads (Q3b-6) and counts only once the owner confirms it (Q3b-7 · I-4)
+  await page.getByTestId('nav-backup').click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByTestId('backup-download').click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toMatch(/^dayo-pos-A-\d{8}-\d{6}\.sqlite3$/)
+  const bytes = readFileSync(await download.path())
+  expect(bytes.subarray(0, 16).toString('latin1')).toBe('SQLite format 3\u0000')
+  await expect(page.getByTestId('backup-file')).toContainText(download.suggestedFilename())
+  await expect(page.getByTestId('backup-done')).toHaveCount(0)
+  await page.getByTestId('backup-confirm').click()
+  await expect(page.getByTestId('backup-done')).toBeVisible()
+
+  // next day: the sell screen needs a new shift; the banner is gone; the past Z is listed
+  await page.getByTestId('nav-home').click()
+  await expect(page).toHaveURL(/\/shift\/open$/)
+  await expect(page.getByTestId('backup-due')).toHaveCount(0)
+  await page.getByTestId('nav-z-list').click()
+  await expect(page.getByTestId('z-row-0')).toBeVisible()
+  await expect(page.getByTestId('z-warn-0')).toHaveCount(0)
+})
+
+test('quick open (spec §4.8 · Q3b-10): an owner opens with a 0 float and the X report marks it', async ({ page }) => {
+  await firstRun(page)
+  // close the first shift with an exact count so we reach the open-shift screen again
+  await page.getByTestId('close-shift-open').click()
+  await page.getByTestId('count-50000').fill('1')
+  await page.getByTestId('count-done').click()
+  await enterPin(page, OWNER.pin)
+  await expect(page).toHaveURL(/\/z\//)
+  await page.getByTestId('z-done').click()
+
+  await page.getByTestId('shift-quick-open').click()
+  await expect(page).toHaveURL(/\/sell$/)
+  await page.getByTestId('nav-shift').click()
+  await expect(page.getByTestId('x-quick')).toBeVisible()
+  await expect(page.getByTestId('x-opening')).toHaveText('฿0')
+})
+```
+
+Run: `pnpm --filter @dayo/pos exec vitest run CloseShiftScreen count-input` แล้ว `pnpm --filter @dayo/pos exec playwright test close-shift`
+Expected: FAIL — `Failed to resolve import "./CloseShiftScreen"` / `parseCountInput is not a function` · e2e หา `getByTestId('close-shift-open')` ไม่เจอ (timeout)
+
+- [ ] **Step 2: `parseCountInput`**
+
+แก้ `apps/pos/src/ui/format.ts` — ต่อท้ายไฟล์:
+```ts
+
+/** Pieces of one note/coin typed at shift close: "" → 0 · "12" → 12 · anything else (or over 99999) → null. */
+export function parseCountInput(text: string): number | null {
+  const t = text.trim()
+  if (t === '') return 0
+  return /^\d{1,5}$/.test(t) ? Number(t) : null
+}
+```
+
+- [ ] **Step 3: หน้าปิดกะ**
+
 `apps/pos/src/screens/CloseShiftScreen.tsx`
 ```tsx
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
 import { CASH_DENOMINATIONS_SATANG, tallyCashCount, varianceNeedsReason, type CashCountLine } from '@dayo/domain'
+import { posErrorCode } from '../api/errors'
 import { REASON_MAX_LENGTH, type CloseShiftInput } from '../api/types'
 import { useApi } from '../app/api-context'
 import { useCart } from '../app/cart-context'
 import { bootstrapKey, ordersKey, shiftReportKey, useBootstrap, zListKey } from '../app/queries'
 import { useSession } from '../app/session'
 import { errorMessage } from '../ui/errors'
-import { formatBaht, parseCountInput } from '../ui/format'
+import { formatBaht, parseBahtInput, parseCountInput } from '../ui/format'
 import { TH } from '../ui/th'
 import { PinPad } from './PinPad'
-import { NegativeBaseList } from './ShiftFigures'
+import { NegativeBaseList, QrTable } from './ShiftFigures'
 
 /**
- * spec §4.8 / §5 ปิดวัน: count the drawer by denomination (รอ Q3b-1) → only then show expected cash and the variance
- * (รอ Q3b-3) → reason when above the threshold → an owner confirms with their PIN (รอ Q3b-2) → frozen Z.
+ * spec §4.8 / §5 ปิดวัน, reached from the sell screen (not from the X report): count the drawer by denomination
+ * (Q3b-1) blind → only after "นับเสร็จ" show expected cash and the variance (Q3b-3 · review I-2) → reason when above the
+ * threshold → PromptPay received / refunded / net and the optional bank-app total (Q3b-12) → an owner confirms with
+ * their PIN (Q3b-2). If the previous Z fails its hash, the API answers Z_CHAIN_BROKEN and the owner acknowledges it by
+ * entering their PIN once more (Q3b-11 · D53).
  */
 export function CloseShiftScreen(): JSX.Element {
   const api = useApi()
@@ -2970,6 +3774,8 @@ export function CloseShiftScreen(): JSX.Element {
   const [texts, setTexts] = useState<Record<number, string>>({})
   const [counted, setCounted] = useState(false)
   const [reason, setReason] = useState('')
+  const [bankText, setBankText] = useState('')
+  const [chainBroken, setChainBroken] = useState(false)
   const owners = (boot.data?.users ?? []).filter((u) => u.role === 'owner')
   const [approverId, setApproverId] = useState<string | null>(user?.role === 'owner' ? user.id : null)
   const [error, setError] = useState<string | null>(null)
@@ -2977,10 +3783,13 @@ export function CloseShiftScreen(): JSX.Element {
   const close = useMutation({
     mutationFn: (input: CloseShiftInput) => api.closeShift(input),
     onSuccess: async (z) => {
-      await Promise.all([bootstrapKey, shiftReportKey, zListKey, ordersKey].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+      // navigate first: a refetched bootstrap (openShift null) would otherwise redirect this screen to /shift/open
       void navigate({ to: '/z/$shiftId', params: { shiftId: z.shiftId } })
+      queryClient.removeQueries({ queryKey: shiftReportKey })
+      await Promise.all([bootstrapKey, zListKey, ordersKey].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
     },
     onError: async (e) => {
+      if (posErrorCode(e) === 'Z_CHAIN_BROKEN') setChainBroken(true)
       setError(errorMessage(e))
       await queryClient.invalidateQueries({ queryKey: shiftReportKey }) // SHIFT_CHANGED: show the fresh expected cash
     },
@@ -3010,6 +3819,8 @@ export function CloseShiftScreen(): JSX.Element {
     if (!counted || totalSatang === null) return setError(TH.errCountFirst)
     if (needsReason && reason.trim() === '') return setError(TH.errVarianceReasonRequired)
     if (approverId === null) return setError(TH.errNotOwner)
+    const bankQrTotalSatang = bankText.trim() === '' ? null : parseBahtInput(bankText)
+    if (bankText.trim() !== '' && bankQrTotalSatang === null) return setError(TH.errBadInput)
     setError(null)
     close.mutate({
       actorUserId: user?.id ?? '',
@@ -3018,13 +3829,15 @@ export function CloseShiftScreen(): JSX.Element {
       countLines: lines,
       shownExpectedCashSatang: r.expectedCashSatang,
       varianceReason: reason.trim() === '' ? null : reason,
+      bankQrTotalSatang,
+      acknowledgeZChainBroken: chainBroken,
     })
   }
 
   return (
     <main className="page">
       <div className="actions">
-        <button type="button" data-testid="nav-shift" onClick={() => void navigate({ to: '/shift' })}>
+        <button type="button" data-testid="nav-sell" onClick={() => void navigate({ to: '/sell' })}>
           {TH.back}
         </button>
       </div>
@@ -3095,6 +3908,11 @@ export function CloseShiftScreen(): JSX.Element {
             {TH.varianceReason} {needsReason && `(${TH.varianceReasonHint(formatBaht(r.varianceAlertSatang))})`}
             <input data-testid="close-reason" maxLength={REASON_MAX_LENGTH} value={reason} onChange={(e) => setReason(e.target.value)} />
           </label>
+          <QrTable sales={r.sales} p="close" />
+          <label>
+            {TH.bankQrTotal}
+            <input data-testid="close-bank-qr" inputMode="decimal" value={bankText} onChange={(e) => setBankText(e.target.value)} />
+          </label>
           <NegativeBaseList items={r.negativeBases} />
           <p className="badge" data-testid="close-pending">
             {TH.pendingAtClose(r.pendingSyncItems)}
@@ -3104,6 +3922,11 @@ export function CloseShiftScreen(): JSX.Element {
               {TH.countEdit}
             </button>
           </div>
+          {chainBroken && (
+            <p role="alert" className="error" data-testid="close-chain-broken">
+              {TH.zChainAck}
+            </p>
+          )}
           <h3>{TH.closeApprover}</h3>
           <div className="choices">
             {owners.map((u) => (
@@ -3120,32 +3943,14 @@ export function CloseShiftScreen(): JSX.Element {
 }
 ```
 
-- [ ] **Step 4: หน้าขาย · หน้าเปิดกะ · route**
+- [ ] **Step 4: ปุ่มปิดกะบนหน้าขาย · หน้าเปิดกะ · route**
 
-แก้ `apps/pos/src/screens/SellScreen.tsx`:
-- ต่อจาก `import { useSession } from '../app/session'` เพิ่ม `import { isShiftStale } from '../lib/clock'`
-- ต่อจาก `import { CartPanel } from './CartPanel'` เพิ่ม `import { CashMoveDialog } from './CashMoveDialog'`
-- ต่อจาก `const [discountOpen, setDiscountOpen] = useState(false)` เพิ่ม `const [cashMoveOpen, setCashMoveOpen] = useState(false)`
-- ต่อจากปุ่ม `data-testid="nav-orders"` (หลัง `</button>` ของมัน) เพิ่ม:
+แก้ `apps/pos/src/screens/SellScreen.tsx` — ต่อจากปุ่ม `data-testid="nav-shift"` (หลัง `</button>` ของมัน) เพิ่ม:
 ```tsx
-        <button type="button" data-testid="cash-move-open" onClick={() => setCashMoveOpen(true)}>
-          {TH.cashMove}
+        {/* Q3b-3 · D52 (review I-2): closing starts here, not from the X report, so the drawer is counted blind */}
+        <button type="button" data-testid="close-shift-open" onClick={() => void navigate({ to: '/shift/close' })}>
+          {TH.closeShift}
         </button>
-        <button type="button" data-testid="nav-shift" onClick={() => void navigate({ to: '/shift' })}>
-          {TH.shiftMenu}
-        </button>
-```
-- ระหว่าง `</header>` กับ `<main className="grid">` เพิ่ม (รอ Q3b-8):
-```tsx
-      {boot.data?.openShift != null && isShiftStale(boot.data.openShift.businessDate, new Date().toISOString()) && (
-        <p role="alert" className="error" data-testid="shift-stale">
-          {TH.shiftStale(boot.data.openShift.businessDate)}
-        </p>
-      )}
-```
-- ต่อจากบรรทัด `{discountOpen && <DiscountDialog onClose={() => setDiscountOpen(false)} />}` เพิ่ม:
-```tsx
-      {cashMoveOpen && <CashMoveDialog onClose={() => setCashMoveOpen(false)} />}
 ```
 
 แทน `apps/pos/src/screens/OpenShiftScreen.tsx` ทั้งไฟล์:
@@ -3178,7 +3983,7 @@ export function OpenShiftScreen(): JSX.Element {
     onSuccess: onOpened,
     onError: (e) => setError(errorMessage(e)),
   })
-  // spec §4.8 "เปิดกะด่วน": owner only, float 0, recorded separately (plan 3 M18 · รอ Q3b-10)
+  // spec §4.8 "เปิดกะด่วน": owner only, float 0, recorded separately (plan 3 M18 · Q3b-10 · D52)
   const quick = useMutation({
     mutationFn: () => api.quickOpenShift({ userId: user?.id ?? '' }),
     onSuccess: onOpened,
@@ -3237,18 +4042,8 @@ export function OpenShiftScreen(): JSX.Element {
 
 แก้ `apps/pos/src/router.tsx`:
 - ต่อจาก `import { CashPayScreen } from './screens/CashPayScreen'` เพิ่ม `import { CloseShiftScreen } from './screens/CloseShiftScreen'`
-- ต่อจาก `import { SetupScreen } from './screens/SetupScreen'` เพิ่ม `import { ShiftScreen } from './screens/ShiftScreen'`
-- ต่อจาก `const zReportRoute = createRoute({ … })` เพิ่ม:
+- ต่อจาก `const shiftRoute = createRoute({ … })` เพิ่ม:
 ```tsx
-const shiftRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/shift',
-  component: () => (
-    <RequireSession>
-      <ShiftScreen />
-    </RequireSession>
-  ),
-})
 const closeShiftRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/shift/close',
@@ -3259,7 +4054,7 @@ const closeShiftRoute = createRoute({
   ),
 })
 ```
-- ใน `rootRoute.addChildren([...])` ต่อจาก `zReportRoute,` เพิ่ม `shiftRoute,` และ `closeShiftRoute,`
+- ใน `rootRoute.addChildren([...])` ต่อจาก `shiftRoute,` เพิ่ม `closeShiftRoute,`
 
 - [ ] **Step 5: รันให้ผ่าน**
 
@@ -3269,19 +4064,19 @@ pnpm --filter @dayo/pos test
 pnpm --filter @dayo/pos typecheck
 pnpm --filter @dayo/pos e2e
 ```
-Expected: unit/integration ผ่านทั้งหมด · e2e **8 เทสต์ผ่าน** (6 เดิม + `close-shift` ×2) · เทสต์ backup ใน e2e ใช้ `exportFile` ของ `opfs-sahpool` จริงใน Chromium และตรวจ 16 ไบต์แรก `SQLite format 3\0` · ถ้า `backup-download` ไม่เกิด event `download` ให้ตรวจว่า `downloadBytes` ใส่ `<a>` ลงใน `document.body` ก่อน `click()` · ถ้า e2e เดิม (`sell-cash`, `offline`) ตกเพราะหาปุ่มใน topbar ไม่เจอ ให้ตรวจว่าเพิ่มปุ่มใหม่ **หลัง** `nav-orders` ไม่ได้แทนที่ของเดิม
+Expected: unit/integration **123 ผ่าน** (118 + `count-input` 2 + `CloseShiftScreen` 3) · e2e **9 เทสต์ผ่าน** (7 + `close-shift` ×2) · เทสต์ backup ใน e2e ใช้ `exportFile` ของ `opfs-sahpool` จริงใน Chromium ตรวจ 16 ไบต์แรก `SQLite format 3\0` แล้วกด `backup-confirm` ก่อนแถบ `backup-due` จะหาย · ถ้า `backup-download` ไม่เกิด event `download` ให้ตรวจว่า `downloadBytes` ใส่ `<a>` ลงใน `document.body` ก่อน `click()` · หน้าปิดกะนำทางไปหน้า Z **ก่อน** invalidate `bootstrapKey` (ถ้าสลับ หน้าจะเด้งไป `/shift/open` เพราะกะปิดแล้ว)
 
 - [ ] **Step 6: Commit**
 
 ใช้ skill `committing-code` แล้ว:
 ```bash
-git add apps/pos/e2e/close-shift.spec.ts apps/pos/src/ui/count-input.test.ts apps/pos/src/ui/format.ts apps/pos/src/app/queries.ts apps/pos/src/screens/ShiftScreen.tsx apps/pos/src/screens/CashMoveDialog.tsx apps/pos/src/screens/CloseShiftScreen.tsx apps/pos/src/screens/SellScreen.tsx apps/pos/src/screens/OpenShiftScreen.tsx apps/pos/src/router.tsx
-git commit -m "feat(pos): x report, cash moves, blind-count shift close and quick open screens"
+git add apps/pos/e2e/close-shift.spec.ts apps/pos/src/ui/count-input.test.ts apps/pos/src/ui/format.ts apps/pos/src/screens/CloseShiftScreen.tsx apps/pos/src/screens/CloseShiftScreen.test.tsx apps/pos/src/screens/SellScreen.tsx apps/pos/src/screens/OpenShiftScreen.tsx apps/pos/src/router.tsx
+git commit -m "feat(pos): blind-count shift close from the sell screen with bank qr total and quick open"
 ```
 
 ---
 
-### Task 11: ตรวจทั้ง repo · บันทึกการทำแผน · ⛔ รายการทดสอบแท็บเล็ต (เลื่อนไปรอบท้ายสุด D51) · final review (opus) · merge ในเครื่อง
+### Task 12: ตรวจทั้ง repo · บันทึกการทำแผน · ⛔ รายการทดสอบแท็บเล็ต (เลื่อนไปรอบท้ายสุด D51) · final review (opus) · merge ในเครื่อง
 
 **Files:**
 - Create: `docs/superpowers/plans/2026-09-17-03b-บันทึกการทำแผน3b.md`
@@ -3302,18 +4097,18 @@ pnpm --filter @dayo/pos e2e
 git status --short
 git log --format=%B main..HEAD | grep -ci "co-authored-by"
 ```
-Expected: ทุกแพ็กเกจผ่าน · e2e 8 ผ่าน · `git status` ไม่มี `test-results/`, `playwright-report/`, `dist/` ค้าง · คำสั่งสุดท้ายพิมพ์ `0`
+Expected: ทุกแพ็กเกจผ่าน (domain 115 · pos 123) · e2e 9 ผ่าน · `git status` ไม่มี `test-results/`, `playwright-report/`, `dist/` ค้าง · คำสั่งสุดท้ายพิมพ์ `0`
 
 - [ ] **Step 2: รายการทดสอบบนแท็บเล็ตจริง** ⛔ HAND-OFF เจ้าของร้าน — **เลื่อนไปทำในรอบทดสอบแท็บเล็ตตอนท้ายสุด (D51) ร่วมกับตาราง spike S1–S10 และแผน 3 Task 15 Step 4**
 
 > **agent ห้ามทำแทน ห้ามกรอกผลแทน และห้ามเขียนว่าผ่าน** · agent แค่ใส่ตารางด้านล่างลงในบันทึกการทำแผน (Step 3) แบบช่องผลว่าง แล้วทำ Step 4–7 ต่อได้เลย (D51 ให้ merge ได้โดยยังไม่มีผลแท็บเล็ต) · **ยังห้ามขายจริง** จนกว่ารอบแท็บเล็ตนี้ผ่าน และ deploy Cloudflare Pages แล้ว (D48 Q3-2, Q3-17)
 
 เปิดแอปวิธีเดียวกับแผน 3 Task 15 Step 4 (build + `vite preview --port 4173` + Quick Tunnel / `adb reverse`) แล้วทำ:
-1. ขาย 2–3 บิล + ยกเลิก 1 บิล + บันทึกจ่ายออก 1 รายการ → เปิด "กะ / รายงาน X" ตัวเลขตรงกับที่ขาย
-2. ปิดกะ: นับเงินจริงในลิ้นชักลงตาราง 9 ชนิด → "นับเสร็จ" → เห็นยอดที่ควรมีและส่วนต่าง → ถ้าเกิน ฿20 ต้องใส่เหตุผล → PIN เจ้าของ → หน้า Z แสดง "ตรวจลายเซ็นแล้ว"
-3. หน้า Z → "สำรองไฟล์ฐานข้อมูล" → "ดาวน์โหลดไฟล์สำรอง" → **ไฟล์ `dayo-pos-A-….sqlite3` อยู่ในโฟลเดอร์ Download ของแท็บเล็ต** (เปิดจากแอปที่ติดตั้งแล้ว ไม่ใช่แท็บ Chrome ธรรมดา) · จดขนาดไฟล์และเวลาที่ใช้
+1. ขาย 2–3 บิล (มีพร้อมเพย์ 1 บิล) + ยกเลิก 1 บิล + บันทึกจ่ายออก 1 รายการ → เปิด "กะ / รายงาน X" ตัวเลขตรงกับที่ขาย และ **ไม่มี** บรรทัดเงินสดที่ควรมี
+2. ปิดกะจากปุ่ม "ปิดกะ" บนหน้าขาย: นับเงินจริงในลิ้นชักลงตาราง 9 ชนิด (ยังไม่เห็นยอดที่ควรมี) → "นับเสร็จ" → เห็นยอดที่ควรมีและส่วนต่าง → กรอกยอดพร้อมเพย์จากแอปธนาคาร → ถ้าเกิน ฿20 ต้องใส่เหตุผล → PIN เจ้าของ → หน้า Z แสดง "ตรวจลายเซ็นแล้ว" และส่วนต่างพร้อมเพย์
+3. หน้า Z → "สำรองไฟล์ฐานข้อมูล" → "ดาวน์โหลดไฟล์สำรอง" → **ไฟล์ `dayo-pos-A-….sqlite3` อยู่ในโฟลเดอร์ Download ของแท็บเล็ต** (เปิดจากแอปที่ติดตั้งแล้ว ไม่ใช่แท็บ Chrome ธรรมดา) → เห็นไฟล์แล้วกด "บันทึกไฟล์แล้ว" · จดขนาดไฟล์และเวลาที่ใช้
 4. ย้ายไฟล์ไป Google Drive หรือคอม → เปิดด้วย DB Browser for SQLite (หรือ `sqlite3`) → เห็นตาราง `order`, `z_report` มีข้อมูลครบ
-5. กด "เสร็จ" → หน้าเปิดกะ → แถบเตือนสำรองหายไปหลังสำรองแล้ว → "เปิดกะด่วน" → หน้าขาย → X แสดง "เปิดกะด่วน" และเงินทอน ฿0
+5. กด "เสร็จ" → หน้าเปิดกะ → แถบเตือนสำรองหายไปหลังกด "บันทึกไฟล์แล้ว" เท่านั้น → "เปิดกะด่วน" → หน้าขาย → X แสดง "เปิดกะด่วน" และเงินทอน ฿0
 6. (ไม่บังคับ) เปิดกะทิ้งไว้ข้ามคืนถึงหลัง 05:00 → หน้าขายขึ้นแถบแดง "กะของวันที่ … ยังไม่ปิด"
 
 **M16 (ย้ำ):** ห้ามจดหมายเลขพร้อมเพย์จริง/PIN จริงลงไฟล์ใด ๆ หรือภาพหน้าจอที่ commit · ไฟล์สำรองมี `pin_hash` และหมายเลขพร้อมเพย์ของร้าน — **ห้าม commit ไฟล์ `.sqlite3` เข้า git และห้ามส่งให้คนนอก**
@@ -3329,7 +4124,7 @@ Expected: ทุกแพ็กเกจผ่าน · e2e 8 ผ่าน · `g
 ## 1. ทดสอบบนแท็บเล็ต (⛔ HAND-OFF — รอรอบท้ายสุด D51)
 รุ่นแท็บเล็ต / เวอร์ชัน Chrome: _(เจ้าของกรอกเอง)_
 
-| ข้อ | รายการ (Task 11 Step 2) | ผลลัพธ์ | ค่าที่วัดได้ | วิธีเปิด |
+| ข้อ | รายการ (Task 12 Step 2) | ผลลัพธ์ | ค่าที่วัดได้ | วิธีเปิด |
 |---|---|---|---|---|
 | 1 | X ตรงกับที่ขาย | | | |
 | 2 | ปิดกะ นับจริง ส่วนต่าง/เหตุผล/PIN/Z | | | |
@@ -3338,14 +4133,14 @@ Expected: ทุกแพ็กเกจผ่าน · e2e 8 ผ่าน · `g
 | 5 | แถบเตือนสำรอง · เปิดกะด่วน | | | |
 | 6 | (ไม่บังคับ) แถบกะค้างข้ามวันหลัง 05:00 | | | |
 
-## 2. คำตอบของเจ้าของที่ใช้ (Q3b-1 … Q3b-10 → D52) และคำถามใหม่ระหว่างทำ
+## 2. คำตอบของเจ้าของที่ใช้ (Q3b-1 … Q3b-10 → D52 · Q3b-11 … Q3b-13 → D53) และคำถามใหม่ระหว่างทำ
 
 ## 3. การตัดสินใจระหว่างทำที่ไม่ได้อยู่ในแผน
 
 ## 4. ผล final review (opus) และการแก้
 
 ## 5. ส่งต่อแผน 4–8 และงาน deploy
-- แผน 5: outbox มีตารางใหม่ `cash_count`, `z_report` และ key `shift:<id>:closed` (แถว `shift` เปลี่ยนสถานะได้ → push handler upsert ตาม id เหมือน `order`) · `audit_log` (`quick_open`, `backup`) ยังเป็น local-only · ธง `openedQuick` อยู่ใน snapshot ของ Z · `sync_state` key `local.last_backup_at` เป็นของเครื่อง ไม่ sync
+- แผน 5: outbox มีตารางใหม่ `cash_count`, `z_report` และ key `shift:<id>:closed` (แถว `shift` เปลี่ยนสถานะได้ → push handler upsert ตาม id เหมือน `order`) · `audit_log` (`quick_open`, `backup`, `z_chain_broken_ack`) ยังเป็น local-only · ธง `openedQuick`, `chainWarning` และยอด `bankQrTotalSatang`/`qrDifferenceSatang` อยู่ใน snapshot ของ Z · `sync_state` key `local.last_backup_at`, `local.last_backup_z_id` เป็นของเครื่อง ไม่ sync
 - แผน 5: setting `cash.variance_alert_satang` ยังไม่มีในเครื่อง (ใช้ค่าเริ่มต้น 2,000) — seed/sync ค่าจริงได้ตามแถว `setting` (D47 ข้อ 9)
 - แผน 7: รายงานยอดขายต้องใช้นิยามเดียวกับ `summarizeShiftSales` (net = gross − ส่วนลด − ยอดยกเลิก ตาม Q3b-4) · export CSV ของ Z
 - แผน 8: invariant 6 (แฮช Z) ใช้ `zReportHash` ตัวเดียวกัน · invariant 7 (ธุรกรรมต้องมี shift)
@@ -3367,10 +4162,11 @@ git commit -m "docs(plan-3b): execution notes and tablet checklist deferred to t
 
 - [ ] **Step 5: final review ทั้ง branch ด้วย opus (D42, D43)**
 
-ส่ง review ทั้ง branch (`main..plan-3b-shift-close`) ให้ reviewer **opus** · ขอบเขต: spec §3.5, §4.3, §4.7, §4.8, §5, §6.1, §7 invariant 6, §11 · D22, D28, D36, D42–D52 · Global Constraints ของแผนนี้ · จุดที่ต้องดูเป็นพิเศษ:
+ส่ง review ทั้ง branch (`main..plan-3b-shift-close`) ให้ reviewer **opus** · ขอบเขต: spec §3.5, §4.3, §4.7, §4.8, §5, §6.1, §7 invariant 6, §11, §12 (เทียบ QR กับแอปธนาคาร) · D22, D28, D36, D42–D53 · Global Constraints ของแผนนี้ · จุดที่ต้องดูเป็นพิเศษ:
 - สูตร D36 และนิยามยอดขาย (Q3b-4) — แต่ละแถว `cash_movement` นับครั้งเดียว · บิลยกเลิกอยู่ใน gross · `cash_sales` รวมบิลที่ยกเลิกภายหลัง
 - ไม่มี UPDATE/DELETE ของ `cash_movement`/`z_report`/`stock_movement`/`order_event` · UPDATE ใหม่มีแค่ `shift` ตอนปิดกะ · ทุกการเขียนอยู่ใน transaction เดียวพร้อม outbox · PIN ตรวจนอก transaction
-- Z ไม่ถูกคำนวณใหม่หลังปิด · แฮชตรวจทุกครั้งที่อ่าน · grand total ไม่ต่อจาก Z ที่แฮชไม่ตรง
+- Z ไม่ถูกคำนวณใหม่หลังปิด · แฮชตรวจทุกครั้งที่อ่าน · Z ใบก่อนแฮชไม่ตรง → `Z_CHAIN_BROKEN` → เจ้าของรับทราบด้วย PIN → grand total ต่อจากค่าคำนวณใหม่ (ไม่ใช่ค่าที่เก็บ) + ธง `chainWarning` ถาวร + audit (Q3b-11 · D53)
+- นับแบบไม่เห็นยอดจริง: ไม่มีหน้าใดแสดงเงินสดที่ควรมีของกะที่เปิดอยู่ก่อนกด "นับเสร็จ" (Q3b-3 · D52) · สำรองไฟล์: เจ้าของเท่านั้น และนับว่าสำรองแล้วเมื่อยืนยันเท่านั้น (Q3b-7 · D52, Q3b-13 · D53)
 - ปิดกะไม่ได้ถ้าเหตุผลหาย (เกินเกณฑ์) หรือยอดเปลี่ยน (`SHIFT_CHANGED`) — และไม่เขียนอะไรเลยในกรณีนั้น
 - ไฟล์สำรองเป็น SQLite ที่เปิดได้ · อ่านในคิว serial · ไม่มีไฟล์ `.sqlite3` ใน git
 - ไม่มี trailer ของ AI: `git log --format=%B main..HEAD | grep -ci "co-authored-by"` ต้องได้ `0` · ไม่มีไฟล์ `.superpowers/`/`.claude/` ใน git
@@ -3390,50 +4186,56 @@ pnpm install --frozen-lockfile && pnpm typecheck && pnpm test
 
 ---
 
-## จุดที่ขึ้นกับคำตอบของเจ้าของ (แก้ก่อนทำ task ถ้าคำตอบต่างจากค่าแนะนำ)
+## คำตอบของเจ้าของที่แผนนี้ใช้ (D52–D53 · 19 ก.ย. "เห็นด้วย ทำต่อได้เลย" = ค่าแนะนำทุกข้อ)
 
-| คำถาม | ค่าที่แผนใช้ | จุดที่ต้องแก้ถ้าคำตอบต่าง |
+ถ้าเจ้าของเปลี่ยนคำตอบภายหลัง แก้จุดในคอลัมน์ขวาก่อนทำ task นั้น แล้วจดในบันทึกการทำแผน
+
+| คำถาม | คำตอบที่ใช้ | จุดในแผน |
 |---|---|---|
-| Q3b-1 ชนิดเงินที่นับ | 9 ชนิดตาม spec §5 | Task 1: `CASH_DENOMINATIONS_SATANG` + เทสต์ `uses the 9 denominations` · Task 10: หน้าปิดกะวนตามค่าคงที่นี้อยู่แล้ว (testid `count-<satang>`) |
-| Q3b-2 ใครปิดกะ | คนล็อกอินนับ + เจ้าของกรอก PIN ซ้ำ | Task 6: `closeShift` เรียก `requireOwnerPin` · `closedBy`/`countedBy` · Task 10: ปุ่มเลือกเจ้าของ + PinPad · e2e |
-| Q3b-3 นับแบบปิดตา | นับก่อนแล้วจึงเห็นยอด | Task 10: สถานะ `counted` ใน `CloseShiftScreen` · e2e ตรวจ `close-expected` ยังไม่แสดงก่อนกด `count-done` |
-| Q3b-4 net / grand total | net = gross − ส่วนลด − ยอดยกเลิก | Task 1: `summarizeShiftSales`, `assertSalesSummary` + เทสต์ · Task 5/6: ตัวเลขคาดหวังในเทสต์ (net ฿40, grand) · e2e `z-net` |
-| Q3b-5 แสดง/ส่งออก Z | แสดงบนจอ + ย้อนหลังในเครื่อง | Task 9 (เพิ่มปุ่ม export ถ้าเลือก (ข)) |
-| Q3b-6 ปลายทางไฟล์สำรอง | ดาวน์โหลด `.sqlite3` ลง Downloads | Task 7: ชื่อไฟล์ใน `exportBackup` · Task 8: `downloadBytes` / `BackupScreen` (เพิ่ม Web Share ถ้าเลือก (ข) + ทดสอบบนแท็บเล็ต) |
-| Q3b-7 ความถี่/บังคับ | เตือน ไม่บล็อก | Task 7: `isBackupDue` · Task 9/10: แถบ `backup-due` (บังคับ = ปิดปุ่ม `shift-open` เมื่อ `backupDue`) |
-| Q3b-8 กะค้างข้ามวัน | เตือนตั้งแต่ 05:00 ไม่บล็อก | Task 7: `STALE_SHIFT_CUTOFF_HOURS` + เทสต์ · Task 10: แถบ `shift-stale` |
-| Q3b-9 เงินเข้า-ออก | ทำใน 3b ทุกคนบันทึกได้ | Task 4 ทั้ง task · Task 10: `CashMoveDialog` · (ถ้าเลือก (ค) ตัด Task 4 และปุ่ม แต่ `cashInputsFromMovements` ยังต้องรวม `VOID_REFUND`) |
-| Q3b-10 เปิดกะด่วน | `audit_log quick_open` + ธงใน Z · ไม่ต้อง PIN | Task 3 ทั้ง task · Task 5 `wasQuickOpened` · Task 10 ปุ่ม `shift-quick-open` (ถ้าเลือก (ข) ต้องมี task migration 2 dialect ก่อน Task 3) |
+| Q3b-1 ชนิดเงินที่นับ (D52) | 9 ชนิดตาม spec §5 ไม่มีเหรียญสตางค์ | Task 1: `CASH_DENOMINATIONS_SATANG` + เทสต์ `uses the 9 denominations` · Task 11: หน้าปิดกะวนตามค่าคงที่นี้ (testid `count-<satang>`) |
+| Q3b-2 ใครปิดกะ (D52) | คนที่ล็อกอินนับ + เจ้าของกรอก PIN ซ้ำทุกครั้ง (แบบ void) | Task 6: `closeShift` เรียก `requireOwnerPin` · `closedBy`/`countedBy` · Task 11: ปุ่มเลือกเจ้าของ + PinPad · e2e |
+| Q3b-3 นับแบบไม่เห็นยอด (D52 · review I-2) | นับจริงแบบไม่เห็นยอด: ปุ่มปิดกะอยู่บนหน้าขาย ไม่ผ่านหน้า X · หน้าปิดกะแสดงยอดที่ควรมีและส่วนต่างหลังกด "นับเสร็จ" เท่านั้น · หน้า X เปิดดูได้ตลอดแต่ไม่แสดงบรรทัดเงินสดที่ควรมี | Task 9: `DrawerTable hideExpected` · Task 10: `ShiftScreen` ไม่มี `x-expected` / ไม่มีปุ่มปิดกะ · e2e `shift-x` · Task 11: `close-shift-open` บนหน้าขาย · สถานะ `counted` · เทสต์ `CloseShiftScreen` + e2e ตรวจ `close-expected` ยังไม่แสดงก่อน `count-done` |
+| Q3b-4 net / grand total (D52) | net = gross − ส่วนลด − ยอดบิลยกเลิก · grand total สะสม net | Task 1: `summarizeShiftSales`, `assertSalesSummary` + เทสต์ · Task 5/6: ตัวเลขคาดหวัง (net ฿40, grand) · e2e `z-net` |
+| Q3b-5 แสดง/ส่งออก Z (D52) | แสดงบนจอหลังปิดกะ + Z ย้อนหลังในเครื่อง · ไม่ส่งออกแยก (CSV = แผน 7) | Task 6 `listZReports`/`getZReport` · Task 9 `ZReportScreen`/`ZListScreen` |
+| Q3b-6 ปลายทางไฟล์สำรอง (D52) | ไฟล์ SQLite ทั้งไฟล์ลง Downloads ชื่อ `dayo-pos-A-YYYYMMDD-HHmmss.sqlite3` · เจ้าของย้ายไป Google Drive เอง · ไม่มีปุ่มแชร์ | Task 7: `backupFileName` / `exportBackup` · Task 8: `downloadBytes` / `BackupScreen` |
+| Q3b-7 ความถี่/บังคับ (D52 · review I-4) | ไม่บังคับ · แถบแดงที่หน้า Z และหน้าเปิดกะจนกว่าจะ **ยืนยัน** ไฟล์สำรองที่ทำหลัง Z ใบล่าสุด · แถบหายเมื่อเจ้าของกด "บันทึกไฟล์แล้ว" หลังดาวน์โหลด ไม่ใช่ตอน export · บันทึก `sync_state` + `audit_log` ตอนยืนยัน | Task 7: `isBackupDue`, `confirmBackupSaved` · Task 8: `backup-confirm` · Task 9/11: แถบ `backup-due` |
+| Q3b-8 กะค้างข้ามวัน (D52) | แถบแดงบนหน้าขายตั้งแต่ 05:00 เวลาไทย · ขายต่อได้ | Task 7: `STALE_SHIFT_CUTOFF_HOURS` + เทสต์ · Task 10: แถบ `shift-stale` |
+| Q3b-9 เงินเข้า-ออก (D52) | ทำใน 3b · ทุกคนที่ล็อกอินบันทึกได้ · บังคับเหตุผล | Task 4 ทั้ง task · Task 10: `CashMoveDialog` |
+| Q3b-10 เปิดกะด่วน (D52) | เจ้าของเท่านั้น · `audit_log quick_open` + ธง `openedQuick` ใน Z · ไม่แก้ schema · ไม่ต้อง PIN ซ้ำ (เปิดกะปกติด้วยเงินทอน 0 ทำได้ทุกคนอยู่แล้ว — D48 Q3-12) | Task 3 ทั้ง task · Task 5 `wasQuickOpened` · Task 11 ปุ่ม `shift-quick-open` |
+| Q3b-11 Z ใบก่อนแฮชไม่ตรง (D53 · review I-3) | ปิดกะต่อได้ · รหัส `Z_CHAIN_BROKEN` เฉพาะ · เจ้าของกรอก PIN ซ้ำเพื่อรับทราบ · Z ใหม่มีธง `chainWarning` ถาวร แสดงที่หน้า Z และ Z ย้อนหลัง · grand total ต่อจากค่าที่ **คำนวณใหม่** จาก snapshot ทุกใบเรียงตาม `zNo` · เขียน `audit_log` | Task 1: `ZChainWarning`, `recomputeZChain` · Task 6: `zChain`, `Z_CHAIN_BROKEN`, `acknowledgeZChainBroken`, `Z_CHAIN_ACK_ACTION` + เทสต์ · Task 9: `z-chain-warning`, `z-warn-<i>` · Task 11: `close-chain-broken` + เทสต์ |
+| Q3b-12 เทียบพร้อมเพย์กับแอปธนาคาร (D53) | หน้าปิดกะแสดงพร้อมเพย์รับ / โอนคืน / สุทธิ + ช่องกรอกยอดในแอปธนาคาร · ส่วนต่าง (ธนาคาร − สุทธิ) แช่แข็งใน Z · ช่องนี้ **ไม่บังคับ ไม่มีเกณฑ์/เหตุผล** (review ไม่ได้เสนอ — แผนเลือกเอง) | Task 1: `qrRefundedSatang`, `qrNetSatang`, `bankQrTotalSatang`, `qrDifferenceSatang` · Task 6: `CloseShiftInput.bankQrTotalSatang` · Task 9: `QrTable` · Task 11: `close-bank-qr` |
+| Q3b-13 ความลับของไฟล์สำรอง (D53) | เจ้าของเท่านั้นที่สำรองได้ (API + หน้าจอ) · ยอมรับว่าในไฟล์มี `pin_hash` และหมายเลขพร้อมเพย์ · ไม่เข้ารหัส | Task 7: `exportBackup`/`confirmBackupSaved` → `NOT_OWNER` · Task 8: `backup-owner-only` + เทสต์ |
 
 ---
 
-## Self-review (18–19 ก.ย. 2026 ตอนเขียนแผน)
+## Self-review (18–19 ก.ย. 2026 ตอนเขียนแผน · ปรับตามคำตอบ D52–D53 และ review I-2/I-3/I-4 วันที่ 19 ก.ย.)
 
 **1. Spec coverage**
 
 | spec / ข้อกำหนด | ที่ทำ |
 |---|---|
-| §4.8 ปิดกะ: นับธนบัตร → expected (D36) → variance → เกิน `cash.variance_alert_satang` ต้องใส่เหตุผล | Task 1 (`cashInputsFromMovements`, `tallyCashCount`, `varianceNeedsReason`, `buildZReport`) · Task 6 (`closeShift`) · Task 10 (หน้าปิดกะ) |
-| §5 ตาราง 1000/500/100/50/20/10/5/2/1 · ปิดวันต้อง owner | Task 1 (`CASH_DENOMINATIONS_SATANG` รอ Q3b-1) · Task 6 (`requireOwnerPin` รอ Q3b-2) |
-| §4.8 X = คำนวณสดได้ตลอด | Task 5 (`shiftReport` ไม่เขียนอะไร) · Task 10 (`/shift`) |
-| §4.8 Z = snapshot + hash ห้ามคำนวณใหม่ · grand total ต่อจาก Z ก่อนหน้า · §7 invariant 6 | Task 1 (`zReportHash`) · Task 6 (insert ครั้งเดียว · `hashOk` ทุกครั้งที่อ่าน · ปฏิเสธต่อ grand total จาก Z ที่แฮชไม่ตรง · เทสต์ trigger append-only) · Task 9 (หน้าจอแสดง snapshot) |
-| §4.3 บิลยกเลิกอยู่ใน gross และแยกเป็นยอดยกเลิก | Task 1 (`summarizeShiftSales` · รอ Q3b-4) · Task 5 |
-| §4.8 เปิดกะด่วน (owner · เงินทอน 0 · event) — ส่งต่อ M18 | Task 3 · Task 10 (รอ Q3b-10) |
-| §3.5 `PAID_IN`/`PAID_OUT`/`DROP` คนบันทึกเอง | Task 4 · Task 10 (รอ Q3b-9) |
-| §11 สำรองด้วย export ไฟล์ SQLite · spike I3 `exportFile` · แผน 3 notes §5 | Task 7 (`exportBackup` + เทสต์เปิดไฟล์คืน) · Task 8 (หน้าสำรอง) · Task 10 e2e (ไฟล์จริงจาก OPFS) |
-| D28 ปิดกะต้องดูรายการเบสติดลบ | Task 5 (`negativeBases`) · Task 10 (หน้าปิดกะ) |
+| §4.8 ปิดกะ: นับธนบัตร → expected (D36) → variance → เกิน `cash.variance_alert_satang` ต้องใส่เหตุผล | Task 1 (`cashInputsFromMovements`, `tallyCashCount`, `varianceNeedsReason`, `buildZReport`) · Task 6 (`closeShift`) · Task 11 (หน้าปิดกะ) |
+| §5 ตาราง 1000/500/100/50/20/10/5/2/1 · ปิดวันต้อง owner | Task 1 (`CASH_DENOMINATIONS_SATANG` — Q3b-1) · Task 6 (`requireOwnerPin` — Q3b-2) |
+| §4.8 X = คำนวณสดได้ตลอด · นับแบบไม่เห็นยอด (Q3b-3) | Task 5 (`shiftReport` ไม่เขียนอะไร) · Task 10 (`/shift` ไม่แสดงเงินสดที่ควรมี) · Task 11 (ปิดกะจากหน้าขาย · ยอดหลัง "นับเสร็จ") |
+| §4.8 Z = snapshot + hash ห้ามคำนวณใหม่ · grand total ต่อจาก Z ก่อนหน้า · §7 invariant 6 | Task 1 (`zReportHash`, `recomputeZChain`) · Task 6 (insert ครั้งเดียว · `hashOk` ทุกครั้งที่อ่าน · Z ก่อนแฮชไม่ตรง → `Z_CHAIN_BROKEN` → รับทราบด้วย PIN → ต่อจากค่าคำนวณใหม่ + `chainWarning` + audit — Q3b-11 · เทสต์ trigger append-only) · Task 9 (หน้าจอแสดง snapshot + ธงเตือน) |
+| §4.3 บิลยกเลิกอยู่ใน gross และแยกเป็นยอดยกเลิก | Task 1 (`summarizeShiftSales` — Q3b-4) · Task 5 |
+| spec §12 ความเสี่ยง "QR ยืนยันด้วยตา … ปิดวันเทียบยอด QR กับแอปธนาคาร" (Q3b-12) | Task 1 (QR รับ/โอนคืน/สุทธิ · `qrDifferenceSatang`) · Task 6 (`bankQrTotalSatang`) · Task 9 (`QrTable`) · Task 11 (`close-bank-qr`) |
+| §4.8 เปิดกะด่วน (owner · เงินทอน 0 · event) — ส่งต่อ M18 | Task 3 · Task 11 (Q3b-10) |
+| §3.5 `PAID_IN`/`PAID_OUT`/`DROP` คนบันทึกเอง | Task 4 · Task 10 (Q3b-9) |
+| §11 สำรองด้วย export ไฟล์ SQLite · spike I3 `exportFile` · แผน 3 notes §5 | Task 7 (`exportBackup` + เทสต์เปิดไฟล์คืน · `confirmBackupSaved` — Q3b-7/I-4 · เจ้าของเท่านั้น — Q3b-13) · Task 8 (หน้าสำรอง) · Task 11 e2e (ไฟล์จริงจาก OPFS + ยืนยัน) |
+| D28 ปิดกะต้องดูรายการเบสติดลบ | Task 5 (`negativeBases`) · Task 11 (หน้าปิดกะ) |
 | D50 Q3-22 รายงาน void ประจำวัน (หน้ารายงานอยู่แผน 3b) · notes §5 เลขอ้างอิงโอนคืนอ่านจาก event | Task 5 (`voids` จาก `VOIDED`) · Task 6 (แช่แข็งใน Z) · Task 9/10 (`VoidList`) |
-| Plan 1 notes §4: `buildZReport` ไม่ตรวจ gross/discount/net และไม่บังคับเหตุผล | Task 1 (`assertSalesSummary` + ตรวจทุกความสัมพันธ์ + บังคับเหตุผล) |
+| Plan 1 notes §4: `buildZReport` ไม่ตรวจ gross/discount/net และไม่บังคับเหตุผล | Task 1 (`assertSalesSummary` + ตรวจทุกความสัมพันธ์ รวม Σ บิลยกเลิกเงินสด = `VOID_REFUND` และ Σ บิลยกเลิกพร้อมเพย์ = โอนคืน + บังคับเหตุผล) |
 | ส่งต่อ Task 13 M-4 เหตุผล void ≤ 200 + ใช้เพดานเดียวกับส่วนลด | Task 2 (+ ใช้กับเหตุผลใหม่ใน Task 4, 6) |
-| §4.7 ขายหลังเที่ยงคืนยังเป็นวันเดิม / ลืมปิดกะ | Task 7 `isShiftStale` · Task 10 แถบเตือน (รอ Q3b-8) |
+| §4.7 ขายหลังเที่ยงคืนยังเป็นวันเดิม / ลืมปิดกะ | Task 7 `isShiftStale` · Task 10 แถบเตือน (Q3b-8) |
 | §6.1 1 transaction = ธุรกรรม + outbox · §6.2 push หลังปิดกะ | Task 4, 6 (outbox ทุกแถว) · T3b-3 (ปิดกะไม่รอ sync — แผน 5) |
-| §8 e2e "… → ยกเลิก → ปิดกะ → Z" | Task 10 `close-shift.spec.ts` (ส่วน "→ sync ครบ" อยู่แผน 5/8) |
-| D51 ทดสอบแท็บเล็ตตอนท้ายสุด | Task 11 Step 2 (⛔ HAND-OFF ตารางว่างในบันทึก) |
+| §8 e2e "… → ยกเลิก → ปิดกะ → Z" | Task 10 `shift-x.spec.ts` · Task 11 `close-shift.spec.ts` (ส่วน "→ sync ครบ" อยู่แผน 5/8 · บิลยกเลิกใน Z ตรวจด้วยเทสต์ Task 5/6) |
+| D51 ทดสอบแท็บเล็ตตอนท้ายสุด | Task 12 Step 2 (⛔ HAND-OFF ตารางว่างในบันทึก) |
 
-**ไม่อยู่ในแผนนี้ (ตั้งใจ):** deploy Cloudflare Pages + `registerType: 'prompt'` (งานเล็กแยก — D48 Q3-2, notes แผน 3 §5) · sync/outbox push และ seed setting `cash.variance_alert_satang` → แผน 5 · export CSV/รายงานช่วงยาว → แผน 7 · invariant รายคืน → แผน 8 · Task 13 M-5 (`actorUserId` เชื่อ UI) ยังไม่มีเจ้าของแผน — แผนนี้ทำตามแบบเดิม (ตรวจว่าผู้ใช้มีอยู่และเปิดใช้) ไม่แก้ · minor ที่พักไว้ของแผน 3 (Task 2, 5, 7, 10, 11) ไม่ได้ถูกส่งมาแผน 3b
+**ไม่อยู่ในแผนนี้ (ตั้งใจ):** deploy Cloudflare Pages + `registerType: 'prompt'` (งานเล็กแยก — D48 Q3-2, notes แผน 3 §5) · sync/outbox push และ seed setting `cash.variance_alert_satang` → แผน 5 · export CSV/รายงานช่วงยาว → แผน 7 · invariant รายคืน → แผน 8 · Task 13 M-5 (`actorUserId` เชื่อ UI) ยังไม่มีเจ้าของแผน — แผนนี้ทำตามแบบเดิม (ตรวจว่าผู้ใช้มีอยู่และเปิดใช้) ไม่แก้ · minor ที่พักไว้ของแผน 3 (Task 2, 5, 7, 10, 11) ไม่ได้ถูกส่งมาแผน 3b · minor ของ review แผนนี้ที่ยังไม่ทำ: m-2 ทำแล้วใน Global Constraints · m-1 และ m-3 ทำแล้ว (Task 1 / Task 11) · m-4 ถึง m-13 ยังไม่ได้ใส่ (ให้ final review ตัดสิน)
 
-**2. Placeholder scan:** ค้น `TBD|TODO|implement later|similar to|fill in` แล้วไม่พบ · เครื่องหมาย `(รอ Q3b-N)` เป็นการอ้างคำถามที่ตั้งใจไว้ (โค้ดเขียนตามค่าแนะนำครบแล้ว ไม่ใช่ช่องว่าง) · ช่องว่างมีเฉพาะแบบฟอร์มบันทึกการทำแผน (ผลแท็บเล็ต — ห้าม agent กรอก) · โค้ดทุกไฟล์ในแผนถูกเขียนและรันจริงบน worktree ตอนเขียนแผน (domain 110 เทสต์ · pos 116 เทสต์ [115 + เทสต์กันคลาดเคลื่อนของ I-1: grand total ต่อจาก `zNo` ไม่ใช่นาฬิกา] · typecheck ทุกแพ็กเกจ · e2e 8/8 บน Chromium รวม `exportFile` จริง) แล้วคัดลอกเข้าแผน · ตัวเลขคาดหวังคิดมือซ้ำใน `test/helpers/shift.ts`
+**2. Placeholder scan:** ค้น `TBD|TODO|implement later|similar to|fill in` แล้วไม่พบ · เครื่องหมาย `(รอ Q3b-N)` เดิมถูกแทนด้วยการอ้างคำตอบ `Q3b-N · D52` / `Q3b-N · D53` ครบทุกจุดแล้ว · ช่องว่างมีเฉพาะแบบฟอร์มบันทึกการทำแผน (ผลแท็บเล็ต — ห้าม agent กรอก) · โค้ดทุกไฟล์ในแผนถูกเขียนและรันจริงบน worktree ชั่วคราว (`git worktree add --detach ../pos-3b-scratch2`) หลังปรับตามคำตอบ แล้วคัดลอกเข้าแผน: domain 115 เทสต์ · pos 123 เทสต์ · typecheck ทุกแพ็กเกจ · build ผ่าน · e2e 9/9 บน Chromium รวม `exportFile` จริง · ตัวเลขคาดหวังคิดมือซ้ำใน `test/helpers/shift.ts`
 
-**3. Type consistency (เทียบกับโค้ดจริงของแผน 1–3):** `RemoteDb` (`@dayo/db-schema/browser`) · ตาราง `s.shift`/`s.cashMovement`/`s.cashCount`/`s.zReport`/`s.auditLog`/`s.syncState`/`s.itemCostState`/`s.item` และคอลัมน์ `snapshotJson`, `linesJson`, `countedSatang`, `expectedSatang`, `varianceSatang`, `countedBy`, `closedBy`, `closedAt`, `onHandMilli`, `isTracked`, `useUnit` ตรงกับ `packages/db-schema/src/sqlite/*.ts` · `currentOpenShift(db, deviceId): ShiftDto | null`, `requireDevice`, `countPendingSyncItems`, `requireOwnerPin(db, deps, userId, pin)`, `getSetting(db, key, atIso)`, `enqueueOutbox(db, table, row, at, newId, keySuffix?)`, `PosError(code, detail)`, `createSerialQueue`, `ApiDeps { now, newId, pinCost, exportDbFile }`, `openReadyApi`/`sellSku`/`PINS`/`TEST_PIN_COST`/`ReadyApi` ตรงกับโค้ดจริง · `CashMovementKind` จาก contracts (`PAID_IN | PAID_OUT | DROP | VOID_REFUND`) ส่งเข้า `CashKind` ของ domain ได้ตรง · `PosApi` มี 17 เมธอด และ `POS_API_METHODS_COMPLETE` ตรวจครบด้วย type · ชื่อข้าม task: `REASON_MAX_LENGTH`, `insertOpenShift`, `quickOpenShift`, `wasQuickOpened`, `QUICK_OPEN_ACTION`, `recordCashMovement`, `toCashMovementDto`, `buildShiftReport`, `shiftReport`, `varianceAlertSatang`, `closeShift`, `listZReports`, `getZReport`, `deviceZRows`, `exportBackup`, `lastBackupAt`, `lastBackupZId`, `isBackupDue`, `isSqliteFile`, `LAST_BACKUP_KEY`, `LAST_BACKUP_Z_ID_KEY`, `bangkokStamp`, `isShiftStale`, `STALE_SHIFT_CUTOFF_HOURS`, `vacuumInto`, `sellVoidScenario`, `COUNT_520`, `downloadBytes`, `parseCountInput`, `shiftReportKey`, `zListKey`, `zKey`, `SalesTable`, `DrawerTable`, `VoidList`, `NegativeBaseList` — ตรงกันทุกจุด
+**3. Type consistency (เทียบกับโค้ดจริงของแผน 1–3):** `RemoteDb` (`@dayo/db-schema/browser`) · ตาราง `s.shift`/`s.cashMovement`/`s.cashCount`/`s.zReport`/`s.auditLog`/`s.syncState`/`s.itemCostState`/`s.item` และคอลัมน์ `snapshotJson`, `linesJson`, `countedSatang`, `expectedSatang`, `varianceSatang`, `countedBy`, `closedBy`, `closedAt`, `onHandMilli`, `isTracked`, `useUnit` ตรงกับ `packages/db-schema/src/sqlite/*.ts` · `currentOpenShift(db, deviceId): ShiftDto | null`, `requireDevice`, `countPendingSyncItems`, `requireOwnerPin(db, deps, userId, pin)`, `getSetting(db, key, atIso)`, `enqueueOutbox(db, table, row, at, newId, keySuffix?)`, `PosError(code, detail)`, `posErrorCode(e)`, `createSerialQueue`, `ApiDeps { now, newId, pinCost, exportDbFile }`, `openReadyApi`/`sellSku`/`PINS`/`TEST_PIN_COST`/`ReadyApi` ตรงกับโค้ดจริง · `CashMovementKind` จาก contracts (`PAID_IN | PAID_OUT | DROP | VOID_REFUND`) ส่งเข้า `CashKind` ของ domain ได้ตรง · `PosApi` มี 18 เมธอด และ `POS_API_METHODS_COMPLETE` ตรวจครบด้วย type · ชื่อข้าม task: `REASON_MAX_LENGTH`, `insertOpenShift`, `quickOpenShift`, `wasQuickOpened`, `QUICK_OPEN_ACTION`, `recordCashMovement`, `toCashMovementDto`, `buildShiftReport`, `shiftReport`, `varianceAlertSatang`, `closeShift`, `listZReports`, `getZReport`, `deviceZRows`, `Z_CHAIN_ACK_ACTION`, `ZChainWarning`, `recomputeZChain`, `exportBackup`, `confirmBackupSaved`, `ConfirmBackupInput`, `BackupFileDto`, `backupFileName`, `lastBackupAt`, `lastBackupZId`, `isBackupDue`, `isSqliteFile`, `LAST_BACKUP_KEY`, `LAST_BACKUP_Z_ID_KEY`, `bangkokStamp`, `isShiftStale`, `STALE_SHIFT_CUTOFF_HOURS`, `vacuumInto`, `sellVoidScenario`, `COUNT_520`, `downloadBytes`, `parseCountInput`, `shiftReportKey`, `zListKey`, `zKey`, `SalesTable`, `QrTable`, `DrawerTable`, `VoidList`, `NegativeBaseList` — ตรงกันทุกจุด
 
-**4. ความเสี่ยงที่รู้อยู่:** ดาวน์โหลดไฟล์จาก blob ใน PWA ที่ติดตั้งแล้วบน Android ยังไม่ได้ทดสอบบนเครื่องจริง (Task 11 Step 2 ข้อ 3 — ถ้าไม่ได้ต้องถามเจ้าของก่อนขายจริง) · `exportFile` ของ `opfs-sahpool` อ่านทั้งไฟล์เข้าหน่วยความจำ (~1.5 MB ตอนนี้ โตตามจำนวนบิล — ยังเล็กมากสำหรับแท็บเล็ต) · `closeShift` คำนวณ X ใหม่ใน transaction ทุกครั้ง (ร้านขายวันละไม่กี่ร้อยบิล — เร็วพอ) · snapshot ของ Z เป็น JSON ที่อ่านกลับมาแล้ว cast เป็น `ZSnapshot` — ป้องกันด้วยการตรวจแฮช (`hashOk`) ไม่ใช่ zod · ไฟล์สำรองมีข้อมูลลับของร้าน (pin_hash, หมายเลขพร้อมเพย์) — เตือนไว้ใน Task 11 Step 2
+**4. ความเสี่ยงที่รู้อยู่:** ดาวน์โหลดไฟล์จาก blob ใน PWA ที่ติดตั้งแล้วบน Android ยังไม่ได้ทดสอบบนเครื่องจริง (Task 12 Step 2 ข้อ 3 — ถ้าไม่ได้ต้องถามเจ้าของก่อนขายจริง · ปุ่ม "บันทึกไฟล์แล้ว" กันไม่ให้แถบเตือนหายเองถ้าไฟล์ไม่ลง) · `exportFile` ของ `opfs-sahpool` อ่านทั้งไฟล์เข้าหน่วยความจำ (~1.5 MB ตอนนี้ โตตามจำนวนบิล — ยังเล็กมากสำหรับแท็บเล็ต) · `closeShift` คำนวณ X ใหม่ใน transaction ทุกครั้ง (ร้านขายวันละไม่กี่ร้อยบิล — เร็วพอ) · snapshot ของ Z เป็น JSON ที่อ่านกลับมาแล้ว cast เป็น `ZSnapshot` — ป้องกันด้วยการตรวจแฮช (`hashOk`) ไม่ใช่ zod · ถ้า snapshot ที่แฮชไม่ตรงถูกแก้จน `sales.netSalesSatang` ไม่ใช่จำนวนเต็ม `recomputeZChain` คำนวณต่อไม่ได้ → `BAD_INPUT` (ต้องแก้ด้วยมือ — โอกาสต่ำมาก) · ส่วนต่างพร้อมเพย์คิดจากยอดตอนปิดกะจริง (ถ้ามีบิลพร้อมเพย์เข้าระหว่างหน้าจอเปิดอยู่ Z จะใช้ยอดล่าสุด ไม่ปฏิเสธแบบ `SHIFT_CHANGED`) · ไฟล์สำรองมีข้อมูลลับของร้าน (pin_hash, หมายเลขพร้อมเพย์) — เจ้าของยอมรับ (Q3b-13 · D53) · เตือนไว้ใน Task 12 Step 2
