@@ -5,6 +5,7 @@ import {
   buildZReport,
   CASH_DENOMINATIONS_SATANG,
   cashInputsFromMovements,
+  DEFAULT_VARIANCE_ALERT_SATANG,
   expectedCashSatang,
   recomputeZChain,
   summarizeShiftSales,
@@ -12,6 +13,7 @@ import {
   varianceNeedsReason,
   zReportHash,
   type CashInputs,
+  type CashKind,
   type SalesSummary,
   type ShiftOrder,
   type ZChainWarning,
@@ -58,6 +60,10 @@ describe('cashInputsFromMovements', () => {
     expect(() => cashInputsFromMovements(0, 0, [{ kind: 'DROP', amountSatang: -1 }])).toThrow(RangeError)
     expect(() => cashInputsFromMovements(0, 0, [{ kind: 'PAID_OUT', amountSatang: 1.5 }])).toThrow(RangeError)
   })
+
+  it('refuses an unknown cash movement kind rather than defaulting it to DROP (M-4)', () => {
+    expect(() => cashInputsFromMovements(0, 0, [{ kind: 'SALE' as CashKind, amountSatang: 500 }])).toThrow(RangeError)
+  })
 })
 
 const paid = (id: string, subtotal: number, discount: number, method: 'CASH' | 'PROMPTPAY'): ShiftOrder => ({
@@ -87,6 +93,24 @@ describe('summarizeShiftSales', () => {
   it('refuses an order whose payments or totals do not add up (spec §4.1)', () => {
     expect(() => summarizeShiftSales([{ ...paid('o1', 4_500, 0, 'CASH'), payments: [{ method: 'CASH', amountSatang: 4_000 }] }])).toThrow(/payments/)
     expect(() => summarizeShiftSales([{ ...paid('o1', 4_500, 0, 'CASH'), totalSatang: 4_400 }])).toThrow(/total/)
+  })
+
+  it('refuses an unknown order status or payment method (M-4)', () => {
+    expect(() => summarizeShiftSales([{ ...paid('o1', 4_500, 0, 'CASH'), status: 'open' as ShiftOrder['status'] }])).toThrow(RangeError)
+    expect(() =>
+      summarizeShiftSales([{ ...paid('o1', 4_500, 0, 'CASH'), payments: [{ method: 'BANK' as ShiftOrder['payments'][number]['method'], amountSatang: 4_500 }] }]),
+    ).toThrow(RangeError)
+  })
+
+  it('refuses a forged summary: cash refunded > cash sales, or zero orders with gross > 0 (M-3)', () => {
+    const forgedCashRefund: SalesSummary = {
+      orderCount: 1, voidCount: 1, grossSalesSatang: 10_000, discountSatang: 0, voidedSatang: 10_000, netSalesSatang: 0,
+      cashSalesSatang: 0, qrSalesSatang: 10_000, qrRefundedSatang: 0, qrNetSatang: 10_000,
+    }
+    expect(() => assertSalesSummary(forgedCashRefund)).toThrow(RangeError)
+    expect(() =>
+      assertSalesSummary({ orderCount: 0, voidCount: 0, grossSalesSatang: 1, discountSatang: 0, voidedSatang: 0, netSalesSatang: 1, cashSalesSatang: 0, qrSalesSatang: 1, qrRefundedSatang: 0, qrNetSatang: 1 }),
+    ).toThrow(RangeError)
   })
 
   it('an empty shift is all zeros', () => {
@@ -142,14 +166,36 @@ describe('tallyCashCount / varianceNeedsReason', () => {
 })
 
 describe('recomputeZChain (Q3b-11 · D53)', () => {
-  it('Z count and Σ net of every earlier snapshot', () => {
-    expect(recomputeZChain([])).toEqual({ zNo: 0, grandTotalSatang: 0 })
-    expect(recomputeZChain([4_000, 0, 10_000])).toEqual({ zNo: 3, grandTotalSatang: 14_000 })
+  const salesOf = (net: number): SalesSummary => ({
+    orderCount: net > 0 ? 1 : 0, voidCount: 0, grossSalesSatang: net, discountSatang: 0, voidedSatang: 0, netSalesSatang: net,
+    cashSalesSatang: net, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0,
   })
 
-  it('refuses a net that is not a whole, non-negative number', () => {
-    expect(() => recomputeZChain([4_000, -1])).toThrow(RangeError)
-    expect(() => recomputeZChain([Number.NaN])).toThrow(RangeError)
+  it('Z count and Σ net of every earlier snapshot, zNo running 1..n', () => {
+    expect(recomputeZChain([])).toEqual({ zNo: 0, grandTotalSatang: 0 })
+    expect(recomputeZChain([1, 2, 3].map((zNo, i) => ({ zNo, sales: salesOf([4_000, 0, 10_000][i]!) })))).toEqual({ zNo: 3, grandTotalSatang: 14_000 })
+  })
+
+  it('refuses a snapshot whose SalesSummary is internally inconsistent (I-1: assertSalesSummary on each)', () => {
+    expect(() => recomputeZChain([{ zNo: 1, sales: { ...salesOf(4_000), voidCount: 2 } }])).toThrow(RangeError)
+  })
+
+  it('refuses a missing zNo (a gap) — I-1', () => {
+    expect(() => recomputeZChain([{ zNo: 1, sales: salesOf(4_000) }, { zNo: 3, sales: salesOf(10_000) }])).toThrow(RangeError)
+  })
+
+  it('refuses a duplicate zNo — I-1', () => {
+    expect(() => recomputeZChain([{ zNo: 1, sales: salesOf(4_000) }, { zNo: 1, sales: salesOf(10_000) }])).toThrow(RangeError)
+  })
+
+  it('does not trust a snapshot whose stored net was tampered with — I-1', () => {
+    const tampered: SalesSummary = { ...salesOf(4_000), netSalesSatang: 9_000 }
+    expect(() => recomputeZChain([{ zNo: 1, sales: tampered }])).toThrow(RangeError)
+  })
+
+  it('throws once the running total would pass Number.MAX_SAFE_INTEGER (M-1)', () => {
+    const huge = salesOf(Number.MAX_SAFE_INTEGER)
+    expect(() => recomputeZChain([{ zNo: 1, sales: huge }, { zNo: 2, sales: salesOf(1) }])).toThrow(RangeError)
   })
 })
 
@@ -182,6 +228,92 @@ describe('buildZReport', () => {
     expect(z.snapshot.countLines).toHaveLength(9)
     expect(z.hash).toBe(zReportHash(z.snapshot))
     expect(z.hash).toHaveLength(64)
+  })
+
+  it('refuses a grand total that would pass Number.MAX_SAFE_INTEGER (M-1)', () => {
+    expect(() => buildZReport(input, { zNo: 0, grandTotalSatang: Number.MAX_SAFE_INTEGER })).toThrow(RangeError)
+  })
+
+  it('pins the base input to a known golden hash (M-7): any change to canonicalization or snapshot shape must be deliberate', () => {
+    expect(buildZReport(input, null).hash).toBe('bf90b64e36954495d2e4e385fd006d4ebcfe17febc914ba6607fef06a5cee4a4')
+  })
+
+  it('a variance exactly at the alert threshold does not need a reason, with a non-default threshold too (M-7, spec §4.8 equality)', () => {
+    // expected cash is 58_000 either way; countLines are rebuilt to sum to the new countedCashSatang exactly.
+    const z1 = buildZReport(
+      { ...input, countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 10_000, count: 1 }], countedCashSatang: 60_000 },
+      null,
+    )
+    expect(z1.snapshot).toMatchObject({ cashVarianceSatang: DEFAULT_VARIANCE_ALERT_SATANG, varianceReason: null })
+    const z2 = buildZReport(
+      {
+        ...input,
+        varianceAlertSatang: 500,
+        countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 5_000, count: 1 }, { denominationSatang: 2_000, count: 1 }, { denominationSatang: 500, count: 1 }],
+        countedCashSatang: 57_500,
+      },
+      null,
+    )
+    expect(z2.snapshot).toMatchObject({ cashVarianceSatang: -500, varianceReason: null })
+  })
+
+  it('a zero-sales Z is accepted; the grand total carries forward unchanged (M-7)', () => {
+    const zeroSales: SalesSummary = { orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 }
+    const zeroCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const z = buildZReport(
+      { ...input, sales: zeroSales, cash: zeroCash, countLines: [{ denominationSatang: 50_000, count: 1 }], countedCashSatang: 50_000, voids: [] },
+      { zNo: 0, grandTotalSatang: 1_000_000 },
+    )
+    expect(z.snapshot).toMatchObject({ expectedCashSatang: 50_000, cashVarianceSatang: 0, grandTotalSatang: 1_000_000 })
+  })
+
+  it('a voids-only Z: net sales zero, the single cash void ties out the drawer (M-7)', () => {
+    const onlyVoidSales: SalesSummary = {
+      orderCount: 1, voidCount: 1, grossSalesSatang: 5_000, discountSatang: 500, voidedSatang: 4_500, netSalesSatang: 0,
+      cashSalesSatang: 4_500, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0,
+    }
+    const onlyVoidCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 4_500, voidRefundsSatang: 4_500, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const z = buildZReport(
+      {
+        ...input, sales: onlyVoidSales, cash: onlyVoidCash, countedCashSatang: 50_000, countLines: [{ denominationSatang: 50_000, count: 1 }],
+        voids: [{ orderId: 'oV', receiptNo: 'A-000001', totalSatang: 4_500, method: 'CASH', reason: 'ลูกค้าเปลี่ยนใจ', made: false, approvedBy: 'u1', approvedByName: 'TungAo', refundReference: null, voidedAt: '2026-09-17T02:00:00.000Z' }],
+      },
+      null,
+    )
+    expect(z.snapshot).toMatchObject({ expectedCashSatang: 50_000, cashVarianceSatang: 0, grandTotalSatang: 0 })
+  })
+
+  it('an accepted PromptPay void: the QR-refund tie-out passes without any cash movement (M-7)', () => {
+    const qrVoidSales: SalesSummary = {
+      orderCount: 2, voidCount: 1, grossSalesSatang: 9_500, discountSatang: 0, voidedSatang: 5_000, netSalesSatang: 4_500,
+      cashSalesSatang: 0, qrSalesSatang: 9_500, qrRefundedSatang: 5_000, qrNetSatang: 4_500,
+    }
+    const qrVoidCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const z = buildZReport(
+      {
+        ...input, sales: qrVoidSales, cash: qrVoidCash, countedCashSatang: 50_000, countLines: [{ denominationSatang: 50_000, count: 1 }],
+        voids: [{ orderId: 'oQ', receiptNo: 'A-000002', totalSatang: 5_000, method: 'PROMPTPAY', reason: 'สั่งผิด', made: true, approvedBy: 'u1', approvedByName: 'TungAo', refundReference: 'REF123', voidedAt: '2026-09-17T03:00:00.000Z' }],
+      },
+      null,
+    )
+    expect(z.snapshot).toMatchObject({ expectedCashSatang: 50_000, cashVarianceSatang: 0, grandTotalSatang: 4_500 })
+  })
+
+  it('checks each void entry individually: positive integer amount, unique orderId, non-blank reason (M-2)', () => {
+    expect(() => buildZReport({ ...input, voids: [{ ...input.voids[0]!, totalSatang: -9_000 }] }, null)).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, voids: [{ ...input.voids[0]!, totalSatang: 4_500.5 }] }, null)).toThrow(RangeError)
+    expect(() =>
+      buildZReport(
+        {
+          ...input,
+          sales: { ...sales, voidCount: 2, voidedSatang: 18_000, netSalesSatang: 5_500 },
+          cash: { ...zCash, voidRefundsSatang: 18_000 },
+          voids: [input.voids[0]!, { ...input.voids[0]! }],
+        },
+        null,
+      ),
+    ).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, voids: [{ ...input.voids[0]!, reason: '   ' }] }, null)).toThrow(RangeError)
   })
 
   it('hash changes when any number changes, and is stable', () => {

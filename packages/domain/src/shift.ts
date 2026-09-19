@@ -53,8 +53,10 @@ export function cashInputsFromMovements(
     if (m.kind === 'VOID_REFUND') x.voidRefundsSatang += m.amountSatang
     else if (m.kind === 'PAID_IN') x.paidInSatang += m.amountSatang
     else if (m.kind === 'PAID_OUT') x.paidOutSatang += m.amountSatang
-    else x.dropsSatang += m.amountSatang
+    else if (m.kind === 'DROP') x.dropsSatang += m.amountSatang
+    else throw new RangeError(`unknown cash movement kind ${String(m.kind)}`) // M-4
   }
+  for (const [k, v] of Object.entries(x)) assertSafeInt(v, k) // M-1
   return x
 }
 
@@ -106,12 +108,14 @@ export function summarizeShiftSales(orders: readonly ShiftOrder[]): SalesSummary
     qrNetSatang: 0,
   }
   for (const o of orders) {
+    if (o.status !== 'paid' && o.status !== 'voided') throw new RangeError(`order ${o.id}: unknown status ${String(o.status)}`) // M-4
     assertNonNegInt(o.subtotalSatang, 'subtotalSatang')
     assertNonNegInt(o.discountSatang, 'discountSatang')
     assertNonNegInt(o.totalSatang, 'totalSatang')
     if (o.totalSatang !== o.subtotalSatang - o.discountSatang) throw new RangeError(`order ${o.id}: total ≠ subtotal − discount`)
     let paid = 0
     for (const p of o.payments) {
+      if (p.method !== 'CASH' && p.method !== 'PROMPTPAY') throw new RangeError(`order ${o.id}: unknown payment method ${String(p.method)}`) // M-4
       assertNonNegInt(p.amountSatang, 'payment amountSatang')
       paid += p.amountSatang
       if (p.method === 'CASH') s.cashSalesSatang += p.amountSatang
@@ -131,17 +135,20 @@ export function summarizeShiftSales(orders: readonly ShiftOrder[]): SalesSummary
   }
   s.netSalesSatang = s.grossSalesSatang - s.discountSatang - s.voidedSatang // Q3b-4 · D52
   s.qrNetSatang = s.qrSalesSatang - s.qrRefundedSatang // Q3b-12 · D53
+  for (const [k, v] of Object.entries(s)) assertSafeInt(v, k) // M-1
   return s
 }
 
 /** Throws unless the summary is internally consistent — the relations `summarizeShiftSales` guarantees (Plan 1 notes §4). */
 export function assertSalesSummary(s: SalesSummary): void {
   for (const [k, v] of Object.entries(s)) assertNonNegInt(v, k)
+  if (s.orderCount === 0 && s.grossSalesSatang !== 0) throw new RangeError('zero orders must mean zero gross') // M-3(b)
   if (s.voidCount > s.orderCount) throw new RangeError('voidCount > orderCount')
   if (s.discountSatang > s.grossSalesSatang) throw new RangeError('discount > gross')
   if (s.netSalesSatang !== s.grossSalesSatang - s.discountSatang - s.voidedSatang) throw new RangeError('net ≠ gross − discount − voided') // Q3b-4 · D52
   if (s.cashSalesSatang + s.qrSalesSatang !== s.grossSalesSatang - s.discountSatang) throw new RangeError('cash + qr ≠ gross − discount')
   if (s.qrRefundedSatang > s.qrSalesSatang || s.qrRefundedSatang > s.voidedSatang) throw new RangeError('qr refunded > qr sales or > voided')
+  if (s.voidedSatang - s.qrRefundedSatang > s.cashSalesSatang) throw new RangeError('cash refunded > cash sales') // M-3(a)
   if (s.qrNetSatang !== s.qrSalesSatang - s.qrRefundedSatang) throw new RangeError('qr net ≠ qr − qr refunded') // Q3b-12 · D53
 }
 
@@ -248,17 +255,22 @@ export function zReportHash(snapshot: unknown): string {
 
 /**
  * Q3b-11 · D53: when the previous Z fails its hash, the chain is rebuilt from every earlier Z snapshot of the device
- * (in `zNo` order): the Z count and Σ net. A healthy chain gives exactly the stored values of the last Z
- * (Z(n).grand = Σ net of Z1…Zn, Z(n).zNo = n), so this only differs where a snapshot's stored total was edited.
+ * (in `zNo` order): the Z count and Σ net, net recomputed from each snapshot's own gross/discount/voided rather than
+ * trusted from its stored `netSalesSatang` (a coordinated edit of gross, discount, voided and net together still
+ * cannot be detected — an accepted limitation; the frozen `chainWarning` records that the chain was broken).
+ * A healthy chain gives exactly the stored values of the last Z (Z(n).grand = Σ net of Z1…Zn, Z(n).zNo = n), so this
+ * only differs where a snapshot was edited, a Z row was removed (a zNo gap) or duplicated (a duplicate zNo).
  */
-export function recomputeZChain(netSalesSatang: readonly number[]): { zNo: number; grandTotalSatang: number } {
+export function recomputeZChain(snapshots: readonly { zNo: number; sales: SalesSummary }[]): { zNo: number; grandTotalSatang: number } {
   let grand = 0
-  for (const [i, net] of netSalesSatang.entries()) {
-    assertNonNegInt(net, `net of Z #${i + 1}`)
+  for (const [i, snap] of snapshots.entries()) {
+    if (snap.zNo !== i + 1) throw new RangeError(`zNo must run 1..n with no gaps or duplicates; expected ${i + 1}, got ${snap.zNo}`)
+    assertSalesSummary(snap.sales)
+    const net = snap.sales.grossSalesSatang - snap.sales.discountSatang - snap.sales.voidedSatang
     grand += net
+    assertSafeInt(grand, 'grandTotalSatang')
   }
-  assertSafeInt(grand, 'grandTotalSatang')
-  return { zNo: netSalesSatang.length, grandTotalSatang: grand }
+  return { zNo: snapshots.length, grandTotalSatang: grand }
 }
 
 /**
@@ -280,6 +292,14 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
   const tally = tallyCashCount(input.countLines)
   if (tally.totalSatang !== input.countedCashSatang) throw new RangeError('countedCashSatang must equal the sum of countLines')
   if (input.voids.length !== input.sales.voidCount) throw new RangeError('voids must list every voided receipt')
+  const seenVoidOrderIds = new Set<string>()
+  for (const v of input.voids) {
+    // M-2: each void entry checked individually — the frozen daily void report (D50 Q3-22) must not carry garbage.
+    if (!Number.isSafeInteger(v.totalSatang) || v.totalSatang <= 0) throw new RangeError(`void ${v.orderId}: totalSatang must be a positive integer`)
+    if (seenVoidOrderIds.has(v.orderId)) throw new RangeError(`void ${v.orderId}: duplicate orderId`)
+    seenVoidOrderIds.add(v.orderId)
+    if (v.reason.trim() === '') throw new RangeError(`void ${v.orderId}: reason must not be blank`)
+  }
   if (input.voids.reduce((a, v) => a + v.totalSatang, 0) !== input.sales.voidedSatang) throw new RangeError('Σ voids.totalSatang must equal sales.voidedSatang')
   const voidSum = (method: ZVoid['method']): number => input.voids.filter((v) => v.method === method).reduce((a, v) => a + v.totalSatang, 0)
   if (voidSum('CASH') !== input.cash.voidRefundsSatang) throw new RangeError('Σ cash voids must equal cash.voidRefundsSatang (D36)')
@@ -287,24 +307,48 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
   if (input.bankQrTotalSatang !== null) assertNonNegInt(input.bankQrTotalSatang, 'bankQrTotalSatang')
   const w = input.chainWarning
   if (w !== null) {
-    if (w.brokenShiftId === '' || w.acknowledgedBy === '') throw new RangeError('chainWarning needs the broken shift and the acknowledging owner')
+    // M-6: trim before checking for blank, and there must be an earlier Z (prevZNo >= 1) for the chain to have broken.
+    if (w.brokenShiftId.trim() === '' || w.acknowledgedBy.trim() === '') throw new RangeError('chainWarning needs the broken shift and the acknowledging owner')
     if (w.storedGrandTotalSatang !== null) assertSafeInt(w.storedGrandTotalSatang, 'chainWarning.storedGrandTotalSatang')
-    if (prev === null || w.recomputedGrandTotalSatang !== prevGrand) throw new RangeError('with a chainWarning, prev must be the recomputed chain')
+    if (prevZNo < 1 || w.recomputedGrandTotalSatang !== prevGrand) throw new RangeError('with a chainWarning, prev must be the recomputed chain of at least one earlier Z')
   }
   const expected = expectedCashSatang(input.cash)
+  assertSafeInt(expected, 'expectedCashSatang') // M-1
   const variance = input.countedCashSatang - expected
+  assertSafeInt(variance, 'cashVarianceSatang') // M-1
   const reason = input.varianceReason?.trim() ?? ''
   if (varianceNeedsReason(variance, input.varianceAlertSatang) && reason === '') {
     throw new RangeError('a cash variance above the alert threshold needs a reason (spec §4.8)')
   }
+  const qrDifference = input.bankQrTotalSatang === null ? null : input.bankQrTotalSatang - input.sales.qrNetSatang
+  if (qrDifference !== null) assertSafeInt(qrDifference, 'qrDifferenceSatang') // M-1
+  const grandTotal = prevGrand + input.sales.netSalesSatang
+  assertSafeInt(grandTotal, 'grandTotalSatang') // M-1
+  // M-5: an explicit field list, not `...input` — the stored/hashed shape is exactly `ZSnapshot`, never a stray extra property.
   const snapshot: ZSnapshot = {
-    ...input,
+    shiftId: input.shiftId,
+    businessDate: input.businessDate,
+    deviceId: input.deviceId,
+    zNo: input.zNo,
+    openedAt: input.openedAt,
+    openedBy: input.openedBy,
+    openedQuick: input.openedQuick,
+    closedAt: input.closedAt,
+    closedBy: input.closedBy,
+    countedBy: input.countedBy,
+    sales: input.sales,
+    cash: input.cash,
     countLines: tally.lines,
+    countedCashSatang: input.countedCashSatang,
+    varianceAlertSatang: input.varianceAlertSatang,
     varianceReason: reason === '' ? null : reason,
+    voids: input.voids,
+    bankQrTotalSatang: input.bankQrTotalSatang,
+    chainWarning: input.chainWarning,
     expectedCashSatang: expected,
     cashVarianceSatang: variance,
-    qrDifferenceSatang: input.bankQrTotalSatang === null ? null : input.bankQrTotalSatang - input.sales.qrNetSatang,
-    grandTotalSatang: prevGrand + input.sales.netSalesSatang,
+    qrDifferenceSatang: qrDifference,
+    grandTotalSatang: grandTotal,
   }
   return { snapshot, hash: zReportHash(snapshot) }
 }
