@@ -205,40 +205,90 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
   const entryOf = (shiftId: string, net: number, extra: Partial<LenientZEntry> = {}): LenientZEntry => ({
     shiftId, zNo: null, grossSalesSatang: net, discountSatang: 0, voidedSatang: 0, netSalesSatang: net, ...extra,
   })
+  const noZNoLists = { duplicateZNos: [], missingZNos: [], maxStoredZNo: 0 }
 
-  it('an empty chain gives Z0, grand 0, nothing unreadable', () => {
-    expect(recomputeZChainLenient([])).toEqual({ zNo: 0, grandTotalSatang: 0, unreadable: [] })
+  it('an empty chain gives Z0, grand 0, nothing unreadable, duplicated or missing', () => {
+    expect(recomputeZChainLenient([])).toEqual({ zNo: 0, grandTotalSatang: 0, unreadable: [], ...noZNoLists })
   })
 
   it('a consistent gross/discount/voided triple is trusted over a tampered stored net (Q3b-16 rule 1)', () => {
     const e = entryOf('s1', 4_000, { grossSalesSatang: 4_500, discountSatang: 500, voidedSatang: 0, netSalesSatang: 1 }) // net lies, gross/discount/voided don't
-    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 4_000, unreadable: [] })
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 4_000, unreadable: [], ...noZNoLists })
   })
 
   it('an inconsistent triple falls back to the stored net, and is listed as unreadable (rule 2)', () => {
     const e = entryOf('s1', 0, { grossSalesSatang: 1_000, discountSatang: 2_000, voidedSatang: 0, netSalesSatang: 7_000 }) // discount > gross
-    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 7_000, unreadable: [{ shiftId: 's1', zNo: null }] })
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 7_000, unreadable: [{ shiftId: 's1', zNo: null }], ...noZNoLists })
+  })
+
+  it('a negative stored net is refused too (review NF-2) — falls back to 0, still flagged unreadable', () => {
+    const e = entryOf('s1', 0, { grossSalesSatang: 1_000, discountSatang: 2_000, voidedSatang: 0, netSalesSatang: -100_000 }) // inconsistent triple; the "fallback" net is itself negative
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 0, unreadable: [{ shiftId: 's1', zNo: null }], ...noZNoLists })
   })
 
   it('a missing gross/discount/voided AND a missing/non-integer stored net falls back to 0, and is listed as unreadable (rule 3)', () => {
     const e: LenientZEntry = { shiftId: 's1', zNo: 3, grossSalesSatang: null, discountSatang: null, voidedSatang: null, netSalesSatang: 1.5 }
-    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 0, unreadable: [{ shiftId: 's1', zNo: 3 }] })
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 0, unreadable: [{ shiftId: 's1', zNo: 3 }], duplicateZNos: [], missingZNos: [1, 2], maxStoredZNo: 3 })
   })
 
   it('sums nets in the order given, zNo is simply the entry count, and totals are pinned literally', () => {
     const chain = recomputeZChainLenient([entryOf('s1', 4_000), entryOf('s2', 0), entryOf('s3', 10_000)])
-    expect(chain).toEqual({ zNo: 3, grandTotalSatang: 14_000, unreadable: [] })
+    expect(chain).toEqual({ zNo: 3, grandTotalSatang: 14_000, unreadable: [], ...noZNoLists })
   })
 
   it('a mix of readable and unreadable entries sums correctly and lists only the unreadable ones', () => {
     const readable = entryOf('s1', 4_000, { zNo: 1 })
-    const badTriple = entryOf('s2', 0, { zNo: 2, grossSalesSatang: 100, discountSatang: 200, voidedSatang: 0, netSalesSatang: 5_000 })
+    const badTriple = entryOf('s2', 5_000, { zNo: 2, grossSalesSatang: 100, discountSatang: 200, voidedSatang: 0, netSalesSatang: 5_000 }) // inconsistent triple, valid stored net
     const wholeRowGone = { shiftId: 's3', zNo: null, grossSalesSatang: null, discountSatang: null, voidedSatang: null, netSalesSatang: null }
     expect(recomputeZChainLenient([readable, badTriple, wholeRowGone])).toEqual({
       zNo: 3,
       grandTotalSatang: 4_000 + 5_000 + 0,
       unreadable: [{ shiftId: 's2', zNo: 2 }, { shiftId: 's3', zNo: null }],
+      duplicateZNos: [],
+      missingZNos: [],
+      maxStoredZNo: 2,
     })
+  })
+
+  it('never lets the running total exceed Number.MAX_SAFE_INTEGER (review NF-2) — an entry that would push it over is skipped and flagged instead', () => {
+    const normal = entryOf('s1', 4_000, { zNo: 1 })
+    const huge = entryOf('s2', 0, { zNo: 2, grossSalesSatang: Number.MAX_SAFE_INTEGER, discountSatang: 0, voidedSatang: 0, netSalesSatang: Number.MAX_SAFE_INTEGER })
+    const chain = recomputeZChainLenient([normal, huge]) // normal is folded in first and fits; huge on top of it would overflow
+    expect(chain.grandTotalSatang).toBe(4_000) // huge is dropped rather than pushing the total unsafe
+    expect(Number.isSafeInteger(chain.grandTotalSatang)).toBe(true)
+    expect(chain.unreadable).toEqual([{ shiftId: 's2', zNo: 2 }])
+  })
+
+  it('names duplicate and missing zNos (review NF-4)', () => {
+    const chain = recomputeZChainLenient([entryOf('s1', 1_000, { zNo: 1 }), entryOf('s2', 1_000, { zNo: 4 }), entryOf('s3', 1_000, { zNo: 4 })])
+    expect(chain.duplicateZNos).toEqual([4])
+    expect(chain.missingZNos).toEqual([2, 3])
+    expect(chain.maxStoredZNo).toBe(4)
+  })
+
+  it('property: the result always satisfies buildZReport as `prev` — never BAD_INPUT, whatever the earlier rows claim (review NF-2, NF-7)', () => {
+    const zeroSales: SalesSummary = { orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 }
+    const zeroCash: CashInputs = { openingFloatSatang: 0, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const wide = fc.integer({ min: -10, max: Number.MAX_SAFE_INTEGER })
+    const entryArb = fc.record({
+      shiftId: fc.string({ minLength: 1, maxLength: 8 }),
+      zNo: fc.option(fc.integer({ min: -5, max: 30 }), { nil: null }),
+      grossSalesSatang: fc.option(wide, { nil: null }),
+      discountSatang: fc.option(wide, { nil: null }),
+      voidedSatang: fc.option(wide, { nil: null }),
+      netSalesSatang: fc.option(wide, { nil: null }),
+    })
+    fc.assert(
+      fc.property(fc.array(entryArb, { maxLength: 15 }), (entries) => {
+        const chain = recomputeZChainLenient(entries)
+        const currentShift: ZInput = {
+          shiftId: 's-current', businessDate: '2026-09-17', deviceId: 'dev-A', zNo: chain.zNo + 1, openedAt: '2026-09-17T01:00:00.000Z', openedBy: 'u1', openedQuick: false,
+          closedAt: '2026-09-17T13:05:00.000Z', closedBy: 'u1', countedBy: 'u1',
+          sales: zeroSales, cash: zeroCash, countLines: [], countedCashSatang: 0, varianceAlertSatang: 2_000, varianceReason: null, voids: [], bankQrTotalSatang: null, chainWarning: null,
+        }
+        buildZReport(currentShift, { zNo: chain.zNo, grandTotalSatang: chain.grandTotalSatang }) // must never throw
+      }),
+    )
   })
 })
 
@@ -382,7 +432,7 @@ describe('buildZReport', () => {
   })
 
   it('a chain warning is frozen into the Z and must match the recomputed chain it chains from (Q3b-11 · D53)', () => {
-    const w: ZChainWarning = { brokenShiftId: 's0', storedGrandTotalSatang: 999, recomputedGrandTotalSatang: 4_000, acknowledgedBy: 'u1', unreadableZs: [] }
+    const w: ZChainWarning = { brokenShiftId: 's0', storedGrandTotalSatang: 999, recomputedGrandTotalSatang: 4_000, acknowledgedBy: 'u1', unreadableZs: [], duplicateZNos: [], missingZNos: [] }
     const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
     expect(z.snapshot).toMatchObject({ chainWarning: w, grandTotalSatang: 18_500 })
     expect(z.hash).toBe(zReportHash(z.snapshot))
@@ -398,11 +448,29 @@ describe('buildZReport', () => {
       recomputedGrandTotalSatang: 4_000,
       acknowledgedBy: 'u1',
       unreadableZs: [{ shiftId: 's0', zNo: 1 }, { shiftId: 'sX', zNo: null }],
+      duplicateZNos: [],
+      missingZNos: [],
     }
     const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
     expect(z.snapshot.chainWarning).toEqual(w)
     expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, unreadableZs: [{ shiftId: '', zNo: 1 }] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
     expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, unreadableZs: [{ shiftId: 's0', zNo: 1.5 }] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+  })
+
+  it('a chain warning names duplicate/missing zNos (review NF-4); a malformed entry there is refused too', () => {
+    const w: ZChainWarning = {
+      brokenShiftId: 's0',
+      storedGrandTotalSatang: null,
+      recomputedGrandTotalSatang: 4_000,
+      acknowledgedBy: 'u1',
+      unreadableZs: [],
+      duplicateZNos: [4],
+      missingZNos: [2, 3],
+    }
+    const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
+    expect(z.snapshot.chainWarning).toEqual(w)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, duplicateZNos: [0] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, missingZNos: [1.5] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
   })
 
   it('refuses inconsistent inputs (Plan 1 notes §4)', () => {

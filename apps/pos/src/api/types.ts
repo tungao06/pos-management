@@ -121,6 +121,10 @@ export type ShiftReportDto = {
   voids: ZVoid[]
   negativeBases: NegativeBaseDto[]
   pendingSyncItems: number
+  /** `shiftReportFingerprint` of every other field above except this one (Q3b-17 · D54, review NF-6) — the
+   * close-shift screen (Task 11) echoes this straight into `CloseShiftInput.shownReportFingerprint`, with no need
+   * to import the helper (or drizzle/@dayo/db-schema through it) itself. */
+  fingerprint: string
 }
 
 export type CloseShiftInput = {

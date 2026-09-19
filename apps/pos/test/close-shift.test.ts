@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { zReportHash } from '@dayo/domain'
-import { shiftReportFingerprint } from '../src/api/shift-report'
 import type { CloseShiftInput } from '../src/api/types'
 import { hashPin } from '../src/lib/pin'
 import { openReadyApi, PINS, sellSku, TEST_PIN_COST, type ReadyApi } from './helpers/db'
@@ -10,7 +9,8 @@ import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
 /** Fetches the X report the screen would show right now and builds the close input from it — `shownExpectedCashSatang`
  * and `shownReportFingerprint` (Q3b-17 · D54) always match the live shift unless `patch` overrides them, the same way
- * a UI screen would fill them in from its own `shiftReport()` call just before submitting. */
+ * a UI screen would fill them in from its own `shiftReport()` call just before submitting (review NF-6: just reading
+ * `report.fingerprint`, with no separate import of the helper that computes it). */
 async function closeInput(t: ReadyApi, patch: Partial<CloseShiftInput> = {}): Promise<CloseShiftInput> {
   const report = await t.api.shiftReport()
   return {
@@ -19,7 +19,7 @@ async function closeInput(t: ReadyApi, patch: Partial<CloseShiftInput> = {}): Pr
     approverPin: PINS.TungAo,
     countLines: COUNT_520,
     shownExpectedCashSatang: report.expectedCashSatang,
-    shownReportFingerprint: shiftReportFingerprint(report),
+    shownReportFingerprint: report.fingerprint,
     varianceReason: null,
     bankQrTotalSatang: null,
     acknowledgeZChainBroken: false,
@@ -32,6 +32,24 @@ function counts(t: ReadyApi): Record<string, number> {
   for (const table of ['cash_count', 'z_report', 'outbox']) out[table] = (t.raw.prepare(`select count(*) as c from "${table}"`).get() as { c: number }).c
   out['open_shift'] = (t.raw.prepare(`select count(*) as c from shift where status = 'open'`).get() as { c: number }).c
   return out
+}
+
+/** Z1 (`sellVoidScenario`, net ฿40), Z2 and Z3 (one PromptPay ฿50 sale each) — true grand ฿140, 14_000 satang.
+ * Review NF-7: every C-1 probe needs **2+** earlier Zs to catch NF-1/NF-3 (a single earlier Z is always `rows[0]`
+ * regardless of ordering, healthy or not, which is exactly why the fix-round-1b tests missed both). Leaves the
+ * clock at 2026-09-19T02:00 with every shift closed, ready for a 4th. */
+async function closeThreeZs(t: ReadyApi) {
+  await sellVoidScenario(t)
+  const z1 = await t.api.closeShift(await closeInput(t))
+  t.clock.set('2026-09-18T02:00:00.000Z')
+  await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+  await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+  const z2 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+  t.clock.set('2026-09-19T02:00:00.000Z')
+  await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+  await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+  const z3 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+  return { z1, z2, z3 }
 }
 
 describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)', () => {
@@ -229,7 +247,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
         entityId: z2.id,
         action: 'z_chain_broken_ack',
         beforeJson: { brokenShiftId: z1.shiftId, storedGrandTotalSatang: 999 },
-        afterJson: { zNo: 2, recomputedGrandTotalSatang: 4_000 },
+        afterJson: { zNo: 2, recomputedGrandTotalSatang: 4_000, rowCount: 1, maxStoredZNo: 1 },
         actorUserId: t.owner.id,
         at: '2026-09-18T02:00:00.000Z',
       },
@@ -310,6 +328,142 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
       grandTotalSatang: 5_000,
       chainWarning: { brokenShiftId: z1.shiftId, storedGrandTotalSatang: null, recomputedGrandTotalSatang: 0, unreadableZs: [{ shiftId: z1.shiftId, zNo: null }] },
     })
+  })
+
+  it('the last Z with only its own zNo unreadable still recovers every earlier ฿, with 2+ earlier Zs (review NF-1 · NF-7)', async () => {
+    // review NF-1's probe: with a single earlier Z, the old bug never even triggered (it was always rows[0]) —
+    // it needs Z1..Z3 for a hand-edited Z3 to have sorted *below* the intact Z2 under the old zNo-based ordering.
+    const tampers = [
+      `update z_report set snapshot_json = json_remove(snapshot_json, '$.zNo') where shift_id = ?`,
+      `update z_report set snapshot_json = json_set(snapshot_json, '$.zNo', 0) where shift_id = ?`,
+      `update z_report set snapshot_json = json_set(snapshot_json, '$.zNo', null) where shift_id = ?`,
+      `update z_report set snapshot_json = json_set(snapshot_json, '$.zNo', 1.5) where shift_id = ?`,
+    ]
+    for (const tamperSql of tampers) {
+      const t = await openReadyApi()
+      const { z3 } = await closeThreeZs(t)
+      t.raw.exec('DROP TRIGGER z_report_no_update')
+      t.raw.prepare(tamperSql).run(z3.shiftId)
+
+      t.clock.set('2026-09-20T02:00:00.000Z')
+      await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+      await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // + ฿50
+      const next = await closeInput(t, { countLines: [] })
+      const before = counts(t)
+      await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+      expect(counts(t)).toEqual(before)
+
+      const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+      // z3's sales are still intact (only zNo was touched), so its ฿50 is recovered in full — not flagged
+      expect(z4.snapshot).toMatchObject({ zNo: 4, grandTotalSatang: 19_000, chainWarning: { brokenShiftId: z3.shiftId, recomputedGrandTotalSatang: 14_000, unreadableZs: [] } })
+
+      // a clean close afterwards needs no acknowledgement at all (review NF-1/NF-3: no perpetual warning)
+      t.clock.set('2026-09-21T02:00:00.000Z')
+      await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+      const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+      expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
+    }
+  })
+
+  it('the last Z with its whole snapshot destroyed honestly loses (and flags) only its own ฿, with 2+ earlier Zs (review NF-1 · NF-7)', async () => {
+    for (const tamperSql of [`update z_report set snapshot_json = 'not json' where shift_id = ?`, `update z_report set snapshot_json = 'null' where shift_id = ?`]) {
+      const t = await openReadyApi()
+      const { z3 } = await closeThreeZs(t)
+      t.raw.exec('DROP TRIGGER z_report_no_update')
+      t.raw.prepare(tamperSql).run(z3.shiftId)
+
+      t.clock.set('2026-09-20T02:00:00.000Z')
+      await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+      await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // + ฿50
+      const next = await closeInput(t, { countLines: [] })
+      await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+
+      const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+      // z3's own data is genuinely gone — its ฿50 cannot be recovered, but (unlike the old silent-skip bug) it is
+      // honestly treated as 0 and named in chainWarning, not silently kept out of the total with no trace at all
+      expect(z4.snapshot).toMatchObject({ zNo: 4, grandTotalSatang: 14_000, chainWarning: { brokenShiftId: z3.shiftId, recomputedGrandTotalSatang: 9_000, unreadableZs: [{ shiftId: z3.shiftId, zNo: null }] } })
+
+      t.clock.set('2026-09-21T02:00:00.000Z')
+      await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+      const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+      expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
+    }
+  })
+
+  it("a middle Z's zNo tampered to a larger number or a string no longer blocks or re-warns any future close (review NF-3 · NF-7)", async () => {
+    for (const middleZNo of [99, 'x']) {
+      const t = await openReadyApi()
+      const { z2 } = await closeThreeZs(t)
+      t.raw.exec('DROP TRIGGER z_report_no_update')
+      t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.zNo', ?) where shift_id = ?`).run(middleZNo, z2.shiftId)
+
+      t.clock.set('2026-09-20T02:00:00.000Z')
+      await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+      await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+      // the true last Z (z3, found by insertion order, not by any zNo) is untouched, so this closes cleanly —
+      // no Z_CHAIN_BROKEN, no chainWarning, no owner PIN re-entry, unlike the old zNo-sorted bug (review NF-3)
+      const z4 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+      expect(z4.snapshot).toMatchObject({ zNo: 4, grandTotalSatang: 19_000, chainWarning: null })
+
+      // the tampered middle Z (z2) shows up only in the list (review m-4 of fix round 1a) — it never blocks again
+      expect((await t.api.listZReports()).map((z) => z.hashOk)).toEqual([true, true, false, true]) // z4, z3, z2(tampered), z1
+
+      t.clock.set('2026-09-21T02:00:00.000Z')
+      await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+      const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+      expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
+    }
+  })
+
+  it('a previous Z with an inconsistent triple and a negative stored net recomputes to 0, not a permanent BAD_INPUT (review NF-2 · NF-7)', async () => {
+    const t = await openReadyApi()
+    const { z3 } = await closeThreeZs(t)
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.sales.discountSatang', 999999, '$.sales.netSalesSatang', -100000) where shift_id = ?`).run(z3.shiftId)
+
+    t.clock.set('2026-09-20T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    const next = await closeInput(t, { countLines: [] })
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+
+    const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    // the triple is inconsistent (discount > gross) and the "fallback" net is negative — neither is trusted, so
+    // z3 contributes 0 and is flagged; z1 + z2's real ฿90 plus this shift's ฿50 still go through
+    expect(z4.snapshot).toMatchObject({ zNo: 4, grandTotalSatang: 14_000, chainWarning: { brokenShiftId: z3.shiftId, recomputedGrandTotalSatang: 9_000, unreadableZs: [{ shiftId: z3.shiftId, zNo: 3 }] } })
+
+    t.clock.set('2026-09-21T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+    expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
+  })
+
+  it('a previous Z with a huge but self-consistent gross never overflows the grand total into a permanent BAD_INPUT (review NF-2 · NF-7)', async () => {
+    const t = await openReadyApi()
+    const { z3 } = await closeThreeZs(t)
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    t.raw
+      .prepare(
+        `update z_report set snapshot_json = json_set(snapshot_json, '$.sales.grossSalesSatang', 9007199254740991, '$.sales.discountSatang', 0, '$.sales.voidedSatang', 0, '$.sales.netSalesSatang', 9007199254740991) where shift_id = ?`,
+      )
+      .run(z3.shiftId)
+
+    t.clock.set('2026-09-20T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    const next = await closeInput(t, { countLines: [] })
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+
+    const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    // z3's own triple is self-consistent, but folding its huge net in would overflow Number.MAX_SAFE_INTEGER —
+    // it is dropped and flagged instead, so the total stays a safe integer built only from what is trustworthy
+    expect(z4.snapshot).toMatchObject({ zNo: 4, grandTotalSatang: 14_000, chainWarning: { brokenShiftId: z3.shiftId, recomputedGrandTotalSatang: 9_000, unreadableZs: [{ shiftId: z3.shiftId, zNo: 3 }] } })
+    expect(Number.isSafeInteger(z4.snapshot!.grandTotalSatang)).toBe(true)
+
+    t.clock.set('2026-09-21T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+    expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
   })
 
   it('a snapshot that is not readable JSON, or is missing sales, is flagged rather than crashing list/get (review I-1)', async () => {

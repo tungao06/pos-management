@@ -95,7 +95,7 @@ export async function buildShiftReport(db: RemoteDb, shift: ShiftDto, atIso: str
     return voidFromEvent(o, method, ev?.payloadJson, names)
   })
 
-  return {
+  const core = {
     shift: { ...shift, openedByName: names.get(shift.openedBy) ?? shift.openedBy, openedQuick: await wasQuickOpened(db, shift.id) },
     generatedAt: atIso,
     sales,
@@ -107,17 +107,33 @@ export async function buildShiftReport(db: RemoteDb, shift: ShiftDto, atIso: str
     negativeBases: await negativeBases(db),
     pendingSyncItems: await countPendingSyncItems(db),
   }
+  // review NF-6: computed here and handed back as `fingerprint` on the DTO itself, so the close-shift screen (Task
+  // 11) just echoes `shiftReport().fingerprint` into `closeShift`'s input — it never needs to import this helper,
+  // or drizzle/@dayo/db-schema through it.
+  return { ...core, fingerprint: shiftReportFingerprint(core) }
 }
 
 /**
- * Q3b-17 · D54: a hash of every report figure that `closeShift`'s SHIFT_CHANGED must guard — sales, cash, QR
- * (folded into `sales`) and voids — never `generatedAt`, `cashMovements` (redundant with `cash`), `negativeBases`
- * or `pendingSyncItems`, which are informational and change for reasons unrelated to this shift's money. The UI
- * computes this from the same X report it shows and sends it back with the close; `closeShift` recomputes it from
- * a fresh report and refuses (SHIFT_CHANGED) on any mismatch — not only when `expectedCashSatang` itself moved.
+ * Q3b-17 · D54: a hash of every report figure that `closeShift`'s SHIFT_CHANGED must guard — the shift itself
+ * (review NF-5: so a stale submission can never be replayed against a *different*, later shift with coincidentally
+ * identical figures), sales, cash, QR (folded into `sales`) and voids — never `generatedAt`, `cashMovements`
+ * (redundant with `cash`), `negativeBases` or `pendingSyncItems`, which are informational and change for reasons
+ * unrelated to this shift's money. `buildShiftReport` computes this once and hands it back as `fingerprint` on the
+ * DTO (review NF-6); `closeShift` recomputes it from a fresh report and refuses (SHIFT_CHANGED) on any mismatch —
+ * not only when `expectedCashSatang` itself moved. Exported for tests, which read `report.fingerprint` in practice.
  */
-export function shiftReportFingerprint(report: ShiftReportDto): string {
-  return sha256Hex(canonicalJson({ sales: report.sales, cash: report.cash, expectedCashSatang: report.expectedCashSatang, varianceAlertSatang: report.varianceAlertSatang, voids: report.voids }))
+export function shiftReportFingerprint(report: Omit<ShiftReportDto, 'fingerprint'>): string {
+  return sha256Hex(
+    canonicalJson({
+      shiftId: report.shift.id,
+      openedQuick: report.shift.openedQuick,
+      sales: report.sales,
+      cash: report.cash,
+      expectedCashSatang: report.expectedCashSatang,
+      varianceAlertSatang: report.varianceAlertSatang,
+      voids: report.voids,
+    }),
+  )
 }
 
 /** X report of the open shift (spec §4.8: computed live, any time, nothing written). */

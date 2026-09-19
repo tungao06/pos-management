@@ -6,17 +6,19 @@ import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { createPosApi } from '../src/api/pos-api'
 import { isSqliteFile } from '../src/api/backup'
-import { shiftReportFingerprint } from '../src/api/shift-report'
 import type { BackupFileDto, CloseShiftInput, ConfirmBackupInput } from '../src/api/types'
 import { hashPin } from '../src/lib/pin'
 import { openReadyApi, PINS, TEST_PIN_COST, type ReadyApi } from './helpers/db'
 import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
-const close520 = async (t: ReadyApi): Promise<CloseShiftInput> => ({
-  actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, countLines: COUNT_520, shownExpectedCashSatang: 52_000,
-  shownReportFingerprint: shiftReportFingerprint(await t.api.shiftReport()),
-  varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: false,
-})
+const close520 = async (t: ReadyApi): Promise<CloseShiftInput> => {
+  const report = await t.api.shiftReport()
+  return {
+    actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, countLines: COUNT_520, shownExpectedCashSatang: 52_000,
+    shownReportFingerprint: report.fingerprint,
+    varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: false,
+  }
+}
 const confirmOf = (t: ReadyApi, file: BackupFileDto): ConfirmBackupInput => ({ actorUserId: t.owner.id, fileName: file.fileName, byteLength: file.bytes.byteLength, createdAt: file.createdAt, lastZId: file.lastZId })
 const backupAudit = async (t: ReadyApi) => (await t.db.select().from(s.auditLog).all()).filter((a) => a.action === 'backup')
 

@@ -216,6 +216,10 @@ export type ZChainWarning = {
    * snapshot claims, or null when that too could not be read. Empty when every earlier Z's net was usable as-is.
    */
   unreadableZs: { shiftId: string; zNo: number | null }[]
+  /** zNo values two or more earlier Z's claim (review NF-4) — cheap to name alongside the recompute; empty when every readable zNo is unique. */
+  duplicateZNos: number[]
+  /** Integers between 1 and the highest zNo any earlier Z claims that none of them claim — a deleted/missing row leaves a gap here (review NF-4). */
+  missingZNos: number[]
 }
 
 export type ZInput = {
@@ -298,29 +302,43 @@ export type LenientZEntry = {
 
 export type LenientZChain = {
   zNo: number
+  /** Always a safe, non-negative integer (review NF-2) — every net folded in is itself safe and non-negative, and
+   * an entry is skipped (and flagged) rather than added if doing so would push this past `Number.MAX_SAFE_INTEGER`.
+   * `buildZReport` can never reject this as `prev.grandTotalSatang`. */
   grandTotalSatang: number
   /** Every entry whose net came from the fallback (path 2 or 3 below), in the order given. */
   unreadable: { shiftId: string; zNo: number | null }[]
+  /** zNo values two or more entries claim (review NF-4) — empty when every readable zNo is unique. */
+  duplicateZNos: number[]
+  /** Integers between 1 and the highest zNo any entry claims that none of them claim (review NF-4) — empty when there is no gap. */
+  missingZNos: number[]
+  /** Highest zNo any entry claims, or 0 when none of them have a readable zNo (review NF-4). */
+  maxStoredZNo: number
 }
 
 /**
  * Q3b-16 · D54: the fallback once an owner has acknowledged a broken chain (`Z_CHAIN_BROKEN`) — closing must go
  * through no matter how bad the earlier data is, so unlike `recomputeZChain` this **never throws**. Callers give
- * entries oldest first (by `zNo` when it is readable, otherwise by their own stable order); `zNo` in the result is
- * simply `entries.length` — the new Z always numbers itself `count of existing Z rows + 1`; the caller is
- * responsible for supplying every existing row.
+ * entries oldest first by insertion order (review NF-1/NF-3: never by the tamperable, self-reported `zNo` — see
+ * `close.ts`'s `deviceZRows`); `zNo` in the result is simply `entries.length` — the new Z always numbers itself
+ * `count of existing Z rows + 1`; the caller is responsible for supplying every existing row.
  *
  * Each entry's net is:
  * 1. gross − discount − voided, when those three are non-negative safe integers with `discount ≤ gross` and
- *    `voided ≤ gross − discount` (a self-consistent triple, spec §4.3's own relation) — the true net regardless of
- *    what `netSalesSatang` claims, since gross/discount/voided are what it is derived from;
- * 2. otherwise the stored `netSalesSatang`, when that alone is a safe integer;
+ *    `voided ≤ gross − discount` (a self-consistent triple, spec §4.3's own relation, and — because of that
+ *    relation — itself always a safe, non-negative integer) — the true net regardless of what `netSalesSatang`
+ *    claims, since gross/discount/voided are what it is derived from;
+ * 2. otherwise the stored `netSalesSatang`, when that alone is a safe integer ≥ 0 (review NF-2: a negative stored
+ *    net is refused too, same as path 1's result always being ≥ 0 — the running total must never go negative);
  * 3. otherwise 0.
- * An entry that took path 2 or 3 is added to `unreadable`.
+ * An entry that took path 2 or 3 is added to `unreadable`. Review NF-2: an otherwise-usable net (path 1 or 2) that
+ * would push the running total past `Number.MAX_SAFE_INTEGER` is *also* treated as unreadable (net 0) instead —
+ * the total only ever grows by amounts that keep it representable, so it can never come out unsafe.
  */
 export function recomputeZChainLenient(entries: readonly LenientZEntry[]): LenientZChain {
   let grand = 0
   const unreadable: { shiftId: string; zNo: number | null }[] = []
+  const zNoCounts = new Map<number, number>()
   for (const e of entries) {
     const { grossSalesSatang: gross, discountSatang: discount, voidedSatang: voided, netSalesSatang: storedNet } = e
     const consistent =
@@ -335,16 +353,20 @@ export function recomputeZChainLenient(entries: readonly LenientZEntry[]): Lenie
       voided >= 0 &&
       discount <= gross &&
       voided <= gross - discount
-    if (consistent) {
-      grand += gross - discount - voided
-    } else if (storedNet !== null && Number.isSafeInteger(storedNet)) {
-      grand += storedNet
-      unreadable.push({ shiftId: e.shiftId, zNo: e.zNo })
-    } else {
-      unreadable.push({ shiftId: e.shiftId, zNo: e.zNo }) // net 0 — nothing usable at all for this Z
-    }
+    const storedNetUsable = storedNet !== null && Number.isSafeInteger(storedNet) && storedNet >= 0
+    // path 1's net (gross − discount − voided, when self-consistent) is always a safe, non-negative integer by
+    // construction; an unusable triple falls back to the stored net when that alone is usable, else 0.
+    const net = consistent ? gross - discount - voided : storedNetUsable ? storedNet : 0
+    const overflow = grand + net > Number.MAX_SAFE_INTEGER
+    if (!overflow) grand += net // an overflowing entry contributes nothing, same as an unusable one
+    if (!consistent || overflow) unreadable.push({ shiftId: e.shiftId, zNo: e.zNo }) // path 1 only is ever left unflagged
+    if (e.zNo !== null) zNoCounts.set(e.zNo, (zNoCounts.get(e.zNo) ?? 0) + 1)
   }
-  return { zNo: entries.length, grandTotalSatang: grand, unreadable }
+  const duplicateZNos = [...zNoCounts.entries()].filter(([, count]) => count > 1).map(([zNo]) => zNo).sort((a, b) => a - b)
+  const maxStoredZNo = zNoCounts.size === 0 ? 0 : Math.max(...zNoCounts.keys())
+  const missingZNos: number[] = []
+  for (let n = 1; n <= maxStoredZNo; n++) if (!zNoCounts.has(n)) missingZNos.push(n)
+  return { zNo: entries.length, grandTotalSatang: grand, unreadable, duplicateZNos, missingZNos, maxStoredZNo }
 }
 
 /**
@@ -389,6 +411,12 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     for (const u of w.unreadableZs) {
       if (typeof u.shiftId !== 'string' || u.shiftId.trim() === '') throw new RangeError('chainWarning.unreadableZs entries need a shiftId')
       if (u.zNo !== null) assertSafeInt(u.zNo, 'chainWarning.unreadableZs[].zNo')
+    }
+    // review NF-4: both are cosmetic (named for the audit trail), so only shape/positivity is checked.
+    if (!Array.isArray(w.duplicateZNos) || !Array.isArray(w.missingZNos)) throw new RangeError('chainWarning.duplicateZNos/missingZNos must be arrays')
+    for (const n of [...w.duplicateZNos, ...w.missingZNos]) {
+      assertSafeInt(n, 'chainWarning zNo list entry')
+      if (n < 1) throw new RangeError('chainWarning.duplicateZNos/missingZNos entries must be >= 1')
     }
   }
   const expected = expectedCashSatang(input.cash)

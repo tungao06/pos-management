@@ -26,6 +26,7 @@ const REPORT: ShiftReportDto = {
   voids: [],
   negativeBases: [],
   pendingSyncItems: 0,
+  fingerprint: 'test-fingerprint', // opaque to this dialog — never rendered or checked here
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

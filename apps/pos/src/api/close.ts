@@ -7,7 +7,7 @@ import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { buildShiftReport, shiftReportFingerprint } from './shift-report'
+import { buildShiftReport } from './shift-report'
 import { REASON_MAX_LENGTH, type CloseShiftInput, type ZReportDto, type ZReportSummaryDto } from './types'
 
 /** audit_log action written when an owner acknowledges a previous Z that fails its hash (Q3b-11 · D53). */
@@ -62,19 +62,21 @@ function toZReportDto(row: ZRawRow): ZReportDto {
   return { id: row.id, shiftId: row.shiftId, createdAt: row.createdAt, hash: row.hash, hashOk: zReportHash(snapshot) === row.hash, snapshot }
 }
 
-/** Newest first by `zNo` (the frozen snapshot), never by `created_at` — a device clock can be wrong and later
- * corrected, and the grand-total chain must not depend on it (see domain `buildZReport`). Exported for backup.ts.
- * `snapshot_json` is selected as raw text (review I-1): ordering by `json_extract` still needs a `json_valid`
- * guard, because SQLite's `json_extract` raises a hard "malformed JSON" error (not just a NULL) on a row a person
- * hand-edited into invalid JSON — unguarded, that one bad row would fail the whole query, not just its own decode. */
+/** Newest first by **insertion order** (`rowid`), never by the snapshot's own `zNo` (review NF-1 · NF-3): `z_report`
+ * is append-only (its `INSERT`-only trigger), so `rowid` — SQLite's own monotonic row-creation order, immune to any
+ * `json_set` on `snapshot_json` — always finds the row `closeShift` really wrote last. Sorting by the *claimed*
+ * `zNo` instead (the original bug) let a hand-edited last row's own `zNo` sort it out of the `rows[0]` position —
+ * silently hiding the true last Z (and its money) from `zChain`'s "previous Z" check, and separately let a
+ * hand-edited *middle* row's `zNo` sort it *into* that position forever, demanding the owner's PIN on every future
+ * close for no reason. Exported for backup.ts. `snapshot_json` is still selected as raw text (review I-1). */
 export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRawRow[]> {
-  const zNo = sql`case when json_valid(${s.zReport.snapshotJson}) then json_extract(${s.zReport.snapshotJson}, '$.zNo') else null end`
+  const rowid = sql`"z_report"."rowid"`
   return db
     .select({ id: s.zReport.id, shiftId: s.zReport.shiftId, hash: s.zReport.hash, createdAt: s.zReport.createdAt, snapshotText: sql<string>`${s.zReport.snapshotJson}` })
     .from(s.zReport)
     .innerJoin(s.shift, eq(s.shift.id, s.zReport.shiftId))
     .where(eq(s.shift.deviceId, deviceId))
-    .orderBy(desc(zNo), desc(s.zReport.id))
+    .orderBy(desc(rowid))
     .all()
 }
 
@@ -96,16 +98,12 @@ function toLenientEntry(row: ZRawRow): LenientZEntry {
   }
 }
 
-/** Oldest first, by `zNo` when it is readable; a row whose `zNo` is not (a whole edit, or JSON gone entirely) keeps
- * its place in the device's own row order (review C-1 · Q3b-16 · D54) — `recomputeZChainLenient` never throws on
- * either. `rows` comes from `deviceZRows`, newest first; stably sorting its reverse (oldest first already) by
- * `zNo` only moves the readable rows, since `Array.prototype.sort` is stable and ties keep their relative order. */
+/** Oldest first — simply `deviceZRows`' own insertion order, reversed (review NF-1 · NF-3): never the snapshot's own
+ * `zNo`, which is exactly what a hand-edit can move around. `recomputeZChainLenient` never throws on any input, so
+ * this needs no fallback logic of its own; it is not exported because insertion order is a `close.ts` concern
+ * (`deviceZRows` already establishes it), not a rule the domain layer should know about. */
 function orderForLenientRecompute(rows: readonly ZRawRow[]): ZRawRow[] {
-  return [...rows]
-    .reverse()
-    .map((r) => ({ r, zNo: safeIntOrNull((tryParseJson(r.snapshotText) as { zNo?: unknown } | undefined)?.zNo) }))
-    .sort((a, b) => (a.zNo ?? Number.MAX_SAFE_INTEGER) - (b.zNo ?? Number.MAX_SAFE_INTEGER))
-    .map((x) => x.r)
+  return [...rows].reverse()
 }
 
 /**
@@ -145,9 +143,10 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     const at = deps.now()
     const report = await buildShiftReport(tx, shift, at)
     // Q3b-17 · D54, review m-1: expected cash alone used to be the only figure checked — a PromptPay sale or void
-    // made while the screen was open left cash untouched and slipped through. The fingerprint covers every figure
-    // the Z snapshot freezes (sales, cash, QR, voids); expected cash is kept only for a readable error detail.
-    if (report.expectedCashSatang !== input.shownExpectedCashSatang || shiftReportFingerprint(report) !== input.shownReportFingerprint) {
+    // made while the screen was open left cash untouched and slipped through. `report.fingerprint` (review NF-6)
+    // covers every figure the Z snapshot freezes (the shift itself, sales, cash, QR, voids); expected cash is kept
+    // only for a readable error detail.
+    if (report.expectedCashSatang !== input.shownExpectedCashSatang || report.fingerprint !== input.shownReportFingerprint) {
       throw new PosError('SHIFT_CHANGED', `shown ${input.shownExpectedCashSatang}, now ${report.expectedCashSatang}`)
     }
     const variance = tally.totalSatang - report.expectedCashSatang
@@ -155,16 +154,27 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
       throw new PosError('VARIANCE_REASON_REQUIRED', `variance ${variance} is above ${report.varianceAlertSatang}`)
     }
 
-    // Q3b-16 · D54 (review C-1): the previous Z of this device, or null for the first one. A broken (unreadable or
-    // hash-mismatched) last Z always refuses with Z_CHAIN_BROKEN first — never a thrown RangeError/BAD_INPUT from
+    // Q3b-16 · D54 (review C-1, NF-1, NF-3): the previous Z of this device — by insertion order (`deviceZRows`),
+    // never the snapshot's own `zNo` — or null for the first one. The chain is broken when the last row's hash is
+    // bad or its snapshot is unreadable (`!hashOk`/`snapshot === null`), OR its own claimed `zNo` does not equal
+    // the number of Z rows that exist (review NF-1: catches a hand-edited `zNo` even if the hash was recomputed to
+    // match it, and a row deleted from the middle — either way the naive "row count + 1" numbering would duplicate
+    // a zNo). Either way it always refuses with Z_CHAIN_BROKEN first — never a thrown RangeError/BAD_INPUT from
     // here — and only builds `chainWarning` (from the never-throwing lenient recompute) once acknowledged.
+    //
+    // A *middle* row's own hash failing is deliberately not checked here (no full-chain verify): D53's Q3b-11
+    // wording is "the previous Z" (ใบก่อน), singular, and `listZReports` already surfaces any such row as
+    // `hashOk: false` on its own (review m-4 of fix round 1a) without demanding the owner's PIN on every future
+    // close for a shift it has no bearing on. Nothing is silently hidden — it just does not block closing.
     const rows = await deviceZRows(tx, device.id)
     const last = rows[0]
     let prev: { zNo: number; grandTotalSatang: number } | null = null
     let chainWarning: ZChainWarning | null = null
+    let maxStoredZNo = 0 // review NF-4: named in the audit row alongside rowCount; 0 when the chain is healthy (nothing to name)
     if (last !== undefined) {
       const lastDto = toZReportDto(last)
-      if (lastDto.hashOk && lastDto.snapshot !== null) {
+      const healthy = lastDto.hashOk && lastDto.snapshot !== null && lastDto.snapshot.zNo === rows.length
+      if (healthy && lastDto.snapshot !== null) {
         prev = { zNo: lastDto.snapshot.zNo, grandTotalSatang: lastDto.snapshot.grandTotalSatang }
       } else if (!input.acknowledgeZChainBroken) {
         throw new PosError('Z_CHAIN_BROKEN', last.shiftId)
@@ -172,12 +182,15 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
         const lenient = recomputeZChainLenient(orderForLenientRecompute(rows).map(toLenientEntry))
         const storedGrand = safeIntOrNull((tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined)?.grandTotalSatang)
         prev = { zNo: lenient.zNo, grandTotalSatang: lenient.grandTotalSatang }
+        maxStoredZNo = lenient.maxStoredZNo
         chainWarning = {
           brokenShiftId: last.shiftId,
           storedGrandTotalSatang: storedGrand,
           recomputedGrandTotalSatang: lenient.grandTotalSatang,
           acknowledgedBy: approver.id,
           unreadableZs: lenient.unreadable,
+          duplicateZNos: lenient.duplicateZNos,
+          missingZNos: lenient.missingZNos,
         }
       }
     }
@@ -233,13 +246,15 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     await enqueueOutbox(tx, 'z_report', zRow, at, deps.newId)
 
     if (chainWarning !== null) {
+      // review NF-4: rowCount/maxStoredZNo let a later audit reader see a duplicate/missing zNo happened, even
+      // though chainWarning itself only carries the cosmetic duplicateZNos/missingZNos lists, not this raw pair.
       await tx.insert(s.auditLog).values({
         id: deps.newId(),
         entity: 'z_report',
         entityId: zRow.id,
         action: Z_CHAIN_ACK_ACTION,
         beforeJson: { brokenShiftId: chainWarning.brokenShiftId, storedGrandTotalSatang: chainWarning.storedGrandTotalSatang },
-        afterJson: { zNo: z.snapshot.zNo, recomputedGrandTotalSatang: chainWarning.recomputedGrandTotalSatang },
+        afterJson: { zNo: z.snapshot.zNo, recomputedGrandTotalSatang: chainWarning.recomputedGrandTotalSatang, rowCount: rows.length, maxStoredZNo },
         actorUserId: approver.id,
         at,
       })

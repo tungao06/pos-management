@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { buildZReport } from '@dayo/domain'
-import { shiftReportFingerprint } from '../src/api/shift-report'
 import { openReadyApi, openTestApi, PINS, sellSku, TEST_SETUP } from './helpers/db'
 import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
@@ -62,7 +61,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
       approverPin: PINS.TungAo,
       countLines: COUNT_520,
       shownExpectedCashSatang: 52_000,
-      shownReportFingerprint: shiftReportFingerprint(await t.api.shiftReport()),
+      shownReportFingerprint: (await t.api.shiftReport()).fingerprint,
       varianceReason: null,
       bankQrTotalSatang: null,
       acknowledgeZChainBroken: false,
