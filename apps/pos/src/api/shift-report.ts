@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, lt } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { cashInputsFromMovements, DEFAULT_VARIANCE_ALERT_SATANG, expectedCashSatang, summarizeShiftSales, type ShiftOrder, type ZVoid } from '@dayo/domain'
+import { canonicalJson, cashInputsFromMovements, DEFAULT_VARIANCE_ALERT_SATANG, expectedCashSatang, sha256Hex, summarizeShiftSales, type ShiftOrder, type ZVoid } from '@dayo/domain'
 import { toCashMovementDto } from './cash'
 import { countPendingSyncItems, currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
@@ -107,6 +107,17 @@ export async function buildShiftReport(db: RemoteDb, shift: ShiftDto, atIso: str
     negativeBases: await negativeBases(db),
     pendingSyncItems: await countPendingSyncItems(db),
   }
+}
+
+/**
+ * Q3b-17 · D54: a hash of every report figure that `closeShift`'s SHIFT_CHANGED must guard — sales, cash, QR
+ * (folded into `sales`) and voids — never `generatedAt`, `cashMovements` (redundant with `cash`), `negativeBases`
+ * or `pendingSyncItems`, which are informational and change for reasons unrelated to this shift's money. The UI
+ * computes this from the same X report it shows and sends it back with the close; `closeShift` recomputes it from
+ * a fresh report and refuses (SHIFT_CHANGED) on any mismatch — not only when `expectedCashSatang` itself moved.
+ */
+export function shiftReportFingerprint(report: ShiftReportDto): string {
+  return sha256Hex(canonicalJson({ sales: report.sales, cash: report.cash, expectedCashSatang: report.expectedCashSatang, varianceAlertSatang: report.varianceAlertSatang, voids: report.voids }))
 }
 
 /** X report of the open shift (spec §4.8: computed live, any time, nothing written). */

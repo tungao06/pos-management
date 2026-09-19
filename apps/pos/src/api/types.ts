@@ -130,8 +130,13 @@ export type CloseShiftInput = {
   approverUserId: string
   approverPin: string
   countLines: CashCountLine[]
-  /** Expected cash the screen showed after the count — refused with SHIFT_CHANGED if the shift moved meanwhile. */
+  /** Expected cash the screen showed after the count — kept for a readable SHIFT_CHANGED detail ("shown X, now Y");
+   * `shownReportFingerprint` is what actually guards every figure (Q3b-17 · D54). */
   shownExpectedCashSatang: number
+  /** `shiftReportFingerprint` of the X report the screen showed (Q3b-17 · D54, review m-1) — refused with
+   * SHIFT_CHANGED on any mismatch (sales, cash, QR or voids moved), not only when expected cash itself moved.
+   * Task 11 (the close-shift screen) computes this from the same `shiftReport()` call it displays. */
+  shownReportFingerprint: string
   varianceReason: string | null
   /** PromptPay total read from the bank app for this shift; optional, no threshold (Q3b-12 · D53). */
   bankQrTotalSatang: number | null

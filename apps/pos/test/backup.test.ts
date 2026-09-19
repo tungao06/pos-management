@@ -6,13 +6,15 @@ import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { createPosApi } from '../src/api/pos-api'
 import { isSqliteFile } from '../src/api/backup'
+import { shiftReportFingerprint } from '../src/api/shift-report'
 import type { BackupFileDto, CloseShiftInput, ConfirmBackupInput } from '../src/api/types'
 import { hashPin } from '../src/lib/pin'
 import { openReadyApi, PINS, TEST_PIN_COST, type ReadyApi } from './helpers/db'
 import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
-const close520 = (t: ReadyApi): CloseShiftInput => ({
+const close520 = async (t: ReadyApi): Promise<CloseShiftInput> => ({
   actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, countLines: COUNT_520, shownExpectedCashSatang: 52_000,
+  shownReportFingerprint: shiftReportFingerprint(await t.api.shiftReport()),
   varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: false,
 })
 const confirmOf = (t: ReadyApi, file: BackupFileDto): ConfirmBackupInput => ({ actorUserId: t.owner.id, fileName: file.fileName, byteLength: file.bytes.byteLength, createdAt: file.createdAt, lastZId: file.lastZId })
@@ -67,7 +69,7 @@ describe('exportBackup / confirmBackupSaved (spec §11 · spike I3 · Q3b-6/7 ·
     await sellVoidScenario(t)
     const early = await t.api.exportBackup(t.owner.id) // taken before the close
     expect((await t.api.bootstrap()).backupDue).toBe(false)
-    const z = await t.api.closeShift(close520(t))
+    const z = await t.api.closeShift(await close520(t))
     expect((await t.api.bootstrap()).backupDue).toBe(true)
     await t.api.confirmBackupSaved(confirmOf(t, early)) // a file without the latest Z does not clear the banner
     expect((await t.api.bootstrap()).backupDue).toBe(true)

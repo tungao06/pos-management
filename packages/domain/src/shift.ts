@@ -206,10 +206,16 @@ export type ZChainWarning = {
   brokenShiftId: string
   /** The grand total that broken snapshot claims (not trusted — null if it is not even a whole number). */
   storedGrandTotalSatang: number | null
-  /** Σ net of every earlier Z snapshot of this device, in `zNo` order (`recomputeZChain`) — what this Z chains from. */
+  /** Σ net of every earlier Z snapshot of this device, in `zNo` order (`recomputeZChainLenient`) — what this Z chains from. */
   recomputedGrandTotalSatang: number
   /** The owner who acknowledged the broken chain with their PIN. */
   acknowledgedBy: string
+  /**
+   * Q3b-16 · D54: every earlier Z (of any Z, not only the one that failed its hash) whose net could not be taken
+   * as gross − discount − voided — `recomputeZChainLenient`'s `unreadable` list. `zNo` is the value that Z's own
+   * snapshot claims, or null when that too could not be read. Empty when every earlier Z's net was usable as-is.
+   */
+  unreadableZs: { shiftId: string; zNo: number | null }[]
 }
 
 export type ZInput = {
@@ -274,6 +280,74 @@ export function recomputeZChain(snapshots: readonly { zNo: number; sales: SalesS
 }
 
 /**
+ * One earlier Z as read off a (possibly hand-edited) stored snapshot, field by field — every field is `null` when
+ * that field is missing or is not a safe integer. Parsing the raw `snapshot_json` is an app-layer concern (it may
+ * not even be valid JSON); this module only ever sees the individual candidate values, so it stays pure and never
+ * throws on bad input, unlike `recomputeZChain`.
+ */
+export type LenientZEntry = {
+  shiftId: string
+  /** The stored `zNo`, or null when it is missing or not a safe integer — ordering by it is the caller's job. */
+  zNo: number | null
+  grossSalesSatang: number | null
+  discountSatang: number | null
+  voidedSatang: number | null
+  /** The stored `sales.netSalesSatang`, used only as a fallback when gross/discount/voided are not usable. */
+  netSalesSatang: number | null
+}
+
+export type LenientZChain = {
+  zNo: number
+  grandTotalSatang: number
+  /** Every entry whose net came from the fallback (path 2 or 3 below), in the order given. */
+  unreadable: { shiftId: string; zNo: number | null }[]
+}
+
+/**
+ * Q3b-16 · D54: the fallback once an owner has acknowledged a broken chain (`Z_CHAIN_BROKEN`) — closing must go
+ * through no matter how bad the earlier data is, so unlike `recomputeZChain` this **never throws**. Callers give
+ * entries oldest first (by `zNo` when it is readable, otherwise by their own stable order); `zNo` in the result is
+ * simply `entries.length` — the new Z always numbers itself `count of existing Z rows + 1`; the caller is
+ * responsible for supplying every existing row.
+ *
+ * Each entry's net is:
+ * 1. gross − discount − voided, when those three are non-negative safe integers with `discount ≤ gross` and
+ *    `voided ≤ gross − discount` (a self-consistent triple, spec §4.3's own relation) — the true net regardless of
+ *    what `netSalesSatang` claims, since gross/discount/voided are what it is derived from;
+ * 2. otherwise the stored `netSalesSatang`, when that alone is a safe integer;
+ * 3. otherwise 0.
+ * An entry that took path 2 or 3 is added to `unreadable`.
+ */
+export function recomputeZChainLenient(entries: readonly LenientZEntry[]): LenientZChain {
+  let grand = 0
+  const unreadable: { shiftId: string; zNo: number | null }[] = []
+  for (const e of entries) {
+    const { grossSalesSatang: gross, discountSatang: discount, voidedSatang: voided, netSalesSatang: storedNet } = e
+    const consistent =
+      gross !== null &&
+      discount !== null &&
+      voided !== null &&
+      Number.isSafeInteger(gross) &&
+      Number.isSafeInteger(discount) &&
+      Number.isSafeInteger(voided) &&
+      gross >= 0 &&
+      discount >= 0 &&
+      voided >= 0 &&
+      discount <= gross &&
+      voided <= gross - discount
+    if (consistent) {
+      grand += gross - discount - voided
+    } else if (storedNet !== null && Number.isSafeInteger(storedNet)) {
+      grand += storedNet
+      unreadable.push({ shiftId: e.shiftId, zNo: e.zNo })
+    } else {
+      unreadable.push({ shiftId: e.shiftId, zNo: e.zNo }) // net 0 — nothing usable at all for this Z
+    }
+  }
+  return { zNo: entries.length, grandTotalSatang: grand, unreadable }
+}
+
+/**
  * Frozen Z report: computed once at shift close, never recomputed (spec §4.8). Refuses an inconsistent input
  * (Plan 1 notes §4): sales relations, cash sales on both sides, the count total, the void list (count, total, cash
  * voids = VOID_REFUND rows, QR voids = QR refunded), and a missing reason when the variance is above the alert
@@ -311,6 +385,11 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     if (w.brokenShiftId.trim() === '' || w.acknowledgedBy.trim() === '') throw new RangeError('chainWarning needs the broken shift and the acknowledging owner')
     if (w.storedGrandTotalSatang !== null) assertSafeInt(w.storedGrandTotalSatang, 'chainWarning.storedGrandTotalSatang')
     if (prevZNo < 1 || w.recomputedGrandTotalSatang !== prevGrand) throw new RangeError('with a chainWarning, prev must be the recomputed chain of at least one earlier Z')
+    if (!Array.isArray(w.unreadableZs)) throw new RangeError('chainWarning.unreadableZs must be an array')
+    for (const u of w.unreadableZs) {
+      if (typeof u.shiftId !== 'string' || u.shiftId.trim() === '') throw new RangeError('chainWarning.unreadableZs entries need a shiftId')
+      if (u.zNo !== null) assertSafeInt(u.zNo, 'chainWarning.unreadableZs[].zNo')
+    }
   }
   const expected = expectedCashSatang(input.cash)
   assertSafeInt(expected, 'expectedCashSatang') // M-1

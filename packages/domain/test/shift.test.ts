@@ -8,12 +8,14 @@ import {
   DEFAULT_VARIANCE_ALERT_SATANG,
   expectedCashSatang,
   recomputeZChain,
+  recomputeZChainLenient,
   summarizeShiftSales,
   tallyCashCount,
   varianceNeedsReason,
   zReportHash,
   type CashInputs,
   type CashKind,
+  type LenientZEntry,
   type SalesSummary,
   type ShiftOrder,
   type ZChainWarning,
@@ -199,6 +201,47 @@ describe('recomputeZChain (Q3b-11 · D53)', () => {
   })
 })
 
+describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recomputeZChain', () => {
+  const entryOf = (shiftId: string, net: number, extra: Partial<LenientZEntry> = {}): LenientZEntry => ({
+    shiftId, zNo: null, grossSalesSatang: net, discountSatang: 0, voidedSatang: 0, netSalesSatang: net, ...extra,
+  })
+
+  it('an empty chain gives Z0, grand 0, nothing unreadable', () => {
+    expect(recomputeZChainLenient([])).toEqual({ zNo: 0, grandTotalSatang: 0, unreadable: [] })
+  })
+
+  it('a consistent gross/discount/voided triple is trusted over a tampered stored net (Q3b-16 rule 1)', () => {
+    const e = entryOf('s1', 4_000, { grossSalesSatang: 4_500, discountSatang: 500, voidedSatang: 0, netSalesSatang: 1 }) // net lies, gross/discount/voided don't
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 4_000, unreadable: [] })
+  })
+
+  it('an inconsistent triple falls back to the stored net, and is listed as unreadable (rule 2)', () => {
+    const e = entryOf('s1', 0, { grossSalesSatang: 1_000, discountSatang: 2_000, voidedSatang: 0, netSalesSatang: 7_000 }) // discount > gross
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 7_000, unreadable: [{ shiftId: 's1', zNo: null }] })
+  })
+
+  it('a missing gross/discount/voided AND a missing/non-integer stored net falls back to 0, and is listed as unreadable (rule 3)', () => {
+    const e: LenientZEntry = { shiftId: 's1', zNo: 3, grossSalesSatang: null, discountSatang: null, voidedSatang: null, netSalesSatang: 1.5 }
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 0, unreadable: [{ shiftId: 's1', zNo: 3 }] })
+  })
+
+  it('sums nets in the order given, zNo is simply the entry count, and totals are pinned literally', () => {
+    const chain = recomputeZChainLenient([entryOf('s1', 4_000), entryOf('s2', 0), entryOf('s3', 10_000)])
+    expect(chain).toEqual({ zNo: 3, grandTotalSatang: 14_000, unreadable: [] })
+  })
+
+  it('a mix of readable and unreadable entries sums correctly and lists only the unreadable ones', () => {
+    const readable = entryOf('s1', 4_000, { zNo: 1 })
+    const badTriple = entryOf('s2', 0, { zNo: 2, grossSalesSatang: 100, discountSatang: 200, voidedSatang: 0, netSalesSatang: 5_000 })
+    const wholeRowGone = { shiftId: 's3', zNo: null, grossSalesSatang: null, discountSatang: null, voidedSatang: null, netSalesSatang: null }
+    expect(recomputeZChainLenient([readable, badTriple, wholeRowGone])).toEqual({
+      zNo: 3,
+      grandTotalSatang: 4_000 + 5_000 + 0,
+      unreadable: [{ shiftId: 's2', zNo: 2 }, { shiftId: 's3', zNo: null }],
+    })
+  })
+})
+
 describe('buildZReport', () => {
   const sales: SalesSummary = {
     orderCount: 3, voidCount: 1, grossSalesSatang: 24_000, discountSatang: 500, voidedSatang: 9_000, netSalesSatang: 14_500,
@@ -339,13 +382,27 @@ describe('buildZReport', () => {
   })
 
   it('a chain warning is frozen into the Z and must match the recomputed chain it chains from (Q3b-11 · D53)', () => {
-    const w: ZChainWarning = { brokenShiftId: 's0', storedGrandTotalSatang: 999, recomputedGrandTotalSatang: 4_000, acknowledgedBy: 'u1' }
+    const w: ZChainWarning = { brokenShiftId: 's0', storedGrandTotalSatang: 999, recomputedGrandTotalSatang: 4_000, acknowledgedBy: 'u1', unreadableZs: [] }
     const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
     expect(z.snapshot).toMatchObject({ chainWarning: w, grandTotalSatang: 18_500 })
     expect(z.hash).toBe(zReportHash(z.snapshot))
     expect(() => buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 999 })).toThrow(RangeError)
     expect(() => buildZReport({ ...input, chainWarning: w }, null)).toThrow(RangeError)
     expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, acknowledgedBy: '' } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+  })
+
+  it('a chain warning with unreadableZs (Q3b-16 · D54) is frozen too; a malformed entry is refused', () => {
+    const w: ZChainWarning = {
+      brokenShiftId: 's0',
+      storedGrandTotalSatang: null,
+      recomputedGrandTotalSatang: 4_000,
+      acknowledgedBy: 'u1',
+      unreadableZs: [{ shiftId: 's0', zNo: 1 }, { shiftId: 'sX', zNo: null }],
+    }
+    const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
+    expect(z.snapshot.chainWarning).toEqual(w)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, unreadableZs: [{ shiftId: '', zNo: 1 }] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, unreadableZs: [{ shiftId: 's0', zNo: 1.5 }] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
   })
 
   it('refuses inconsistent inputs (Plan 1 notes §4)', () => {

@@ -1,13 +1,13 @@
 import { desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { buildZReport, recomputeZChain, tallyCashCount, varianceNeedsReason, zReportHash, type SalesSummary, type ZChainWarning, type ZSnapshot } from '@dayo/domain'
+import { buildZReport, recomputeZChainLenient, tallyCashCount, varianceNeedsReason, zReportHash, type LenientZEntry, type SalesSummary, type ZChainWarning, type ZSnapshot } from '@dayo/domain'
 import { enqueueOutbox } from '../db/outbox'
 import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { buildShiftReport } from './shift-report'
+import { buildShiftReport, shiftReportFingerprint } from './shift-report'
 import { REASON_MAX_LENGTH, type CloseShiftInput, type ZReportDto, type ZReportSummaryDto } from './types'
 
 /** audit_log action written when an owner acknowledges a previous Z that fails its hash (Q3b-11 · D53). */
@@ -78,41 +78,47 @@ export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRawR
     .all()
 }
 
-type ZChain = { prev: { zNo: number; grandTotalSatang: number } | null; broken: { shiftId: string; storedGrandTotalSatang: number | null } | null }
-
 /**
- * Z(n).zNo = Z(n−1).zNo + 1 and Z(n).grand = Z(n−1).grand + net (spec §4.8) — the previous Z of this device, or null
- * for the first one. Q3b-11 · D53: if that Z fails its hash, its stored numbers are not trusted — the chain is
- * recomputed from every snapshot of this device in `zNo` order (`recomputeZChain`) and `broken` says which Z it was.
- *
- * Controller ruling (task-6): `recomputeZChain` takes `{ zNo, sales }` snapshots, not a plain array of nets — it
- * re-derives net from each snapshot's own gross/discount/voided (via `assertSalesSummary`) rather than trusting a
- * stored `netSalesSatang` that a coordinated hand-edit could also have changed. A snapshot missing/malformed
- * `sales` (or an unreadable `zNo`) makes `recomputeZChain` throw a RangeError, which the caller maps to BAD_INPUT —
- * a documented known risk of this offline device.
+ * Reads a stored snapshot's individual sales fields for `recomputeZChainLenient` — every field is `null` when it
+ * is missing or not a safe integer (never a throw: this only feeds the lenient recompute, review C-1). `zNo` too
+ * is read defensively here; ordering by it is `orderForLenientRecompute`'s job, not this function's.
  */
-async function zChain(db: RemoteDb, deviceId: string): Promise<ZChain> {
-  const rows = await deviceZRows(db, deviceId)
-  const last = rows[0]
-  if (last === undefined) return { prev: null, broken: null }
-  const dto = toZReportDto(last)
-  if (dto.hashOk && dto.snapshot !== null) return { prev: { zNo: dto.snapshot.zNo, grandTotalSatang: dto.snapshot.grandTotalSatang }, broken: null }
-  const snapshots = [...rows].reverse().map((r) => {
-    const snap = tryParseJson(r.snapshotText) as { zNo?: unknown; sales?: SalesSummary } | undefined
-    return { zNo: typeof snap?.zNo === 'number' ? snap.zNo : Number.NaN, sales: snap?.sales as SalesSummary } // a bad zNo also fails recomputeZChain's 1..n check
-  })
-  const lastParsed = tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined
-  return { prev: recomputeZChain(snapshots), broken: { shiftId: last.shiftId, storedGrandTotalSatang: safeIntOrNull(lastParsed?.grandTotalSatang) } }
+function toLenientEntry(row: ZRawRow): LenientZEntry {
+  const parsed = tryParseJson(row.snapshotText) as { zNo?: unknown; sales?: { grossSalesSatang?: unknown; discountSatang?: unknown; voidedSatang?: unknown; netSalesSatang?: unknown } } | undefined
+  const sales = parsed?.sales
+  return {
+    shiftId: row.shiftId,
+    zNo: safeIntOrNull(parsed?.zNo),
+    grossSalesSatang: safeIntOrNull(sales?.grossSalesSatang),
+    discountSatang: safeIntOrNull(sales?.discountSatang),
+    voidedSatang: safeIntOrNull(sales?.voidedSatang),
+    netSalesSatang: safeIntOrNull(sales?.netSalesSatang),
+  }
+}
+
+/** Oldest first, by `zNo` when it is readable; a row whose `zNo` is not (a whole edit, or JSON gone entirely) keeps
+ * its place in the device's own row order (review C-1 · Q3b-16 · D54) — `recomputeZChainLenient` never throws on
+ * either. `rows` comes from `deviceZRows`, newest first; stably sorting its reverse (oldest first already) by
+ * `zNo` only moves the readable rows, since `Array.prototype.sort` is stable and ties keep their relative order. */
+function orderForLenientRecompute(rows: readonly ZRawRow[]): ZRawRow[] {
+  return [...rows]
+    .reverse()
+    .map((r) => ({ r, zNo: safeIntOrNull((tryParseJson(r.snapshotText) as { zNo?: unknown } | undefined)?.zNo) }))
+    .sort((a, b) => (a.zNo ?? Number.MAX_SAFE_INTEGER) - (b.zNo ?? Number.MAX_SAFE_INTEGER))
+    .map((x) => x.r)
 }
 
 /**
  * spec §4.8 + D22 + D36: close the open shift. One transaction writes cash_count, the frozen z_report (snapshot +
  * hash, never recomputed) and the shift status change, each with its outbox row (spec §6.1). The drawer count is by
  * denomination (Q3b-1); a variance above `cash.variance_alert_satang` needs a reason; an owner confirms with their
- * PIN (Q3b-2); if the shift changed after the screen showed the expected cash, nothing is written (SHIFT_CHANGED).
- * The bank-app QR total is optional and frozen with its difference (Q3b-12). A previous Z that fails its hash stops the
- * close with Z_CHAIN_BROKEN until the owner acknowledges it by entering their PIN again (Q3b-11 · D53): the new Z then
- * chains from the recomputed total, carries `chainWarning` for good, and an audit row records the acknowledgement.
+ * PIN (Q3b-2). If the shift's figures moved between the screen showing them and this call — expected cash, sales,
+ * QR or voids — nothing is written (SHIFT_CHANGED, Q3b-17 · D54, review m-1). The bank-app QR total is optional and
+ * frozen with its difference (Q3b-12). Q3b-16 · D54 (review C-1): a previous Z that fails its hash (or whose earlier
+ * chain can't be recomputed at all) always refuses with the dedicated `Z_CHAIN_BROKEN`, never `BAD_INPUT` — it must
+ * never block closing forever. Once the owner acknowledges it by entering their PIN again, the new Z chains from a
+ * lenient recompute that never throws (`recomputeZChainLenient`), carries `chainWarning` for good (naming every Z
+ * whose net it could not trust as-is), and an audit row records the acknowledgement.
  */
 export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftInput): Promise<ZReportDto> {
   let tally: ReturnType<typeof tallyCashCount>
@@ -138,7 +144,10 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     if (shift === null) throw new PosError('NO_OPEN_SHIFT', 'no open shift to close')
     const at = deps.now()
     const report = await buildShiftReport(tx, shift, at)
-    if (report.expectedCashSatang !== input.shownExpectedCashSatang) {
+    // Q3b-17 · D54, review m-1: expected cash alone used to be the only figure checked — a PromptPay sale or void
+    // made while the screen was open left cash untouched and slipped through. The fingerprint covers every figure
+    // the Z snapshot freezes (sales, cash, QR, voids); expected cash is kept only for a readable error detail.
+    if (report.expectedCashSatang !== input.shownExpectedCashSatang || shiftReportFingerprint(report) !== input.shownReportFingerprint) {
       throw new PosError('SHIFT_CHANGED', `shown ${input.shownExpectedCashSatang}, now ${report.expectedCashSatang}`)
     }
     const variance = tally.totalSatang - report.expectedCashSatang
@@ -146,23 +155,32 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
       throw new PosError('VARIANCE_REASON_REQUIRED', `variance ${variance} is above ${report.varianceAlertSatang}`)
     }
 
-    let chain: ZChain
-    try {
-      chain = await zChain(tx, device.id)
-    } catch (e) {
-      if (e instanceof RangeError) throw new PosError('BAD_INPUT', e.message)
-      throw e
+    // Q3b-16 · D54 (review C-1): the previous Z of this device, or null for the first one. A broken (unreadable or
+    // hash-mismatched) last Z always refuses with Z_CHAIN_BROKEN first — never a thrown RangeError/BAD_INPUT from
+    // here — and only builds `chainWarning` (from the never-throwing lenient recompute) once acknowledged.
+    const rows = await deviceZRows(tx, device.id)
+    const last = rows[0]
+    let prev: { zNo: number; grandTotalSatang: number } | null = null
+    let chainWarning: ZChainWarning | null = null
+    if (last !== undefined) {
+      const lastDto = toZReportDto(last)
+      if (lastDto.hashOk && lastDto.snapshot !== null) {
+        prev = { zNo: lastDto.snapshot.zNo, grandTotalSatang: lastDto.snapshot.grandTotalSatang }
+      } else if (!input.acknowledgeZChainBroken) {
+        throw new PosError('Z_CHAIN_BROKEN', last.shiftId)
+      } else {
+        const lenient = recomputeZChainLenient(orderForLenientRecompute(rows).map(toLenientEntry))
+        const storedGrand = safeIntOrNull((tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined)?.grandTotalSatang)
+        prev = { zNo: lenient.zNo, grandTotalSatang: lenient.grandTotalSatang }
+        chainWarning = {
+          brokenShiftId: last.shiftId,
+          storedGrandTotalSatang: storedGrand,
+          recomputedGrandTotalSatang: lenient.grandTotalSatang,
+          acknowledgedBy: approver.id,
+          unreadableZs: lenient.unreadable,
+        }
+      }
     }
-    if (chain.broken !== null && !input.acknowledgeZChainBroken) throw new PosError('Z_CHAIN_BROKEN', chain.broken.shiftId)
-    const chainWarning: ZChainWarning | null =
-      chain.broken === null
-        ? null
-        : {
-            brokenShiftId: chain.broken.shiftId,
-            storedGrandTotalSatang: chain.broken.storedGrandTotalSatang,
-            recomputedGrandTotalSatang: chain.prev?.grandTotalSatang ?? 0,
-            acknowledgedBy: approver.id,
-          }
 
     let z: ReturnType<typeof buildZReport>
     try {
@@ -171,7 +189,7 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
           shiftId: shift.id,
           businessDate: shift.businessDate,
           deviceId: device.id,
-          zNo: (chain.prev?.zNo ?? 0) + 1,
+          zNo: (prev?.zNo ?? 0) + 1,
           openedAt: shift.openedAt,
           openedBy: shift.openedBy,
           openedQuick: report.shift.openedQuick,
@@ -188,7 +206,7 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
           bankQrTotalSatang: input.bankQrTotalSatang,
           chainWarning,
         },
-        chain.prev,
+        prev,
       )
     } catch (e) {
       if (e instanceof RangeError) throw new PosError('BAD_INPUT', e.message)
