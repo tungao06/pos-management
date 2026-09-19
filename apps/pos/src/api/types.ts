@@ -11,6 +11,8 @@ export type ShiftDto = { id: string; businessDate: string; openedAt: string; ope
 export type BootstrapState = { needsSetup: boolean; device: DeviceDto | null; users: UserDto[]; openShift: ShiftDto | null; pendingSyncItems: number }
 export type SetupInput = { deviceName: string; receiptPrefix: string; owners: { displayName: string; pin: string }[]; promptPayId: string }
 export type OpenShiftInput = { userId: string; openingFloatSatang: number }
+/** "เปิดกะด่วน" (spec §4.8): owner only, float 0 (Q3b-10 · D52). */
+export type QuickOpenShiftInput = { userId: string }
 
 export type MenuCategory = { id: string; code: string; name: string }
 export type MenuProduct = { id: string; code: string; nameTh: string; nameEn: string; categoryId: string }
@@ -101,10 +103,23 @@ export interface PosApi {
   getOrder(orderId: string): Promise<OrderDetailDto>
   promptPayForAmount(amountSatang: number): Promise<string>
   voidOrder(input: VoidOrderInput): Promise<OrderDetailDto>
+  quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
-export const POS_API_METHODS = ['bootstrap', 'setupShop', 'login', 'openShift', 'loadMenu', 'commitSale', 'listOrders', 'getOrder', 'promptPayForAmount', 'voidOrder'] as const
+export const POS_API_METHODS = [
+  'bootstrap',
+  'setupShop',
+  'login',
+  'openShift',
+  'loadMenu',
+  'commitSale',
+  'listOrders',
+  'getOrder',
+  'promptPayForAmount',
+  'voidOrder',
+  'quickOpenShift',
+] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
 export const POS_API_METHODS_COMPLETE: [MissingMethods] extends [never] ? true : MissingMethods = true
