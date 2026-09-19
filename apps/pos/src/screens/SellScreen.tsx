@@ -5,9 +5,11 @@ import type { MenuProduct } from '../api/types'
 import { useApi } from '../app/api-context'
 import { menuKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
+import { isShiftStale } from '../lib/clock'
 import { errorMessage } from '../ui/errors'
 import { TH } from '../ui/th'
 import { CartPanel } from './CartPanel'
+import { CashMoveDialog } from './CashMoveDialog'
 import { DiscountDialog } from './DiscountDialog'
 import { ItemDialog } from './ItemDialog'
 
@@ -24,6 +26,7 @@ export function SellScreen(): JSX.Element {
   const [tab, setTab] = useState<string>(BEST_TAB)
   const [picking, setPicking] = useState<MenuProduct | null>(null)
   const [discountOpen, setDiscountOpen] = useState(false)
+  const [cashMoveOpen, setCashMoveOpen] = useState(false)
 
   if (boot.data !== undefined && boot.data.openShift === null) return <Navigate to="/shift/open" />
   if (menuQuery.isPending) return <main className="page">{TH.loading}</main>
@@ -67,10 +70,26 @@ export function SellScreen(): JSX.Element {
         <button type="button" data-testid="nav-orders" onClick={() => void navigate({ to: '/orders' })}>
           {TH.orders}
         </button>
+        <button type="button" data-testid="cash-move-open" onClick={() => setCashMoveOpen(true)}>
+          {TH.cashMove}
+        </button>
+        <button type="button" data-testid="nav-shift" onClick={() => void navigate({ to: '/shift' })}>
+          {TH.shiftMenu}
+        </button>
         <button type="button" data-testid="lock" onClick={session.lock}>
           {TH.lock}
         </button>
       </header>
+      {boot.data?.openShift != null && isShiftStale(boot.data.openShift.businessDate, new Date().toISOString()) && (
+        <p role="alert" className="error" data-testid="shift-stale">
+          {TH.shiftStale(boot.data.openShift.businessDate)}
+        </p>
+      )}
+      {boot.data?.backupDue === true && (
+        <button type="button" className="error" data-testid="backup-due" onClick={() => void navigate({ to: '/backup' })}>
+          {TH.backupDue}
+        </button>
+      )}
       <main className="grid">
         {products.map((p) => (
           <button key={p.id} type="button" className="product" data-testid={`product-${p.code}`} onClick={() => setPicking(p)}>
@@ -83,6 +102,7 @@ export function SellScreen(): JSX.Element {
       <CartPanel onOpenDiscount={() => setDiscountOpen(true)} onPay={(method) => void navigate({ to: method === 'CASH' ? '/pay/cash' : '/pay/qr' })} />
       {picking !== null && <ItemDialog menu={menu} product={picking} onClose={() => setPicking(null)} />}
       {discountOpen && <DiscountDialog onClose={() => setDiscountOpen(false)} />}
+      {cashMoveOpen && <CashMoveDialog onClose={() => setCashMoveOpen(false)} />}
     </div>
   )
 }

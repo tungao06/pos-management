@@ -199,5 +199,8 @@ export const TH = {
   cashKinds: { PAID_IN: 'เงินเข้า (เติมเงินทอน)', PAID_OUT: 'จ่ายออก (ซื้อของ)', DROP: 'นำเงินออกไปเก็บ' },
   cashMoveAmount: 'จำนวนเงิน (บาท)',
   cashMoveReason: 'เหตุผล / รายการ',
+  // Q3b-14 · D54: worded without the expected-cash figure — the drawer stays counted blind (Q3b-3 · D52)
+  cashOverDrawerWarning: 'จำนวนนี้มากกว่าเงินสดที่ควรมีในลิ้นชัก ณ ตอนนี้ — ตรวจสอบให้แน่ใจก่อนบันทึก',
+  cashOverDrawerConfirm: 'ยืนยันบันทึกทั้งที่เกิน',
   save: 'บันทึก',
 } as const
