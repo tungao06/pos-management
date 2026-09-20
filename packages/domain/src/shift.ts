@@ -202,7 +202,9 @@ export type ZVoid = {
  * Frozen into the new Z for good (it is part of the hashed snapshot) and shown wherever that Z is shown.
  */
 export type ZChainWarning = {
-  /** Shift of the previous Z whose snapshot no longer matches its hash. */
+  /** The shift that made the chain acknowledgement necessary — its Z's snapshot no longer matches its hash (or is
+   * unreadable, or its own claimed `zNo`/`grandTotalSatang` is not usable, review R2-3), or its Z row is missing
+   * entirely (review R2-4, in which case it is also the first entry of `deletedShiftIds`). */
   brokenShiftId: string
   /** The grand total that broken snapshot claims (not trusted — null if it is not even a whole number). */
   storedGrandTotalSatang: number | null
@@ -216,10 +218,24 @@ export type ZChainWarning = {
    * snapshot claims, or null when that too could not be read. Empty when every earlier Z's net was usable as-is.
    */
   unreadableZs: { shiftId: string; zNo: number | null }[]
-  /** zNo values two or more earlier Z's claim (review NF-4) — cheap to name alongside the recompute; empty when every readable zNo is unique. */
+  /** zNo values two or more earlier Z's claim, each >= 1 (review NF-4, R2-1) — cheap to name alongside the
+   * recompute; empty when every readable zNo is unique. Capped at `MAX_ZNO_LIST_LENGTH`; see `duplicateZNosTruncated`. */
   duplicateZNos: number[]
-  /** Integers between 1 and the highest zNo any earlier Z claims that none of them claim — a deleted/missing row leaves a gap here (review NF-4). */
+  /** True when `duplicateZNos` left some names out because there were more than `MAX_ZNO_LIST_LENGTH` (review R2-2). */
+  duplicateZNosTruncated: boolean
+  /** Integers >= 1, at most the row count, that no earlier Z claims — a deleted/missing row leaves a gap here
+   * (review NF-4). Never scans past the row count even when a stray zNo is huge (review R2-2) — a claimed zNo
+   * above the row count is an anomaly, not a gap, and is not named here (it still shows in `unreadableZs` or the
+   * hash mismatch that got the chain here in the first place). Capped at `MAX_ZNO_LIST_LENGTH`; see `missingZNosTruncated`. */
   missingZNos: number[]
+  /** True when `missingZNos` left some names out because there were more than `MAX_ZNO_LIST_LENGTH` (review R2-2). */
+  missingZNosTruncated: boolean
+  /** Closed shifts of this device with no Z row at all — a whole row deleted, not merely edited (review R2-4).
+   * Their money cannot be recomputed (there is nothing left to read), only named; not treated as unreadable
+   * because there is no zNo to report either. Capped at `MAX_ZNO_LIST_LENGTH`; see `deletedShiftIdsTruncated`. */
+  deletedShiftIds: string[]
+  /** True when `deletedShiftIds` left some names out because there were more than `MAX_ZNO_LIST_LENGTH` (review R2-2/R2-4). */
+  deletedShiftIdsTruncated: boolean
 }
 
 export type ZInput = {
@@ -300,6 +316,11 @@ export type LenientZEntry = {
   netSalesSatang: number | null
 }
 
+/** `chainWarning`'s zNo/deleted-shift lists are frozen into the hash and the outbox forever — a single hand-edited
+ * zNo of a few million must never balloon that payload or hang the recompute (review R2-2). Exported so `close.ts`
+ * caps `deletedShiftIds` (computed at the app layer, from the `shift` table) the same way. */
+export const MAX_ZNO_LIST_LENGTH = 50
+
 export type LenientZChain = {
   zNo: number
   /** Always a safe, non-negative integer (review NF-2) — every net folded in is itself safe and non-negative, and
@@ -308,11 +329,17 @@ export type LenientZChain = {
   grandTotalSatang: number
   /** Every entry whose net came from the fallback (path 2 or 3 below), in the order given. */
   unreadable: { shiftId: string; zNo: number | null }[]
-  /** zNo values two or more entries claim (review NF-4) — empty when every readable zNo is unique. */
+  /** zNo values two or more entries claim, each >= 1 (review NF-4, R2-1) — empty when every readable zNo is unique.
+   * Capped at `MAX_ZNO_LIST_LENGTH`; see `duplicateZNosTruncated`. */
   duplicateZNos: number[]
-  /** Integers between 1 and the highest zNo any entry claims that none of them claim (review NF-4) — empty when there is no gap. */
+  duplicateZNosTruncated: boolean
+  /** Integers >= 1, at most `entries.length`, that no entry claims (review NF-4) — the scan never goes past the
+   * entry count even when a stray zNo is huge (review R2-2), so this can never be slow or unbounded. Capped at
+   * `MAX_ZNO_LIST_LENGTH`; see `missingZNosTruncated`. */
   missingZNos: number[]
-  /** Highest zNo any entry claims, or 0 when none of them have a readable zNo (review NF-4). */
+  missingZNosTruncated: boolean
+  /** Highest zNo any entry claims (>= 1), or 0 when none of them have a readable one >= 1 (review NF-4, R2-1). A
+   * single number, however large — unlike the two lists above, it can never balloon the frozen payload on its own. */
   maxStoredZNo: number
 }
 
@@ -360,13 +387,30 @@ export function recomputeZChainLenient(entries: readonly LenientZEntry[]): Lenie
     const overflow = grand + net > Number.MAX_SAFE_INTEGER
     if (!overflow) grand += net // an overflowing entry contributes nothing, same as an unusable one
     if (!consistent || overflow) unreadable.push({ shiftId: e.shiftId, zNo: e.zNo }) // path 1 only is ever left unflagged
-    if (e.zNo !== null) zNoCounts.set(e.zNo, (zNoCounts.get(e.zNo) ?? 0) + 1)
+    // review R2-1: a zNo of 0 or below is nonsensical (real zNos start at 1) and is already reported via
+    // `unreadable`/the hash mismatch that got the chain here — counting it here too would let `buildZReport`'s own
+    // "duplicateZNos/missingZNos entries must be >= 1" check reject a chainWarning the owner can never clear.
+    if (e.zNo !== null && e.zNo >= 1) zNoCounts.set(e.zNo, (zNoCounts.get(e.zNo) ?? 0) + 1)
   }
-  const duplicateZNos = [...zNoCounts.entries()].filter(([, count]) => count > 1).map(([zNo]) => zNo).sort((a, b) => a - b)
+  const duplicateZNosAll = [...zNoCounts.entries()].filter(([, count]) => count > 1).map(([zNo]) => zNo).sort((a, b) => a - b)
+  const duplicateZNos = duplicateZNosAll.slice(0, MAX_ZNO_LIST_LENGTH)
+  const duplicateZNosTruncated = duplicateZNosAll.length > MAX_ZNO_LIST_LENGTH
   const maxStoredZNo = zNoCounts.size === 0 ? 0 : Math.max(...zNoCounts.keys())
+  // review R2-2: scans only 1..entries.length, never 1..maxStoredZNo — a single stray zNo of a few million (or
+  // 9e15, still a safe integer) must never turn one acknowledged close into a multi-second hang or a multi-MB
+  // snapshot. A claimed zNo above the row count is left unreported here; it is still visible via `unreadable` or
+  // the hash mismatch that triggered this recompute in the first place.
   const missingZNos: number[] = []
-  for (let n = 1; n <= maxStoredZNo; n++) if (!zNoCounts.has(n)) missingZNos.push(n)
-  return { zNo: entries.length, grandTotalSatang: grand, unreadable, duplicateZNos, missingZNos, maxStoredZNo }
+  let missingZNosTruncated = false
+  for (let n = 1; n <= entries.length; n++) {
+    if (zNoCounts.has(n)) continue
+    if (missingZNos.length >= MAX_ZNO_LIST_LENGTH) {
+      missingZNosTruncated = true
+      break
+    }
+    missingZNos.push(n)
+  }
+  return { zNo: entries.length, grandTotalSatang: grand, unreadable, duplicateZNos, duplicateZNosTruncated, missingZNos, missingZNosTruncated, maxStoredZNo }
 }
 
 /**
@@ -403,20 +447,38 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
   if (input.bankQrTotalSatang !== null) assertNonNegInt(input.bankQrTotalSatang, 'bankQrTotalSatang')
   const w = input.chainWarning
   if (w !== null) {
-    // M-6: trim before checking for blank, and there must be an earlier Z (prevZNo >= 1) for the chain to have broken.
+    // M-6: trim before checking for blank.
     if (w.brokenShiftId.trim() === '' || w.acknowledgedBy.trim() === '') throw new RangeError('chainWarning needs the broken shift and the acknowledging owner')
     if (w.storedGrandTotalSatang !== null) assertSafeInt(w.storedGrandTotalSatang, 'chainWarning.storedGrandTotalSatang')
-    if (prevZNo < 1 || w.recomputedGrandTotalSatang !== prevGrand) throw new RangeError('with a chainWarning, prev must be the recomputed chain of at least one earlier Z')
+    // review R2-4: prevZNo may be 0 here — every earlier Z row can be gone (deleted, not merely edited), leaving
+    // nothing to chain from but still something to acknowledge and name (`deletedShiftIds`). What matters is that
+    // `prev` (however small) is exactly what was recomputed, not that an earlier Z necessarily still exists.
+    if (w.recomputedGrandTotalSatang !== prevGrand) throw new RangeError('with a chainWarning, prev must be the recomputed chain')
     if (!Array.isArray(w.unreadableZs)) throw new RangeError('chainWarning.unreadableZs must be an array')
     for (const u of w.unreadableZs) {
       if (typeof u.shiftId !== 'string' || u.shiftId.trim() === '') throw new RangeError('chainWarning.unreadableZs entries need a shiftId')
       if (u.zNo !== null) assertSafeInt(u.zNo, 'chainWarning.unreadableZs[].zNo')
     }
-    // review NF-4: both are cosmetic (named for the audit trail), so only shape/positivity is checked.
-    if (!Array.isArray(w.duplicateZNos) || !Array.isArray(w.missingZNos)) throw new RangeError('chainWarning.duplicateZNos/missingZNos must be arrays')
-    for (const n of [...w.duplicateZNos, ...w.missingZNos]) {
-      assertSafeInt(n, 'chainWarning zNo list entry')
-      if (n < 1) throw new RangeError('chainWarning.duplicateZNos/missingZNos entries must be >= 1')
+    // review NF-4/R2-1/R2-2: cosmetic (named for the audit trail) — checked only for shape, a floor of 1, and the
+    // same cap `recomputeZChainLenient` itself applies, so a hand-edited list can never make this reject forever.
+    for (const [list, truncated, name] of [
+      [w.duplicateZNos, w.duplicateZNosTruncated, 'duplicateZNos'],
+      [w.missingZNos, w.missingZNosTruncated, 'missingZNos'],
+    ] as const) {
+      if (!Array.isArray(list)) throw new RangeError(`chainWarning.${name} must be an array`)
+      if (list.length > MAX_ZNO_LIST_LENGTH) throw new RangeError(`chainWarning.${name} must be at most ${MAX_ZNO_LIST_LENGTH} entries`)
+      if (typeof truncated !== 'boolean') throw new RangeError(`chainWarning.${name}Truncated must be a boolean`)
+      for (const n of list) {
+        assertSafeInt(n, `chainWarning.${name}[]`)
+        if (n < 1) throw new RangeError(`chainWarning.${name} entries must be >= 1`)
+      }
+    }
+    // review R2-4: a whole Z row deleted — named, not reconstructed. Bounded the same way as the zNo lists above.
+    if (!Array.isArray(w.deletedShiftIds)) throw new RangeError('chainWarning.deletedShiftIds must be an array')
+    if (w.deletedShiftIds.length > MAX_ZNO_LIST_LENGTH) throw new RangeError(`chainWarning.deletedShiftIds must be at most ${MAX_ZNO_LIST_LENGTH} entries`)
+    if (typeof w.deletedShiftIdsTruncated !== 'boolean') throw new RangeError('chainWarning.deletedShiftIdsTruncated must be a boolean')
+    for (const id of w.deletedShiftIds) {
+      if (typeof id !== 'string' || id.trim() === '') throw new RangeError('chainWarning.deletedShiftIds entries need a non-blank shiftId')
     }
   }
   const expected = expectedCashSatang(input.cash)

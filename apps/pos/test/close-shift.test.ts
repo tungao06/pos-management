@@ -466,6 +466,119 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
   })
 
+  it('two earlier Zs claiming zNo <= 0 do not block acknowledging forever (review R2-1)', async () => {
+    const t = await openReadyApi()
+    const { z1, z2, z3 } = await closeThreeZs(t)
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.zNo', 0) where shift_id = ?`).run(z1.shiftId)
+    t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.zNo', -3) where shift_id = ?`).run(z2.shiftId)
+    t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.grandTotalSatang', 999) where shift_id = ?`).run(z3.shiftId) // breaks the last Z's own hash, so the chain path actually runs
+
+    t.clock.set('2026-09-20T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    const next = await closeInput(t, { countLines: [] })
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+
+    // before the fix, buildZReport rejected any duplicateZNos/missingZNos entry below 1 — z1/z2's edited zNo (0, -3)
+    // would have made every acknowledged retry fail with a permanent BAD_INPUT, exactly what D54 forbids
+    const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    expect(z4.snapshot).toMatchObject({ zNo: 4, grandTotalSatang: 19_000, chainWarning: { brokenShiftId: z3.shiftId, recomputedGrandTotalSatang: 14_000 } })
+    const w = z4.snapshot!.chainWarning!
+    expect(w.duplicateZNos.every((n) => n >= 1)).toBe(true)
+    expect(w.missingZNos.every((n) => n >= 1)).toBe(true)
+
+    t.clock.set('2026-09-21T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+    expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
+  })
+
+  it('a middle Z claiming a huge zNo (2_000_000 or ~9e15) still closes fast, with a small chainWarning (review R2-2)', async () => {
+    for (const hugeZNo of [2_000_000, 9_000_000_000_000_000]) {
+      const t = await openReadyApi()
+      const { z2, z3 } = await closeThreeZs(t)
+      t.raw.exec('DROP TRIGGER z_report_no_update')
+      t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.zNo', ?) where shift_id = ?`).run(hugeZNo, z2.shiftId)
+      t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.grandTotalSatang', 999) where shift_id = ?`).run(z3.shiftId) // breaks the last Z's own hash, so the chain path actually runs
+
+      t.clock.set('2026-09-20T02:00:00.000Z')
+      await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+      await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+      const next = await closeInput(t, { countLines: [] })
+      await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+
+      const started = performance.now()
+      const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+      expect(performance.now() - started).toBeLessThan(2_000) // would hang / allocate megabytes if the scan ran 1..hugeZNo
+      expect(z4.snapshot).toMatchObject({ zNo: 4, grandTotalSatang: 19_000 })
+      const w = z4.snapshot!.chainWarning!
+      expect(w.missingZNos.length).toBeLessThanOrEqual(50)
+      expect(w.duplicateZNos.length).toBeLessThanOrEqual(50)
+      expect(JSON.stringify(w).length).toBeLessThan(10_000) // the review's own probe found a 14.9 MB chainWarning here
+
+      t.clock.set('2026-09-21T02:00:00.000Z')
+      await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+      const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+      expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
+    }
+  })
+
+  it('a last Z with a forged (recomputed) hash but an invalid grand total still gives Z_CHAIN_BROKEN, not a permanent BAD_INPUT (review R2-3)', async () => {
+    const t = await openReadyApi()
+    const { z3 } = await closeThreeZs(t)
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    const row = await t.db.select().from(s.zReport).where(eq(s.zReport.shiftId, z3.shiftId)).get()
+    const tampered = { ...(row!.snapshotJson as Record<string, unknown>), grandTotalSatang: -1 }
+    t.raw.prepare(`update z_report set snapshot_json = ?, hash = ? where shift_id = ?`).run(JSON.stringify(tampered), zReportHash(tampered), z3.shiftId)
+
+    t.clock.set('2026-09-20T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    const next = await closeInput(t, { countLines: [] })
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+
+    // before the fix, a matching (forged) hash plus zNo === row count alone was treated as "healthy", handing -1
+    // straight to buildZReport as prev.grandTotalSatang, which rejected it — forever, since the same row is read every time
+    const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    expect(z4.snapshot).toMatchObject({ zNo: 4, grandTotalSatang: 19_000, chainWarning: { brokenShiftId: z3.shiftId, recomputedGrandTotalSatang: 14_000 } })
+
+    t.clock.set('2026-09-21T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+    expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
+  })
+
+  it('deleting the last Z row entirely still gives Z_CHAIN_BROKEN, names the missing shift, and is clean afterwards (review R2-4)', async () => {
+    const t = await openReadyApi()
+    const { z3 } = await closeThreeZs(t)
+    t.raw.exec('DROP TRIGGER z_report_no_delete')
+    t.raw.prepare(`delete from z_report where shift_id = ?`).run(z3.shiftId)
+
+    t.clock.set('2026-09-20T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    const next = await closeInput(t, { countLines: [] })
+    const before = counts(t)
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+    expect(counts(t)).toEqual(before)
+
+    const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    // z3's row is gone entirely — its ฿50 cannot be recomputed, only named; z1 + z2's real ฿90 plus this shift's ฿50 still go through
+    expect(z4.snapshot).toMatchObject({
+      zNo: 3, // z1 and z2 remain (row count 2) + 1 — z3's slot is reused, per Q3b-16 (ก)
+      grandTotalSatang: 4_000 + 5_000 + 5_000,
+      chainWarning: { brokenShiftId: z3.shiftId, recomputedGrandTotalSatang: 9_000, deletedShiftIds: [z3.shiftId], deletedShiftIdsTruncated: false },
+    })
+
+    // the next close finds nothing closed more recently than z4's own shift — clean, no re-ask, even though z3's
+    // shift permanently has no Z row of its own (review R2-4: the scan is bounded to "since the last known-good Z")
+    t.clock.set('2026-09-21T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+    expect(z5.snapshot).toMatchObject({ zNo: 4, chainWarning: null })
+  })
+
   it('a snapshot that is not readable JSON, or is missing sales, is flagged rather than crashing list/get (review I-1)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)

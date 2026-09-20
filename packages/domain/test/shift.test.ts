@@ -7,6 +7,7 @@ import {
   cashInputsFromMovements,
   DEFAULT_VARIANCE_ALERT_SATANG,
   expectedCashSatang,
+  MAX_ZNO_LIST_LENGTH,
   recomputeZChain,
   recomputeZChainLenient,
   summarizeShiftSales,
@@ -205,35 +206,36 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
   const entryOf = (shiftId: string, net: number, extra: Partial<LenientZEntry> = {}): LenientZEntry => ({
     shiftId, zNo: null, grossSalesSatang: net, discountSatang: 0, voidedSatang: 0, netSalesSatang: net, ...extra,
   })
-  const noZNoLists = { duplicateZNos: [], missingZNos: [], maxStoredZNo: 0 }
+  const noZNoLists = { duplicateZNos: [], duplicateZNosTruncated: false, maxStoredZNo: 0, missingZNosTruncated: false }
 
   it('an empty chain gives Z0, grand 0, nothing unreadable, duplicated or missing', () => {
-    expect(recomputeZChainLenient([])).toEqual({ zNo: 0, grandTotalSatang: 0, unreadable: [], ...noZNoLists })
+    expect(recomputeZChainLenient([])).toEqual({ zNo: 0, grandTotalSatang: 0, unreadable: [], missingZNos: [], ...noZNoLists })
   })
 
   it('a consistent gross/discount/voided triple is trusted over a tampered stored net (Q3b-16 rule 1)', () => {
     const e = entryOf('s1', 4_000, { grossSalesSatang: 4_500, discountSatang: 500, voidedSatang: 0, netSalesSatang: 1 }) // net lies, gross/discount/voided don't
-    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 4_000, unreadable: [], ...noZNoLists })
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 4_000, unreadable: [], missingZNos: [1], ...noZNoLists })
   })
 
   it('an inconsistent triple falls back to the stored net, and is listed as unreadable (rule 2)', () => {
     const e = entryOf('s1', 0, { grossSalesSatang: 1_000, discountSatang: 2_000, voidedSatang: 0, netSalesSatang: 7_000 }) // discount > gross
-    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 7_000, unreadable: [{ shiftId: 's1', zNo: null }], ...noZNoLists })
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 7_000, unreadable: [{ shiftId: 's1', zNo: null }], missingZNos: [1], ...noZNoLists })
   })
 
   it('a negative stored net is refused too (review NF-2) — falls back to 0, still flagged unreadable', () => {
     const e = entryOf('s1', 0, { grossSalesSatang: 1_000, discountSatang: 2_000, voidedSatang: 0, netSalesSatang: -100_000 }) // inconsistent triple; the "fallback" net is itself negative
-    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 0, unreadable: [{ shiftId: 's1', zNo: null }], ...noZNoLists })
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 0, unreadable: [{ shiftId: 's1', zNo: null }], missingZNos: [1], ...noZNoLists })
   })
 
   it('a missing gross/discount/voided AND a missing/non-integer stored net falls back to 0, and is listed as unreadable (rule 3)', () => {
     const e: LenientZEntry = { shiftId: 's1', zNo: 3, grossSalesSatang: null, discountSatang: null, voidedSatang: null, netSalesSatang: 1.5 }
-    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 0, unreadable: [{ shiftId: 's1', zNo: 3 }], duplicateZNos: [], missingZNos: [1, 2], maxStoredZNo: 3 })
+    // entries.length is 1, so the missing-zNo scan only ever looks at 1..1 (review R2-2) — it never reaches up to the claimed zNo 3
+    expect(recomputeZChainLenient([e])).toEqual({ zNo: 1, grandTotalSatang: 0, unreadable: [{ shiftId: 's1', zNo: 3 }], missingZNos: [1], duplicateZNos: [], duplicateZNosTruncated: false, missingZNosTruncated: false, maxStoredZNo: 3 })
   })
 
   it('sums nets in the order given, zNo is simply the entry count, and totals are pinned literally', () => {
-    const chain = recomputeZChainLenient([entryOf('s1', 4_000), entryOf('s2', 0), entryOf('s3', 10_000)])
-    expect(chain).toEqual({ zNo: 3, grandTotalSatang: 14_000, unreadable: [], ...noZNoLists })
+    const chain = recomputeZChainLenient([entryOf('s1', 4_000, { zNo: 1 }), entryOf('s2', 0, { zNo: 2 }), entryOf('s3', 10_000, { zNo: 3 })])
+    expect(chain).toEqual({ zNo: 3, grandTotalSatang: 14_000, unreadable: [], missingZNos: [], duplicateZNos: [], duplicateZNosTruncated: false, missingZNosTruncated: false, maxStoredZNo: 3 })
   })
 
   it('a mix of readable and unreadable entries sums correctly and lists only the unreadable ones', () => {
@@ -245,7 +247,9 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
       grandTotalSatang: 4_000 + 5_000 + 0,
       unreadable: [{ shiftId: 's2', zNo: 2 }, { shiftId: 's3', zNo: null }],
       duplicateZNos: [],
-      missingZNos: [],
+      duplicateZNosTruncated: false,
+      missingZNos: [3], // entries.length is 3; zNo 1 and 2 are claimed, 3 (the row without any readable zNo) is not
+      missingZNosTruncated: false,
       maxStoredZNo: 2,
     })
   })
@@ -262,17 +266,52 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
   it('names duplicate and missing zNos (review NF-4)', () => {
     const chain = recomputeZChainLenient([entryOf('s1', 1_000, { zNo: 1 }), entryOf('s2', 1_000, { zNo: 4 }), entryOf('s3', 1_000, { zNo: 4 })])
     expect(chain.duplicateZNos).toEqual([4])
+    // entries.length is 3, so the scan only reaches 1..3 (review R2-2) — 4 is above the row count and is not named as "missing"
     expect(chain.missingZNos).toEqual([2, 3])
     expect(chain.maxStoredZNo).toBe(4)
   })
 
-  it('property: the result always satisfies buildZReport as `prev` — never BAD_INPUT, whatever the earlier rows claim (review NF-2, NF-7)', () => {
+  it('ignores zNo <= 0 for duplicate/missing naming (review R2-1) — those rows are already flagged unreadable another way', () => {
+    const chain = recomputeZChainLenient([entryOf('s1', 1_000, { zNo: 0 }), entryOf('s2', 1_000, { zNo: 0 }), entryOf('s3', 1_000, { zNo: -3 })])
+    expect(chain.duplicateZNos).toEqual([]) // zNo 0 appears twice, but 0 is never a candidate at all
+    expect(chain.missingZNos).toEqual([1, 2, 3]) // none of the three rows has a readable zNo >= 1
+    expect(chain.maxStoredZNo).toBe(0)
+  })
+
+  it('never scans past the row count, however huge a stray zNo claims to be (review R2-2)', () => {
+    const started = performance.now()
+    const chain = recomputeZChainLenient([entryOf('s1', 1_000, { zNo: 2_000_000 }), entryOf('s2', 1_000, { zNo: 2 }), entryOf('s3', 1_000, { zNo: 3 })])
+    expect(performance.now() - started).toBeLessThan(200) // would hang for seconds (or exhaust memory) if the scan ran 1..2_000_000
+    expect(chain.maxStoredZNo).toBe(2_000_000) // the scalar itself is harmless to keep, however large
+    expect(chain.missingZNos).toEqual([1]) // scanned only 1..3 (the row count); 2_000_000 is simply never visited
+    expect(chain.missingZNosTruncated).toBe(false)
+  })
+
+  it('caps missingZNos at MAX_ZNO_LIST_LENGTH and flags the rest as truncated (review R2-2)', () => {
+    const entries = Array.from({ length: MAX_ZNO_LIST_LENGTH + 10 }, (_, i) => entryOf(`s${i}`, 0)) // none of them claim any zNo at all
+    const chain = recomputeZChainLenient(entries)
+    expect(chain.missingZNos).toEqual(Array.from({ length: MAX_ZNO_LIST_LENGTH }, (_, i) => i + 1))
+    expect(chain.missingZNosTruncated).toBe(true)
+  })
+
+  it('caps duplicateZNos at MAX_ZNO_LIST_LENGTH and flags the rest as truncated (review R2-2)', () => {
+    const entries = Array.from({ length: MAX_ZNO_LIST_LENGTH + 10 }, (_, i) => [entryOf(`a${i}`, 0, { zNo: i + 1 }), entryOf(`b${i}`, 0, { zNo: i + 1 })]).flat()
+    const chain = recomputeZChainLenient(entries)
+    expect(chain.duplicateZNos).toHaveLength(MAX_ZNO_LIST_LENGTH)
+    expect(chain.duplicateZNosTruncated).toBe(true)
+  })
+
+  it('property: the result always satisfies buildZReport as `prev`, and as a real, non-null chainWarning built from its own lists — never BAD_INPUT, whatever the earlier rows claim (review NF-2, NF-7, R2-1, R2-2)', () => {
     const zeroSales: SalesSummary = { orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 }
     const zeroCash: CashInputs = { openingFloatSatang: 0, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
     const wide = fc.integer({ min: -10, max: Number.MAX_SAFE_INTEGER })
+    // review R2-1/R2-2: the zNo arbitrary now also reaches zNo <= 0 and huge (near-MAX_SAFE_INTEGER) values, on top
+    // of the small range that already produced duplicates and gaps — exactly the inputs the earlier property test
+    // (which only ever passed `chainWarning: null`) never exercised.
     const entryArb = fc.record({
-      shiftId: fc.string({ minLength: 1, maxLength: 8 }),
-      zNo: fc.option(fc.integer({ min: -5, max: 30 }), { nil: null }),
+      shiftId: fc.string({ minLength: 1, maxLength: 8 }).filter((s) => s.trim() !== ''), // real ids are never blank; buildZReport rejects one that is, same as unreadableZs entries
+
+      zNo: fc.option(fc.oneof(fc.integer({ min: -5, max: 6 }), fc.integer({ min: Number.MAX_SAFE_INTEGER - 5, max: Number.MAX_SAFE_INTEGER })), { nil: null }),
       grossSalesSatang: fc.option(wide, { nil: null }),
       discountSatang: fc.option(wide, { nil: null }),
       voidedSatang: fc.option(wide, { nil: null }),
@@ -281,10 +320,23 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
     fc.assert(
       fc.property(fc.array(entryArb, { maxLength: 15 }), (entries) => {
         const chain = recomputeZChainLenient(entries)
+        const chainWarning: ZChainWarning = {
+          brokenShiftId: 's-broken',
+          storedGrandTotalSatang: null,
+          recomputedGrandTotalSatang: chain.grandTotalSatang,
+          acknowledgedBy: 'u1',
+          unreadableZs: chain.unreadable,
+          duplicateZNos: chain.duplicateZNos,
+          duplicateZNosTruncated: chain.duplicateZNosTruncated,
+          missingZNos: chain.missingZNos,
+          missingZNosTruncated: chain.missingZNosTruncated,
+          deletedShiftIds: [],
+          deletedShiftIdsTruncated: false,
+        }
         const currentShift: ZInput = {
           shiftId: 's-current', businessDate: '2026-09-17', deviceId: 'dev-A', zNo: chain.zNo + 1, openedAt: '2026-09-17T01:00:00.000Z', openedBy: 'u1', openedQuick: false,
           closedAt: '2026-09-17T13:05:00.000Z', closedBy: 'u1', countedBy: 'u1',
-          sales: zeroSales, cash: zeroCash, countLines: [], countedCashSatang: 0, varianceAlertSatang: 2_000, varianceReason: null, voids: [], bankQrTotalSatang: null, chainWarning: null,
+          sales: zeroSales, cash: zeroCash, countLines: [], countedCashSatang: 0, varianceAlertSatang: 2_000, varianceReason: null, voids: [], bankQrTotalSatang: null, chainWarning,
         }
         buildZReport(currentShift, { zNo: chain.zNo, grandTotalSatang: chain.grandTotalSatang }) // must never throw
       }),
@@ -432,7 +484,10 @@ describe('buildZReport', () => {
   })
 
   it('a chain warning is frozen into the Z and must match the recomputed chain it chains from (Q3b-11 · D53)', () => {
-    const w: ZChainWarning = { brokenShiftId: 's0', storedGrandTotalSatang: 999, recomputedGrandTotalSatang: 4_000, acknowledgedBy: 'u1', unreadableZs: [], duplicateZNos: [], missingZNos: [] }
+    const w: ZChainWarning = {
+      brokenShiftId: 's0', storedGrandTotalSatang: 999, recomputedGrandTotalSatang: 4_000, acknowledgedBy: 'u1', unreadableZs: [],
+      duplicateZNos: [], duplicateZNosTruncated: false, missingZNos: [], missingZNosTruncated: false, deletedShiftIds: [], deletedShiftIdsTruncated: false,
+    }
     const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
     expect(z.snapshot).toMatchObject({ chainWarning: w, grandTotalSatang: 18_500 })
     expect(z.hash).toBe(zReportHash(z.snapshot))
@@ -449,7 +504,11 @@ describe('buildZReport', () => {
       acknowledgedBy: 'u1',
       unreadableZs: [{ shiftId: 's0', zNo: 1 }, { shiftId: 'sX', zNo: null }],
       duplicateZNos: [],
+      duplicateZNosTruncated: false,
       missingZNos: [],
+      missingZNosTruncated: false,
+      deletedShiftIds: [],
+      deletedShiftIdsTruncated: false,
     }
     const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
     expect(z.snapshot.chainWarning).toEqual(w)
@@ -457,7 +516,7 @@ describe('buildZReport', () => {
     expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, unreadableZs: [{ shiftId: 's0', zNo: 1.5 }] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
   })
 
-  it('a chain warning names duplicate/missing zNos (review NF-4); a malformed entry there is refused too', () => {
+  it('a chain warning names duplicate/missing zNos (review NF-4); a malformed entry, or one over the cap, is refused too (review R2-2)', () => {
     const w: ZChainWarning = {
       brokenShiftId: 's0',
       storedGrandTotalSatang: null,
@@ -465,12 +524,57 @@ describe('buildZReport', () => {
       acknowledgedBy: 'u1',
       unreadableZs: [],
       duplicateZNos: [4],
+      duplicateZNosTruncated: false,
       missingZNos: [2, 3],
+      missingZNosTruncated: true, // the truncated flag itself is just a boolean the caller reports — buildZReport does not recompute it
+      deletedShiftIds: [],
+      deletedShiftIdsTruncated: false,
     }
     const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
     expect(z.snapshot.chainWarning).toEqual(w)
     expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, duplicateZNos: [0] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
     expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, missingZNos: [1.5] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, missingZNos: Array.from({ length: MAX_ZNO_LIST_LENGTH + 1 }, (_, i) => i + 1) } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, missingZNosTruncated: 'yes' as unknown as boolean } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+  })
+
+  it('a chain warning names deleted shifts (review R2-4); a malformed entry, or one over the cap, is refused too', () => {
+    const w: ZChainWarning = {
+      brokenShiftId: 's-deleted',
+      storedGrandTotalSatang: null,
+      recomputedGrandTotalSatang: 4_000,
+      acknowledgedBy: 'u1',
+      unreadableZs: [],
+      duplicateZNos: [],
+      duplicateZNosTruncated: false,
+      missingZNos: [],
+      missingZNosTruncated: false,
+      deletedShiftIds: ['s-deleted'],
+      deletedShiftIdsTruncated: false,
+    }
+    const z = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
+    expect(z.snapshot.chainWarning).toEqual(w)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, deletedShiftIds: [''] } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, deletedShiftIds: Array.from({ length: MAX_ZNO_LIST_LENGTH + 1 }, (_, i) => `s${i}`) } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+    expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, deletedShiftIdsTruncated: 1 as unknown as boolean } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+  })
+
+  it('a chain warning may have prevZNo 0 when every earlier Z row was deleted (review R2-4) — nothing to chain from, still something to name', () => {
+    const w: ZChainWarning = {
+      brokenShiftId: 's-deleted',
+      storedGrandTotalSatang: null,
+      recomputedGrandTotalSatang: 0,
+      acknowledgedBy: 'u1',
+      unreadableZs: [],
+      duplicateZNos: [],
+      duplicateZNosTruncated: false,
+      missingZNos: [],
+      missingZNosTruncated: false,
+      deletedShiftIds: ['s-deleted'],
+      deletedShiftIdsTruncated: false,
+    }
+    const z = buildZReport({ ...input, zNo: 1, chainWarning: w }, { zNo: 0, grandTotalSatang: 0 })
+    expect(z.snapshot).toMatchObject({ zNo: 1, grandTotalSatang: 14_500, chainWarning: w })
   })
 
   it('refuses inconsistent inputs (Plan 1 notes §4)', () => {

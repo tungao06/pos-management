@@ -1,7 +1,7 @@
-import { desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { buildZReport, recomputeZChainLenient, tallyCashCount, varianceNeedsReason, zReportHash, type LenientZEntry, type SalesSummary, type ZChainWarning, type ZSnapshot } from '@dayo/domain'
+import { buildZReport, MAX_ZNO_LIST_LENGTH, recomputeZChainLenient, tallyCashCount, varianceNeedsReason, zReportHash, type LenientZEntry, type SalesSummary, type ZChainWarning, type ZSnapshot } from '@dayo/domain'
 import { enqueueOutbox } from '../db/outbox'
 import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
@@ -68,7 +68,13 @@ function toZReportDto(row: ZRawRow): ZReportDto {
  * `zNo` instead (the original bug) let a hand-edited last row's own `zNo` sort it out of the `rows[0]` position —
  * silently hiding the true last Z (and its money) from `zChain`'s "previous Z" check, and separately let a
  * hand-edited *middle* row's `zNo` sort it *into* that position forever, demanding the owner's PIN on every future
- * close for no reason. Exported for backup.ts. `snapshot_json` is still selected as raw text (review I-1). */
+ * close for no reason. Exported for backup.ts. `snapshot_json` is still selected as raw text (review I-1).
+ *
+ * Review R2-7: this depends on `rowid` staying insertion order for `z_report`. A future migration that rebuilds
+ * this table (drizzle's `INSERT INTO __new… SELECT …` has no `ORDER BY`) must copy it `ORDER BY rowid`, and any
+ * restore/re-seed of a device's database from the server (Postgres has no `rowid`) must insert its Z rows back in
+ * `zNo` (or `created_at`) order. Getting this wrong would misidentify the "previous Z" — but the `zNo === row
+ * count` check below still catches it as a *false* `Z_CHAIN_BROKEN`, never as silent data loss. */
 export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRawRow[]> {
   const rowid = sql`"z_report"."rowid"`
   return db
@@ -78,6 +84,34 @@ export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRawR
     .where(eq(s.shift.deviceId, deviceId))
     .orderBy(desc(rowid))
     .all()
+}
+
+/**
+ * Closed shifts of this device, more recently closed than the last surviving Z's own shift, that have no
+ * `z_report` row at all (review R2-4) — a whole Z row deleted, not merely edited. `closeShift` writes exactly one
+ * closed `shift` and one `z_report` row per close, in the same transaction, so in the healthy case there is never
+ * a closed shift more recent than the last Z's; any that turn up here had their Z deleted, and their money cannot
+ * be recomputed, only named.
+ *
+ * Deliberately bounded to *after* the last surviving Z (never a full-history scan): once a gap like this has been
+ * acknowledged and named in some later Z's `chainWarning`, that shift's own closed row permanently has no Z of its
+ * own to match — a full-history "closed count == Z count" check would flag it forever, which is exactly the
+ * perpetual block Q3b-16 · D54 forbids. Bounding the scan to "since the last known-good Z" means the very next
+ * close, once it has written its own Z for the shift it just closed, finds nothing after *that* Z and is clean.
+ */
+async function deletedShiftIds(db: RemoteDb, deviceId: string, rows: readonly ZRawRow[]): Promise<string[]> {
+  const rowid = sql<number>`"shift"."rowid"`
+  const closed = await db
+    .select({ id: s.shift.id, rowid })
+    .from(s.shift)
+    .where(and(eq(s.shift.deviceId, deviceId), eq(s.shift.status, 'closed')))
+    .orderBy(desc(rowid))
+    .all()
+  const last = rows[0]
+  if (last === undefined) return closed.map((c) => c.id) // closed shifts exist, but this device has no Z row at all
+  const lastShift = closed.find((c) => c.id === last.shiftId)
+  if (lastShift === undefined) return closed.map((c) => c.id) // defensive: the last Z's own shift is not even closed — treat everything as suspect
+  return closed.filter((c) => c.rowid > lastShift.rowid).map((c) => c.id)
 }
 
 /**
@@ -154,43 +188,65 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
       throw new PosError('VARIANCE_REASON_REQUIRED', `variance ${variance} is above ${report.varianceAlertSatang}`)
     }
 
-    // Q3b-16 · D54 (review C-1, NF-1, NF-3): the previous Z of this device — by insertion order (`deviceZRows`),
-    // never the snapshot's own `zNo` — or null for the first one. The chain is broken when the last row's hash is
-    // bad or its snapshot is unreadable (`!hashOk`/`snapshot === null`), OR its own claimed `zNo` does not equal
-    // the number of Z rows that exist (review NF-1: catches a hand-edited `zNo` even if the hash was recomputed to
-    // match it, and a row deleted from the middle — either way the naive "row count + 1" numbering would duplicate
-    // a zNo). Either way it always refuses with Z_CHAIN_BROKEN first — never a thrown RangeError/BAD_INPUT from
-    // here — and only builds `chainWarning` (from the never-throwing lenient recompute) once acknowledged.
+    // Q3b-16 · D54 (review C-1, NF-1, NF-3, R2-3, R2-4): the previous Z of this device — by insertion order
+    // (`deviceZRows`), never the snapshot's own `zNo` — or null for the first one. The chain is broken when:
+    //   - the last row's hash is bad, or its snapshot is unreadable (`!hashOk` / `snapshot === null`);
+    //   - its own claimed `zNo`, or `grandTotalSatang`, is not a safe integer >= 0, or `zNo` != the Z row count
+    //     (review NF-1/R2-3: catches a hand-edit even where the hash was also recomputed to match it — the hash
+    //     has no secret key — whether that hand-edit targets `zNo` (also catching a middle row deleted) or, with a
+    //     forged hash, `grandTotalSatang` directly);
+    //   - a whole Z row was deleted rather than merely edited (review R2-4): no closed shift of this device may be
+    //     more recent than the last surviving Z's own shift (`deletedShiftIds`) — the row-count check above cannot
+    //     see this when the *last* row is the one deleted, because both `zNo` and the row count shrink by one
+    //     together.
+    // Any of these always refuses with Z_CHAIN_BROKEN first — never a thrown RangeError/BAD_INPUT from here — and
+    // only builds `chainWarning` (from the never-throwing lenient recompute) once acknowledged. A deleted Z's
+    // money is not reconstructed (there is nothing left to read); it is only named in `deletedShiftIds`.
     //
-    // A *middle* row's own hash failing is deliberately not checked here (no full-chain verify): D53's Q3b-11
-    // wording is "the previous Z" (ใบก่อน), singular, and `listZReports` already surfaces any such row as
-    // `hashOk: false` on its own (review m-4 of fix round 1a) without demanding the owner's PIN on every future
-    // close for a shift it has no bearing on. Nothing is silently hidden — it just does not block closing.
+    // A *middle* row's own hash failing (without a row being deleted) is deliberately not checked here (no
+    // full-chain verify): D53's Q3b-11 wording is "the previous Z" (ใบก่อน), singular, and `listZReports` already
+    // surfaces any such row as `hashOk: false` on its own (review m-4 of fix round 1a) without demanding the
+    // owner's PIN on every future close for a shift it has no bearing on. Nothing is silently hidden — it just
+    // does not block closing.
     const rows = await deviceZRows(tx, device.id)
     const last = rows[0]
+    const deletedIds = await deletedShiftIds(tx, device.id, rows)
+    const lastDto = last !== undefined ? toZReportDto(last) : null
+    const lastGrand = lastDto?.snapshot ? safeIntOrNull(lastDto.snapshot.grandTotalSatang) : null
+    const lastHealthy =
+      last !== undefined &&
+      lastDto !== null &&
+      lastDto.hashOk &&
+      lastDto.snapshot !== null &&
+      lastDto.snapshot.zNo === rows.length &&
+      lastGrand !== null &&
+      lastGrand >= 0
+
     let prev: { zNo: number; grandTotalSatang: number } | null = null
     let chainWarning: ZChainWarning | null = null
     let maxStoredZNo = 0 // review NF-4: named in the audit row alongside rowCount; 0 when the chain is healthy (nothing to name)
-    if (last !== undefined) {
-      const lastDto = toZReportDto(last)
-      const healthy = lastDto.hashOk && lastDto.snapshot !== null && lastDto.snapshot.zNo === rows.length
-      if (healthy && lastDto.snapshot !== null) {
+    if (last !== undefined || deletedIds.length > 0) {
+      if (lastHealthy && deletedIds.length === 0 && lastDto !== null && lastDto.snapshot !== null) {
         prev = { zNo: lastDto.snapshot.zNo, grandTotalSatang: lastDto.snapshot.grandTotalSatang }
       } else if (!input.acknowledgeZChainBroken) {
-        throw new PosError('Z_CHAIN_BROKEN', last.shiftId)
+        throw new PosError('Z_CHAIN_BROKEN', deletedIds[0] ?? last!.shiftId)
       } else {
         const lenient = recomputeZChainLenient(orderForLenientRecompute(rows).map(toLenientEntry))
-        const storedGrand = safeIntOrNull((tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined)?.grandTotalSatang)
+        const storedGrand = last !== undefined ? safeIntOrNull((tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined)?.grandTotalSatang) : null
         prev = { zNo: lenient.zNo, grandTotalSatang: lenient.grandTotalSatang }
         maxStoredZNo = lenient.maxStoredZNo
         chainWarning = {
-          brokenShiftId: last.shiftId,
+          brokenShiftId: deletedIds[0] ?? last!.shiftId,
           storedGrandTotalSatang: storedGrand,
           recomputedGrandTotalSatang: lenient.grandTotalSatang,
           acknowledgedBy: approver.id,
           unreadableZs: lenient.unreadable,
           duplicateZNos: lenient.duplicateZNos,
+          duplicateZNosTruncated: lenient.duplicateZNosTruncated,
           missingZNos: lenient.missingZNos,
+          missingZNosTruncated: lenient.missingZNosTruncated,
+          deletedShiftIds: deletedIds.slice(0, MAX_ZNO_LIST_LENGTH),
+          deletedShiftIdsTruncated: deletedIds.length > MAX_ZNO_LIST_LENGTH,
         }
       }
     }
