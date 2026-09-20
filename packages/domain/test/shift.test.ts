@@ -279,9 +279,9 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
   })
 
   it('never scans past the row count, however huge a stray zNo claims to be (review R2-2)', () => {
-    const started = performance.now()
+    const started = Date.now()
     const chain = recomputeZChainLenient([entryOf('s1', 1_000, { zNo: 2_000_000 }), entryOf('s2', 1_000, { zNo: 2 }), entryOf('s3', 1_000, { zNo: 3 })])
-    expect(performance.now() - started).toBeLessThan(200) // would hang for seconds (or exhaust memory) if the scan ran 1..2_000_000
+    expect(Date.now() - started).toBeLessThan(200) // would hang for seconds (or exhaust memory) if the scan ran 1..2_000_000
     expect(chain.maxStoredZNo).toBe(2_000_000) // the scalar itself is harmless to keep, however large
     expect(chain.missingZNos).toEqual([1]) // scanned only 1..3 (the row count); 2_000_000 is simply never visited
     expect(chain.missingZNosTruncated).toBe(false)
