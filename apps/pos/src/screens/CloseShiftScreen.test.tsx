@@ -177,6 +177,12 @@ describe('CloseShiftScreen', () => {
     await waitFor(() => expect(screen.getByTestId('close-chain-broken').textContent).toBe(TH.zChainAck))
     // the warning is said once: the line by the PIN pad only says what to do next (review M1)
     expect(screen.getAllByRole('alert').map((n) => n.textContent)).toEqual([TH.zChainAck, TH.zChainAckPin])
+    // …and that one warning still carries both halves D54 Q3b-16 owes the owner: the cause in plain words, and
+    // that acknowledging lets the shift close anyway (the literal Thai is asserted because shortening the copy is
+    // exactly the regression — review N-3).
+    const warning = screen.getByTestId('close-chain-broken').textContent ?? ''
+    expect(warning).toContain('ถูกแก้ไขหรือไฟล์เสีย')
+    expect(warning).toContain('ปิดกะต่อได้')
     expect(inputOf(api, 0).acknowledgeZChainBroken).toBe(false)
     enterPin('1111')
     await waitFor(() => expect(api.closeShift).toHaveBeenCalledTimes(2))
@@ -251,5 +257,43 @@ describe('CloseShiftScreen', () => {
     expect(countDoneButton().disabled).toBe(true)
     act(() => countDoneButton().click())
     expect(screen.queryByTestId('close-expected')).toBeNull() // no expected cash, no PIN pad, no close
+  })
+
+  it('the count cannot be confirmed while the report is still reloading (review M2)', async () => {
+    let reports = 0
+    let landSecondReport: (report: ShiftReportDto) => void = () => undefined
+    const { api, queryClient } = mount(async () => ({}) as ZReportDto, {
+      shiftReport: async () => {
+        reports += 1
+        return reports === 1 ? REPORT : new Promise<ShiftReportDto>((resolve) => (landSecondReport = resolve))
+      },
+    })
+    await waitFor(() => expect(screen.getByTestId('count-50000')).toBeTruthy())
+    fireEvent.change(countBox(50_000), { target: { value: '1' } })
+    expect(countDoneButton().disabled).toBe(false)
+
+    await act(async () => {
+      void queryClient.invalidateQueries({ queryKey: shiftReportKey }) // a reload the owner cannot see, still in flight
+    })
+    await waitFor(() => expect(api.shiftReport).toHaveBeenCalledTimes(2))
+    expect(countDoneButton().disabled).toBe(true)
+    act(() => countDoneButton().click())
+    expect(screen.queryByTestId('close-expected')).toBeNull() // the report about to be replaced is never frozen
+
+    await act(async () => landSecondReport(LATER))
+    await countDone()
+    expect(screen.getByTestId('close-expected').textContent).toBe('฿530') // the figures that actually landed
+  })
+
+  it('a close that finds no open shift refreshes the bootstrap, so the screen leaves itself (review M7)', async () => {
+    const { api } = mount(async () => {
+      throw new PosError('NO_OPEN_SHIFT', 'no open shift to close')
+    })
+    await countAndConfirm()
+    expect(api.bootstrap).toHaveBeenCalledTimes(1)
+    enterPin('1111')
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(TH.errNoOpenShift))
+    // the shift is gone (a close that committed without answering): the refreshed bootstrap is what redirects
+    await waitFor(() => expect(api.bootstrap).toHaveBeenCalledTimes(2))
   })
 })

@@ -119,11 +119,13 @@ describe('CloseShiftScreen against the real API', () => {
     expect(screen.getByTestId('close-expected').textContent).toBe('฿520')
 
     await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5_000 }) // ฿45 into the drawer, behind the screen
-    // …and the report reloads on top of it (a window-focus refetch). The owner must still be looking at the ฿520
-    // they were shown, and that is the pair the PIN submits — the real API is then the one that refuses it.
+    // …and the report reloads on top of it (a window-focus refetch). Waiting for the *newer* report to be in the
+    // cache is what gives the next line its meaning: the owner is still looking at the ฿520 they were shown, and
+    // that is the pair the PIN submits — the real API is then the one that refuses it.
     await act(async () => {
       await queryClient.invalidateQueries({ queryKey: shiftReportKey })
     })
+    await waitFor(() => expect(queryClient.getQueryData(shiftReportKey)).toMatchObject({ expectedCashSatang: 56_500 }))
     expect(screen.getByTestId('close-expected').textContent).toBe('฿520')
     enterPin(PINS.TungAo)
 

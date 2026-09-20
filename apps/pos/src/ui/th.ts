@@ -171,7 +171,10 @@ export const TH = {
   varianceReasonHint: (limit: string): string => `ขาดหรือเกินมากกว่า ${limit} ต้องใส่เหตุผล`,
   closeApprover: 'เจ้าของที่ยืนยันปิดกะ',
   cartNotEmpty: 'ยังมีรายการค้างในตะกร้า — ขายหรือล้างตะกร้าก่อนปิดกะ',
-  zChainAck: 'Z ใบก่อนหน้าลายเซ็นไม่ตรง — เจ้าของกรอก PIN อีกครั้งเพื่อรับทราบ ระบบจะคิดยอดสะสมใหม่จาก Z ทุกใบ และติดป้ายเตือนถาวรใน Z ใบนี้',
+  // The one warning the close screen shows for Z_CHAIN_BROKEN: the cause in plain words, and — D54 Q3b-16's
+  // whole point — that acknowledging lets the shift close anyway, so nobody is ever stuck at closing time.
+  zChainAck:
+    'Z ใบก่อนหน้าลายเซ็นไม่ตรง (ถูกแก้ไขหรือไฟล์เสีย) — เจ้าของกรอก PIN อีกครั้งเพื่อรับทราบแล้วปิดกะต่อได้ ระบบจะคิดยอดสะสมใหม่จาก Z ทุกใบ และติดป้ายเตือนถาวรใน Z ใบนี้',
   // sits by the PIN pad under the full zChainAck warning — it says what to do now, it does not repeat it (review M1)
   zChainAckPin: 'กรอก PIN อีกครั้งเพื่อยืนยันว่ารับทราบ',
   zTitle: 'รายงาน Z',
