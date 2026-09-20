@@ -26,6 +26,10 @@ import { NegativeBaseList, QrTable } from './ShiftFigures'
  * (Q3b-17 · D54, review NF-6), so what the owner saw is exactly what `closeShift` re-checks. If anything moved
  * meanwhile the API refuses with SHIFT_CHANGED — the count is then thrown away and the drawer is counted again,
  * still blind, against the reloaded figures.
+ *
+ * Two frozen figures sit outside that guarantee by design (review M3): `negativeBases` and `pendingSyncItems` are
+ * deliberately left out of `shiftReportFingerprint` — they are informational, move for reasons unrelated to this
+ * shift's money and never enter the Z — so they alone are not re-checked at submit and can be shown stale.
  */
 export function CloseShiftScreen(): JSX.Element {
   const api = useApi()
@@ -55,8 +59,20 @@ export function CloseShiftScreen(): JSX.Element {
     },
     onError: async (e) => {
       const code = posErrorCode(e)
-      if (code === 'Z_CHAIN_BROKEN') setChainBroken(true)
+      if (code === 'Z_CHAIN_BROKEN') {
+        // `close-chain-broken` below already explains it at length — the line by the PinPad only says what to do
+        // now, instead of repeating the same paragraph in slightly different words (review M1).
+        setChainBroken(true)
+        setError(TH.zChainAckPin)
+        return
+      }
       setError(errorMessage(e))
+      if (code === 'NO_OPEN_SHIFT') {
+        // The shift is gone (e.g. the close committed but its answer never arrived): let the bootstrap refresh
+        // send the owner out of this screen rather than leave them on "ยังไม่ได้เปิดกะ" (review M7).
+        await queryClient.invalidateQueries({ queryKey: bootstrapKey })
+        return
+      }
       if (code === 'SHIFT_CHANGED') {
         // The shift moved while the drawer was being counted: the count belongs to figures that no longer exist.
         // Drop it, hide the expected cash again and reload the report — the owner counts once more, blind.
@@ -160,7 +176,9 @@ export function CloseShiftScreen(): JSX.Element {
               type="button"
               className="primary"
               data-testid="count-done"
-              disabled={totalSatang === null || cart.state.lines.length > 0}
+              // `report.isFetching`: after a SHIFT_CHANGED the reload is still in flight — confirming now would
+              // freeze the figures that were just refused (review M2).
+              disabled={totalSatang === null || cart.state.lines.length > 0 || report.isFetching}
               onClick={() => {
                 setError(null)
                 setShown(report.data)
@@ -200,7 +218,14 @@ export function CloseShiftScreen(): JSX.Element {
             {TH.pendingAtClose(shown.pendingSyncItems)}
           </p>
           <div className="actions">
-            <button type="button" data-testid="count-edit" onClick={() => setShown(null)}>
+            <button
+              type="button"
+              data-testid="count-edit"
+              onClick={() => {
+                setError(null) // a PIN error from the previous attempt must not follow the owner into the recount (review M6)
+                setShown(null)
+              }}
+            >
               {TH.countEdit}
             </button>
           </div>

@@ -88,6 +88,12 @@ test('blind count from the sell screen → variance reason → owner PIN → Z w
 
 test('quick open (spec §4.8 · Q3b-10): an owner opens with a 0 float and the X report marks it', async ({ page }) => {
   await firstRun(page)
+  // the close screen can always be left again, without closing anything
+  await page.getByTestId('close-shift-open').click()
+  await expect(page.getByTestId('count-50000')).toBeVisible()
+  await page.getByTestId('nav-sell').click()
+  await expect(page).toHaveURL(/\/sell$/)
+
   // close the first shift with an exact count so we reach the open-shift screen again
   await page.getByTestId('close-shift-open').click()
   await page.getByTestId('count-50000').fill('1')

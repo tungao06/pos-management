@@ -172,6 +172,8 @@ export const TH = {
   closeApprover: 'เจ้าของที่ยืนยันปิดกะ',
   cartNotEmpty: 'ยังมีรายการค้างในตะกร้า — ขายหรือล้างตะกร้าก่อนปิดกะ',
   zChainAck: 'Z ใบก่อนหน้าลายเซ็นไม่ตรง — เจ้าของกรอก PIN อีกครั้งเพื่อรับทราบ ระบบจะคิดยอดสะสมใหม่จาก Z ทุกใบ และติดป้ายเตือนถาวรใน Z ใบนี้',
+  // sits by the PIN pad under the full zChainAck warning — it says what to do now, it does not repeat it (review M1)
+  zChainAckPin: 'กรอก PIN อีกครั้งเพื่อยืนยันว่ารับทราบ',
   zTitle: 'รายงาน Z',
   zList: 'Z ย้อนหลัง',
   noZ: 'ยังไม่มีรายงาน Z',

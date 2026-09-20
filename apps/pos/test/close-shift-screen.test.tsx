@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { UserDto } from '../src/api/types'
 import { ApiProvider } from '../src/app/api-context'
 import { CartProvider } from '../src/app/cart-context'
+import { shiftReportKey } from '../src/app/queries'
 import { SessionProvider, useSession } from '../src/app/session'
 import { CloseShiftScreen } from '../src/screens/CloseShiftScreen'
 import { TH } from '../src/ui/th'
@@ -34,7 +35,7 @@ function SignedIn({ user }: { user: UserDto }): JSX.Element {
   return <CloseShiftScreen />
 }
 
-function mount(t: ReadyApi): void {
+function mount(t: ReadyApi): QueryClient {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
@@ -47,6 +48,7 @@ function mount(t: ReadyApi): void {
       </ApiProvider>
     </QueryClientProvider>,
   )
+  return queryClient
 }
 
 /** Types one count line; every denomination left out counts as 0. */
@@ -58,7 +60,9 @@ async function startCount(): Promise<void> {
   await waitFor(() => expect(screen.getByTestId('count-50000')).toBeTruthy())
 }
 
-function countDone(): void {
+/** Confirms the count once the report has settled — `count-done` stays disabled while a reload is in flight. */
+async function countDone(): Promise<void> {
+  await waitFor(() => expect((screen.getByTestId('count-done') as HTMLButtonElement).disabled).toBe(false))
   act(() => screen.getByTestId('count-done').click())
   act(() => screen.getByTestId('close-approver-TungAo').click())
 }
@@ -84,7 +88,7 @@ describe('CloseShiftScreen against the real API', () => {
     count(2_000, '1')
     expect(screen.getByTestId('close-counted').textContent).toBe('฿520')
     expect(screen.queryByTestId('close-expected')).toBeNull() // blind until the count is confirmed (Q3b-3 · D52)
-    countDone()
+    await countDone()
     expect(screen.getByTestId('close-expected').textContent).toBe('฿520')
     expect(screen.getByTestId('close-variance').textContent).toBe('฿0')
 
@@ -107,14 +111,20 @@ describe('CloseShiftScreen against the real API', () => {
   it('a sale made while the drawer was being counted: real SHIFT_CHANGED, the count is cleared and taken again (Q3b-17 · D54)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t) // expected cash ฿520
-    mount(t)
+    const queryClient = mount(t)
     await startCount()
     count(50_000, '1')
     count(2_000, '1')
-    countDone()
+    await countDone()
     expect(screen.getByTestId('close-expected').textContent).toBe('฿520')
 
     await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5_000 }) // ฿45 into the drawer, behind the screen
+    // …and the report reloads on top of it (a window-focus refetch). The owner must still be looking at the ฿520
+    // they were shown, and that is the pair the PIN submits — the real API is then the one that refuses it.
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: shiftReportKey })
+    })
+    expect(screen.getByTestId('close-expected').textContent).toBe('฿520')
     enterPin(PINS.TungAo)
 
     await waitFor(() => expect(screen.queryByTestId('close-expected')).toBeNull())
@@ -127,7 +137,7 @@ describe('CloseShiftScreen against the real API', () => {
     count(2_000, '3')
     count(500, '1')
     await waitFor(() => expect(screen.getByTestId('close-counted').textContent).toBe('฿565'))
-    countDone()
+    await countDone()
     expect(screen.getByTestId('close-expected').textContent).toBe('฿565')
     enterPin(PINS.TungAo)
     await waitForZCount(t, 1)
@@ -141,13 +151,15 @@ describe('CloseShiftScreen against the real API', () => {
     await startCount()
     count(50_000, '1')
     count(2_000, '1')
-    countDone()
+    await countDone()
     enterPin(PINS.TungAo)
     await waitForZCount(t, 1)
     const z1 = await t.api.getZReport(t.shift.id)
     cleanup()
 
-    // someone edits the stored Z by hand — its hash no longer matches (spec §7 invariant 6)
+    // Someone edits the stored Z by hand — its hash no longer matches (spec §7 invariant 6). The append-only
+    // trigger stays dropped for the rest of this test (review M8): harmless here, since each test opens its own
+    // :memory: database and closeShift only ever inserts into z_report — but do not copy this idiom blind.
     t.raw.exec('DROP TRIGGER z_report_no_update')
     t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.grandTotalSatang', 999)`).run()
 
@@ -158,7 +170,7 @@ describe('CloseShiftScreen against the real API', () => {
     await startCount()
     count(2_000, '2')
     count(500, '1')
-    countDone()
+    await countDone()
     expect(screen.getByTestId('close-expected').textContent).toBe('฿45')
     expect(screen.queryByTestId('close-chain-broken')).toBeNull()
 
