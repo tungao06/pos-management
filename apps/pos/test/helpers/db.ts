@@ -1,7 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import type { RemoteDb } from '@dayo/db-schema/browser'
@@ -11,6 +8,15 @@ import type { ApiDeps } from '../../src/api/deps'
 import { createPosApi } from '../../src/api/pos-api'
 import type { CommitSaleInput, CommitSaleResult, DeviceDto, PosApi, SetupInput, ShiftDto, UserDto } from '../../src/api/types'
 import { initDatabase } from '../../src/db/init'
+
+// Node's built-ins are taken from `process.getBuiltinModule`, never named in an `import` statement: this helper is
+// also used by a jsdom test file (`test/close-shift-screen.test.tsx`, the close screen driven against the real
+// API), and Vite's "client" environment — the one jsdom tests run in — refuses to resolve an imported built-in.
+const { mkdtempSync, readFileSync } = process.getBuiltinModule('node:fs')
+const { tmpdir } = process.getBuiltinModule('node:os')
+const { join } = process.getBuiltinModule('node:path')
+const { DatabaseSync } = process.getBuiltinModule('node:sqlite')
+export type DatabaseSync = DatabaseSyncType
 
 /** Tiny argon2 cost so tests stay fast (production uses PROD_PIN_COST). */
 export const TEST_PIN_COST = { t: 1, m: 64 } as const
