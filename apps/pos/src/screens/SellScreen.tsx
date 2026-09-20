@@ -76,6 +76,10 @@ export function SellScreen(): JSX.Element {
         <button type="button" data-testid="nav-shift" onClick={() => void navigate({ to: '/shift' })}>
           {TH.shiftMenu}
         </button>
+        {/* Q3b-3 · D52 (review I-2): closing starts here, not from the X report, so the drawer is counted blind */}
+        <button type="button" data-testid="close-shift-open" onClick={() => void navigate({ to: '/shift/close' })}>
+          {TH.closeShift}
+        </button>
         <button type="button" data-testid="lock" onClick={session.lock}>
           {TH.lock}
         </button>

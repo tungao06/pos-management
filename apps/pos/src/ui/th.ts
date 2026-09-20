@@ -113,7 +113,8 @@ export const TH = {
   errVoidNotAllowed: 'ยกเลิกได้เฉพาะบิลที่ชำระแล้วในกะที่เปิดอยู่',
   errChooseMade: 'เลือกก่อนว่าทำเครื่องดื่มไปแล้วหรือยัง',
   errRefundRefRequired: 'ต้องใส่เลขอ้างอิงการโอนคืน',
-  errShiftChanged: 'ยอดในกะเปลี่ยนระหว่างนับเงิน — ดูยอดใหม่แล้วยืนยันอีกครั้ง',
+  // Q3b-17 · D54: the close screen clears the count when this comes back — the drawer is counted again, blind, against the new figures.
+  errShiftChanged: 'ยอดในกะเปลี่ยนระหว่างนับเงิน — ระบบล้างจำนวนที่นับไว้แล้ว กรุณานับเงินในลิ้นชักใหม่อีกครั้ง',
   errVarianceReasonRequired: 'เงินขาด/เกินเกินเกณฑ์ ต้องใส่เหตุผล',
   errZNotFound: 'ไม่พบรายงาน Z',
   errBackupFailed: 'สำรองไฟล์ไม่สำเร็จ ลองใหม่อีกครั้ง',

@@ -13,3 +13,10 @@ export function parseBahtInput(text: string): number | null {
   if (!m) return null
   return Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'))
 }
+
+/** Pieces of one note/coin typed at shift close: "" → 0 · "12" → 12 · anything else (or over 99999) → null. */
+export function parseCountInput(text: string): number | null {
+  const t = text.trim()
+  if (t === '') return 0
+  return /^\d{1,5}$/.test(t) ? Number(t) : null
+}

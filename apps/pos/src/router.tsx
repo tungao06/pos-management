@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/re
 import { RequireSession } from './app/guards'
 import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
+import { CloseShiftScreen } from './screens/CloseShiftScreen'
 import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
 import { LoginScreen } from './screens/LoginScreen'
@@ -132,6 +133,15 @@ const shiftRoute = createRoute({
     </RequireSession>
   ),
 })
+const closeShiftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/shift/close',
+  component: () => (
+    <RequireSession>
+      <CloseShiftScreen />
+    </RequireSession>
+  ),
+})
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -148,6 +158,7 @@ export const routeTree = rootRoute.addChildren([
   zListRoute,
   zReportRoute,
   shiftRoute,
+  closeShiftRoute,
 ])
 
 export const router = createRouter({ routeTree })
