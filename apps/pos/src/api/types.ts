@@ -245,6 +245,23 @@ export type PurchaseDto = {
   createdAt: string
 }
 
+/** ทำเบส (spec §5): `scaleBp` 10000 = one BOM batch; `yieldActualMilli` = what actually came out (default = standard). */
+export type ProduceBatchInput = { actorUserId: string; itemId: string; scaleBp: number; yieldActualMilli: number }
+export type ProductionBatchDto = {
+  id: string
+  itemId: string
+  code: string
+  name: string
+  businessDate: string
+  scaleBp: number
+  yieldActualMilli: number
+  unitCostUsat: number
+  batchCostSatang: number
+  expiresAt: string | null
+  createdAt: string
+  components: { itemId: string; code: string; qtyMilli: number }[]
+}
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -267,6 +284,7 @@ export interface PosApi {
   confirmBackupSaved(input: ConfirmBackupInput): Promise<void>
   stockOverview(): Promise<StockOverviewDto>
   receivePurchase(input: ReceivePurchaseInput): Promise<PurchaseDto>
+  produceBatch(input: ProduceBatchInput): Promise<ProductionBatchDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -291,6 +309,7 @@ export const POS_API_METHODS = [
   'confirmBackupSaved',
   'stockOverview',
   'receivePurchase',
+  'produceBatch',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>

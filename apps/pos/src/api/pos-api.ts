@@ -7,6 +7,7 @@ import { closeShift, getZReport, listZReports } from './close'
 import type { ApiDeps } from './deps'
 import { loadMenu } from './menu'
 import { getOrder, listOrders } from './orders'
+import { produceBatch } from './production'
 import { receivePurchase } from './purchase'
 import { commitSale, promptPayForAmount } from './sale'
 import { createSerialQueue } from './serial'
@@ -40,5 +41,6 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     confirmBackupSaved: (input) => serial(() => confirmBackupSaved(db, deps, input)),
     stockOverview: () => serial(() => stockOverview(db, deps)),
     receivePurchase: (input) => serial(() => receivePurchase(db, deps, input)),
+    produceBatch: (input) => serial(() => produceBatch(db, deps, input)),
   }
 }
