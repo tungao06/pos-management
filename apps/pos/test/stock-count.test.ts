@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { openReadyApi, sellSku } from './helpers/db'
@@ -55,6 +55,16 @@ describe('opening count (D30 · Q4-13)', () => {
     expect(await movementsOf(t, 'stock_count', c.id)).toEqual([{ code: 'RM-TEA-01', kind: 'OPENING', qtyMilli: -200_000, unitCostUsat: 25_000_000, businessDate: '2026-09-17' }])
     expect(c.lines.find((l) => l.code === 'RM-TEA-01')).toMatchObject({ varianceUseMilli: -200_000, varianceSatang: -5_000, opening: true }) // −฿50, not −฿38.50
   })
+
+  it('a first-count gain is priced at the standard cost, not the moving average (review I-2)', async () => {
+    const t = await openReadyApi()
+    const tea = { itemId: await itemId(t, 'RM-TEA-01'), purchaseUnitId: await defaultUnitId(t, 'RM-TEA-01'), qtyUnitsMilli: 1_000, lineTotalSatang: 10_000 } // ฿100 for 1 bag (400 g)
+    await t.api.receivePurchase({ actorUserId: t.owner.id, supplier: '', note: '', lines: [tea], paidFromDrawer: false, acceptPriceJump: true })
+    expect((await stockOf(t, 'RM-TEA-01')).avgCostUsat).toBe(25_000_000) // the only movement so far: average = purchase cost
+    const c = await openingCount(t, { 'RM-TEA-01': 600_000 }) // more than the 400 g bought: a gain
+    expect(await movementsOf(t, 'stock_count', c.id)).toEqual([{ code: 'RM-TEA-01', kind: 'OPENING', qtyMilli: 200_000, unitCostUsat: 19_250_000, businessDate: '2026-09-17' }]) // at standard, not 25,000,000
+    expect((await stockOf(t, 'RM-TEA-01')).avgCostUsat).toBe(23_083_333) // blended: 400,000 @ 25,000,000 + 200,000 @ 19,250,000
+  })
 })
 
 describe('stock count after the opening (spec §4.5)', () => {
@@ -96,19 +106,54 @@ describe('stock count after the opening (spec §4.5)', () => {
     expect((await stockOf(t, 'RM-MLK-02')).onHandMilli).toBe(359_000) // re-freezing would have left 405 ml and lost the sale
   })
 
-  it('COUNT_ADJ at the moving average; a line can be taken out before closing; 0 is a valid count', async () => {
+  it('COUNT_ADJ at the moving average; a line can be taken out before closing (m-1: only from the open count); 0 is a valid count', async () => {
     const t = await openReadyApi()
-    await openingCount(t, { 'RM-TEA-01': 800_000 })
+    const opened = await openingCount(t, { 'RM-TEA-01': 800_000 })
+    const milk1 = await itemId(t, 'RM-MLK-01')
     const c = await t.api.startStockCount(t.owner.id)
     const recount = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: await itemId(t, 'RM-TEA-01'), purchaseUnitId: await defaultUnitId(t, 'RM-TEA-01'), countedUnitsMilli: 1_500 })
     expect(recount.lines).toEqual([expect.objectContaining({ code: 'RM-TEA-01', countedUseMilli: 600_000, expectedUseMilli: 800_000, varianceUseMilli: -200_000, varianceSatang: -3_850, opening: false })])
-    const withMilk = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: await itemId(t, 'RM-MLK-01'), purchaseUnitId: null, countedUnitsMilli: 0 })
+    const withMilk = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk1, purchaseUnitId: null, countedUnitsMilli: 0 })
     expect(withMilk.lines).toHaveLength(2)
-    const removed = await t.api.removeCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: await itemId(t, 'RM-MLK-01') })
+    const removed = await t.api.removeCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk1 })
     expect(removed.lines.map((l) => l.code)).toEqual(['RM-TEA-01'])
+    // m-1: remove is scoped to countId — the closed opening count keeps its own RM-MLK-01 line, untouched
+    expect(await t.db.select().from(s.stockCountLine).where(and(eq(s.stockCountLine.countId, opened.id), eq(s.stockCountLine.itemId, milk1))).all()).toHaveLength(1)
     await t.api.closeStockCount({ actorUserId: t.owner.id, countId: c.id }) // a partial count is fine after the opening
     expect(await movementsOf(t, 'stock_count', c.id)).toEqual([{ code: 'RM-TEA-01', kind: 'COUNT_ADJ', qtyMilli: -200_000, unitCostUsat: 19_250_000, businessDate: '2026-09-17' }])
     expect((await stockOf(t, 'RM-TEA-01')).onHandMilli).toBe(600_000)
+    // m-1: RM-MLK-01 was already counted in the closed opening count — a later count of it is not misclassified as OPENING
+    const c2 = await t.api.startStockCount(t.owner.id)
+    const milk1Again = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c2.id, itemId: milk1, purchaseUnitId: null, countedUnitsMilli: 0 })
+    expect(milk1Again.lines[0]).toMatchObject({ opening: false })
+  })
+
+  it('COUNT_ADJ is priced at the moving average, not the standard cost (review I-1)', async () => {
+    const t = await openReadyApi()
+    await openingCount(t, { 'RM-TEA-01': 800_000 }) // on-hand 800 g at avg = standard (19,250,000)
+    const tea = { itemId: await itemId(t, 'RM-TEA-01'), purchaseUnitId: await defaultUnitId(t, 'RM-TEA-01'), qtyUnitsMilli: 2_000, lineTotalSatang: 20_000 } // ฿100 a bag: blends the average above standard
+    await t.api.receivePurchase({ actorUserId: t.owner.id, supplier: '', note: '', lines: [tea], paidFromDrawer: false, acceptPriceJump: true })
+    expect((await stockOf(t, 'RM-TEA-01')).avgCostUsat).toBe(22_125_000) // blended, above the 19,250,000 standard
+    const c = await t.api.startStockCount(t.owner.id)
+    const recount = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: await itemId(t, 'RM-TEA-01'), purchaseUnitId: await defaultUnitId(t, 'RM-TEA-01'), countedUnitsMilli: 3_500 }) // 200 g short of 1,600,000
+    expect(recount.lines[0]).toMatchObject({ expectedUseMilli: 1_600_000, varianceUseMilli: -200_000, varianceSatang: -4_425 }) // −฿44.25 at the average, not −฿38.50 at standard
+    await t.api.closeStockCount({ actorUserId: t.owner.id, countId: c.id })
+    expect(await movementsOf(t, 'stock_count', c.id)).toEqual([{ code: 'RM-TEA-01', kind: 'COUNT_ADJ', qtyMilli: -200_000, unitCostUsat: 22_125_000, businessDate: '2026-09-17' }])
+  })
+
+  it('a real recount (removeCountLine, then save again) re-freezes expected to the live book (review m-2)', async () => {
+    const t = await openReadyApi()
+    await openingCount(t, { 'RM-MLK-02': 405_000 })
+    const milk = await itemId(t, 'RM-MLK-02')
+    const can = await defaultUnitId(t, 'RM-MLK-02')
+    const c = await t.api.startStockCount(t.owner.id)
+    await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk, purchaseUnitId: can, countedUnitsMilli: 1_000 }) // first pass: 1 can, before the sale
+    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // −46 ml, after the item was already counted
+    await t.api.removeCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk }) // "ไม่นับรายการนี้" — a real recount, not แก้ตัวเลข
+    const recounted = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk, purchaseUnitId: can, countedUnitsMilli: 1_000 }) // still 1 can on the shelf
+    expect(recounted.lines[0]).toMatchObject({ countedUseMilli: 405_000, expectedUseMilli: 359_000, varianceUseMilli: 46_000 })
+    await t.api.closeStockCount({ actorUserId: t.owner.id, countId: c.id })
+    expect((await stockOf(t, 'RM-MLK-02')).onHandMilli).toBe(405_000) // the sale is not taken off twice
   })
 
   it('closing a count with no lines just ends it — no movement, and it does not count as "counted" (Q4-12)', async () => {

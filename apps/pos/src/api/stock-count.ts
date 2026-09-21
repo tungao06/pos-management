@@ -132,9 +132,11 @@ export async function getOpenStockCount(db: RemoteDb): Promise<StockCountDto | n
 /**
  * Saves one counted line of the open count. expected = the book on-hand at the moment the item is FIRST saved — frozen
  * per line (spec §3.3 "ณ เวลานับ", T4-2), so sales between counting it and closing the count are not double-counted.
- * "นับใหม่" (saving the same item again) only replaces the counted quantity: the expected stays as first frozen, so a
- * typo fixed an hour later does not swallow what sold in that hour (review I-9). Draft lines are not synced until the
- * count closes (T4-11).
+ * Saving the same item again is "แก้ตัวเลข" (a typo fix), never "นับใหม่" (a real recount): it only replaces the
+ * counted quantity, and the expected stays as first frozen — a typo fixed an hour later does not swallow what sold in
+ * that hour (review I-9). A real recount is `removeCountLine` ("ไม่นับรายการนี้") followed by a fresh save, which
+ * re-freezes expected to the live book (review m-2) — the UI must offer that path, not treat the save button as a
+ * recount. Draft lines are not synced until the count closes (T4-11).
  *
  * Controller ruling (Task 7): looked up with `{ allowInactiveWithStock: true }` — an item turned off while it still
  * holds stock (on-hand ≠ 0) must still be countable (down to zero), the same escape hatch Task 3/6 already use; an
