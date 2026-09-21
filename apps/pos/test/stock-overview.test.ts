@@ -15,7 +15,7 @@ describe('stockOverview (spec §5 หน้าสต็อก)', () => {
     expect(o.items.map((i) => i.code)).not.toContain('RM-WTR-01')
     expect(o.items.map((i) => i.code)).not.toContain('PK-SET-16')
     const tea = o.items.find((i) => i.code === 'RM-TEA-01')!
-    expect(tea).toMatchObject({ kind: 'raw', useUnit: 'g', onHandMilli: 0, avgCostUsat: 19_250_000, priceCheckUsat: 19_250_000, valueSatang: 0, reorderPointMilli: 400_000, status: 'out', alert: true, isKeyCount: true, latestBatch: null, bom: null })
+    expect(tea).toMatchObject({ kind: 'raw', useUnit: 'g', onHandMilli: 0, avgCostUsat: 19_250_000, priceCheckUsat: 19_250_000, valueSatang: 0, reorderPointMilli: 400_000, status: 'out', alert: true, isKeyCount: true, latestBatch: null, bom: null, isActive: true })
     expect(tea.units).toEqual([{ id: expect.any(String), name: 'ถุง', qtyPerUnitMilli: 400_000, isDefault: true }])
     const base = o.items.find((i) => i.code === 'PB-TEA-THAI')!
     // Q4-10: an empty base is "out" but not an alert (bases have no reorder point)
@@ -42,13 +42,16 @@ describe('stockOverview (spec §5 หน้าสต็อก)', () => {
     expect(o.alertCount).toBe(33) // 31 raw items at or below their reorder point + 2 negative bases
   })
 
-  it('an item taken off the list stays on the page while it still has stock (review M-11)', async () => {
+  it('an item taken off the list stays on the page while it still has stock (review M-11), marked isActive: false (I-2 · Task 9 fix round 1)', async () => {
     const t = await openReadyApi()
     await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // RM-MLK-03 −16 ml; RM-POW-01 untouched
     t.raw.prepare("update item set is_active = 0 where code in ('RM-MLK-03', 'RM-POW-01')").run()
-    const codes = (await t.api.stockOverview()).items.map((i) => i.code)
+    const o = await t.api.stockOverview()
+    const codes = o.items.map((i) => i.code)
     expect(codes).toContain('RM-MLK-03') // still has (negative) stock to count out
     expect(codes).not.toContain('RM-POW-01') // nothing on hand: gone
+    expect(o.items.find((i) => i.code === 'RM-MLK-03')?.isActive).toBe(false) // shown, but not offered by receive/produce
+    expect(o.items.find((i) => i.code === 'RM-TEA-01')?.isActive).toBe(true) // an ordinary active item, for contrast
   })
 
   it('business date (Q4-1): the open shift\'s date, else today in Thailand', async () => {

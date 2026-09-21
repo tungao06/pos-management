@@ -23,6 +23,7 @@ const DATE_TIME = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', d
 
 function item(overrides: Partial<StockItemDto> & Pick<StockItemDto, 'itemId' | 'code' | 'name' | 'kind'>): StockItemDto {
   return {
+    isActive: true,
     category: 'วัตถุดิบ',
     useUnit: 'g',
     onHandMilli: 0,
@@ -44,9 +45,9 @@ function item(overrides: Partial<StockItemDto> & Pick<StockItemDto, 'itemId' | '
 const RAW_OK = item({ itemId: 'i-ice', code: 'RW-ICE', name: 'น้ำแข็ง', kind: 'raw', status: 'ok', alert: false, onHandMilli: 5_000_000 })
 const RAW_LOW = item({ itemId: 'i-milk', code: 'RW-MILK', name: 'นมสด', kind: 'raw', status: 'low', alert: true, onHandMilli: 500, reorderPointMilli: 2_000 })
 // Task 3's stockCountableItems fix: an inactive catalog item with stock left still comes back from stockOverview.
-// StockItemDto carries no isActive field at all, so the screen has nothing to filter on — this stands in for one
-// and pins that it is rendered like any other row, not silently dropped.
-const RAW_INACTIVE = item({ itemId: 'i-old', code: 'RW-OLD', name: 'วัตถุดิบเลิกขาย', kind: 'raw', status: 'negative', alert: true, onHandMilli: 250 })
+// isActive: false (Task 9 fix round 1, controller ruling I-2) pins that it is rendered like any other row, not
+// silently dropped, and carries the inactive marker.
+const RAW_INACTIVE = item({ itemId: 'i-old', code: 'RW-OLD', name: 'วัตถุดิบเลิกขาย', kind: 'raw', status: 'negative', alert: true, onHandMilli: 250, isActive: false })
 const BASE_EXPIRED = item({
   itemId: 'i-expired',
   code: 'PB-EXPIRED',
@@ -154,13 +155,20 @@ describe('StockScreen — filter views (Task 8 fix round 1: the review found zer
 })
 
 describe('StockScreen — an inactive catalog item with stock left is shown and marked', () => {
-  it('renders with the same data-status/data-alert marks and on-hand figure as any other row', async () => {
+  it('renders with the same data-status/data-alert marks and on-hand figure as any other row, plus an inactive badge (I-2, Task 9 fix round 1)', async () => {
     mount()
     const row = await screen.findByTestId(`stock-row-${RAW_INACTIVE.code}`)
     expect(row.getAttribute('data-status')).toBe(RAW_INACTIVE.status)
     expect(row.getAttribute('data-alert')).toBe(String(RAW_INACTIVE.alert))
     expect(screen.getByTestId(`stock-status-${RAW_INACTIVE.code}`).textContent).toBe(TH.stockStatus.negative)
     expect(screen.getByTestId(`stock-onhand-${RAW_INACTIVE.code}`).textContent).toContain('0.25 g')
+    expect(screen.getByTestId(`stock-inactive-${RAW_INACTIVE.code}`).textContent).toBe(TH.stockInactive)
+  })
+
+  it('an active item never gets the inactive badge', async () => {
+    mount()
+    await screen.findByTestId(`stock-row-${RAW_OK.code}`)
+    expect(screen.queryByTestId(`stock-inactive-${RAW_OK.code}`)).toBeNull()
   })
 })
 

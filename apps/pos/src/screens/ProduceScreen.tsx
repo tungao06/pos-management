@@ -63,7 +63,9 @@ export function ProduceScreen(): JSX.Element {
     )
   }
   if (stock.data === undefined) return <main className="page">{TH.loading}</main>
-  const bases = stock.data.items.filter((i): i is StockItemDto & { bom: NonNullable<StockItemDto['bom']> } => i.kind === 'prepared' && i.bom !== null)
+  // review I-2 (controller ruling, Task 9 fix round 1): an inactive base can still hold stock and stay on the stock
+  // page (M-11), but producing more of it must be refused — offer active bases only, same as ReceiveScreen's items.
+  const bases = stock.data.items.filter((i): i is StockItemDto & { bom: NonNullable<StockItemDto['bom']> } => i.kind === 'prepared' && i.bom !== null && i.isActive)
   const base = bases.find((b) => b.itemId === baseId) ?? null
 
   const choose = (b: StockItemDto & { bom: NonNullable<StockItemDto['bom']> }, bp: number): void => {

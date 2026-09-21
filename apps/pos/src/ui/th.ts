@@ -245,6 +245,7 @@ export const TH = {
   useUnitOption: (unit: string): string => `${unit} (หน่วยใช้)`,
   errQtyFormat: 'จำนวนต้องเป็นตัวเลข ทศนิยมไม่เกิน 3 ตำแหน่ง ไม่เกิน 9999',
   errChooseItem: 'เลือกสินค้าก่อน',
+  stockInactive: 'เลิกขาย',
 
   produceTitle: 'ทำเบส',
   produceChooseBase: 'เลือกเบส',
@@ -272,6 +273,8 @@ export const TH = {
   receiveConfirmPrice: 'ยืนยันราคานี้',
   receiveSave: 'บันทึกรับของ',
   receiveDone: (total: string): string => `บันทึกรับของแล้ว รวม ${total}`,
+  errLineTooLarge: (max: string): string => `ราคารวมต่อรายการต้องไม่เกิน ${max}`,
+  errTooManyLines: (max: number): string => `รับของเข้าได้สูงสุด ${max} รายการต่อใบ`,
   remove: 'ลบ',
 
   adjustTitle: 'ปรับสต็อก (เบิกของออก)',

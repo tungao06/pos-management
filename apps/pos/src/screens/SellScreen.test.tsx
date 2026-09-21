@@ -84,7 +84,7 @@ const STOCK: StockOverviewDto = {
   businessDate: '2026-09-17',
   items: [
     {
-      itemId: 'i-shot', code: 'PB-MATCHA-SHOT', name: 'มัทฉะช็อต', kind: 'prepared', category: 'เบส', useUnit: 'ml', onHandMilli: 120_000, avgCostUsat: 95_666_667, priceCheckUsat: 95_666_667,
+      itemId: 'i-shot', code: 'PB-MATCHA-SHOT', name: 'มัทฉะช็อต', kind: 'prepared', isActive: true, category: 'เบส', useUnit: 'ml', onHandMilli: 120_000, avgCostUsat: 95_666_667, priceCheckUsat: 95_666_667,
       valueSatang: 11_480, reorderPointMilli: 0, status: 'ok', alert: true, isKeyCount: false, units: [], shelfLifeHours: 4,
       latestBatch: { batchId: 'b1', createdAt: '2026-09-17T03:00:00.000Z', expiresAt: '2026-09-17T07:00:00.000Z', expiry: 'expired' }, bom: null,
     },

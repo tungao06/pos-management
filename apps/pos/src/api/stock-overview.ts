@@ -103,6 +103,7 @@ export async function stockOverview(db: RemoteDb, deps: ApiDeps): Promise<StockO
       code: i.code,
       name: i.name,
       kind,
+      isActive: i.isActive,
       category: i.category,
       useUnit: i.useUnit,
       onHandMilli,

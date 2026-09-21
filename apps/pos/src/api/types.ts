@@ -184,6 +184,10 @@ export type StockItemDto = {
   code: string
   name: string
   kind: 'raw' | 'prepared'
+  /** Controller ruling I-2 (Task 9 fix round 1): an item turned off in the catalog, but still on this list because it
+   * still holds stock (M-11 · `stockCountableItems`). Receiving and producing must offer active items only — an
+   * inactive item can still be counted or written off (Tasks 6/7), never bought or made. */
+  isActive: boolean
   category: string
   useUnit: UseUnit
   onHandMilli: number

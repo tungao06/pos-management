@@ -107,6 +107,14 @@ export function StockScreen(): JSX.Element {
                   {i.name}
                   <br />
                   <small className="badge">{i.code}</small>
+                  {!i.isActive && (
+                    <>
+                      {' '}
+                      <small className="badge" data-testid={`stock-inactive-${i.code}`}>
+                        {TH.stockInactive}
+                      </small>
+                    </>
+                  )}
                   {expiry !== null && (
                     <>
                       <br />

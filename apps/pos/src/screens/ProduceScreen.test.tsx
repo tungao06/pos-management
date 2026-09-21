@@ -19,6 +19,7 @@ const OWNER: UserDto = { id: 'u1', displayName: 'TungAo', role: 'owner' }
 
 function item(overrides: Partial<StockItemDto> & Pick<StockItemDto, 'itemId' | 'code' | 'name' | 'kind'>): StockItemDto {
   return {
+    isActive: true,
     category: 'เบส',
     useUnit: 'g',
     onHandMilli: 0,
@@ -46,11 +47,22 @@ const BASE = item({
   shelfLifeHours: 72,
   bom: { yieldMilli: 3_000_000, lines: [{ itemId: 'i-rm-02', code: 'RM-TEA-02', name: 'ใบชา', useUnit: 'g', qtyMilli: 180_000 }] },
 })
+// controller ruling I-2 (Task 9 fix round 1): an inactive base still holding stock stays on the stock page but must
+// not be offered here — producing more of it is refused server-side (requireStockItem, no allowInactiveWithStock).
+const BASE_INACTIVE = item({
+  itemId: 'i-base-old',
+  code: 'PB-OLD',
+  name: 'เบสเลิกทำ',
+  kind: 'prepared',
+  useUnit: 'ml',
+  isActive: false,
+  bom: { yieldMilli: 1_000_000, lines: [{ itemId: 'i-rm-02', code: 'RM-TEA-02', name: 'ใบชา', useUnit: 'g', qtyMilli: 60_000 }] },
+})
 
 const STOCK: StockOverviewDto = {
   generatedAt: '2026-09-17T10:00:00.000Z',
   businessDate: '2026-09-17',
-  items: [BASE],
+  items: [BASE, BASE_INACTIVE],
   totalValueSatang: 0,
   alertCount: 0,
   expiredBaseCodes: [],
@@ -110,6 +122,14 @@ async function chooseBase(): Promise<void> {
   await waitFor(() => expect(screen.getByTestId(`produce-base-${BASE.code}`)).toBeTruthy())
   fireEvent.click(screen.getByTestId(`produce-base-${BASE.code}`))
 }
+
+describe('ProduceScreen — controller ruling I-2 (Task 9 fix round 1): the base picker offers active bases only', () => {
+  it('an inactive base with stock left never appears among the choices', async () => {
+    mount()
+    await waitFor(() => expect(screen.getByTestId(`produce-base-${BASE.code}`)).toBeTruthy())
+    expect(screen.queryByTestId(`produce-base-${BASE_INACTIVE.code}`)).toBeNull()
+  })
+})
 
 describe('ProduceScreen — M-10: a scale preset clears whatever custom scale was typed', () => {
   it('typing a custom scale then clicking a preset button empties the custom field', async () => {

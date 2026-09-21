@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
 import { isPriceJump, priceDeviationBp, purchaseUnitCostUsat, unitsToUseMilli } from '@dayo/domain'
 import { posErrorCode } from '../api/errors'
+import { MAX_LINE_SATANG, MAX_STOCK_LINES } from '../api/stock-common'
 import { REASON_MAX_LENGTH, type PurchaseDto, type PurchaseLineInput, type StockItemDto } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, shiftReportKey, stockKey, useBootstrap } from '../app/queries'
@@ -59,7 +60,12 @@ export function ReceiveScreen(): JSX.Element {
   const [paidFromDrawer, setPaidFromDrawer] = useState(false)
   const [priceJump, setPriceJump] = useState(false)
   const [overDrawer, setOverDrawer] = useState(false)
-  const drawer = useDrawerCheck(paidFromDrawer)
+  const hasShift = boot.data?.openShift != null
+  // review m-2 (Task 9 fix round 1): derived, not the raw checkbox state — if the open shift disappears from under a
+  // ticked checkbox (e.g. closed on another screen, then a bootstrap refetch lands), this goes false on its own, so
+  // save no longer sends `paidFromDrawer: true` into a guaranteed NO_OPEN_SHIFT, and the checkbox itself unticks.
+  const payFromDrawer = paidFromDrawer && hasShift
+  const drawer = useDrawerCheck(payFromDrawer)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<PurchaseDto | null>(null)
 
@@ -70,7 +76,7 @@ export function ReceiveScreen(): JSX.Element {
         supplier,
         note,
         lines: lines.map((l) => ({ itemId: l.itemId, purchaseUnitId: l.purchaseUnitId, qtyUnitsMilli: l.qtyUnitsMilli, lineTotalSatang: l.lineTotalSatang })),
-        paidFromDrawer,
+        paidFromDrawer: payFromDrawer,
         acceptPriceJump,
       }),
     onSuccess: async (p) => {
@@ -88,7 +94,14 @@ export function ReceiveScreen(): JSX.Element {
       ])
     },
     onError: (e) => {
-      if (posErrorCode(e) === 'PRICE_JUMP') setPriceJump(true)
+      // review I-1 (Task 9 fix round 1, money): a PRICE_JUMP refusal must also clear `overDrawer`. Without this, a
+      // second tap on the still-visible `receive-over-drawer-confirm` sends `save.mutate(priceJump)` = `mutate(true)`
+      // — accepting the jump without the owner ever pressing "ยืนยันราคานี้". The only way to `acceptPriceJump: true`
+      // from here on is `receive-confirm-price`, which re-runs the over-drawer check for real before it saves.
+      if (posErrorCode(e) === 'PRICE_JUMP') {
+        setPriceJump(true)
+        setOverDrawer(false)
+      }
       setError(errorMessage(e))
     },
   })
@@ -103,18 +116,21 @@ export function ReceiveScreen(): JSX.Element {
     )
   }
   if (stock.data === undefined) return <main className="page">{TH.loading}</main>
-  const items = stock.data.items.filter((i) => i.kind === 'raw')
+  // review I-2 (controller ruling, Task 9 fix round 1): `stockOverview` keeps an inactive item around while it still
+  // holds stock (M-11), so it can be counted or written off — but `receivePurchase` only ever accepts active items
+  // (stock-common.ts `requireStockItem`, no `allowInactiveWithStock`). Offering it here would let a whole receipt
+  // fail on save with no hint of which line was the problem.
+  const items = stock.data.items.filter((i) => i.kind === 'raw' && i.isActive)
   const sumSatang = lines.reduce((a, l) => a + l.lineTotalSatang, 0)
   const submit = (acceptPriceJump: boolean): void => {
     // Q3b-14 · D54 via Q4-6: more than the drawer should hold → one explicit confirm first (no figure shown)
-    if (paidFromDrawer && !overDrawer) {
+    if (payFromDrawer && !overDrawer) {
       if (drawer.pending) return
       if (drawer.exceeds(sumSatang)) return setOverDrawer(true)
     }
     save.mutate(acceptPriceJump)
   }
   const item = items.find((i) => i.code === itemCode) ?? null
-  const hasShift = boot.data?.openShift != null
 
   const pickItem = (code: string): void => {
     setItemCode(code)
@@ -129,6 +145,11 @@ export function ReceiveScreen(): JSX.Element {
     const total = parseBahtInput(totalText)
     if (qty === null || qty <= 0) return setError(TH.errQtyFormat)
     if (total === null) return setError(TH.errBadInput)
+    // review m-3 (Task 9 fix round 1): the same caps `receivePurchase` enforces (MAX_LINE_SATANG, MAX_STOCK_LINES) —
+    // checked here too, so a line over the cap or a 51st line is refused with a clear Thai message on add, not a
+    // generic BAD_INPUT for the whole receipt on save.
+    if (total > MAX_LINE_SATANG) return setError(TH.errLineTooLarge(formatBaht(MAX_LINE_SATANG)))
+    if (lines.length >= MAX_STOCK_LINES) return setError(TH.errTooManyLines(MAX_STOCK_LINES))
     const unit = item.units.find((u) => u.id === unitId)
     setLines([...lines, { itemId: item.itemId, purchaseUnitId: unit?.id ?? null, qtyUnitsMilli: qty, lineTotalSatang: total, item, unitName: unit?.name ?? item.useUnit }])
     setItemCode('')
@@ -144,6 +165,7 @@ export function ReceiveScreen(): JSX.Element {
     setLines(lines.filter((_, j) => j !== i))
     setPriceJump(false)
     setOverDrawer(false)
+    setError(null) // m-1 (Task 9 fix round 1): a stale PRICE_JUMP message must not outlive the line it was about
   }
 
   return (
@@ -227,7 +249,7 @@ export function ReceiveScreen(): JSX.Element {
         <input
           type="checkbox"
           data-testid="receive-paid-drawer"
-          checked={paidFromDrawer}
+          checked={payFromDrawer}
           disabled={!hasShift}
           onChange={(e) => {
             setPaidFromDrawer(e.target.checked)
@@ -257,7 +279,7 @@ export function ReceiveScreen(): JSX.Element {
             {TH.cashOverDrawerConfirm}
           </button>
         )}
-        <button type="button" className="primary" data-testid="receive-save" disabled={save.isPending || lines.length === 0 || (paidFromDrawer && drawer.pending)} onClick={() => submit(false)}>
+        <button type="button" className="primary" data-testid="receive-save" disabled={save.isPending || lines.length === 0 || (payFromDrawer && drawer.pending)} onClick={() => submit(false)}>
           {TH.receiveSave}
         </button>
       </div>
