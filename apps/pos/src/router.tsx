@@ -9,6 +9,7 @@ import { LoginScreen } from './screens/LoginScreen'
 import { OpenShiftScreen } from './screens/OpenShiftScreen'
 import { OrderDetailScreen } from './screens/OrderDetailScreen'
 import { OrdersScreen } from './screens/OrdersScreen'
+import { ProduceScreen } from './screens/ProduceScreen'
 import { QrPayScreen } from './screens/QrPayScreen'
 import { ReceiveScreen } from './screens/ReceiveScreen'
 import { SellScreen } from './screens/SellScreen'
@@ -164,6 +165,15 @@ const receiveRoute = createRoute({
     </RequireSession>
   ),
 })
+const produceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/stock/produce',
+  component: () => (
+    <RequireSession>
+      <ProduceScreen />
+    </RequireSession>
+  ),
+})
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -183,6 +193,7 @@ export const routeTree = rootRoute.addChildren([
   closeShiftRoute,
   stockRoute,
   receiveRoute,
+  produceRoute,
 ])
 
 export const router = createRouter({ routeTree })

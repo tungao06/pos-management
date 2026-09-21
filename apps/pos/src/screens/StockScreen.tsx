@@ -69,6 +69,9 @@ export function StockScreen(): JSX.Element {
         <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' })}>
           {TH.navReceive}
         </button>
+        <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' })}>
+          {TH.navProduce}
+        </button>
       </div>
       <h1>{TH.stockTitle}</h1>
       <p>
