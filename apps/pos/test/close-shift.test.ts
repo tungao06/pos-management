@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
-import { zReportHash } from '@dayo/domain'
+import { MAX_ZNO_LIST_LENGTH, zReportHash } from '@dayo/domain'
 import type { CloseShiftInput } from '../src/api/types'
 import { hashPin } from '../src/lib/pin'
 import { openReadyApi, PINS, sellSku, TEST_PIN_COST, type ReadyApi } from './helpers/db'
@@ -310,7 +310,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     expect(z2.snapshot).toMatchObject({ zNo: 2, grandTotalSatang: 4_000 + 5_000, chainWarning: { brokenShiftId: z1.shiftId, recomputedGrandTotalSatang: 4_000, unreadableZs: [] } })
   })
 
-  it('a previous Z whose zNo was edited: the chain still closes, numbering from the row count (C-1 · Q3b-16 · D54)', async () => {
+  it('a previous Z whose zNo was edited: the chain still closes, numbering past the claimed zNo so none repeats (C-1 · Q3b-16 · D54; review R5-1)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
     const z1 = await t.api.closeShift(await closeInput(t)) // net ฿40
@@ -325,8 +325,13 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     const z2 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
     expect(z2.hashOk).toBe(true)
-    // exactly one earlier Z row, whatever its own claimed zNo says — the new zNo is 1 (row count) + 1
-    expect(z2.snapshot).toMatchObject({ zNo: 2, grandTotalSatang: 4_000 + 5_000, chainWarning: { brokenShiftId: z1.shiftId, recomputedGrandTotalSatang: 4_000, unreadableZs: [] } })
+    // review R5-1 (2026-09-21): the lenient zNo is max(row count + known gap, the last Z's stored zNo when within
+    // MAX_ZNO_LIST_LENGTH of the row count) + 1 — here max(1 + 0, 7) + 1 = 8, recorded as a gap of 6 so the next
+    // close is clean. Before, it was the row count + 1 = 2 (money is the same either way: the sales were untouched)
+    expect(z2.snapshot).toMatchObject({ zNo: 8, grandTotalSatang: 4_000 + 5_000, chainWarning: { brokenShiftId: z1.shiftId, recomputedGrandTotalSatang: 4_000, unreadableZs: [], zNoGap: 6 } })
+    t.clock.set('2026-09-19T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    expect((await t.api.closeShift(await closeInput(t, { countLines: [] }))).snapshot).toMatchObject({ zNo: 9, chainWarning: null })
   })
 
   it('a previous Z whose JSON is entirely unreadable: the chain still closes, treating its net as 0 and flagging it (C-1 · Q3b-16 · D54)', async () => {
@@ -704,6 +709,80 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.chainWarning.zNoGap', 2) where shift_id = ?`).run(z4.shiftId) // no hash recompute
     t.raw.prepare(`delete from z_report where shift_id = ?`).run(z1.shiftId) // gap now really is 2
     await expect(t.api.closeShift(await nextShift(t, '2026-09-22'))).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z5.shiftId}$`))
+  })
+
+  it('a lenient acknowledgement after a D55 gap carries the gap forward: no duplicate zNo, and deleting that Z later is caught (review R5-1, 2026-09-21)', async () => {
+    const t = await openReadyApi()
+    await ackMiddleDeletion(t) // Z4, zNoGap 1
+    const z5 = await t.api.closeShift(await nextShift(t, '2026-09-21'))
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.grandTotalSatang', 1) where shift_id = ?`).run(z5.shiftId) // plain edit, no forged hash
+    const next = await nextShift(t, '2026-09-22')
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z5.shiftId}$`))
+    const l = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    // lenient: numbered max(rows 4 + known gap 1, z5's stored 5) + 1 = 6, never a second "Z5"; the gap stays 1
+    expect(l.snapshot).toMatchObject({ zNo: 6, chainWarning: { brokenShiftId: z5.shiftId, zNoGap: 1 } })
+    const z7 = await t.api.closeShift(await nextShift(t, '2026-09-23'))
+    expect(z7.snapshot).toMatchObject({ zNo: 7, chainWarning: null })
+    t.raw.prepare(`delete from z_report where shift_id = ?`).run(l.shiftId) // the lenient acknowledgement, now a middle row
+    // before the fix, L was a duplicate zNo 5 with zNoGap 0: deleting it raised the real gap by one and dropped the
+    // newest record back to Z4's 1, which cancelled out — a silent deletion
+    const after = await nextShift(t, '2026-09-24')
+    await expect(t.api.closeShift(after)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z7.shiftId}$`))
+    const z8 = await t.api.closeShift({ ...after, acknowledgeZChainBroken: true })
+    expect(z8.snapshot).toMatchObject({ zNo: 8, chainWarning: { zNoGap: 2 } })
+    for (const [i, date] of ['2026-09-25', '2026-09-26', '2026-09-27', '2026-09-28', '2026-09-29'].entries()) {
+      expect((await t.api.closeShift(await nextShift(t, date))).snapshot).toMatchObject({ zNo: 9 + i, chainWarning: null })
+    }
+    const zNos = (await t.api.listZReports()).map((z) => z.zNo)
+    expect(new Set(zNos).size).toBe(zNos.length) // no duplicate zNo anywhere
+  })
+
+  it('the lenient path carries the known gap even when the broken last Z has no readable zNo of its own (review R5-1)', async () => {
+    const t = await openReadyApi()
+    await ackMiddleDeletion(t) // Z4, zNoGap 1
+    const z5 = await t.api.closeShift(await nextShift(t, '2026-09-21'))
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    t.raw.prepare(`update z_report set snapshot_json = 'not json' where shift_id = ?`).run(z5.shiftId) // z5's zNo (and ฿50) unreadable
+    const next = await nextShift(t, '2026-09-22')
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z5.shiftId}$`))
+    const l = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    // max(rows 4 + known gap 1, no stored zNo) + 1 = 6 — the row count alone would give a second "5" with gap 0
+    expect(l.snapshot).toMatchObject({ zNo: 6, chainWarning: { brokenShiftId: z5.shiftId, zNoGap: 1 } })
+    const z7 = await t.api.closeShift(await nextShift(t, '2026-09-23'))
+    t.raw.prepare(`delete from z_report where shift_id = ?`).run(l.shiftId)
+    await expect(t.api.closeShift(await nextShift(t, '2026-09-24'))).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z7.shiftId}$`))
+  })
+
+  it('a broken last Z plus a deleted middle Z no longer repeats a zNo; the deleted Z’s net is still lost, and named (review R4-3 / probe G, known risk (i))', async () => {
+    const t = await openReadyApi()
+    const { z2, z3 } = await closeThreeZs(t)
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    t.raw.exec('DROP TRIGGER z_report_no_delete')
+    t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.grandTotalSatang', 1) where shift_id = ?`).run(z3.shiftId)
+    t.raw.prepare(`delete from z_report where shift_id = ?`).run(z2.shiftId)
+    const next = await nextShift(t, '2026-09-20')
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+    const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    // zNo from z3's stored 3 (not rows 2 + 1 = a second "3"); money: z1 + z3 re-folded = ฿90, z2's ฿50 is gone
+    expect(z4.snapshot).toMatchObject({ zNo: 4, grandTotalSatang: 14_000, chainWarning: { recomputedGrandTotalSatang: 9_000, missingZNos: [2], zNoGap: 1 } })
+    for (const [i, date] of ['2026-09-21', '2026-09-22', '2026-09-23'].entries()) {
+      expect((await t.api.closeShift(await nextShift(t, date))).snapshot).toMatchObject({ zNo: 5 + i, chainWarning: null })
+    }
+  })
+
+  it('the lenient zNo uses the last Z’s stored zNo only up to MAX_ZNO_LIST_LENGTH above the row count (review R5-1, R2-2)', async () => {
+    for (const [claimed, expectedZNo] of [[3 + MAX_ZNO_LIST_LENGTH, 3 + MAX_ZNO_LIST_LENGTH + 1], [3 + MAX_ZNO_LIST_LENGTH + 1, 4]] as const) {
+      const t = await openReadyApi()
+      const { z3 } = await closeThreeZs(t)
+      t.raw.exec('DROP TRIGGER z_report_no_update')
+      t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '$.zNo', ?) where shift_id = ?`).run(claimed, z3.shiftId) // hash now broken
+      const next = await nextShift(t, '2026-09-20')
+      await expect(t.api.closeShift(next)).rejects.toThrow(/^Z_CHAIN_BROKEN: /)
+      const z = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+      expect(z.snapshot).toMatchObject({ zNo: expectedZNo, grandTotalSatang: 19_000, chainWarning: { zNoGap: expectedZNo - 4 } })
+      expect((await t.api.closeShift(await nextShift(t, '2026-09-21'))).snapshot).toMatchObject({ zNo: expectedZNo + 1, chainWarning: null })
+    }
   })
 
   it('a hash-valid last Z claiming fewer Zs than there are rows goes the lenient way, never a negative zNoGap and a permanent BAD_INPUT (2026-09-21)', async () => {

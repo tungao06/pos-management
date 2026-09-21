@@ -238,8 +238,9 @@ export type ZChainWarning = {
   deletedShiftIdsTruncated: boolean
   /**
    * 2026-09-21 · D55 (review R4-1, R4-2): how many Z rows were known missing when this warning was acknowledged —
-   * this Z's own `zNo` minus the device's Z row count including this Z. 0 on the lenient path (it renumbers from
-   * the row count); `last.zNo − row count` when chaining from a trustworthy last Z past a deleted middle Z. Every
+   * this Z's own `zNo` minus the device's Z row count including this Z. `last.zNo − row count` when chaining
+   * from a trustworthy last Z past a deleted middle Z; on the lenient path, never less than the gap already
+   * acknowledged (review R5-1 — 0 on a chain that never had one). Every
    * clean Z afterwards grows `zNo` and the row count by one together, so the gap stays the same until another row
    * is deleted: `closeShift` compares the current gap against the most recent recorded one, instead of re-asking
    * for the same acknowledged gap forever or skipping the check. Optional so a warning frozen before this field

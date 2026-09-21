@@ -157,6 +157,26 @@ function expectedZNoGap(rows: readonly ZRawRow[]): number {
   return 0
 }
 
+/**
+ * The zNo the lenient path chains from (review R5-1, 2026-09-21; the new Z is this + 1). Not simply the row count
+ * (`recomputeZChainLenient`'s own `zNo`, D54's original rule): that threw away the gap the chain already carries
+ * (`expectedGap`), recording `zNoGap: 0` — so after a D55 gap acknowledgement, a later lenient acknowledgement wrote
+ * a duplicate zNo, and deleting *that* Z afterwards went silent (the deletion raised the real gap by one while
+ * dropping the newest record back to the older, one-higher gap: the two cancelled out). Instead it is the larger of
+ *   - the row count plus the gap already acknowledged, which keeps the recorded gap from ever shrinking, and
+ *   - the last row's own stored zNo, when it is a safe integer at most `MAX_ZNO_LIST_LENGTH` above the row count —
+ *     so the new Z never repeats the (untrustworthy) last Z's number (review R4-3), while a hand-edited huge zNo
+ *     cannot push the numbering out of range (review R2-2) and is simply ignored.
+ * `closeShift` records `zNoGap` = the new Z's zNo − (row count + 1) = this − row count, which is >= `expectedGap`.
+ * Falls back to the row count if the sum is not a safe integer (only a forged `zNoGap` near 2^53 gets there).
+ */
+function lenientPrevZNo(rows: readonly ZRawRow[], expectedGap: number): number {
+  const carried = rows.length + expectedGap
+  const base = Number.isSafeInteger(carried + 1) ? carried : rows.length
+  const stored = rows[0] !== undefined ? toLenientEntry(rows[0]).zNo : null
+  return stored !== null && stored <= rows.length + MAX_ZNO_LIST_LENGTH ? Math.max(base, stored) : base
+}
+
 /** Oldest first — simply `deviceZRows`' own insertion order, reversed (review NF-1 · NF-3): never the snapshot's own
  * `zNo`, which is exactly what a hand-edit can move around. `recomputeZChainLenient` never throws on any input, so
  * this needs no fallback logic of its own; it is not exported because insertion order is a `close.ts` concern
@@ -261,7 +281,8 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     // (the perpetual ask Q3b-16 · D54 forbids) and hid a new deletion made while that Z was last. `deletedShiftIds`
     // is a separate check, bounded to "since the last surviving Z" (review R2-4).
     const lastZNo = lastSnapshot !== null ? safeIntOrNull(lastSnapshot.zNo) : null
-    const unacknowledgedZNoGap = lastHealthy && (lastZNo === null || lastZNo - rows.length !== expectedZNoGap(rows))
+    const expectedGap = expectedZNoGap(rows)
+    const unacknowledgedZNoGap = lastHealthy && (lastZNo === null || lastZNo - rows.length !== expectedGap)
 
     let prev: { zNo: number; grandTotalSatang: number } | null = null
     let chainWarning: ZChainWarning | null = null
@@ -288,10 +309,10 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
         // 2026-09-21 (review R4-1): a last Z claiming fewer Zs than there are rows (`lastZNo < rows.length` — only
         // a forged hash or a Z table restored out of order, review R2-7, gets here) cannot be the head of the chain
         // it sits on: its gap would be negative, which `buildZReport` rightly rejects — forever, since the same row
-        // is read every time. It goes the lenient way instead, which renumbers from the row count and sums every
-        // surviving row's net.
+        // is read every time. It goes the lenient way instead, which sums every surviving row's net and
+        // numbers past both the row count and the known gap (`lenientPrevZNo`).
         const trustLast = lastHealthy && lastSnapshot !== null && lastZNo !== null && lastZNo >= rows.length
-        prev = trustLast ? { zNo: lastZNo, grandTotalSatang: lastSnapshot.grandTotalSatang } : { zNo: lenient.zNo, grandTotalSatang: lenient.grandTotalSatang }
+        prev = trustLast ? { zNo: lastZNo, grandTotalSatang: lastSnapshot.grandTotalSatang } : { zNo: lenientPrevZNo(rows, expectedGap), grandTotalSatang: lenient.grandTotalSatang }
         const storedGrand = trustLast ? lastGrand : last !== undefined ? safeIntOrNull((tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined)?.grandTotalSatang) : null
         chainWarning = {
           brokenShiftId: deletedIds[0] ?? last!.shiftId,
@@ -305,9 +326,10 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
           missingZNosTruncated: lenient.missingZNosTruncated,
           deletedShiftIds: deletedIds.slice(0, MAX_ZNO_LIST_LENGTH),
           deletedShiftIdsTruncated: deletedIds.length > MAX_ZNO_LIST_LENGTH,
-          // 2026-09-21 (review R4-1, R4-2): the new Z's zNo minus the row count including it — the Z rows known
-          // missing right now, carried forward by `expectedZNoGap`. 0 on the lenient path (zNo = row count + 1);
-          // `lastZNo − rows.length` (>= 0 by `trustLast`) when chaining from a trustworthy last Z.
+          // 2026-09-21 (review R4-1, R4-2, R5-1): the new Z's zNo minus the row count including it — the Z rows known
+          // missing right now, carried forward by `expectedZNoGap`. `lastZNo − rows.length` (>= 0 by `trustLast`)
+          // when chaining from a trustworthy last Z; `lenientPrevZNo − rows.length` (>= the gap already
+          // acknowledged) on the lenient path.
           zNoGap: prev.zNo + 1 - (rows.length + 1),
         }
       }
