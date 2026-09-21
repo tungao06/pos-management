@@ -65,6 +65,15 @@ export function ReceiveScreen(): JSX.Element {
   // ticked checkbox (e.g. closed on another screen, then a bootstrap refetch lands), this goes false on its own, so
   // save no longer sends `paidFromDrawer: true` into a guaranteed NO_OPEN_SHIFT, and the checkbox itself unticks.
   const payFromDrawer = paidFromDrawer && hasShift
+  // review n-1 (Task 9 re-review 1): the derived guard above is not enough by itself — once a *new* shift opens
+  // while this screen is still mounted, `hasShift` goes true again and the never-actually-cleared `paidFromDrawer`
+  // would tick the checkbox back on with no click (Q4-6: off by default — consent does not survive the shift it was
+  // given for). Reset the stored flag itself the moment the shift disappears. React's "adjust state during render"
+  // pattern: the condition is self-correcting (it clears `paidFromDrawer`, so it cannot re-fire next render).
+  if (!hasShift && paidFromDrawer) {
+    setPaidFromDrawer(false)
+    setOverDrawer(false)
+  }
   const drawer = useDrawerCheck(payFromDrawer)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<PurchaseDto | null>(null)

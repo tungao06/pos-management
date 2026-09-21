@@ -70,6 +70,8 @@ const STOCK: StockOverviewDto = {
 const DONE: PurchaseDto = { id: 'p1', businessDate: '2026-09-17', supplier: null, totalSatang: 12, lines: [], cashMovementId: null, createdAt: '2026-09-17T10:00:00Z' }
 
 const OPEN_SHIFT = { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 5 }
+// n-1 (Task 9 re-review 1): a second, later shift — distinct id — for the "a new shift opens" step of the m-2 test.
+const OPEN_SHIFT_2 = { id: 's2', businessDate: '2026-09-17', openedAt: '2026-09-17T02:00:00Z', openedBy: 'u1', openingFloatSatang: 5 }
 
 // Q3b-14: an expected drawer cash of just 5 satang — small enough that even a single ฿0.10/g line (10 satang) is
 // "over the drawer", so the over-drawer flow is trivial to reach without needing large quantities.
@@ -358,7 +360,14 @@ describe('ReceiveScreen — m-2 (Task 9 fix round 1): the drawer checkbox cannot
     await waitFor(() => expect((screen.getByTestId('receive-paid-drawer') as HTMLInputElement).checked).toBe(false))
     expect((screen.getByTestId('receive-paid-drawer') as HTMLInputElement).disabled).toBe(true)
 
-    fireEvent.click(screen.getByTestId('receive-save')) // must not fail in a loop against NO_OPEN_SHIFT
+    // n-1 (Task 9 re-review 1): a new shift opens while this screen is still mounted — Q4-6 says "off by default",
+    // and consent from the closed shift must not survive it. Without the render-time reset, `paidFromDrawer` (never
+    // actually cleared, only masked by the derived `payFromDrawer`) would tick the checkbox back on by itself here.
+    queryClient.setQueryData(bootstrapKey, bootstrap({ openShift: OPEN_SHIFT_2 }))
+    await waitFor(() => expect((screen.getByTestId('receive-paid-drawer') as HTMLInputElement).disabled).toBe(false))
+    expect((screen.getByTestId('receive-paid-drawer') as HTMLInputElement).checked).toBe(false) // stays unticked, no click happened
+
+    fireEvent.click(screen.getByTestId('receive-save')) // must not fail in a loop against NO_OPEN_SHIFT, and must not pay from the new shift's drawer either
     await waitFor(() => expect(receivePurchase).toHaveBeenCalledTimes(1))
     expect(receivePurchase).toHaveBeenLastCalledWith(expect.objectContaining({ paidFromDrawer: false }))
     await waitFor(() => expect(screen.getByTestId('receive-done')).toBeTruthy())
