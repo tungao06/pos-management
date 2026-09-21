@@ -246,6 +246,9 @@ export const TH = {
   errQtyFormat: 'จำนวนต้องเป็นตัวเลข ทศนิยมไม่เกิน 3 ตำแหน่ง ไม่เกิน 9999',
   errChooseItem: 'เลือกสินค้าก่อน',
   stockInactive: 'เลิกขาย',
+  // fix round 1, review [Important]: mirrors ReceiveScreen's client-side price-jump preview — the same ½×–2× bound
+  // the API enforces (MAX_YIELD_FACTOR), shown near the input and checked before saving, not only after a round trip.
+  errYieldRange: (range: string): string => `ยอดที่ได้จริงต้องอยู่ระหว่าง ${range}`,
 
   produceTitle: 'ทำเบส',
   produceChooseBase: 'เลือกเบส',
@@ -253,6 +256,7 @@ export const TH = {
   produceScaleCustom: 'หรือพิมพ์เอง (เช่น 0.75)',
   produceComponents: 'ส่วนประกอบที่ต้องใช้',
   produceYield: (unit: string): string => `ได้จริง (${unit})`,
+  produceYieldRange: (range: string): string => `ยอมรับได้ (½×–2× ของสูตร): ${range}`,
   produceLeftover: (qty: string, state: string): string => `ยังมีเบสเดิมเหลือ ${qty}${state === '' ? '' : ` · ${state}`}`,
   produceDiscardFirst: 'ทิ้งของเก่าก่อน',
   produceSave: 'บันทึกทำเบส',

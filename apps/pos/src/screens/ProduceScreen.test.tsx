@@ -146,6 +146,57 @@ describe('ProduceScreen — M-10: a scale preset clears whatever custom scale wa
   })
 })
 
+describe('ProduceScreen — fix round 1, review [Important]: the ½×–2× actual-yield bound is shown and checked before saving', () => {
+  it('shows the accepted range for the standard batch (3,000 ml) and recomputes it when the scale changes', async () => {
+    mount()
+    await chooseBase()
+    expect(screen.getByTestId('produce-yield-range').textContent).toContain('1,500–6,000 ml')
+
+    fireEvent.click(screen.getByTestId('produce-scale-5000')) // ½ batch → standard 1,500 ml
+    expect(screen.getByTestId('produce-yield-range').textContent).toContain('750–3,000 ml')
+  })
+
+  it('accepts exactly the half× boundary (1,500 ml) — the smallest yield that still saves', async () => {
+    const produceBatch = vi.fn(async () => DONE)
+    mount({ produceBatch })
+    await chooseBase()
+    fireEvent.change(screen.getByTestId('produce-yield'), { target: { value: '1500' } })
+    fireEvent.click(screen.getByTestId('produce-save'))
+    await waitFor(() => expect(produceBatch).toHaveBeenCalledTimes(1))
+    expect(produceBatch).toHaveBeenCalledWith(expect.objectContaining({ yieldActualMilli: 1_500_000 }))
+  })
+
+  it('refuses just under the half× boundary (1,499.999 ml) with the Thai range message, calling produceBatch never', async () => {
+    const produceBatch = vi.fn(async () => DONE)
+    mount({ produceBatch })
+    await chooseBase()
+    fireEvent.change(screen.getByTestId('produce-yield'), { target: { value: '1499.999' } })
+    fireEvent.click(screen.getByTestId('produce-save'))
+    expect(screen.getByRole('alert').textContent).toContain('1,500–6,000 ml')
+    expect(produceBatch).not.toHaveBeenCalled()
+  })
+
+  it('accepts exactly the 2× boundary (6,000 ml) — the largest yield that still saves', async () => {
+    const produceBatch = vi.fn(async () => DONE)
+    mount({ produceBatch })
+    await chooseBase()
+    fireEvent.change(screen.getByTestId('produce-yield'), { target: { value: '6000' } })
+    fireEvent.click(screen.getByTestId('produce-save'))
+    await waitFor(() => expect(produceBatch).toHaveBeenCalledTimes(1))
+    expect(produceBatch).toHaveBeenCalledWith(expect.objectContaining({ yieldActualMilli: 6_000_000 }))
+  })
+
+  it('refuses just over the 2× boundary (6,000.001 ml) with the Thai range message, calling produceBatch never', async () => {
+    const produceBatch = vi.fn(async () => DONE)
+    mount({ produceBatch })
+    await chooseBase()
+    fireEvent.change(screen.getByTestId('produce-yield'), { target: { value: '6000.001' } })
+    fireEvent.click(screen.getByTestId('produce-save'))
+    expect(screen.getByRole('alert').textContent).toContain('1,500–6,000 ml')
+    expect(produceBatch).not.toHaveBeenCalled()
+  })
+})
+
 describe('ProduceScreen — produce-save is disabled while the mutation is pending, so a double tap cannot record two batches', () => {
   it('a second click while the first save is still in flight never calls produceBatch twice', async () => {
     let resolveSave!: (b: ProductionBatchDto) => void

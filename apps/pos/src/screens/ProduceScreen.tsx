@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
 import { scaleQtyMilli } from '@dayo/domain'
+import { MAX_YIELD_FACTOR } from '../api/production'
 import type { ProductionBatchDto, StockItemDto } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, stockKey } from '../app/queries'
@@ -9,15 +10,28 @@ import { useSession } from '../app/session'
 import { errorMessage } from '../ui/errors'
 import { formatBaht, formatQty, parseQtyInput } from '../ui/format'
 import { TH } from '../ui/th'
-import { expiryText } from './StockScreen'
+import { DATE_TIME, expiryText } from './StockScreen'
 
-const DATE_TIME = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' })
 /** Preset batch sizes: ½, 1, 1½, 2 (spec §5 "ใส่ตัวคูณ"). */
 const SCALES_BP = [5_000, 10_000, 15_000, 20_000] as const
 
 /** milli-units → the text a person would type ("1500", "16.6"). */
 function qtyText(milli: number): string {
   return formatQty(milli, '').trim().replaceAll(',', '')
+}
+
+/** milli-units → the text a person reads ("1,500", "16.6" — commas kept, no unit). */
+function qtyReadText(milli: number): string {
+  return formatQty(milli, '').trim()
+}
+
+/**
+ * The ½×–2× actual-yield bound `produceBatch` enforces (`api/production.ts` `MAX_YIELD_FACTOR`), mirrored here so the
+ * screen can show and check it before saving instead of only after a round trip (fix round 1, review [Important]) —
+ * same inequality as the server's, just solved for the two bounds instead of one pass/fail check.
+ */
+function yieldBounds(standardYieldMilli: number): { minMilli: number; maxMilli: number } {
+  return { minMilli: Math.ceil(standardYieldMilli / MAX_YIELD_FACTOR), maxMilli: standardYieldMilli * MAX_YIELD_FACTOR }
 }
 
 /**
@@ -67,6 +81,9 @@ export function ProduceScreen(): JSX.Element {
   // page (M-11), but producing more of it must be refused — offer active bases only, same as ReceiveScreen's items.
   const bases = stock.data.items.filter((i): i is StockItemDto & { bom: NonNullable<StockItemDto['bom']> } => i.kind === 'prepared' && i.bom !== null && i.isActive)
   const base = bases.find((b) => b.itemId === baseId) ?? null
+  const standardYield = base === null ? 0 : scaleQtyMilli(base.bom.yieldMilli, scaleBp)
+  const { minMilli: yieldMin, maxMilli: yieldMax } = yieldBounds(standardYield)
+  const yieldRangeText = base === null ? '' : `${qtyReadText(yieldMin)}–${qtyReadText(yieldMax)} ${base.useUnit}`
 
   const choose = (b: StockItemDto & { bom: NonNullable<StockItemDto['bom']> }, bp: number): void => {
     setBaseId(b.itemId)
@@ -87,6 +104,9 @@ export function ProduceScreen(): JSX.Element {
     if (base === null) return setError(TH.errChooseItem)
     const yieldMilli = parseQtyInput(yieldText)
     if (yieldMilli === null || yieldMilli <= 0) return setError(TH.errQtyFormat)
+    // fix round 1, review [Important]: caught here with the same bound the server checks, so a typo is refused
+    // instantly with a clean Thai message instead of a round trip to `errBadInput` with the raw server detail.
+    if (yieldMilli < yieldMin || yieldMilli > yieldMax) return setError(TH.errYieldRange(yieldRangeText))
     setError(null)
     save.mutate({ itemId: base.itemId, scaleBp, yieldActualMilli: yieldMilli })
   }
@@ -157,6 +177,9 @@ export function ProduceScreen(): JSX.Element {
             {TH.produceYield(base.useUnit)}
             <input data-testid="produce-yield" inputMode="decimal" value={yieldText} onChange={(e) => setYieldText(e.target.value)} />
           </label>
+          <p className="badge" data-testid="produce-yield-range">
+            {TH.produceYieldRange(yieldRangeText)}
+          </p>
           {error !== null && (
             <p role="alert" className="error">
               {error}

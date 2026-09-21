@@ -9,7 +9,8 @@ import { errorMessage } from '../ui/errors'
 import { formatBaht, formatQty } from '../ui/format'
 import { TH } from '../ui/th'
 
-const DATE_TIME = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' })
+// shared with ProduceScreen (fix round 1, review [Minor]) — one formatter, not two copies drifting apart
+export const DATE_TIME = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' })
 type Filter = 'all' | 'reorder' | 'bases'
 
 /** On hand in the default purchase unit, when the item has one (e.g. "2 ถุง") — for reading at a glance. */
