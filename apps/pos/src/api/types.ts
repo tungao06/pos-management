@@ -223,6 +223,28 @@ export type StockOverviewDto = {
   openingCountPending: boolean
 }
 
+/** One line of a receipt: `qtyUnitsMilli` of `purchaseUnitId` (null = the use unit) for `lineTotalSatang` (0 = free). */
+export type PurchaseLineInput = { itemId: string; purchaseUnitId: string | null; qtyUnitsMilli: number; lineTotalSatang: number }
+export type ReceivePurchaseInput = {
+  actorUserId: string
+  supplier: string
+  note: string
+  lines: PurchaseLineInput[]
+  /** Q4-6: the total was paid with drawer cash — also write a PAID_OUT of the open shift. */
+  paidFromDrawer: boolean
+  /** true only after a PRICE_JUMP refusal, when the person checked the prices (D47 item 3). */
+  acceptPriceJump: boolean
+}
+export type PurchaseDto = {
+  id: string
+  businessDate: string
+  supplier: string | null
+  totalSatang: number
+  lines: { itemId: string; code: string; name: string; qtyUseMilli: number; lineTotalSatang: number; unitCostUsat: number }[]
+  cashMovementId: string | null
+  createdAt: string
+}
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -244,6 +266,7 @@ export interface PosApi {
   exportBackup(actorUserId: string): Promise<BackupFileDto>
   confirmBackupSaved(input: ConfirmBackupInput): Promise<void>
   stockOverview(): Promise<StockOverviewDto>
+  receivePurchase(input: ReceivePurchaseInput): Promise<PurchaseDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -267,6 +290,7 @@ export const POS_API_METHODS = [
   'exportBackup',
   'confirmBackupSaved',
   'stockOverview',
+  'receivePurchase',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
