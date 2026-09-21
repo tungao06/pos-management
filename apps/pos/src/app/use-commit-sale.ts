@@ -6,7 +6,7 @@ import type { CommitSaleInput } from '../api/types'
 import { cartReducer, cartTotals, toSaleLines, type CartAction } from '../state/cart'
 import { useApi } from './api-context'
 import { useCart } from './cart-context'
-import { bootstrapKey, menuKey, ordersKey } from './queries'
+import { bootstrapKey, menuKey, ordersKey, shiftReportKey } from './queries'
 import { useSession } from './session'
 
 export type PriceChange = { fromSatang: number; toSatang: number }
@@ -42,6 +42,10 @@ export function useCommitSale() {
         queryClient.invalidateQueries({ queryKey: bootstrapKey }),
         queryClient.invalidateQueries({ queryKey: menuKey }),
         queryClient.invalidateQueries({ queryKey: ordersKey }),
+        // review m-2: a committed sale changes expectedCashSatang (cash) or qrSalesSatang (QR); without this the X
+        // report (and the Q3b-14 over-drawer check in CashMoveDialog) can read a stale figure for up to `staleTime`
+        // (5s, main.tsx) after the sale.
+        queryClient.invalidateQueries({ queryKey: shiftReportKey }),
       ])
     },
     onError: async (e) => {

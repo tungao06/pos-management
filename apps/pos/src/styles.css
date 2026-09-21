@@ -66,3 +66,10 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
   .sell { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
   .cart { border-left: 0; border-top: 1px solid var(--line); max-height: 45dvh; }
 }
+
+/* แผน 3b: ตารางตัวเลขของรายงาน X/Z และตารางนับเงิน */
+.figures { width: 100%; border-collapse: collapse; font-size: 18px; }
+.figures th { text-align: left; font-weight: 500; padding: 6px 4px; }
+.figures td { text-align: right; font-variant-numeric: tabular-nums; padding: 6px 4px; }
+.figures tr + tr { border-top: 1px solid var(--line); }
+.figures input { width: 7em; font-size: 20px; text-align: right; }

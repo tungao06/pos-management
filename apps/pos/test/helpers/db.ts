@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import type { RemoteDb } from '@dayo/db-schema/browser'
@@ -8,6 +8,15 @@ import type { ApiDeps } from '../../src/api/deps'
 import { createPosApi } from '../../src/api/pos-api'
 import type { CommitSaleInput, CommitSaleResult, DeviceDto, PosApi, SetupInput, ShiftDto, UserDto } from '../../src/api/types'
 import { initDatabase } from '../../src/db/init'
+
+// Node's built-ins are taken from `process.getBuiltinModule`, never named in an `import` statement: this helper is
+// also used by a jsdom test file (`test/close-shift-screen.test.tsx`, the close screen driven against the real
+// API), and Vite's "client" environment — the one jsdom tests run in — refuses to resolve an imported built-in.
+const { mkdtempSync, readFileSync } = process.getBuiltinModule('node:fs')
+const { tmpdir } = process.getBuiltinModule('node:os')
+const { join } = process.getBuiltinModule('node:path')
+const { DatabaseSync } = process.getBuiltinModule('node:sqlite')
+export type DatabaseSync = DatabaseSyncType
 
 /** Tiny argon2 cost so tests stay fast (production uses PROD_PIN_COST). */
 export const TEST_PIN_COST = { t: 1, m: 64 } as const
@@ -40,12 +49,19 @@ export async function openTestDb(): Promise<{ raw: DatabaseSync; db: RemoteDb; i
   return { raw, db, init }
 }
 
+/** Test stand-in for opfs-sahpool `exportFile`: a consistent copy of the in-memory database via `VACUUM INTO`. */
+export function vacuumInto(raw: DatabaseSync): Uint8Array {
+  const file = join(mkdtempSync(join(tmpdir(), 'dayo-backup-')), 'copy.sqlite3')
+  raw.prepare('VACUUM INTO ?').run(file)
+  return new Uint8Array(readFileSync(file))
+}
+
 export type TestApi = { api: PosApi; db: RemoteDb; raw: DatabaseSync; clock: TestClock; deps: ApiDeps }
 
 export async function openTestApi(): Promise<TestApi> {
   const { raw, db } = await openTestDb()
   const clock = testClock()
-  const deps: ApiDeps = { now: clock.now, newId: sequentialIds(), pinCost: { ...TEST_PIN_COST } }
+  const deps: ApiDeps = { now: clock.now, newId: sequentialIds(), pinCost: { ...TEST_PIN_COST }, exportDbFile: async () => vacuumInto(raw) }
   return { api: createPosApi(db, deps), db, raw, clock, deps }
 }
 

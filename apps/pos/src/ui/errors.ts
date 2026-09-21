@@ -20,6 +20,11 @@ const MESSAGES: Record<PosErrorCode, string> = {
   NO_PROMPTPAY_ID: TH.errNoPromptPayId,
   ORDER_NOT_FOUND: TH.errOrderNotFound,
   VOID_NOT_ALLOWED: TH.errVoidNotAllowed,
+  SHIFT_CHANGED: TH.errShiftChanged,
+  VARIANCE_REASON_REQUIRED: TH.errVarianceReasonRequired,
+  Z_NOT_FOUND: TH.errZNotFound,
+  BACKUP_FAILED: TH.errBackupFailed,
+  Z_CHAIN_BROKEN: TH.errZChainBroken,
 }
 
 /**

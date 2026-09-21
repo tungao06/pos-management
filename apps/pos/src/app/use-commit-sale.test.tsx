@@ -8,6 +8,7 @@ import type { CommitSaleInput, CommitSaleResult, MenuDto, PosApi, UserDto } from
 import { cartReducer, cartTotals, type CartState } from '../state/cart'
 import { ApiProvider } from './api-context'
 import { CartProvider, useCart } from './cart-context'
+import { shiftReportKey } from './queries'
 import { SessionProvider, useSession } from './session'
 import { useCommitSale } from './use-commit-sale'
 
@@ -126,5 +127,56 @@ describe('useCommitSale PRICE_CHANGED (D50 Q3-27)', () => {
     expect(secondCallInput.expectedTotalSatang).toBe(newTotal)
     // ...and after success the cart is cleared.
     await waitFor(() => expect(screen.getByTestId('lines').textContent).toBe('0'))
+  })
+})
+
+describe('useCommitSale — review m-2: the shift-report cache must be invalidated after a committed sale', () => {
+  it('invalidates shiftReportKey on success, so the X report and the Q3b-14 over-drawer check are never stale', async () => {
+    const api = {
+      bootstrap: vi.fn(),
+      setupShop: vi.fn(),
+      login: vi.fn(),
+      openShift: vi.fn(),
+      loadMenu: vi.fn(async () => menuWithPrice(OLD_PRICE)),
+      commitSale: vi.fn(
+        async (input: CommitSaleInput): Promise<CommitSaleResult> => ({
+          orderId: input.orderId,
+          receiptNo: 'A-000001',
+          queueNo: 1,
+          businessDate: '2026-09-18',
+          totalSatang: input.expectedTotalSatang,
+          changeSatang: 0,
+          method: 'CASH',
+        }),
+      ),
+      listOrders: vi.fn(),
+      getOrder: vi.fn(),
+      promptPayForAmount: vi.fn(),
+    } as unknown as PosApi
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ApiProvider api={api}>
+          <SessionProvider>
+            <CartProvider initial={INITIAL_CART}>
+              <Probe />
+            </CartProvider>
+          </SessionProvider>
+        </ApiProvider>
+      </QueryClientProvider>,
+    )
+    act(() => screen.getByTestId('sign-in').click())
+    act(() => screen.getByTestId('pay').click())
+
+    await waitFor(() => expect(api.commitSale).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByTestId('lines').textContent).toBe('0')) // cart cleared only after onSuccess ran to completion
+
+    // the only assertion review m-2 needs: without `queryClient.invalidateQueries({ queryKey: shiftReportKey })` in
+    // useCommitSale's onSuccess, this call is never made and this test fails — a committed sale changes
+    // expectedCashSatang or qrSalesSatang, and a stale X report can miss the Q3b-14 over-drawer warning for up to
+    // staleTime (5s, main.tsx) afterwards.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: shiftReportKey })
   })
 })

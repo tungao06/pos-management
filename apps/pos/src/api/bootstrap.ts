@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
+import { isBackupDue, lastBackupAt, lastBackupZId } from './backup'
 import { PosError } from './errors'
 import type { BootstrapState, DeviceDto, ShiftDto, UserDto } from './types'
 
@@ -55,13 +56,17 @@ export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
 }
 
 export async function bootstrap(db: RemoteDb): Promise<BootstrapState> {
-  if ((await localDeviceId(db)) === null) return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0 }
+  if ((await localDeviceId(db)) === null) return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false }
   const device = await requireDevice(db)
+  const lastAt = await lastBackupAt(db)
+  const lastZId = await lastBackupZId(db)
   return {
     needsSetup: false,
     device,
     users: await listActiveUsers(db),
     openShift: await currentOpenShift(db, device.id),
     pendingSyncItems: await countPendingSyncItems(db),
+    lastBackupAt: lastAt,
+    backupDue: await isBackupDue(db, device.id, lastZId),
   }
 }

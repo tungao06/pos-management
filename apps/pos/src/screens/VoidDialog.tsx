@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, type JSX } from 'react'
-import type { OrderDetailDto } from '../api/types'
+import { REASON_MAX_LENGTH, type OrderDetailDto } from '../api/types'
 import { useApi } from '../app/api-context'
-import { bootstrapKey, orderKey, ordersKey, useBootstrap } from '../app/queries'
+import { bootstrapKey, orderKey, ordersKey, shiftReportKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import { errorMessage } from '../ui/errors'
 import { formatBaht } from '../ui/format'
@@ -41,6 +41,9 @@ export function VoidDialog({ order, onClose }: { order: OrderDetailDto; onClose:
         queryClient.invalidateQueries({ queryKey: ordersKey }),
         queryClient.invalidateQueries({ queryKey: orderKey(order.id) }),
         queryClient.invalidateQueries({ queryKey: bootstrapKey }),
+        // review m-2: a cash void changes expectedCashSatang; without this the X report (and the Q3b-14 over-drawer
+        // check in CashMoveDialog) can read a stale figure for up to `staleTime` (5s, main.tsx) after the void.
+        queryClient.invalidateQueries({ queryKey: shiftReportKey }),
       ])
       onClose()
     },
@@ -62,7 +65,7 @@ export function VoidDialog({ order, onClose }: { order: OrderDetailDto; onClose:
         <h2>{TH.voidTitle(order.receiptNo)}</h2>
         <label>
           {TH.voidReason}
-          <input data-testid="void-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input data-testid="void-reason" maxLength={REASON_MAX_LENGTH} value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
         <div className="choices">
           {TH.voidReasonPresets.map((text, i) => (

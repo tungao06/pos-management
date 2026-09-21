@@ -9,7 +9,7 @@ import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { getSetting, PROMPTPAY_SETTING_KEY } from './setup'
-import type { CommitSaleInput, CommitSaleResult } from './types'
+import { REASON_MAX_LENGTH, type CommitSaleInput, type CommitSaleResult } from './types'
 
 async function lastReceiptNo(db: RemoteDb, deviceId: string): Promise<string | null> {
   const row = await db
@@ -91,6 +91,7 @@ export async function commitSale(db: RemoteDb, deps: ApiDeps, input: CommitSaleI
   if (discount !== null && (!Number.isSafeInteger(discount.amountSatang) || discount.amountSatang <= 0 || discount.reason === '')) {
     throw new PosError('BAD_INPUT', 'a discount needs a positive whole satang amount and a reason')
   }
+  if (discount !== null && discount.reason.length > REASON_MAX_LENGTH) throw new PosError('BAD_INPUT', `a reason is at most ${REASON_MAX_LENGTH} characters`)
   const device = await requireDevice(db)
   const actor = await db.select().from(s.user).where(eq(s.user.id, input.actorUserId)).get()
   if (!actor || !actor.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${input.actorUserId}`)

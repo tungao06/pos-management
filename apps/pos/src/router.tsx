@@ -1,6 +1,8 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { RequireSession } from './app/guards'
+import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
+import { CloseShiftScreen } from './screens/CloseShiftScreen'
 import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
 import { LoginScreen } from './screens/LoginScreen'
@@ -10,6 +12,9 @@ import { OrdersScreen } from './screens/OrdersScreen'
 import { QrPayScreen } from './screens/QrPayScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
+import { ShiftScreen } from './screens/ShiftScreen'
+import { ZListScreen } from './screens/ZListScreen'
+import { ZReportScreen } from './screens/ZReportScreen'
 import { BrandBar } from './ui/BrandBar'
 
 // Root layout: the brand bar (D44) above every screen.
@@ -91,6 +96,53 @@ const orderDetailRoute = createRoute({
   ),
 })
 
+// แผน 3b: X report / close shift / Z / backup
+const backupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/backup',
+  component: () => (
+    <RequireSession>
+      <BackupScreen />
+    </RequireSession>
+  ),
+})
+const zListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/z',
+  component: () => (
+    <RequireSession>
+      <ZListScreen />
+    </RequireSession>
+  ),
+})
+const zReportRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/z/$shiftId',
+  component: () => (
+    <RequireSession>
+      <ZReportScreen />
+    </RequireSession>
+  ),
+})
+const shiftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/shift',
+  component: () => (
+    <RequireSession>
+      <ShiftScreen />
+    </RequireSession>
+  ),
+})
+const closeShiftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/shift/close',
+  component: () => (
+    <RequireSession>
+      <CloseShiftScreen />
+    </RequireSession>
+  ),
+})
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
@@ -102,6 +154,11 @@ export const routeTree = rootRoute.addChildren([
   doneRoute,
   ordersRoute,
   orderDetailRoute,
+  backupRoute,
+  zListRoute,
+  zReportRoute,
+  shiftRoute,
+  closeShiftRoute,
 ])
 
 export const router = createRouter({ routeTree })

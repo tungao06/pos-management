@@ -1,4 +1,5 @@
 import { useState, type JSX } from 'react'
+import { REASON_MAX_LENGTH } from '../api/types'
 import { useCart } from '../app/cart-context'
 import { cartSubtotalSatang } from '../state/cart'
 import { parseBahtInput } from '../ui/format'
@@ -30,7 +31,7 @@ export function DiscountDialog({ onClose }: { onClose: () => void }): JSX.Elemen
         </label>
         <label>
           {TH.discountReason}
-          <input data-testid="discount-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <input data-testid="discount-reason" maxLength={REASON_MAX_LENGTH} value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
         {error !== null && (
           <p role="alert" className="error">
