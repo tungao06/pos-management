@@ -29,6 +29,16 @@ export function rebuildCostState(movements: readonly { qtyMilli: number; unitCos
   return movements.reduce(applyMovement, initialCostState(standardCostUsat))
 }
 
+/**
+ * `qtyMilli` × `scaleBp` / 10,000, rounded once half away from zero (spec §3.3 scale_bp: 10,000 = one batch) — a
+ * component's need and the standard yield of a scaled batch (the produce screen's default yield, spec §5).
+ */
+export function scaleQtyMilli(qtyMilli: number, scaleBp: number): number {
+  assertSafeInt(qtyMilli, 'qtyMilli')
+  assertSafeInt(scaleBp, 'scaleBp')
+  return Number(roundDivBig(BigInt(qtyMilli) * BigInt(scaleBp), 10_000n))
+}
+
 export function productionMovements(
   bom: Bom,
   scaleBp: number,
@@ -44,7 +54,7 @@ export function productionMovements(
   let totalMilliUsat = 0n
   const outs: MovementDraft[] = []
   for (const line of bom.lines) {
-    const qty = Number(roundDivBig(BigInt(line.qtyMilli) * BigInt(scaleBp), 10_000n))
+    const qty = scaleQtyMilli(line.qtyMilli, scaleBp)
     if (qty === 0) continue
     const unitCostUsat = costOf(line.itemId)
     totalMilliUsat += BigInt(qty) * BigInt(unitCostUsat)

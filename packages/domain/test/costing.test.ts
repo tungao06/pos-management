@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { EMPTY_COST_STATE, applyMovement, initialCostState, productionMovements, rebuildCostState } from '../src/stock/costing.js'
+import { EMPTY_COST_STATE, applyMovement, initialCostState, productionMovements, rebuildCostState, scaleQtyMilli } from '../src/stock/costing.js'
 import { costSatang } from '../src/money.js'
 import type { Bom } from '../src/stock/catalog.js'
 import { milliArb, usatArb } from './arb.js'
@@ -86,5 +86,14 @@ describe('productionMovements', () => {
   it('rejects non-positive yield or scale', () => {
     expect(() => productionMovements(thaiBase, 0, 1, costOf, 'b')).toThrow(RangeError)
     expect(() => productionMovements(thaiBase, 10_000, 0, costOf, 'b')).toThrow(RangeError)
+  })
+})
+
+describe('scaleQtyMilli', () => {
+  it('scales by basis points, rounding once (10000 bp = one batch)', () => {
+    expect(scaleQtyMilli(3_000_000, 10_000)).toBe(3_000_000)
+    expect(scaleQtyMilli(3_000_000, 5_000)).toBe(1_500_000)
+    expect(scaleQtyMilli(490_000, 15_000)).toBe(735_000)
+    expect(scaleQtyMilli(1, 5_000)).toBe(1) // 0.5 → 1 (half away from zero)
   })
 })
