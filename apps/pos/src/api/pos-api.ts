@@ -15,6 +15,7 @@ import { createSerialQueue } from './serial'
 import { setupShop } from './setup'
 import { openShift, quickOpenShift } from './shift'
 import { shiftReport } from './shift-report'
+import { closeStockCount, getOpenStockCount, removeCountLine, saveCountLine, startStockCount } from './stock-count'
 import { stockOverview } from './stock-overview'
 import type { PosApi } from './types'
 import { voidOrder } from './void'
@@ -45,5 +46,10 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     produceBatch: (input) => serial(() => produceBatch(db, deps, input)),
     adjustStock: (input) => serial(() => adjustStock(db, deps, input)),
     discardBase: (input) => serial(() => discardBase(db, deps, input)),
+    startStockCount: (actorUserId) => serial(() => startStockCount(db, deps, actorUserId)),
+    getOpenStockCount: () => serial(() => getOpenStockCount(db)),
+    saveCountLine: (input) => serial(() => saveCountLine(db, deps, input)),
+    removeCountLine: (input) => serial(() => removeCountLine(db, input)),
+    closeStockCount: (input) => serial(() => closeStockCount(db, deps, input)),
   }
 }

@@ -1,6 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import * as s from '@dayo/db-schema/sqlite'
-import type { TestApi } from './db'
+import type { StockCountDto } from '../../src/api/types'
+import type { ReadyApi, TestApi } from './db'
 
 /** Seed item id by its code (ids are deterministic seed ids, plan 2). */
 export async function itemId(t: TestApi, code: string): Promise<string> {
@@ -38,4 +39,16 @@ export async function movementsOf(t: TestApi, refType: string, refId: string): P
 /** Outbox idempotency keys, in insert order. */
 export async function outboxKeys(t: TestApi): Promise<string[]> {
   return (await t.db.select({ k: s.outbox.idempotencyKey }).from(s.outbox).all()).map((r) => r.k)
+}
+
+/**
+ * Q4-13 · D30: opens and closes the shop's opening count — every tracked item on the stock page, at `counted`
+ * (code → use-unit milli) or 0. Returns the closed count.
+ */
+export async function openingCount(t: ReadyApi, counted: Record<string, number> = {}): Promise<StockCountDto> {
+  const c = await t.api.startStockCount(t.owner.id)
+  for (const i of (await t.api.stockOverview()).items) {
+    await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: i.itemId, purchaseUnitId: null, countedUnitsMilli: counted[i.code] ?? 0 })
+  }
+  return t.api.closeStockCount({ actorUserId: t.owner.id, countId: c.id })
 }

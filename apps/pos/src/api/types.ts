@@ -278,6 +278,36 @@ export type StockAdjustmentDto = {
   createdAt: string
 }
 
+/** A counted line of the open stock count (spec §3.3 stock_count_line) — `expectedUseMilli` frozen when it was counted (T4-2). */
+export type StockCountLineDto = {
+  itemId: string
+  code: string
+  name: string
+  useUnit: UseUnit
+  purchaseUnitId: string | null
+  unitName: string
+  countedUnitsMilli: number
+  countedUseMilli: number
+  expectedUseMilli: number
+  varianceUseMilli: number
+  varianceSatang: number
+  /** No earlier closed count has this item: closing writes its opening balance, OPENING (D30 · Q4-13) — plan 7 leaves these lines out of the variance report. */
+  opening: boolean
+}
+export type StockCountDto = {
+  id: string
+  businessDate: string
+  status: 'open' | 'closed'
+  createdBy: string
+  createdAt: string
+  closedAt: string | null
+  lines: StockCountLineDto[]
+  totalVarianceSatang: number
+}
+export type SaveCountLineInput = { actorUserId: string; countId: string; itemId: string; purchaseUnitId: string | null; countedUnitsMilli: number }
+export type RemoveCountLineInput = { actorUserId: string; countId: string; itemId: string }
+export type CloseStockCountInput = { actorUserId: string; countId: string }
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -303,6 +333,11 @@ export interface PosApi {
   produceBatch(input: ProduceBatchInput): Promise<ProductionBatchDto>
   adjustStock(input: AdjustStockInput): Promise<StockAdjustmentDto>
   discardBase(input: DiscardBaseInput): Promise<StockAdjustmentDto>
+  startStockCount(actorUserId: string): Promise<StockCountDto>
+  getOpenStockCount(): Promise<StockCountDto | null>
+  saveCountLine(input: SaveCountLineInput): Promise<StockCountDto>
+  removeCountLine(input: RemoveCountLineInput): Promise<StockCountDto>
+  closeStockCount(input: CloseStockCountInput): Promise<StockCountDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -330,6 +365,11 @@ export const POS_API_METHODS = [
   'produceBatch',
   'adjustStock',
   'discardBase',
+  'startStockCount',
+  'getOpenStockCount',
+  'saveCountLine',
+  'removeCountLine',
+  'closeStockCount',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
