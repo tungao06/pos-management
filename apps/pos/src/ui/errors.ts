@@ -25,6 +25,9 @@ const MESSAGES: Record<PosErrorCode, string> = {
   Z_NOT_FOUND: TH.errZNotFound,
   BACKUP_FAILED: TH.errBackupFailed,
   Z_CHAIN_BROKEN: TH.errZChainBroken,
+  PRICE_JUMP: TH.errPriceJump,
+  STOCK_COUNT_NOT_OPEN: TH.errStockCountNotOpen,
+  OPENING_COUNT_INCOMPLETE: TH.errOpeningCountIncomplete,
 }
 
 /**

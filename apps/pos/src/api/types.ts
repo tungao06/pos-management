@@ -1,5 +1,5 @@
-import type { CashMovementKind, UserRole } from '@dayo/contracts'
-import type { CashCountLine, CashInputs, SalesSummary, ZSnapshot, ZVoid } from '@dayo/domain'
+import type { AdjustReason, CashMovementKind, MovementKind, UseUnit, UserRole } from '@dayo/contracts'
+import type { CashCountLine, CashInputs, ExpiryState, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -173,6 +173,56 @@ export type BackupFileDto = { fileName: string; bytes: Uint8Array; createdAt: st
 /** The owner saw the exported file in Downloads (review I-4) — echoes the BackupFileDto without its bytes. */
 export type ConfirmBackupInput = { actorUserId: string; fileName: string; byteLength: number; createdAt: string; lastZId: string | null }
 
+// ---- แผน 4: สต็อก ----
+
+export type PurchaseUnitDto = { id: string; name: string; qtyPerUnitMilli: number; isDefault: boolean }
+export type BomLineDto = { itemId: string; code: string; name: string; useUnit: UseUnit; qtyMilli: number }
+/** The latest production batch of a base — its expiry stands for the whole lump on hand (spec §4.6, no FIFO). */
+export type BaseBatchDto = { batchId: string; createdAt: string; expiresAt: string | null; expiry: ExpiryState }
+export type StockItemDto = {
+  itemId: string
+  code: string
+  name: string
+  kind: 'raw' | 'prepared'
+  category: string
+  useUnit: UseUnit
+  onHandMilli: number
+  avgCostUsat: number
+  /** What a received price is compared with for PRICE_JUMP: the last purchase price, else the standard cost (Q4-15). */
+  priceCheckUsat: number
+  valueSatang: number
+  reorderPointMilli: number
+  status: StockStatus
+  /** raw: low / out / negative · base: negative or expired (Q4-10) — what the sell-screen badge counts. */
+  alert: boolean
+  /** In the weekly "ชุดนับหลัก" (Q4-2 · D20). */
+  isKeyCount: boolean
+  units: PurchaseUnitDto[]
+  shelfLifeHours: number | null
+  /** Bases only. */
+  latestBatch: BaseBatchDto | null
+  /** Bases only: the current BOM (spec §3.3) — what the produce screen shows. */
+  bom: { yieldMilli: number; lines: BomLineDto[] } | null
+}
+/** หน้าสต็อก (spec §5): tracked items only (D29), computed live, nothing written. */
+export type StockOverviewDto = {
+  generatedAt: string
+  /** Where stock work typed now would land (Q4-1). */
+  businessDate: string
+  items: StockItemDto[]
+  totalValueSatang: number
+  alertCount: number
+  /** Codes of bases whose latest batch is past its expiry with stock left (spec §4.6). */
+  expiredBaseCodes: string[]
+  /** closed_at of the last count that had at least one line, or null. */
+  lastCountAt: string | null
+  /** No count for COUNT_DUE_DAYS days, or never (Q4-12 · D20). */
+  countDue: boolean
+  openCountId: string | null
+  /** No count with lines has closed yet: the next one is the opening count and must cover every item (Q4-13 · D30). */
+  openingCountPending: boolean
+}
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -193,6 +243,7 @@ export interface PosApi {
   getZReport(shiftId: string): Promise<ZReportDto>
   exportBackup(actorUserId: string): Promise<BackupFileDto>
   confirmBackupSaved(input: ConfirmBackupInput): Promise<void>
+  stockOverview(): Promise<StockOverviewDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -215,6 +266,7 @@ export const POS_API_METHODS = [
   'getZReport',
   'exportBackup',
   'confirmBackupSaved',
+  'stockOverview',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>

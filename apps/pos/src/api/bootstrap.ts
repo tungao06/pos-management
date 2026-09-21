@@ -39,16 +39,21 @@ export async function listActiveUsers(db: RemoteDb): Promise<UserDto[]> {
 /**
  * spec §12 "ยังไม่ส่ง N รายการ" (D50 Q3-26): counts bills, not outbox rows. Every pending row that belongs to an order
  * (the order row itself, its lines, discount, payment, events, `refType = 'order'` stock movements and the VOID_REFUND
- * cash movement) counts once per order; any other record (a shift, a paid-in/out, a non-sale stock movement) counts
- * once per row id. Only status pending — plan 2 M8; dead rows are shown elsewhere by plan 5.
+ * cash movement) counts once per order. Plan 4 (T4-8) counts stock documents the same way: a purchase, a production
+ * batch, a stock count or a stock adjustment is one item with its lines and movements (a movement counts under its
+ * `refType:refId`). Any other record (a shift, a paid-in/out — including the PAID_OUT of a receipt paid from the
+ * drawer, which is a cash record of its own) counts once per row id. Only status pending — plan 2 M8; dead rows are
+ * shown elsewhere by plan 5.
  */
 export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
   const rows = await db.values<[number]>(sql`
     select count(distinct case
       when table_name = 'order' then 'order:' || json_extract(row_json, '$.id')
       when table_name in ('order_line', 'payment', 'discount', 'order_event') then 'order:' || json_extract(row_json, '$.orderId')
-      when table_name = 'stock_movement' and json_extract(row_json, '$.refType') = 'order' then 'order:' || json_extract(row_json, '$.refId')
+      when table_name = 'stock_movement' then json_extract(row_json, '$.refType') || ':' || json_extract(row_json, '$.refId')
       when table_name = 'cash_movement' and json_extract(row_json, '$.orderId') is not null then 'order:' || json_extract(row_json, '$.orderId')
+      when table_name = 'purchase_line' then 'purchase:' || json_extract(row_json, '$.purchaseId')
+      when table_name = 'stock_count_line' then 'stock_count:' || json_extract(row_json, '$.countId')
       else table_name || ':' || json_extract(row_json, '$.id')
     end)
     from outbox where status = 'pending'`)

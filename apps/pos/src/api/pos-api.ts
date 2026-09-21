@@ -12,6 +12,7 @@ import { createSerialQueue } from './serial'
 import { setupShop } from './setup'
 import { openShift, quickOpenShift } from './shift'
 import { shiftReport } from './shift-report'
+import { stockOverview } from './stock-overview'
 import type { PosApi } from './types'
 import { voidOrder } from './void'
 
@@ -36,5 +37,6 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     getZReport: (shiftId) => serial(() => getZReport(db, shiftId)),
     exportBackup: (actorUserId) => serial(() => exportBackup(db, deps, actorUserId)),
     confirmBackupSaved: (input) => serial(() => confirmBackupSaved(db, deps, input)),
+    stockOverview: () => serial(() => stockOverview(db, deps)),
   }
 }

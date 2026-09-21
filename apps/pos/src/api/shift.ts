@@ -11,7 +11,7 @@ import type { OpenShiftInput, QuickOpenShiftInput, ShiftDto } from './types'
 /** audit_log action that marks a "เปิดกะด่วน" (spec §4.8 · plan 3 M18 · Q3b-10 · D52). */
 export const QUICK_OPEN_ACTION = 'quick_open'
 
-async function requireActiveUser(db: RemoteDb, userId: string): Promise<typeof s.user.$inferSelect> {
+export async function requireActiveUser(db: RemoteDb, userId: string): Promise<typeof s.user.$inferSelect> {
   const user = await db.select().from(s.user).where(eq(s.user.id, userId)).get()
   if (!user || !user.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${userId}`)
   return user
