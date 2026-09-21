@@ -1,4 +1,5 @@
 import type { RemoteDb } from '@dayo/db-schema/browser'
+import { adjustStock, discardBase } from './adjust'
 import { login } from './auth'
 import { confirmBackupSaved, exportBackup } from './backup'
 import { bootstrap } from './bootstrap'
@@ -42,5 +43,7 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     stockOverview: () => serial(() => stockOverview(db, deps)),
     receivePurchase: (input) => serial(() => receivePurchase(db, deps, input)),
     produceBatch: (input) => serial(() => produceBatch(db, deps, input)),
+    adjustStock: (input) => serial(() => adjustStock(db, deps, input)),
+    discardBase: (input) => serial(() => discardBase(db, deps, input)),
   }
 }

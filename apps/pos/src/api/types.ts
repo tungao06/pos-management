@@ -262,6 +262,22 @@ export type ProductionBatchDto = {
   components: { itemId: string; code: string; qtyMilli: number }[]
 }
 
+/** A stock-out line typed by item: `qtyUnitsMilli` of `purchaseUnitId` (null = the use unit). */
+export type AdjustItemInput = { itemId: string; purchaseUnitId: string | null; qtyUnitsMilli: number }
+/** A stock-out by whole drinks through their current recipe (D50 Q3-20 แจก/ชดเชย, Q4-8). */
+export type AdjustDrinkInput = { variantId: string; sweetnessId: string; qty: number }
+export type AdjustStockInput = { actorUserId: string; reasonCode: AdjustReason; reason: string; items: AdjustItemInput[]; drinks: AdjustDrinkInput[] }
+/** ทิ้งเบสที่เหลือทั้งหมด (spec §4.6): EXPIRED when its latest batch has expired, WASTE otherwise. */
+export type DiscardBaseInput = { actorUserId: string; itemId: string }
+export type StockAdjustmentDto = {
+  id: string
+  businessDate: string
+  reasonCode: AdjustReason
+  reason: string
+  movements: { itemId: string; code: string; kind: MovementKind; qtyMilli: number }[]
+  createdAt: string
+}
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -285,6 +301,8 @@ export interface PosApi {
   stockOverview(): Promise<StockOverviewDto>
   receivePurchase(input: ReceivePurchaseInput): Promise<PurchaseDto>
   produceBatch(input: ProduceBatchInput): Promise<ProductionBatchDto>
+  adjustStock(input: AdjustStockInput): Promise<StockAdjustmentDto>
+  discardBase(input: DiscardBaseInput): Promise<StockAdjustmentDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -310,6 +328,8 @@ export const POS_API_METHODS = [
   'stockOverview',
   'receivePurchase',
   'produceBatch',
+  'adjustStock',
+  'discardBase',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
