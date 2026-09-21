@@ -39,6 +39,10 @@ test('blind count from the sell screen → variance reason → owner PIN → Z w
   await page.getByTestId('count-50000').fill('1') // ฿500
   await page.getByTestId('count-2000').fill('2') // ฿40 → ฿540 counted
   await expect(page.getByTestId('close-counted')).toHaveText('฿540')
+  // review m-3: the blind count (Q3b-3 · D52) must hide the expected cash figure everywhere on the page before
+  // "นับเสร็จ" — not merely from the dedicated `close-expected` test id (M9b: rendering it in some other element
+  // would still pass a check scoped to that id alone).
+  await expect(page.locator('body')).not.toContainText('฿570')
   await page.getByTestId('count-done').click()
   await expect(page.getByTestId('close-expected')).toHaveText('฿570') // 500 + 90 − 20
   await expect(page.getByTestId('close-variance')).toHaveText('-฿30')

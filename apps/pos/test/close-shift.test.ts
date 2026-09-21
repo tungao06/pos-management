@@ -579,6 +579,38 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     expect(z5.snapshot).toMatchObject({ zNo: 4, chainWarning: null })
   })
 
+  it("a middle Z row deleted (z2 of three) is caught by the last Z's own zNo vs the row count, not silently accepted (review I-1)", async () => {
+    const t = await openReadyApi()
+    const { z2, z3 } = await closeThreeZs(t)
+    t.raw.exec('DROP TRIGGER z_report_no_delete')
+    t.raw.prepare(`delete from z_report where shift_id = ?`).run(z2.shiftId) // z1 and z3 (hash-valid, untouched) remain
+
+    t.clock.set('2026-09-20T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    const next = await closeInput(t, { countLines: [] })
+    const before = counts(t)
+    // z3's own hash and grand total are fine, but its stored zNo (3) no longer equals the surviving row count (2) —
+    // that mismatch is the *only* thing that catches a deleted middle row (review I-1: deletedShiftIds only covers
+    // shifts closed after the last Z, never a gap in the middle of the chain).
+    await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
+    expect(counts(t)).toEqual(before)
+
+    const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    expect(z4.snapshot).toMatchObject({
+      zNo: 3, // z1 and z3 remain (row count 2) + 1
+      grandTotalSatang: 4_000 + 5_000 + 5_000, // z1's ฿40 + z3's ฿50 (both intact) + this shift's ฿50
+      chainWarning: { brokenShiftId: z3.shiftId, recomputedGrandTotalSatang: 9_000 },
+    })
+    // z2's slot (zNo 2) is the only surviving trace that a row was ever deleted from the middle of the chain
+    expect(z4.snapshot!.chainWarning!.missingZNos).toEqual([2])
+
+    t.clock.set('2026-09-21T02:00:00.000Z')
+    await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
+    const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
+    expect(z5.snapshot).toMatchObject({ zNo: 4, chainWarning: null })
+  })
+
   it('a snapshot that is not readable JSON, or is missing sales, is flagged rather than crashing list/get (review I-1)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
@@ -628,6 +660,32 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     await expect(u.api.closeShift(await closeInput(u, { countLines: over }))).rejects.toThrow(/^VARIANCE_REASON_REQUIRED: /)
     const zOver = await u.api.closeShift(await closeInput(u, { countLines: over, varianceReason: 'เกินมา' }))
     expect(zOver.snapshot).toMatchObject({ cashVarianceSatang: 2_100, varianceReason: 'เกินมา' })
+  })
+
+  it('an over-drawer paid-out that pushes expected cash negative still closes, with the variance it causes (review m-4 · Q3b-16 · D54)', async () => {
+    const t = await openReadyApi() // float ฿500
+    // a paid-out larger than the drawer (Q3b-14's over-drawer confirm is a client-side warning only — recordCashMovement
+    // itself never blocks, Q3b-16): ฿500 float − ฿550 paid out → expected −฿50
+    await t.api.recordCashMovement({ actorUserId: t.owner.id, kind: 'PAID_OUT', amountSatang: 55_000, reason: 'เบิกเกินลิ้นชัก' })
+    const report = await t.api.shiftReport()
+    expect(report.expectedCashSatang).toBe(-5_000)
+
+    const before = counts(t)
+    // ฿0 counted vs −฿50 expected → +฿50 variance, above the ฿20 alert threshold: needs a reason, same as any other close
+    await expect(t.api.closeShift(await closeInput(t, { countLines: [] }))).rejects.toThrow(/^VARIANCE_REASON_REQUIRED: /)
+    expect(counts(t)).toEqual(before)
+
+    const z = await t.api.closeShift(await closeInput(t, { countLines: [], varianceReason: 'เบิกเกินลิ้นชัก' }))
+    expect(z.hashOk).toBe(true)
+    expect(z.hash).toBe(zReportHash(z.snapshot)) // the negative figure is still hash-frozen correctly, not merely accepted
+    expect(z.snapshot).toMatchObject({
+      cash: { openingFloatSatang: 50_000, paidOutSatang: 55_000 },
+      countedCashSatang: 0,
+      expectedCashSatang: -5_000,
+      cashVarianceSatang: 5_000, // 0 − (−5,000)
+      varianceReason: 'เบิกเกินลิ้นชัก',
+      chainWarning: null,
+    })
   })
 
   it('a tampered middle Z is flagged in the list without blocking a later close (m-4)', async () => {
