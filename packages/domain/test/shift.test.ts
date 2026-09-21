@@ -318,7 +318,7 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
       netSalesSatang: fc.option(wide, { nil: null }),
     })
     fc.assert(
-      fc.property(fc.array(entryArb, { maxLength: 15 }), (entries) => {
+      fc.property(fc.array(entryArb, { maxLength: 15 }), fc.option(fc.oneof(fc.constant(0), fc.integer({ min: 0, max: 20 }), fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER })), { nil: undefined }), (entries, zNoGap) => {
         const chain = recomputeZChainLenient(entries)
         const chainWarning: ZChainWarning = {
           brokenShiftId: 's-broken',
@@ -332,6 +332,7 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
           missingZNosTruncated: chain.missingZNosTruncated,
           deletedShiftIds: [],
           deletedShiftIdsTruncated: false,
+          ...(zNoGap === undefined ? {} : { zNoGap }), // 2026-09-21: absent (an older warning), 0 (lenient), or any recorded gap
         }
         const currentShift: ZInput = {
           shiftId: 's-current', businessDate: '2026-09-17', deviceId: 'dev-A', zNo: chain.zNo + 1, openedAt: '2026-09-17T01:00:00.000Z', openedBy: 'u1', openedQuick: false,
@@ -575,6 +576,26 @@ describe('buildZReport', () => {
     }
     const z = buildZReport({ ...input, zNo: 1, chainWarning: w }, { zNo: 0, grandTotalSatang: 0 })
     expect(z.snapshot).toMatchObject({ zNo: 1, grandTotalSatang: 14_500, chainWarning: w })
+  })
+
+  it('a chain warning may record zNoGap, the Z rows known missing at the acknowledgement (2026-09-21 · D55 / review R4-1, R4-2): a safe integer >= 0 when present; an older warning without it still builds and hashes as before', () => {
+    const w: ZChainWarning = {
+      brokenShiftId: 's3', storedGrandTotalSatang: 14_000, recomputedGrandTotalSatang: 4_000, acknowledgedBy: 'u1', unreadableZs: [],
+      duplicateZNos: [], duplicateZNosTruncated: false, missingZNos: [2], missingZNosTruncated: false, deletedShiftIds: [], deletedShiftIdsTruncated: false,
+    }
+    const legacy = buildZReport({ ...input, zNo: 2, chainWarning: w }, { zNo: 1, grandTotalSatang: 4_000 })
+    expect(legacy.snapshot.chainWarning).toEqual(w)
+    expect('zNoGap' in legacy.snapshot.chainWarning!).toBe(false) // an old snapshot's shape (and so its hash) is unchanged
+    expect(legacy.hash).toBe(zReportHash(legacy.snapshot))
+    for (const zNoGap of [0, 1, 7]) {
+      const z = buildZReport({ ...input, zNo: 2, chainWarning: { ...w, zNoGap } }, { zNo: 1, grandTotalSatang: 4_000 })
+      expect(z.snapshot.chainWarning!.zNoGap).toBe(zNoGap)
+      expect(z.hash).toBe(zReportHash(z.snapshot))
+      expect(z.hash).not.toBe(legacy.hash) // the recorded gap is part of the hashed snapshot
+    }
+    for (const bad of [-1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, '1', null]) {
+      expect(() => buildZReport({ ...input, zNo: 2, chainWarning: { ...w, zNoGap: bad as unknown as number } }, { zNo: 1, grandTotalSatang: 4_000 })).toThrow(RangeError)
+    }
   })
 
   it('refuses inconsistent inputs (Plan 1 notes §4)', () => {

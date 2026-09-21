@@ -236,6 +236,16 @@ export type ZChainWarning = {
   deletedShiftIds: string[]
   /** True when `deletedShiftIds` left some names out because there were more than `MAX_ZNO_LIST_LENGTH` (review R2-2/R2-4). */
   deletedShiftIdsTruncated: boolean
+  /**
+   * 2026-09-21 · D55 (review R4-1, R4-2): how many Z rows were known missing when this warning was acknowledged —
+   * this Z's own `zNo` minus the device's Z row count including this Z. 0 on the lenient path (it renumbers from
+   * the row count); `last.zNo − row count` when chaining from a trustworthy last Z past a deleted middle Z. Every
+   * clean Z afterwards grows `zNo` and the row count by one together, so the gap stays the same until another row
+   * is deleted: `closeShift` compares the current gap against the most recent recorded one, instead of re-asking
+   * for the same acknowledged gap forever or skipping the check. Optional so a warning frozen before this field
+   * existed keeps its shape and hash; a safe integer >= 0 when present.
+   */
+  zNoGap?: number
 }
 
 export type ZInput = {
@@ -480,6 +490,7 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     for (const id of w.deletedShiftIds) {
       if (typeof id !== 'string' || id.trim() === '') throw new RangeError('chainWarning.deletedShiftIds entries need a non-blank shiftId')
     }
+    if (w.zNoGap !== undefined) assertNonNegInt(w.zNoGap, 'chainWarning.zNoGap') // 2026-09-21 · D55 (review R4-1, R4-2)
   }
   const expected = expectedCashSatang(input.cash)
   assertSafeInt(expected, 'expectedCashSatang') // M-1
