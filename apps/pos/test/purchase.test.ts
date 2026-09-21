@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import type { ReceivePurchaseInput } from '../src/api/types'
@@ -105,5 +106,65 @@ describe('receivePurchase (spec §5 รับของเข้า · D19 · §4
     await expect(t.api.receivePurchase(input(t, [tea], { actorUserId: 'nobody' }))).rejects.toThrow(/^BAD_INPUT: /)
     expect(await t.db.select().from(s.purchase).all()).toEqual([])
     expect(await t.db.select().from(s.stockMovement).all()).toEqual([])
+  })
+
+  it('an inactive item is refused with BAD_INPUT and writes nothing, whether or not it still holds stock (review I-1)', async () => {
+    const t = await openReadyApi()
+    const id = await itemId(t, 'RM-TEA-01')
+
+    // no stock yet
+    t.raw.prepare('update item set is_active = 0 where id = ?').run(id)
+    await expect(t.api.receivePurchase(input(t, [await teaBags(t, 1_000, 7_700)]))).rejects.toThrow(/^BAD_INPUT: /)
+    expect(await t.db.select().from(s.purchase).all()).toEqual([])
+    expect(await t.db.select().from(s.stockMovement).all()).toEqual([])
+
+    // reactivate, buy some stock, then deactivate again — refused just the same even though on-hand is now > 0
+    t.raw.prepare('update item set is_active = 1 where id = ?').run(id)
+    await t.api.receivePurchase(input(t, [await teaBags(t, 1_000, 7_700)]))
+    t.raw.prepare('update item set is_active = 0 where id = ?').run(id)
+    await expect(t.api.receivePurchase(input(t, [await teaBags(t, 1_000, 7_700)]))).rejects.toThrow(/^BAD_INPUT: /)
+    expect(await t.db.select().from(s.purchase).all()).toHaveLength(1) // only the receipt made while active
+  })
+
+  it('a wholly free receipt paid from the drawer is a no-op: no PAID_OUT, no shift required (review m-1)', async () => {
+    const u = await openTestApi()
+    await u.api.setupShop(TEST_SETUP)
+    const owner = (await u.api.bootstrap()).users[0]!
+    const tea = { itemId: await itemId(u, 'RM-TEA-01'), purchaseUnitId: null, qtyUnitsMilli: 400_000, lineTotalSatang: 0 }
+    // no shift is open, yet paidFromDrawer + a wholly free line succeeds — nothing to pay out
+    const p = await u.api.receivePurchase({ actorUserId: owner.id, supplier: '', note: '', lines: [tea], paidFromDrawer: true, acceptPriceJump: true })
+    expect(p.totalSatang).toBe(0)
+    expect(p.cashMovementId).toBeNull()
+    expect(await u.db.select().from(s.cashMovement).all()).toEqual([])
+  })
+
+  it('needs an open shift before a price jump is even considered, when paying from the drawer (review m-2)', async () => {
+    const u = await openTestApi()
+    await u.api.setupShop(TEST_SETUP)
+    const owner = (await u.api.bootstrap()).users[0]!
+    const tea = { itemId: await itemId(u, 'RM-TEA-01'), purchaseUnitId: null, qtyUnitsMilli: 400_000, lineTotalSatang: 8_500 } // +10.4% vs standard: a price jump
+    // if PRICE_JUMP ran first, this would fail with PRICE_JUMP instead
+    await expect(u.api.receivePurchase({ actorUserId: owner.id, supplier: '', note: '', lines: [tea], paidFromDrawer: true, acceptPriceJump: false })).rejects.toThrow(/^NO_OPEN_SHIFT: /)
+    expect(await u.db.select().from(s.purchase).all()).toEqual([])
+  })
+
+  it('the PRICE_JUMP detail lists each item code once, even with two jumping lines of the same item (review m-4)', async () => {
+    const t = await openReadyApi()
+    const line = await teaBags(t, 1_000, 8_500) // +10.4% vs standard: a jump
+    await expect(t.api.receivePurchase(input(t, [line, line]))).rejects.toThrow(/^PRICE_JUMP: RM-TEA-01$/)
+  })
+
+  it('cuts the PAID_OUT reason on code points, never inside a surrogate pair (review m-5)', async () => {
+    const t = await openReadyApi()
+    // 195 UTF-16 units (192 BMP chars + a 2-unit emoji + 1 BMP char), under the 200-char supplier cap; combined
+    // with the "รับของ " prefix (7 units) the raw reason is 202 units, so it must be cut — right through the emoji
+    // if the cut is done on UTF-16 units rather than code points.
+    const supplier = `${'ก'.repeat(192)}🎉ข`
+    const p = await t.api.receivePurchase(input(t, [await teaBags(t, 1_000, 7_700)], { supplier, paidFromDrawer: true }))
+    const cash = await t.db.select().from(s.cashMovement).where(eq(s.cashMovement.id, p.cashMovementId!)).get()
+    const expectedReason = Array.from(`รับของ ${supplier}`).slice(0, 200).join('')
+    expect(cash!.reason).toBe(expectedReason)
+    expect(cash!.reason!.endsWith('🎉')).toBe(true) // the emoji survives whole — never a lone surrogate
+    expect(Array.from(cash!.reason!).length).toBe(200)
   })
 })

@@ -13,10 +13,16 @@ import { REASON_MAX_LENGTH, type PurchaseDto, type ReceivePurchaseInput } from '
 
 /**
  * รับของเข้า (spec §5, D19): one receipt = purchase + purchase_line + PURCHASE movements (moving average, spec §4.4) +
- * item_cost_state + outbox, in one transaction. Tracked raw items only (D29). A unit cost more than 10% off the item's
- * last purchase price (or its standard cost if never bought — Q4-15) is refused with PRICE_JUMP until the person
- * confirms it (D47 item 3). With `paidFromDrawer` the total also leaves the drawer as a PAID_OUT of the open shift, in
- * the same transaction, through the same cap as a manual paid-out (`insertManualCashMovement` — Q4-6).
+ * item_cost_state + outbox, in one transaction. Tracked raw items only (D29): `requireStockItem` is called with no
+ * options, so an inactive item is refused whatever its stock (review I-1, Task 4 fix round 1 — receiving never opts
+ * into the Task 3 `allowInactiveWithStock` escape hatch). A unit cost more than 10% off the item's last purchase
+ * price (or its standard cost if never bought — Q4-15) is refused with PRICE_JUMP until the person confirms it
+ * (D47 item 3); the codes in its detail are de-duplicated (review m-4). With `paidFromDrawer` and a non-zero total,
+ * the total also leaves the drawer as a PAID_OUT of the open shift, in the same transaction, through the same cap
+ * as a manual paid-out (`insertManualCashMovement` — Q4-6) — checked for an open shift *before* any price jump is
+ * even considered (review m-2), so the person is not asked to confirm a jump only to learn there is no shift to pay
+ * from. A wholly free receipt (`totalSatang === 0`) never touches the drawer at all — nothing to pay out — rather
+ * than fail with a confusing amount error (review m-1).
  */
 export async function receivePurchase(db: RemoteDb, deps: ApiDeps, input: ReceivePurchaseInput): Promise<PurchaseDto> {
   const actor = await requireActiveUser(db, input.actorUserId)
@@ -48,7 +54,8 @@ export async function receivePurchase(db: RemoteDb, deps: ApiDeps, input: Receiv
       const qtyUseMilli = badInputOnRange(() => unitsToUseMilli(l.qtyUnitsMilli, perUnit))
       if (qtyUseMilli <= 0) throw new PosError('BAD_INPUT', `line of ${item.code} rounds to nothing`)
       const unitCostUsat = badInputOnRange(() => purchaseUnitCostUsat(l.lineTotalSatang, qtyUseMilli))
-      if (isPriceJump(unitCostUsat, lastCosts.get(item.id) ?? item.standardCostUsat)) jumps.push(item.code)
+      // m-4 (Task 4 fix round 1): two jumping lines of the same item must not repeat its code in the detail.
+      if (isPriceJump(unitCostUsat, lastCosts.get(item.id) ?? item.standardCostUsat) && !jumps.includes(item.code)) jumps.push(item.code)
       drafts.push({ itemId: item.id, qtyUseMilli, lineTotalSatang: l.lineTotalSatang })
       lineRows.push({
         id: deps.newId(),
@@ -61,14 +68,22 @@ export async function receivePurchase(db: RemoteDb, deps: ApiDeps, input: Receiv
       } satisfies typeof s.purchaseLine.$inferInsert)
       out.push({ itemId: item.id, code: item.code, name: item.name, qtyUseMilli, lineTotalSatang: l.lineTotalSatang, unitCostUsat })
     }
-    if (jumps.length > 0 && !input.acceptPriceJump) throw new PosError('PRICE_JUMP', jumps.join(','))
     const totalSatang = drafts.reduce((a, d) => a + d.lineTotalSatang, 0)
 
+    // m-1 (Task 4 fix round 1): a wholly free receipt pays nothing out — `paidFromDrawer` is then a no-op, not an
+    // error, and no shift is even required for it.
+    const payFromDrawer = input.paidFromDrawer && totalSatang > 0
+    // m-2 (Task 4 fix round 1): the drawer's own requirement (an open shift) is checked before PRICE_JUMP, so a
+    // person with no shift open is not first asked to confirm a price jump for a payment that cannot happen anyway.
+    const shift = payFromDrawer ? await currentOpenShift(tx, device.id) : null
+    if (payFromDrawer && shift === null) throw new PosError('NO_OPEN_SHIFT', 'paying from the drawer needs an open shift')
+
+    if (jumps.length > 0 && !input.acceptPriceJump) throw new PosError('PRICE_JUMP', jumps.join(','))
+
     let cashMovementId: string | null = null
-    if (input.paidFromDrawer) {
-      const shift = await currentOpenShift(tx, device.id)
-      if (shift === null) throw new PosError('NO_OPEN_SHIFT', 'paying from the drawer needs an open shift')
-      const reason = (supplier === '' ? 'รับของ' : `รับของ ${supplier}`).slice(0, REASON_MAX_LENGTH)
+    if (payFromDrawer && shift !== null) {
+      // m-5 (Task 4 fix round 1): cut on code points — never inside a surrogate pair (an emoji supplier name).
+      const reason = truncateCodePoints(supplier === '' ? 'รับของ' : `รับของ ${supplier}`, REASON_MAX_LENGTH)
       const cash = await insertManualCashMovement(tx, deps, { shiftId: shift.id, kind: 'PAID_OUT', amountSatang: totalSatang, reason, actorId: actor.id, at })
       cashMovementId = cash.id
     }
@@ -93,4 +108,13 @@ export async function receivePurchase(db: RemoteDb, deps: ApiDeps, input: Receiv
     await insertMovements(tx, deps, purchaseMovements(drafts, purchaseId), { businessDate, deviceId: device.id, createdBy: actor.id, at }, catalog)
     return { id: purchaseId, businessDate, supplier: purchaseRow.supplier, totalSatang, lines: out, cashMovementId, createdAt: at }
   })
+}
+
+/**
+ * Slices `text` to at most `max` Unicode code points — `Array.from` iterates by code point, so a surrogate pair
+ * (an emoji) is kept whole or dropped whole, never split into a lone surrogate the way `String.slice` would
+ * (review m-5, Task 4 fix round 1).
+ */
+function truncateCodePoints(text: string, max: number): string {
+  return Array.from(text).slice(0, max).join('')
 }
