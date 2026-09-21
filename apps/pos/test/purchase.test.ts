@@ -1,8 +1,10 @@
 import { asc, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
-import { applyMovement, rebuildCostState } from '@dayo/domain'
+import { loadCatalogSqlite } from '@dayo/db-schema/browser'
+import { applyMovement, rebuildCostState, type MovementDraft } from '@dayo/domain'
 import type { ReceivePurchaseInput } from '../src/api/types'
+import { insertMovements } from '../src/db/stock'
 import { openReadyApi, openTestApi, TEST_SETUP, type ReadyApi } from './helpers/db'
 import { defaultUnitId, itemId, movementsOf, outboxKeys, stockOf } from './helpers/stock'
 
@@ -194,6 +196,34 @@ describe('receivePurchase (spec §5 รับของเข้า · D19 · §4
         expect(cache!.asOfMovementId).toBe(rows.at(-1)!.id)
         expect(rebuildCostState(rows, 19_250_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 9_625_000 })
       }
+    })
+
+    it('another item typed between two lines of the same item does not split them: tea, milk, tea still merge', async () => {
+      for (const order of [[7_700, 0], [0, 7_700]]) {
+        const t = await negativeTea()
+        const milk = { itemId: await itemId(t, 'RM-MLK-02'), purchaseUnitId: await defaultUnitId(t, 'RM-MLK-02'), qtyUnitsMilli: 1_000, lineTotalSatang: 3_000 }
+        await t.api.receivePurchase(input(t, [await tea(t, order[0]!), milk, await tea(t, order[1]!)], { acceptPriceJump: true }))
+        expect(await stockOf(t, 'RM-TEA-01')).toEqual({ onHandMilli: 300_000, avgCostUsat: 9_625_000 })
+        expect(await stockOf(t, 'RM-MLK-02')).toEqual({ onHandMilli: 405_000, avgCostUsat: 7_407_407 })
+      }
+    })
+
+    it('a non-positive line of the same item in the same document splits the run: the two sides are not merged', async () => {
+      const t = await negativeTea()
+      const tea01 = await itemId(t, 'RM-TEA-01')
+      const ref = { refType: 'test', refId: 'doc-1' }
+      const drafts: MovementDraft[] = [
+        { itemId: tea01, kind: 'PURCHASE', qtyMilli: 400_000, unitCostUsat: 19_250_000, ...ref }, // −500 → −100 g, avg 19_250_000
+        { itemId: tea01, kind: 'WASTE', qtyMilli: -100_000, unitCostUsat: 19_250_000, ...ref }, // → −200 g
+        { itemId: tea01, kind: 'PURCHASE', qtyMilli: 400_000, unitCostUsat: 0, ...ref }, // at ≤ 0 on its own: avg 0
+      ]
+      await t.db.transaction(async (tx) => {
+        await insertMovements(tx, t.deps, drafts, { businessDate: t.shift.businessDate, deviceId: t.device.id, createdBy: t.owner.id, at: t.clock.now() }, await loadCatalogSqlite(tx))
+      })
+      // merged across the WASTE it would be 9_625_000
+      expect(await stockOf(t, 'RM-TEA-01')).toEqual({ onHandMilli: 200_000, avgCostUsat: 0 })
+      const rows = await t.db.select().from(s.stockMovement).where(eq(s.stockMovement.itemId, tea01)).orderBy(asc(s.stockMovement.id)).all()
+      expect(rebuildCostState(rows, 19_250_000)).toEqual({ onHandMilli: 200_000, avgCostUsat: 0 })
     })
 
     it('a bill with two different items is unaffected: each item is its own one-line receipt', async () => {

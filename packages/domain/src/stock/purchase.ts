@@ -30,7 +30,10 @@ export function purchaseUnitCostUsat(lineTotalSatang: number, qtyUseMilli: numbe
 
 export type PurchaseLineDraft = { itemId: string; qtyUseMilli: number; lineTotalSatang: number }
 
-/** One PURCHASE movement (+qty) per line at the line's own unit cost; the moving average happens in applyMovement (§4.4). */
+/**
+ * One PURCHASE movement (+qty) per line at the line's own unit cost. The moving average happens when the movements
+ * are folded: one bill's lines of the same item count as one receipt in applyInboundGroup (§4.4 · Q4-17 ก · D57).
+ */
 export function purchaseMovements(lines: readonly PurchaseLineDraft[], purchaseId: string): MovementDraft[] {
   return lines.map((l) => ({
     itemId: l.itemId,

@@ -116,6 +116,9 @@ describe('applyInboundGroup (one document’s same-item inbound lines as one rec
     expect(rebuildCostState([sale, { ...paid, ...ref }, { ...free, refType: 'purchase', refId: 'p2' }], 19_250_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 0 })
     // a movement of another document between two lines ends the run
     expect(rebuildCostState([sale, { ...paid, ...ref }, { qtyMilli: -1_000, unitCostUsat: 0, refType: 'order', refId: 'o2' }, { ...free, ...ref }], 19_250_000)).toEqual({ onHandMilli: 299_000, avgCostUsat: 0 })
+    // a non-positive movement of the same document between two lines ends the run too
+    expect(rebuildCostState([sale, { ...paid, ...ref }, { qtyMilli: -100_000, unitCostUsat: 19_250_000, ...ref }, { ...free, ...ref }], 19_250_000)).toEqual({ onHandMilli: 200_000, avgCostUsat: 0 })
+    expect(rebuildCostState([sale, { ...paid, ...ref }, { qtyMilli: 0, unitCostUsat: 0, ...ref }, { ...free, ...ref }], 19_250_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 0 })
     // no refs: the old fold
     expect(rebuildCostState([{ qtyMilli: -500_000, unitCostUsat: 0 }, paid, free], 19_250_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 0 })
   })
