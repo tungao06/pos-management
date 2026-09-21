@@ -23,7 +23,7 @@ export function countLineResult(i: CountLineInput): CountLineResult {
 /**
  * COUNT_ADJ = counted − expected per line at the line's cost (spec §4.5), only for non-zero variances.
  * Items in `openingItemIds` are counted for the first time: their movement is the opening balance, kind OPENING
- * (D30) — the caller prices those lines at the standard cost (their `avgCostUsat` = standard_cost_usat).
+ * (D30) — a gain at standard (D30), loss at the average (Q4-13 · I-5); the caller chooses the cost per line.
  */
 export function countAdjustmentMovements(lines: readonly CountLineResult[], countId: string, openingItemIds: ReadonlySet<string> = new Set()): MovementDraft[] {
   return lines

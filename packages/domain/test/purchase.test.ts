@@ -28,6 +28,9 @@ describe('purchaseUnitCostUsat', () => {
   it('a free line (฿0, e.g. ของแถม) costs 0', () => {
     expect(purchaseUnitCostUsat(0, 400_000)).toBe(0)
   })
+  it('rounds half away from zero, not floored: 2 satang for 3,000 milli = 666,667 usat (floor gives 666,666)', () => {
+    expect(purchaseUnitCostUsat(2, 3_000)).toBe(666_667)
+  })
   it('refuses a negative total, a non-positive quantity, and a unit cost past the safe-integer range', () => {
     expect(() => purchaseUnitCostUsat(-1, 1_000)).toThrow(RangeError)
     expect(() => purchaseUnitCostUsat(100, 0)).toThrow(RangeError)
@@ -59,7 +62,7 @@ describe('purchaseMovements', () => {
 })
 
 describe('priceDeviationBp / isPriceJump (D47 item 3: more than 10%)', () => {
-  it('measures the change against the current cost', () => {
+  it('measures the change against the reference price (Q4-15: last non-zero purchase price, else standard cost)', () => {
     expect(priceDeviationBp(19_250_000, 19_250_000)).toBe(0)
     expect(priceDeviationBp(21_175_000, 19_250_000)).toBe(1_000) // exactly +10%
     expect(priceDeviationBp(17_325_000, 19_250_000)).toBe(1_000) // exactly −10%

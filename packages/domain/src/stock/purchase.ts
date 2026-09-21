@@ -42,10 +42,14 @@ export function purchaseMovements(lines: readonly PurchaseLineDraft[], purchaseI
   }))
 }
 
-/** D47 item 3: warn when a received price differs from the current cost by more than 10% (1,000 bp). */
+/** D47 item 3: warn when a received price differs from the reference price by more than 10% (1,000 bp). */
 export const PRICE_JUMP_BP = 1_000
 
-/** |new − ref| / ref in basis points, rounded half up, for display; a zero reference with a non-zero new cost is "infinitely" off. */
+/**
+ * |new − ref| / ref in basis points, rounded half up, for display; a zero reference with a non-zero new cost is
+ * "infinitely" off. `ref` is the reference price (Q4-15: the last non-zero purchase price, else the standard cost)
+ * — not the moving average, which would re-alarm on every receipt after a real price change (I-7).
+ */
 export function priceDeviationBp(newUsat: number, refUsat: number): number {
   assertSafeInt(newUsat, 'newUsat')
   assertSafeInt(refUsat, 'refUsat')
@@ -55,7 +59,10 @@ export function priceDeviationBp(newUsat: number, refUsat: number): number {
   return Number(roundDivBig(diff * 10_000n, BigInt(refUsat)))
 }
 
-/** True when |new − ref| / ref is strictly above `limitBp` (exactly 10% is not a jump) — compared exactly, not on the rounded bp. */
+/**
+ * True when |new − ref| / ref is strictly above `limitBp` (exactly 10% is not a jump) — compared exactly, not on
+ * the rounded bp. `ref` is the reference price (Q4-15: the last non-zero purchase price, else the standard cost).
+ */
 export function isPriceJump(newUsat: number, refUsat: number, limitBp: number = PRICE_JUMP_BP): boolean {
   assertSafeInt(newUsat, 'newUsat')
   assertSafeInt(refUsat, 'refUsat')
