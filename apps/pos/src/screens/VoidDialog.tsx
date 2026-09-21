@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, type JSX } from 'react'
 import { REASON_MAX_LENGTH, type OrderDetailDto } from '../api/types'
 import { useApi } from '../app/api-context'
-import { bootstrapKey, orderKey, ordersKey, shiftReportKey, useBootstrap } from '../app/queries'
+import { bootstrapKey, orderKey, ordersKey, shiftReportKey, stockKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import { errorMessage } from '../ui/errors'
 import { formatBaht } from '../ui/format'
@@ -44,6 +44,8 @@ export function VoidDialog({ order, onClose }: { order: OrderDetailDto; onClose:
         // review m-2: a cash void changes expectedCashSatang; without this the X report (and the Q3b-14 over-drawer
         // check in CashMoveDialog) can read a stale figure for up to `staleTime` (5s, main.tsx) after the void.
         queryClient.invalidateQueries({ queryKey: shiftReportKey }),
+        // plan 4: a void that was not made returns its ingredients (VOID_RETURN)
+        queryClient.invalidateQueries({ queryKey: stockKey }),
       ])
       onClose()
     },

@@ -25,6 +25,9 @@ const MESSAGES: Record<PosErrorCode, string> = {
   Z_NOT_FOUND: TH.errZNotFound,
   BACKUP_FAILED: TH.errBackupFailed,
   Z_CHAIN_BROKEN: TH.errZChainBroken,
+  PRICE_JUMP: TH.errPriceJump,
+  STOCK_COUNT_NOT_OPEN: TH.errStockCountNotOpen,
+  OPENING_COUNT_INCOMPLETE: TH.errOpeningCountIncomplete,
 }
 
 /**
@@ -43,5 +46,8 @@ export function errorMessage(e: unknown): string {
     const seconds = Number(raw.slice(code.length + 2))
     return Number.isInteger(seconds) && seconds > 0 ? TH.errPinLockedFor(seconds) : MESSAGES[code]
   }
-  return code === 'BAD_INPUT' ? `${MESSAGES[code]} — ${raw.slice(code.length + 2)}` : MESSAGES[code]
+  // m-3 (Task 12 fix round 1): closeStockCount sends the missing item codes as the detail (stock-count.ts) — shown
+  // here so a ~38-row opening count does not need a scroll-and-guess to find what is still uncounted.
+  if (code === 'BAD_INPUT' || code === 'OPENING_COUNT_INCOMPLETE') return `${MESSAGES[code]} — ${raw.slice(code.length + 2)}`
+  return MESSAGES[code]
 }

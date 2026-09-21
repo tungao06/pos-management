@@ -15,6 +15,13 @@
       "when": 1789724617156,
       "tag": "0001_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789977341065,
+      "tag": "0002_stock_adjustment",
+      "breakpoints": true
     }
   ]
 }

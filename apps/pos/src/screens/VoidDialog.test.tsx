@@ -5,7 +5,7 @@ import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BootstrapState, OrderDetailDto, PosApi, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
-import { shiftReportKey } from '../app/queries'
+import { shiftReportKey, stockKey } from '../app/queries'
 import { SessionProvider, useSession } from '../app/session'
 import { VoidDialog } from './VoidDialog'
 
@@ -97,5 +97,6 @@ describe('VoidDialog — review m-2: the shift-report cache must be invalidated 
     // VoidDialog's onSuccess, this call is never made and this test fails — a cash void changes expectedCashSatang,
     // and a stale X report can miss the Q3b-14 over-drawer warning for up to staleTime (5s, main.tsx) afterwards.
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: shiftReportKey })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: stockKey }) // plan 4: VOID_RETURN moves stock back
   })
 })

@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { applyMovement, initialCostState, requireItem, VAT_OFF, type Catalog, type CostOf, type CostState, type MovementDraft, type SaleContext, type SaleRecipe } from '@dayo/domain'
+import { applyInboundGroup, applyMovement, initialCostState, requireItem, VAT_OFF, type Catalog, type CostOf, type CostState, type MovementDraft, type SaleContext, type SaleRecipe } from '@dayo/domain'
 import type { ApiDeps } from '../api/deps'
 import { requireStoreChannelId } from '../api/menu'
 import { enqueueOutbox } from './outbox'
@@ -63,10 +63,26 @@ export async function loadSaleContext(db: RemoteDb, atIso: string, variantIds: r
 
 export type MovementMeta = { businessDate: string; deviceId: string; createdBy: string; at: string }
 
-/** Writes movements, keeps the item_cost_state cache in step (spec §4.4), and queues each movement for sync. */
+/**
+ * Writes movements, keeps the item_cost_state cache in step (spec §4.4), and queues each movement for sync.
+ * Audit rows stay one per draft with their own unit cost, but a run of positive drafts of one item from one
+ * document (same refType + refId, no other draft of that item between them) is folded into the cost state as a
+ * single receipt (Q4-17 ก · D57): its average never depends on which line was typed last.
+ */
 export async function insertMovements(db: RemoteDb, deps: ApiDeps, drafts: readonly MovementDraft[], meta: MovementMeta, catalog: Catalog): Promise<string[]> {
   const states = await loadCostStates(db)
   const ids: string[] = []
+  const stateOf = (itemId: string): CostState => states.get(itemId) ?? initialCostState(requireItem(catalog, itemId).standardCostUsat)
+  /** Per item: the open inbound run of one document, and the item's last inserted row. */
+  const runs = new Map<string, { key: string | null; lines: MovementDraft[]; lastRowId: string }>()
+  const flush = (itemId: string): void => {
+    const run = runs.get(itemId)
+    if (run && run.lines.length > 0) states.set(itemId, applyInboundGroup(stateOf(itemId), run.lines))
+    if (run) {
+      run.lines = []
+      run.key = null
+    }
+  }
   for (const d of drafts) {
     const row = {
       id: deps.newId(),
@@ -83,11 +99,23 @@ export async function insertMovements(db: RemoteDb, deps: ApiDeps, drafts: reado
     } satisfies typeof s.stockMovement.$inferInsert
     await db.insert(s.stockMovement).values(row)
     await enqueueOutbox(db, 'stock_movement', row, meta.at, deps.newId)
-    const next = applyMovement(states.get(d.itemId) ?? initialCostState(requireItem(catalog, d.itemId).standardCostUsat), d)
-    states.set(d.itemId, next)
-    const cache = { onHandMilli: next.onHandMilli, avgCostUsat: next.avgCostUsat, asOfMovementId: row.id, updatedAt: meta.at }
-    await db.insert(s.itemCostState).values({ itemId: d.itemId, ...cache }).onConflictDoUpdate({ target: s.itemCostState.itemId, set: cache })
     ids.push(row.id)
+    const key = d.qtyMilli > 0 ? JSON.stringify([d.refType, d.refId]) : null
+    const run = runs.get(d.itemId)
+    if (run && key !== null && run.key === key) {
+      run.lines.push(d)
+      run.lastRowId = row.id
+      continue
+    }
+    flush(d.itemId)
+    if (key === null) states.set(d.itemId, applyMovement(stateOf(d.itemId), d))
+    runs.set(d.itemId, { key, lines: key === null ? [] : [d], lastRowId: row.id })
+  }
+  for (const [itemId, run] of runs) {
+    flush(itemId)
+    const next = stateOf(itemId)
+    const cache = { onHandMilli: next.onHandMilli, avgCostUsat: next.avgCostUsat, asOfMovementId: run.lastRowId, updatedAt: meta.at }
+    await db.insert(s.itemCostState).values({ itemId, ...cache }).onConflictDoUpdate({ target: s.itemCostState.itemId, set: cache })
   }
   return ids
 }

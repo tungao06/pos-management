@@ -13,8 +13,9 @@ import { applySeedSqlite } from '../src/seed/apply-sqlite.js'
 import { seedToRows } from '../src/seed/rows.js'
 import { openPglite, openSqliteMemory, seedOpts, sqliteRows } from './helpers.js'
 
-// 36 shared tables (18 reference + 7 stock + 10 sales/shift + audit_log) + 2 dialect-only tables per side.
-const TABLES_PER_DIALECT = 38
+// 37 shared tables (18 reference + 8 stock + 10 sales/shift + audit_log) + 2 dialect-only tables per side.
+// Plan 4 T4-1 added stock_adjustment (the 8th stock table).
+const TABLES_PER_DIALECT = 39
 /** Largest usat value in the shop's file (Global Constraints) — above 2^31, so it needs a 64-bit column. */
 const BIG_USAT = 2_499_000_000
 
@@ -26,7 +27,7 @@ const bigItem = {
 }
 
 describe('migrations', () => {
-  it('sqlite: creates all 38 tables and the FK from cash_movement to order', async () => {
+  it('sqlite: creates all 39 tables and the FK from cash_movement to order', async () => {
     const { db, raw } = await openSqliteMemory()
     migrateSqlite(db)
     const names = sqliteRows(raw, `select name from sqlite_master where type = 'table' and name not like '__drizzle%' and name not like 'sqlite_%' order by name`).map((r) => r['name'] as string)
@@ -37,7 +38,7 @@ describe('migrations', () => {
     const fks = sqliteRows(raw, `select "table", "from" from pragma_foreign_key_list('cash_movement')`)
     expect(fks).toContainEqual({ table: 'order', from: 'order_id' })
   })
-  it('pg: creates all 38 tables', async () => {
+  it('pg: creates all 39 tables', async () => {
     const { db, client } = await openPglite()
     await migratePg(db)
     const r = await db.execute<{ table_name: string }>(sql`select table_name from information_schema.tables where table_schema = 'public' order by table_name`)

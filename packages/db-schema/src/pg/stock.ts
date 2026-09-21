@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
-import { CountStatus, MovementKind } from '@dayo/contracts'
+import { AdjustReason, CountStatus, MovementKind } from '@dayo/contracts'
 import { check, index, pgTable, unique } from 'drizzle-orm/pg-core'
-import { big, id, int, serverReceivedAt, serverSeq, text, textEnum } from './columns.js'
+import { big, id, int, json, serverReceivedAt, serverSeq, text, textEnum } from './columns.js'
 import { bom, device, item, purchaseUnit, user } from './reference.js'
 
 export const purchase = pgTable('purchase', {
@@ -68,6 +68,19 @@ export const stockCountLine = pgTable('stock_count_line', {
   varianceSatang: int('variance_satang').notNull(),
   serverReceivedAt: serverReceivedAt(),
 }, (t) => [unique().on(t.countId, t.itemId)])
+
+/** Mirror of sqlite `stock_adjustment` (plan 4 T4-1). */
+export const stockAdjustment = pgTable('stock_adjustment', {
+  id: id(),
+  businessDate: text('business_date').notNull(),
+  reasonCode: textEnum('reason_code', AdjustReason).notNull(),
+  reason: text('reason').notNull(),
+  detailJson: json('detail_json'),
+  deviceId: text('device_id').references(() => device.id),
+  createdBy: text('created_by').notNull().references(() => user.id),
+  createdAt: text('created_at').notNull(),
+  serverReceivedAt: serverReceivedAt(),
+})
 
 export const stockMovement = pgTable('stock_movement', {
   id: id(),

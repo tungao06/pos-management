@@ -22,6 +22,9 @@ export type PosErrorCode =
   | 'Z_NOT_FOUND'
   | 'Z_CHAIN_BROKEN' // Q3b-11 · D53: the previous Z fails its hash — detail = its shiftId; retry with acknowledgeZChainBroken
   | 'BACKUP_FAILED'
+  | 'PRICE_JUMP' // D47 item 3 · Q4-15: a received price is > 10% off the last purchase price — detail = the item codes; retry with acceptPriceJump
+  | 'STOCK_COUNT_NOT_OPEN' // the stock count was closed (or never opened) — reload the count screen
+  | 'OPENING_COUNT_INCOMPLETE' // Q4-13 · D30: the opening count must cover every tracked item — detail = the missing codes
 
 /** Comlink forwards only name/message/stack, so the code travels as a "CODE: " message prefix. */
 export class PosError extends Error {

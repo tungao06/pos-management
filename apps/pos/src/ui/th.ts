@@ -122,6 +122,11 @@ export const TH = {
   errCountFormat: 'จำนวนต้องเป็นตัวเลขจำนวนเต็ม 0–99999',
   errCountFirst: 'กด "นับเสร็จ" ก่อน',
 
+  // แผน 4
+  errPriceJump: 'ราคาบางรายการต่างจากราคาที่รับครั้งก่อนเกิน 10% — ตรวจราคาอีกครั้ง แล้วกด "ยืนยันราคานี้"',
+  errStockCountNotOpen: 'ใบนับนี้ปิดไปแล้ว — เปิดหน้านับสต็อกใหม่',
+  errOpeningCountIncomplete: 'การนับครั้งแรก (ยอดยกมา) ต้องนับให้ครบทุกรายการ — กรอกรายการที่ยังเหลือ (ของที่ไม่มีให้กรอก 0)',
+
   // แผน 3b — กะ / X / Z / เงินเข้า-ออก / สำรองไฟล์
   shiftMenu: 'กะ / รายงาน X',
   xTitle: 'รายงาน X (ยอดสด ณ ตอนนี้)',
@@ -209,4 +214,117 @@ export const TH = {
   cashOverDrawerWarning: 'จำนวนนี้มากกว่าเงินสดที่ควรมีในลิ้นชัก ณ ตอนนี้ — ตรวจสอบให้แน่ใจก่อนบันทึก',
   cashOverDrawerConfirm: 'ยืนยันบันทึกทั้งที่เกิน',
   save: 'บันทึก',
+
+  // แผน 4 — สต็อก
+  stockMenu: 'สต็อก',
+  stockMenuAlerts: (n: number): string => `สต็อก ⚠ ${n}`,
+  stockTitle: 'สต็อก',
+  stockTotalValue: 'มูลค่าสต็อกรวม',
+  stockFilterAll: 'ทั้งหมด',
+  stockFilterReorder: 'ต้องสั่งซื้อ',
+  stockFilterBases: 'เบส',
+  stockOnHand: 'คงเหลือ',
+  stockValue: 'มูลค่า',
+  stockStatus: { ok: 'ปกติ', low: 'ใกล้หมด', out: 'หมด', negative: 'ติดลบ' },
+  stockExpiry: { none: '', fresh: 'หมดอายุ', soon: 'ใกล้หมดอายุ', expired: 'หมดอายุแล้ว' },
+  stockExpiresAt: (label: string, at: string): string => `${label} ${at}`,
+  stockNoExpiry: 'ไม่มีวันหมดอายุ',
+  stockLastCount: (at: string): string => `นับสต็อกล่าสุด ${at}`,
+  stockNeverCounted: 'ยังไม่เคยนับสต็อก',
+  stockCountDue: 'ถึงเวลานับสต็อกประจำสัปดาห์แล้ว',
+  stockNoItems: 'ไม่มีรายการ',
+  baseExpiredBanner: (names: string): string => `เบสหมดอายุ: ${names} — ทิ้งแล้วทำใหม่ (หน้าสต็อก)`,
+  navProduce: 'ทำเบส',
+  navReceive: 'รับของเข้า',
+  navCount: 'นับสต็อก',
+  navCountResume: 'นับสต็อกต่อ',
+  navAdjust: 'ปรับสต็อก',
+  discard: 'ทิ้ง',
+  discardTitle: (name: string): string => `ทิ้ง${name}ที่เหลือทั้งหมด`,
+  discardConfirm: (qty: string): string => `ยืนยันทิ้ง ${qty}`,
+  useUnitOption: (unit: string): string => `${unit} (หน่วยใช้)`,
+  errQtyFormat: 'จำนวนต้องเป็นตัวเลข ทศนิยมไม่เกิน 3 ตำแหน่ง ไม่เกิน 9999',
+  errChooseItem: 'เลือกสินค้าก่อน',
+  stockInactive: 'เลิกขาย',
+  // fix round 1, review [Important]: mirrors ReceiveScreen's client-side price-jump preview — the same ½×–2× bound
+  // the API enforces (MAX_YIELD_FACTOR), shown near the input and checked before saving, not only after a round trip.
+  errYieldRange: (range: string): string => `ยอดที่ได้จริงต้องอยู่ระหว่าง ${range}`,
+
+  produceTitle: 'ทำเบส',
+  produceChooseBase: 'เลือกเบส',
+  produceScale: 'จำนวน batch',
+  produceScaleCustom: 'หรือพิมพ์เอง (เช่น 0.75)',
+  produceComponents: 'ส่วนประกอบที่ต้องใช้',
+  produceYield: (unit: string): string => `ได้จริง (${unit})`,
+  produceYieldRange: (range: string): string => `ยอมรับได้ (½×–2× ของสูตร): ${range}`,
+  produceLeftover: (qty: string, state: string): string => `ยังมีเบสเดิมเหลือ ${qty}${state === '' ? '' : ` · ${state}`}`,
+  produceDiscardFirst: 'ทิ้งของเก่าก่อน',
+  produceSave: 'บันทึกทำเบส',
+  produceDone: (name: string, cost: string, expires: string): string => `บันทึก${name}แล้ว · ต้นทุน ${cost} · ${expires}`,
+
+  receiveTitle: 'รับของเข้า',
+  receiveSupplier: 'ร้าน / ผู้ขาย',
+  receiveNote: 'หมายเหตุ',
+  receiveItem: 'สินค้า',
+  receiveUnit: 'หน่วย',
+  receiveQty: 'จำนวน',
+  receiveLineTotal: 'ราคารวม (บาท)',
+  receiveAdd: 'เพิ่มรายการ',
+  receiveSum: 'รวมทั้งใบ',
+  receivePaidDrawer: 'จ่ายด้วยเงินในลิ้นชัก (บันทึกจ่ายออกให้อัตโนมัติ)',
+  receivePaidDrawerNoShift: 'จ่ายจากลิ้นชักได้เมื่อเปิดกะอยู่เท่านั้น',
+  receiveJump: (pct: string): string => `ราคาต่างจากครั้งก่อน ${pct}`,
+  receiveConfirmPrice: 'ยืนยันราคานี้',
+  receiveSave: 'บันทึกรับของ',
+  receiveDone: (total: string): string => `บันทึกรับของแล้ว รวม ${total}`,
+  errLineTooLarge: (max: string): string => `ราคารวมต่อรายการต้องไม่เกิน ${max}`,
+  errTooManyLines: (max: number): string => `รับของเข้าได้สูงสุด ${max} รายการต่อใบ`,
+  errDrawerPayTooLarge: (max: string): string => `จ่ายจากลิ้นชักได้ไม่เกิน ${max} ต่อครั้ง — ลดยอด หรือปิด "จ่ายด้วยเงินในลิ้นชัก" แล้วจ่ายด้วยวิธีอื่น`,
+  remove: 'ลบ',
+
+  adjustTitle: 'ปรับสต็อก (เบิกของออก)',
+  adjustReasons: { WASTE: 'ของเสีย', EXPIRED: 'หมดอายุ', TRIAL: 'ทดลองสูตร', GIVEAWAY: 'แจก / ชดเชย', OTHER: 'อื่น ๆ' },
+  adjustModeItems: 'เป็นวัตถุดิบ',
+  adjustModeDrinks: 'เป็นแก้ว (ตามสูตร)',
+  adjustProduct: 'เมนู',
+  adjustDrinkQty: 'จำนวนแก้ว',
+  adjustAdd: 'เพิ่มรายการ',
+  adjustReason: 'เหตุผล',
+  adjustSave: 'บันทึกเบิกของออก',
+  adjustDone: (n: number): string => `บันทึกแล้ว ${n} รายการ`,
+  errChooseReason: 'เลือกประเภทก่อน',
+  errNothingToAdjust: 'ยังไม่มีรายการ',
+
+  countTitle: 'นับสต็อก',
+  // review m-1 (final review): the book figure of a counted item is frozen at the moment its line is saved (T4-2) —
+  // a receipt, batch, or "not made" void entered later that same day, but from stock that physically moved before
+  // the count, lands on top of the frozen figure and overstates the item until next week's count corrects it.
+  countCutoffHint: 'บันทึกรับของ/ทำเบสให้ครบก่อนเริ่มนับ',
+  countStart: 'เริ่มนับ',
+  countScopeKey: 'ชุดหลัก',
+  countScopeAll: 'ทั้งหมด',
+  countBlindHint: 'นับของจริงแล้วกรอกเป็นหน่วยเต็ม + เศษ — ระบบแสดงส่วนต่างหลังบันทึกแต่ละรายการ (แก้ตัวเลขได้ ยอดบัญชียังเป็นของตอนนับครั้งแรก)',
+  countSaveLine: 'บันทึก',
+  // review I-2 (fix round 1): a blank field is refused — never silently saved as 0 — so an accidental tap on
+  // "บันทึก" cannot zero out a good count. Typing an explicit 0 is still how an empty shelf is recorded.
+  errCountBlank: 'ต้องกรอกจำนวนที่นับ — ถ้าของหมดแล้วให้พิมพ์ 0',
+  errCountTooLarge: (max: string): string => `จำนวนที่นับต้องไม่เกิน ${max}`,
+  countRecount: 'แก้ตัวเลข', // I-9: the book figure stays as frozen when the item was first counted
+  // m-2 (Task 7 review, carried into Task 12): "แก้ตัวเลข" fixes a typo only — it never re-freezes the book figure.
+  // A genuine recount after sales must go through "ไม่นับรายการนี้" then a fresh save, which does re-freeze it.
+  countRecountHint: 'แก้ตัวเลขที่พิมพ์ผิดเท่านั้น ยอดบัญชียังคงเป็นของตอนนับครั้งแรก — ถ้ามีขายหรือรับของระหว่างที่รอ ให้กด "ไม่นับรายการนี้" แล้วนับใหม่ ระบบจะตั้งยอดบัญชีใหม่ตามปัจจุบัน',
+  countUnits: (unit: string, size: string): string => `${unit} เต็ม (${size})`,
+  countRest: (useUnit: string): string => `เศษ (${useUnit})`,
+  // review I-2 (fix round 1): was "leave it blank (= 0)" — a blank field is now refused, so the hint must say to
+  // type the explicit 0 instead.
+  countOpeningHint: 'นับครั้งแรก (ยอดยกมา) — ต้องนับให้ครบทุกรายการ ของที่ไม่มีให้พิมพ์ 0 แล้วกด "บันทึก"',
+  countSkip: 'ไม่นับรายการนี้', // m-2: the genuine-recount path — removes the draft line so the next save re-freezes the book figure
+  countOpening: 'ยอดยกมาครั้งแรก',
+  countCounted: (qty: string): string => `นับได้ ${qty}`,
+  countVariance: (qty: string, baht: string): string => `ส่วนต่าง ${qty} (${baht})`,
+  countLines: (n: number): string => `นับแล้ว ${n} รายการ`,
+  countTotalVariance: 'ส่วนต่างรวม',
+  countClose: 'ปิดใบนับ',
+  countCloseConfirm: 'ยืนยันปิดใบนับ (ปรับยอดตามที่นับ)',
+  countClosed: (n: number, baht: string): string => `ปิดใบนับแล้ว ปรับ ${n} รายการ · ส่วนต่างรวม ${baht}`,
 } as const

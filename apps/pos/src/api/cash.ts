@@ -16,6 +16,34 @@ export function toCashMovementDto(r: typeof s.cashMovement.$inferSelect): CashMo
 }
 
 /**
+ * Writes one PAID_IN / PAID_OUT / DROP row of `shiftId` + its outbox row inside the caller's transaction, refusing an
+ * amount outside 1…MAX_CASH_MOVEMENT_SATANG. Shared by `recordCashMovement` and a receipt paid from the drawer
+ * (plan 4 `receivePurchase`, Q4-6) so both follow the same cap.
+ */
+export async function insertManualCashMovement(
+  tx: RemoteDb,
+  deps: ApiDeps,
+  m: { shiftId: string; kind: 'PAID_IN' | 'PAID_OUT' | 'DROP'; amountSatang: number; reason: string; actorId: string; at: string },
+): Promise<CashMovementDto> {
+  if (!Number.isSafeInteger(m.amountSatang) || m.amountSatang <= 0 || m.amountSatang > MAX_CASH_MOVEMENT_SATANG) {
+    throw new PosError('BAD_INPUT', `amount must be a whole number of satang from 1 to ${MAX_CASH_MOVEMENT_SATANG}`)
+  }
+  const row = {
+    id: deps.newId(),
+    shiftId: m.shiftId,
+    kind: m.kind,
+    amountSatang: m.amountSatang,
+    orderId: null, // only VOID_REFUND carries an order (D47 item 7 CHECK)
+    reason: m.reason,
+    createdBy: m.actorId,
+    createdAt: m.at,
+  } satisfies typeof s.cashMovement.$inferInsert
+  await tx.insert(s.cashMovement).values(row)
+  await enqueueOutbox(tx, 'cash_movement', row, m.at, deps.newId)
+  return toCashMovementDto(row)
+}
+
+/**
  * spec §3.5: PAID_IN / PAID_OUT / DROP are typed in by a person, with a reason, into the open shift (Q3b-9 · D52).
  * VOID_REFUND is never accepted here — voidOrder writes it (D36). One transaction: cash_movement + outbox.
  */
@@ -34,19 +62,6 @@ export async function recordCashMovement(db: RemoteDb, deps: ApiDeps, input: Cas
   return db.transaction(async (tx) => {
     const shift = await currentOpenShift(tx, device.id)
     if (shift === null) throw new PosError('NO_OPEN_SHIFT', 'open a shift first')
-    const at = deps.now()
-    const row = {
-      id: deps.newId(),
-      shiftId: shift.id,
-      kind: input.kind,
-      amountSatang: input.amountSatang,
-      orderId: null, // only VOID_REFUND carries an order (D47 item 7 CHECK)
-      reason,
-      createdBy: actor.id,
-      createdAt: at,
-    } satisfies typeof s.cashMovement.$inferInsert
-    await tx.insert(s.cashMovement).values(row)
-    await enqueueOutbox(tx, 'cash_movement', row, at, deps.newId)
-    return toCashMovementDto(row)
+    return insertManualCashMovement(tx, deps, { shiftId: shift.id, kind: input.kind, amountSatang: input.amountSatang, reason, actorId: actor.id, at: deps.now() })
   })
 }

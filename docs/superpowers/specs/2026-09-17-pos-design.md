@@ -222,7 +222,7 @@ explode(item, need):
 - บิลที่ยกเลิก **ยังคงอยู่ในรายงานยอดขายรวม (gross) และแยกเป็นยอดยกเลิก** ไม่หายไป
 
 ### 4.4 ต้นทุนถัวเฉลี่ยเคลื่อนที่
-- ของดิบ: เมื่อ `PURCHASE` เข้า `avg = (on_hand × avg + qty × unit_cost) / (on_hand + qty)` (ถ้า on_hand ≤ 0 ให้ avg = unit_cost ใหม่)
+- ของดิบ: เมื่อ `PURCHASE` เข้า `avg = (on_hand × avg + qty × unit_cost) / (on_hand + qty)` (ถ้า on_hand ≤ 0 ให้ avg = unit_cost ใหม่) · บรรทัดรับเข้าของสินค้าเดียวกันในเอกสารเดียวกันคิดรวมเป็นก้อนเดียวก่อนเฉลี่ย (D57 / Q4-17)
 - ต้นทุนมาตรฐาน (`standard_cost`) ของของดิบ = **ต้นทุนเฉลี่ยจากบันทึกซื้อในไฟล์ร้าน** (D34 · ตรงกับที่ Excel ใช้คิดทุกสูตร) · ของเบส/ชุดบรรจุภัณฑ์ = roll-up จาก BOM
 - **ก่อนมีของเข้าครั้งแรก** (ยังไม่มี movement ใดของ item นั้น): avg = `standard_cost` → ขาย/ทำเบสก่อนรับของก็คิดต้นทุนได้ถูก
 - ทำเบส (`production_batch`): `PRODUCE_OUT` ทุกส่วนประกอบที่ราคาเฉลี่ยขณะนั้น → `batch_cost = Σ` → `PRODUCE_IN` เบส qty = yield_actual, unit_cost = batch_cost / yield_actual → เข้าถัวเฉลี่ยของเบส

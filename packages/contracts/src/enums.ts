@@ -30,6 +30,13 @@ export type ActorType = z.infer<typeof ActorType>
 export const UserRole = z.enum(['owner', 'staff'])
 export type UserRole = z.infer<typeof UserRole>
 
+/**
+ * stock_adjustment.reason_code (spec §5 ปรับสต็อก · D50 Q3-20 · plan 4 T4-1): why stock left without a sale.
+ * The stock_movement rows keep the 11 kinds of D39 — GIVEAWAY and OTHER are WASTE movements.
+ */
+export const AdjustReason = z.enum(['WASTE', 'EXPIRED', 'TRIAL', 'GIVEAWAY', 'OTHER'])
+export type AdjustReason = z.infer<typeof AdjustReason>
+
 export const ShiftStatus = z.enum(['open', 'closed'])
 export type ShiftStatus = z.infer<typeof ShiftStatus>
 

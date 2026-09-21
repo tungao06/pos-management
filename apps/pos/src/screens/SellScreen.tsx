@@ -3,7 +3,7 @@ import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
 import type { MenuProduct } from '../api/types'
 import { useApi } from '../app/api-context'
-import { menuKey, useBootstrap } from '../app/queries'
+import { menuKey, stockKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import { isShiftStale } from '../lib/clock'
 import { errorMessage } from '../ui/errors'
@@ -23,6 +23,9 @@ export function SellScreen(): JSX.Element {
   const menuQuery = useQuery({ queryKey: menuKey, queryFn: () => api.loadMenu() })
   // I-5: warn when the browser has not granted persistent storage (spec §8/§12) — OPFS is the only copy until sync.
   const persisted = useQuery({ queryKey: ['storage-persisted'], queryFn: () => navigator.storage?.persisted?.() ?? Promise.resolve(false) })
+  // Plan 4 (Q4-10): the stock badge and the expired-base banner — shown only, never blocking a sale (spec §4.2)
+  // M-2: refetched every minute so a base that expires while nobody sells still raises the banner before the next sale
+  const stock = useQuery({ queryKey: stockKey, queryFn: () => api.stockOverview(), refetchInterval: 60_000 })
   const [tab, setTab] = useState<string>(BEST_TAB)
   const [picking, setPicking] = useState<MenuProduct | null>(null)
   const [discountOpen, setDiscountOpen] = useState(false)
@@ -73,6 +76,9 @@ export function SellScreen(): JSX.Element {
         <button type="button" data-testid="cash-move-open" onClick={() => setCashMoveOpen(true)}>
           {TH.cashMove}
         </button>
+        <button type="button" data-testid="nav-stock" className={(stock.data?.alertCount ?? 0) > 0 ? 'error' : undefined} onClick={() => void navigate({ to: '/stock' })}>
+          {(stock.data?.alertCount ?? 0) > 0 ? TH.stockMenuAlerts(stock.data?.alertCount ?? 0) : TH.stockMenu}
+        </button>
         <button type="button" data-testid="nav-shift" onClick={() => void navigate({ to: '/shift' })}>
           {TH.shiftMenu}
         </button>
@@ -92,6 +98,16 @@ export function SellScreen(): JSX.Element {
       {boot.data?.backupDue === true && (
         <button type="button" role="alert" className="error" data-testid="backup-due" onClick={() => void navigate({ to: '/backup' })}>
           {TH.backupDue}
+        </button>
+      )}
+      {stock.data !== undefined && stock.data.expiredBaseCodes.length > 0 && (
+        <button type="button" role="alert" className="error" data-testid="base-expired" onClick={() => void navigate({ to: '/stock' })}>
+          {TH.baseExpiredBanner(
+            stock.data.items
+              .filter((i) => stock.data.expiredBaseCodes.includes(i.code))
+              .map((i) => i.name)
+              .join(', '),
+          )}
         </button>
       )}
       <main className="grid">

@@ -1,5 +1,5 @@
-import type { CashMovementKind, UserRole } from '@dayo/contracts'
-import type { CashCountLine, CashInputs, SalesSummary, ZSnapshot, ZVoid } from '@dayo/domain'
+import type { AdjustReason, CashMovementKind, MovementKind, UseUnit, UserRole } from '@dayo/contracts'
+import type { CashCountLine, CashInputs, ExpiryState, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -173,6 +173,145 @@ export type BackupFileDto = { fileName: string; bytes: Uint8Array; createdAt: st
 /** The owner saw the exported file in Downloads (review I-4) — echoes the BackupFileDto without its bytes. */
 export type ConfirmBackupInput = { actorUserId: string; fileName: string; byteLength: number; createdAt: string; lastZId: string | null }
 
+// ---- แผน 4: สต็อก ----
+
+export type PurchaseUnitDto = { id: string; name: string; qtyPerUnitMilli: number; isDefault: boolean }
+export type BomLineDto = { itemId: string; code: string; name: string; useUnit: UseUnit; qtyMilli: number }
+/** The latest production batch of a base — its expiry stands for the whole lump on hand (spec §4.6, no FIFO). */
+export type BaseBatchDto = { batchId: string; createdAt: string; expiresAt: string | null; expiry: ExpiryState }
+export type StockItemDto = {
+  itemId: string
+  code: string
+  name: string
+  kind: 'raw' | 'prepared'
+  /** Controller ruling I-2 (Task 9 fix round 1): an item turned off in the catalog, but still on this list because it
+   * still holds stock (M-11 · `stockCountableItems`). Receiving and producing must offer active items only — an
+   * inactive item can still be counted or written off (Tasks 6/7), never bought or made. */
+  isActive: boolean
+  category: string
+  useUnit: UseUnit
+  onHandMilli: number
+  avgCostUsat: number
+  /** What a received price is compared with for PRICE_JUMP: the last purchase price, else the standard cost (Q4-15). */
+  priceCheckUsat: number
+  valueSatang: number
+  reorderPointMilli: number
+  status: StockStatus
+  /** raw: low / out / negative · base: negative or expired (Q4-10) — what the sell-screen badge counts. */
+  alert: boolean
+  /** In the weekly "ชุดนับหลัก" (Q4-2 · D20). */
+  isKeyCount: boolean
+  units: PurchaseUnitDto[]
+  shelfLifeHours: number | null
+  /** Bases only. */
+  latestBatch: BaseBatchDto | null
+  /** Bases only: the current BOM (spec §3.3) — what the produce screen shows. */
+  bom: { yieldMilli: number; lines: BomLineDto[] } | null
+}
+/** หน้าสต็อก (spec §5): tracked items only (D29), computed live, nothing written. */
+export type StockOverviewDto = {
+  generatedAt: string
+  /** Where stock work typed now would land (Q4-1). */
+  businessDate: string
+  items: StockItemDto[]
+  totalValueSatang: number
+  alertCount: number
+  /** Codes of bases whose latest batch is past its expiry with stock left (spec §4.6). */
+  expiredBaseCodes: string[]
+  /** closed_at of the last count that had at least one line, or null. */
+  lastCountAt: string | null
+  /** No count for COUNT_DUE_DAYS days, or never (Q4-12 · D20). */
+  countDue: boolean
+  openCountId: string | null
+  /** No count with lines has closed yet: the next one is the opening count and must cover every item (Q4-13 · D30). */
+  openingCountPending: boolean
+}
+
+/** One line of a receipt: `qtyUnitsMilli` of `purchaseUnitId` (null = the use unit) for `lineTotalSatang` (0 = free). */
+export type PurchaseLineInput = { itemId: string; purchaseUnitId: string | null; qtyUnitsMilli: number; lineTotalSatang: number }
+export type ReceivePurchaseInput = {
+  actorUserId: string
+  supplier: string
+  note: string
+  lines: PurchaseLineInput[]
+  /** Q4-6: the total was paid with drawer cash — also write a PAID_OUT of the open shift. */
+  paidFromDrawer: boolean
+  /** true only after a PRICE_JUMP refusal, when the person checked the prices (D47 item 3). */
+  acceptPriceJump: boolean
+}
+export type PurchaseDto = {
+  id: string
+  businessDate: string
+  supplier: string | null
+  totalSatang: number
+  lines: { itemId: string; code: string; name: string; qtyUseMilli: number; lineTotalSatang: number; unitCostUsat: number }[]
+  cashMovementId: string | null
+  createdAt: string
+}
+
+/** ทำเบส (spec §5): `scaleBp` 10000 = one BOM batch; `yieldActualMilli` = what actually came out (default = standard). */
+export type ProduceBatchInput = { actorUserId: string; itemId: string; scaleBp: number; yieldActualMilli: number }
+export type ProductionBatchDto = {
+  id: string
+  itemId: string
+  code: string
+  name: string
+  businessDate: string
+  scaleBp: number
+  yieldActualMilli: number
+  unitCostUsat: number
+  batchCostSatang: number
+  expiresAt: string | null
+  createdAt: string
+  components: { itemId: string; code: string; qtyMilli: number }[]
+}
+
+/** A stock-out line typed by item: `qtyUnitsMilli` of `purchaseUnitId` (null = the use unit). */
+export type AdjustItemInput = { itemId: string; purchaseUnitId: string | null; qtyUnitsMilli: number }
+/** A stock-out by whole drinks through their current recipe (D50 Q3-20 แจก/ชดเชย, Q4-8). */
+export type AdjustDrinkInput = { variantId: string; sweetnessId: string; qty: number }
+export type AdjustStockInput = { actorUserId: string; reasonCode: AdjustReason; reason: string; items: AdjustItemInput[]; drinks: AdjustDrinkInput[] }
+/** ทิ้งเบสที่เหลือทั้งหมด (spec §4.6): EXPIRED when its latest batch has expired, WASTE otherwise. */
+export type DiscardBaseInput = { actorUserId: string; itemId: string }
+export type StockAdjustmentDto = {
+  id: string
+  businessDate: string
+  reasonCode: AdjustReason
+  reason: string
+  movements: { itemId: string; code: string; kind: MovementKind; qtyMilli: number }[]
+  createdAt: string
+}
+
+/** A counted line of the open stock count (spec §3.3 stock_count_line) — `expectedUseMilli` frozen when it was counted (T4-2). */
+export type StockCountLineDto = {
+  itemId: string
+  code: string
+  name: string
+  useUnit: UseUnit
+  purchaseUnitId: string | null
+  unitName: string
+  countedUnitsMilli: number
+  countedUseMilli: number
+  expectedUseMilli: number
+  varianceUseMilli: number
+  varianceSatang: number
+  /** No earlier closed count has this item: closing writes its opening balance, OPENING (D30 · Q4-13) — plan 7 leaves these lines out of the variance report. */
+  opening: boolean
+}
+export type StockCountDto = {
+  id: string
+  businessDate: string
+  status: 'open' | 'closed'
+  createdBy: string
+  createdAt: string
+  closedAt: string | null
+  lines: StockCountLineDto[]
+  totalVarianceSatang: number
+}
+export type SaveCountLineInput = { actorUserId: string; countId: string; itemId: string; purchaseUnitId: string | null; countedUnitsMilli: number }
+export type RemoveCountLineInput = { actorUserId: string; countId: string; itemId: string }
+export type CloseStockCountInput = { actorUserId: string; countId: string }
+
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
@@ -193,6 +332,16 @@ export interface PosApi {
   getZReport(shiftId: string): Promise<ZReportDto>
   exportBackup(actorUserId: string): Promise<BackupFileDto>
   confirmBackupSaved(input: ConfirmBackupInput): Promise<void>
+  stockOverview(): Promise<StockOverviewDto>
+  receivePurchase(input: ReceivePurchaseInput): Promise<PurchaseDto>
+  produceBatch(input: ProduceBatchInput): Promise<ProductionBatchDto>
+  adjustStock(input: AdjustStockInput): Promise<StockAdjustmentDto>
+  discardBase(input: DiscardBaseInput): Promise<StockAdjustmentDto>
+  startStockCount(actorUserId: string): Promise<StockCountDto>
+  getOpenStockCount(): Promise<StockCountDto | null>
+  saveCountLine(input: SaveCountLineInput): Promise<StockCountDto>
+  removeCountLine(input: RemoveCountLineInput): Promise<StockCountDto>
+  closeStockCount(input: CloseStockCountInput): Promise<StockCountDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -215,6 +364,16 @@ export const POS_API_METHODS = [
   'getZReport',
   'exportBackup',
   'confirmBackupSaved',
+  'stockOverview',
+  'receivePurchase',
+  'produceBatch',
+  'adjustStock',
+  'discardBase',
+  'startStockCount',
+  'getOpenStockCount',
+  'saveCountLine',
+  'removeCountLine',
+  'closeStockCount',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
