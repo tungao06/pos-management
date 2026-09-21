@@ -5,7 +5,7 @@ import { expiryState, stockStatus, stockValueSatang, type ExpiryState } from '@d
 import { loadCostStates } from '../db/stock'
 import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
-import { KEY_COUNT_ITEM_CODES, lastPurchaseCosts, stockBusinessDate } from './stock-common'
+import { KEY_COUNT_ITEM_CODES, lastPurchaseCosts, stockBusinessDate, stockCountableItems } from './stock-common'
 import type { BaseBatchDto, BomLineDto, PurchaseUnitDto, StockItemDto, StockOverviewDto } from './types'
 
 /** Q4-12 · D20: a count is due when the last one (with at least one line) closed this many days ago, or never. */
@@ -59,21 +59,15 @@ export async function stockOverview(db: RemoteDb, deps: ApiDeps): Promise<StockO
   const device = await requireDevice(db)
   const at = deps.now()
   const states = await loadCostStates(db)
-  // M-11: an item taken off the list (inactive) stays on the page while it still has stock, so it can be counted out
-  const items = (
-    await db
-      .select()
-      .from(s.item)
-      .where(and(eq(s.item.isTracked, true), inArray(s.item.kind, ['raw', 'prepared'])))
-      .orderBy(asc(s.item.kind), asc(s.item.code))
-      .all()
-  ).filter((i) => i.isActive || (states.get(i.id)?.onHandMilli ?? 0) !== 0)
+  // M-11 · controller ruling I-2: an item taken off the list (inactive) stays on the page while it still has stock,
+  // so it can be counted out — see stockCountableItems in stock-common.ts (also Task 7's "count all" list).
+  const items = await stockCountableItems(db, states)
   const lastCosts = await lastPurchaseCosts(db)
   const units = await db.select().from(s.purchaseUnit).orderBy(desc(s.purchaseUnit.isDefault), asc(s.purchaseUnit.name)).all()
   const bases = items.filter((i) => i.kind === 'prepared')
   const batches = await latestBatches(db, bases.map((b) => b.id))
   const boms = bases.length === 0 ? [] : await db.select().from(s.bom).where(and(inArray(s.bom.itemId, bases.map((b) => b.id)), eq(s.bom.isCurrent, true))).all()
-  const bomLines = boms.length === 0 ? [] : await db.select().from(s.bomLine).where(inArray(s.bomLine.bomId, boms.map((b) => b.id))).all()
+  const bomLines = boms.length === 0 ? [] : await db.select().from(s.bomLine).where(inArray(s.bomLine.bomId, boms.map((b) => b.id))).orderBy(asc(sql`rowid`)).all()
   const allItems = new Map((await db.select().from(s.item).all()).map((i) => [i.id, i]))
 
   const out: StockItemDto[] = items.map((i) => {

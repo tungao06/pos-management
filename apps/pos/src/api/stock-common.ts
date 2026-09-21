@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { bangkokDate } from '../lib/clock'
@@ -36,6 +36,11 @@ export const MAX_STOCK_LINES = 50
 /**
  * Q4-1: stock work does not need an open shift. Its business_date is the open shift's (so after-midnight work stays on
  * the same day, spec §4.7) or, with no shift open, today's Thai calendar date.
+ *
+ * m-3 (Task 3 fix round 1, controller ruling): deliberately ignores the 05:00 stale-shift cutoff (`isShiftStale`,
+ * Q3b-8 · D52) — a shift left open well into the next day still dates stock work to the shift's own day, exactly
+ * like a sale (SellScreen only shows a "close this shift" banner, spec §4.7; it never changes the business date).
+ * Stock work and sales must agree on the date, so this stays a plain lookup of the open shift, not a stale-aware one.
  */
 export async function stockBusinessDate(db: RemoteDb, deviceId: string, atIso: string): Promise<string> {
   const shift = await currentOpenShift(db, deviceId)
@@ -44,16 +49,52 @@ export async function stockBusinessDate(db: RemoteDb, deviceId: string, atIso: s
 
 export type StockItemKind = 'raw' | 'prepared'
 
+async function hasNonZeroStock(db: RemoteDb, itemId: string): Promise<boolean> {
+  const row = await db.select({ onHandMilli: s.itemCostState.onHandMilli }).from(s.itemCostState).where(eq(s.itemCostState.itemId, itemId)).get()
+  return (row?.onHandMilli ?? 0) !== 0
+}
+
 /**
- * An active, tracked item of one of `kinds` (D29: untracked items — ice, water, salt, packaging sets — are never
- * received, counted or adjusted by hand; plan 3 hand-off I-2b M-4).
+ * A tracked item of one of `kinds` (D29: untracked items — ice, water, salt, packaging sets — are never received,
+ * counted or adjusted by hand; plan 3 hand-off I-2b M-4).
+ *
+ * Active by default. Controller ruling I-2 (Task 3 fix round 1): an item turned off while it still holds stock
+ * (on-hand ≠ 0) must still be reachable so it can be brought to zero — pass `{ allowInactiveWithStock: true }` for
+ * that. Receiving (`receivePurchase`) and producing (`produceBase`) never set this: an inactive item cannot be
+ * bought or made, only counted or written off by Tasks 6–7.
  */
-export async function requireStockItem(db: RemoteDb, itemId: string, kinds: readonly StockItemKind[]): Promise<typeof s.item.$inferSelect> {
+export async function requireStockItem(
+  db: RemoteDb,
+  itemId: string,
+  kinds: readonly StockItemKind[],
+  opts: { allowInactiveWithStock?: boolean } = {},
+): Promise<typeof s.item.$inferSelect> {
   const item = await db.select().from(s.item).where(eq(s.item.id, itemId)).get()
-  if (!item || !item.isActive || !item.isTracked || !(kinds as readonly string[]).includes(item.kind)) {
+  const kindOk = item !== undefined && item.isTracked && (kinds as readonly string[]).includes(item.kind)
+  const activeOk = item !== undefined && (item.isActive || (opts.allowInactiveWithStock === true && (await hasNonZeroStock(db, itemId))))
+  if (!item || !kindOk || !activeOk) {
     throw new PosError('BAD_INPUT', `item ${itemId} is not a tracked ${kinds.join('/')} item`)
   }
   return item
+}
+
+/**
+ * Tracked raw items and bases that belong on the stock page and in a full ("ทั้งหมด") count (Q4-13 · D30 ·
+ * controller ruling I-2, Task 3 fix round 1): active items, plus an inactive item whose on-hand is not exactly 0
+ * (M-11) — visible because it still holds stock, so it can be counted (and, with `requireStockItem`'s
+ * `allowInactiveWithStock`, written off) down to zero. An inactive item already at 0 is gone for good. `states` is
+ * the caller's `loadCostStates(db)` map, so this never re-reads it. Shared by `stockOverview` and, from Task 7 on,
+ * by the opening-count completeness check and the "ทั้งหมด" count screen — call this instead of re-deriving the
+ * filter so the stock page and a full count always agree on which items are in scope.
+ */
+export async function stockCountableItems(db: RemoteDb, states: ReadonlyMap<string, { onHandMilli: number }>): Promise<(typeof s.item.$inferSelect)[]> {
+  const items = await db
+    .select()
+    .from(s.item)
+    .where(and(eq(s.item.isTracked, true), inArray(s.item.kind, ['raw', 'prepared'])))
+    .orderBy(asc(s.item.kind), asc(s.item.code))
+    .all()
+  return items.filter((i) => i.isActive || (states.get(i.id)?.onHandMilli ?? 0) !== 0)
 }
 
 /** Use-unit milli in one of `purchaseUnitId` of the item · `null` = the use unit itself (g / ml / ชิ้น) = 1,000. */
@@ -81,8 +122,13 @@ export function badInputOnRange<T>(fn: () => T): T {
   }
 }
 
-/** Zero-width characters that `trim()` keeps (3b parked minor m-1): a reason made only of these is empty. */
-const ZERO_WIDTH = /[​-‍﻿]/g
+/**
+ * Every Unicode format character (`\p{Cf}`) that `trim()` keeps — ZWSP/ZWNJ/ZWJ U+200B–U+200D, WORD JOINER U+2060,
+ * LRM/RLM U+200E/U+200F, the BOM U+FEFF, soft hyphen, bidi overrides and the rest of the category — not just the
+ * handful the 3b parked minor m-1 first listed (Task 3 fix round 1, review I-1 · m-1): a reason made only of these
+ * is empty.
+ */
+const ZERO_WIDTH = /\p{Cf}/gu
 
 /**
  * Free text typed by a person (a reason, a supplier, a note — plan 4 M-6): must be a string; zero-width characters

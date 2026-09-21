@@ -43,11 +43,14 @@ export async function listActiveUsers(db: RemoteDb): Promise<UserDto[]> {
  * batch, a stock count or a stock adjustment is one item with its lines and movements (a movement counts under its
  * `refType:refId`). Any other record (a shift, a paid-in/out — including the PAID_OUT of a receipt paid from the
  * drawer, which is a cash record of its own) counts once per row id. Only status pending — plan 2 M8; dead rows are
- * shown elsewhere by plan 5.
+ * shown elsewhere by plan 5. m-2 (Task 3 fix round 1): the whole case is wrapped in `coalesce(…, table_name || ':' ||
+ * id)` — if a future writer ever queues a row missing the field a branch reads (`refType`/`refId`, `purchaseId`,
+ * `countId`), the key must fall back to something non-null, never disappear into `count(distinct …)`'s silent skip
+ * of NULL. That would make the badge undercount, which it must never do.
  */
 export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
   const rows = await db.values<[number]>(sql`
-    select count(distinct case
+    select count(distinct coalesce(case
       when table_name = 'order' then 'order:' || json_extract(row_json, '$.id')
       when table_name in ('order_line', 'payment', 'discount', 'order_event') then 'order:' || json_extract(row_json, '$.orderId')
       when table_name = 'stock_movement' then json_extract(row_json, '$.refType') || ':' || json_extract(row_json, '$.refId')
@@ -55,7 +58,7 @@ export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
       when table_name = 'purchase_line' then 'purchase:' || json_extract(row_json, '$.purchaseId')
       when table_name = 'stock_count_line' then 'stock_count:' || json_extract(row_json, '$.countId')
       else table_name || ':' || json_extract(row_json, '$.id')
-    end)
+    end, table_name || ':' || json_extract(row_json, '$.id')))
     from outbox where status = 'pending'`)
   return rows[0]?.[0] ?? 0
 }

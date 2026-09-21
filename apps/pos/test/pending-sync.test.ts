@@ -83,4 +83,24 @@ describe('countPendingSyncItems — stock documents (plan 4 T4-8)', () => {
     await enqueueOutbox(db, 'stock_movement', { id: 'm-6', refType: 'stock_adjustment', refId: 'sa-1' }, AT, newId)
     expect(await countPendingSyncItems(db)).toBe(4)
   })
+
+  it('a receipt paid from the drawer is 2 items: the purchase (with its lines and movements) and the paid-out cash record (Task 4 · m-4)', async () => {
+    const { db } = await openTestDb()
+    const newId = sequentialIds('ob')
+    await enqueueOutbox(db, 'purchase', { id: 'pu-2' }, AT, newId)
+    await enqueueOutbox(db, 'purchase_line', { id: 'pl-3', purchaseId: 'pu-2' }, AT, newId)
+    await enqueueOutbox(db, 'stock_movement', { id: 'm-7', refType: 'purchase', refId: 'pu-2' }, AT, newId)
+    await enqueueOutbox(db, 'cash_movement', { id: 'c-3', kind: 'PAID_OUT', orderId: null }, AT, newId)
+    expect(await countPendingSyncItems(db)).toBe(2)
+  })
+
+  it('m-2: a row missing the field its branch reads still counts once, instead of vanishing into a NULL group key', async () => {
+    const { db } = await openTestDb()
+    const newId = sequentialIds('ob')
+    // a hypothetical trimmed purchase_line row without purchaseId, the field that branch reads — every real writer
+    // today sends the full row (purchaseId is NOT NULL in the schema), but the badge must never silently undercount
+    // if that ever changes.
+    await enqueueOutbox(db, 'purchase_line', { id: 'pl-9' }, AT, newId)
+    expect(await countPendingSyncItems(db)).toBe(1)
+  })
 })

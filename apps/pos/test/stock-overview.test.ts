@@ -1,6 +1,9 @@
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
+import * as s from '@dayo/db-schema/sqlite'
+import { EXPIRY_SOON_MINUTES } from '@dayo/domain'
 import { openReadyApi, openTestApi, sellSku, TEST_SETUP } from './helpers/db'
-import { stockOf } from './helpers/stock'
+import { itemId, stockOf } from './helpers/stock'
 
 describe('stockOverview (spec §5 หน้าสต็อก)', () => {
   it('lists tracked raw items and bases only, at the standard cost before any movement; nothing on hand = out', async () => {
@@ -57,5 +60,66 @@ describe('stockOverview (spec §5 หน้าสต็อก)', () => {
     const u = await openReadyApi() // shift of 2026-09-17 opened at 10:00
     u.clock.set('2026-09-17T18:30:00.000Z') // after midnight, shift still open (spec §4.7)
     expect((await u.api.stockOverview()).businessDate).toBe('2026-09-17')
+  })
+
+  it('business date (m-3, Task 3 fix round 1) still keeps the open shift\'s date once the shift is stale — matches sales, which only warn (spec §4.7)', async () => {
+    const t = await openReadyApi() // shift of 2026-09-17
+    t.clock.set('2026-09-18T07:00:00.000Z') // 14:00 on the 18th in Bangkok — well past the 05:00 stale cutoff (Q3b-8), shift still open
+    expect((await t.api.stockOverview()).businessDate).toBe('2026-09-17')
+  })
+
+  it('a base "soon" to expire is not an alert — only negative or already-expired bases alert (Q4-10, m-4)', async () => {
+    const t = await openReadyApi()
+    const baseId = await itemId(t, 'PB-TEA-THAI')
+    const bom = await t.db.select().from(s.bom).where(and(eq(s.bom.itemId, baseId), eq(s.bom.isCurrent, true))).get()
+    const now = t.deps.now()
+    await t.db.insert(s.productionBatch).values({
+      id: t.deps.newId(),
+      bomId: bom!.id,
+      itemId: baseId,
+      businessDate: '2026-09-17',
+      scaleBp: 10_000,
+      yieldActualMilli: 3_000_000,
+      unitCostUsat: 0,
+      batchCostSatang: 0,
+      expiresAt: new Date(Date.parse(now) + (EXPIRY_SOON_MINUTES / 2) * 60_000).toISOString(), // well within the "soon" window
+      deviceId: t.device.id,
+      createdBy: t.owner.id,
+      createdAt: now,
+    })
+    await t.db.insert(s.itemCostState).values({ itemId: baseId, onHandMilli: 1_000_000, avgCostUsat: 1_000, asOfMovementId: null, updatedAt: now })
+    const item = (await t.api.stockOverview()).items.find((i) => i.code === 'PB-TEA-THAI')!
+    expect(item.latestBatch?.expiry).toBe('soon')
+    expect(item.status).toBe('ok') // on hand, no reorder point for a base
+    expect(item.alert).toBe(false)
+  })
+
+  it('countDue at the exact 7-day boundary (Q4-12 · D20, m-4)', async () => {
+    const t = await openReadyApi() // "now" (deps.now()) is 2026-09-17T03:00:00.000Z
+    const countId = t.deps.newId()
+    await t.db.insert(s.stockCount).values({
+      id: countId,
+      businessDate: '2026-09-10',
+      status: 'closed',
+      deviceId: t.device.id,
+      createdBy: t.owner.id,
+      createdAt: '2026-09-10T03:00:00.000Z',
+      closedBy: t.owner.id,
+      closedAt: '2026-09-10T03:00:00.000Z', // exactly 7 days before "now"
+    })
+    await t.db.insert(s.stockCountLine).values({
+      id: t.deps.newId(),
+      countId,
+      itemId: await itemId(t, 'RM-TEA-01'),
+      purchaseUnitId: null,
+      countedUnitsMilli: 0,
+      countedUseMilli: 0,
+      expectedUseMilli: 0,
+      varianceUseMilli: 0,
+      varianceSatang: 0,
+    })
+    expect((await t.api.stockOverview()).countDue).toBe(true) // exactly 7 days since the last count with lines: due
+    await t.db.update(s.stockCount).set({ closedAt: '2026-09-10T03:00:00.001Z' }).where(eq(s.stockCount.id, countId))
+    expect((await t.api.stockOverview()).countDue).toBe(false) // 1 ms short of 7 days: not due yet
   })
 })
