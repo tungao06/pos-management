@@ -110,6 +110,37 @@ describe('adjustStock (spec §5 ปรับสต็อก · D50 Q3-20 · Q4-8
     t.raw.prepare('update item set is_active = 0 where id = ?').run(milk) // never had stock: on-hand is still 0
     await expect(t.api.adjustStock({ actorUserId: t.owner.id, reasonCode: 'WASTE', reason: 'หก', items: [{ itemId: milk, purchaseUnitId: null, qtyUnitsMilli: 100_000 }], drinks: [] })).rejects.toThrow(/^BAD_INPUT: /)
   })
+
+  it('a drink recipe never gates on an inactive ingredient — a giveaway succeeds the same as a sale would (fix round 1, review I-1)', async () => {
+    const t = await openReadyApi()
+    const milk3 = await itemId(t, 'RM-MLK-03') // in the Original-16oz recipe; counted down to 0 and turned off
+    t.raw.prepare('update item set is_active = 0 where id = ?').run(milk3)
+    const a = await t.api.adjustStock({ actorUserId: t.owner.id, reasonCode: 'GIVEAWAY', reason: 'ชดเชยลูกค้า แก้วหก', items: [], drinks: [await drink(t, 'Original-16oz')] })
+    expect(a.movements.find((m) => m.code === 'RM-MLK-03')).toEqual({ itemId: milk3, code: 'RM-MLK-03', kind: 'WASTE', qtyMilli: -16_000 })
+    expect(await stockOf(t, 'RM-MLK-03')).toMatchObject({ onHandMilli: -16_000 })
+  })
+
+  it('a by-item WASTE line costs at the moving average, not standard, and an outflow never moves the average (review I-2)', async () => {
+    const t = await openReadyApi()
+    const milk = await itemId(t, 'RM-MLK-01') // standard 4,800,000 usat/ml
+    const unit = await defaultUnitId(t, 'RM-MLK-01')
+    await t.api.receivePurchase({ actorUserId: t.owner.id, supplier: '', note: '', lines: [{ itemId: milk, purchaseUnitId: unit, qtyUnitsMilli: 1_000, lineTotalSatang: 5_500 }], paidFromDrawer: false, acceptPriceJump: true })
+    expect(await stockOf(t, 'RM-MLK-01')).toEqual({ onHandMilli: 1_000_000, avgCostUsat: 5_500_000 }) // now above standard
+    const a = await t.api.adjustStock({ actorUserId: t.owner.id, reasonCode: 'WASTE', reason: 'หกบางส่วน', items: [{ itemId: milk, purchaseUnitId: null, qtyUnitsMilli: 200_000 }], drinks: [] })
+    expect(a.movements).toEqual([{ itemId: milk, code: 'RM-MLK-01', kind: 'WASTE', qtyMilli: -200_000 }])
+    expect((await movementsOf(t, 'stock_adjustment', a.id))[0]).toMatchObject({ unitCostUsat: 5_500_000 }) // the average, not the 4,800,000 standard
+    expect(await stockOf(t, 'RM-MLK-01')).toEqual({ onHandMilli: 800_000, avgCostUsat: 5_500_000 })
+  })
+
+  it('a recipe line costs its tracked ingredient at the moving average too (review I-2)', async () => {
+    const t = await openReadyApi()
+    const milk2 = await itemId(t, 'RM-MLK-02') // standard 7,407,407 usat/ml
+    const unit = await defaultUnitId(t, 'RM-MLK-02')
+    await t.api.receivePurchase({ actorUserId: t.owner.id, supplier: '', note: '', lines: [{ itemId: milk2, purchaseUnitId: unit, qtyUnitsMilli: 1_000, lineTotalSatang: 3_645 }], paidFromDrawer: false, acceptPriceJump: true })
+    expect(await stockOf(t, 'RM-MLK-02')).toEqual({ onHandMilli: 405_000, avgCostUsat: 9_000_000 }) // now above standard
+    const a = await t.api.adjustStock({ actorUserId: t.owner.id, reasonCode: 'GIVEAWAY', reason: 'ชดเชยลูกค้า', items: [], drinks: [await drink(t, 'Original-16oz')] })
+    expect((await movementsOf(t, 'stock_adjustment', a.id)).find((m) => m.code === 'RM-MLK-02')).toMatchObject({ kind: 'WASTE', qtyMilli: -46_000, unitCostUsat: 9_000_000 })
+  })
 })
 
 describe('discardBase (spec §4.6 ปุ่ม "ทิ้ง" · Q4-9)', () => {
@@ -139,6 +170,16 @@ describe('discardBase (spec §4.6 ปุ่ม "ทิ้ง" · Q4-9)', () => {
     t.raw.prepare('update item set is_active = 0 where id = ?').run(shot) // dropped from the menu, leftover base still on hand
     const a = await t.api.discardBase({ actorUserId: t.owner.id, itemId: shot })
     expect(a).toMatchObject({ reasonCode: 'WASTE', reason: 'ทิ้งเบสที่เหลือ', movements: [{ code: 'PB-MATCHA-SHOT', kind: 'WASTE', qtyMilli: -300_000 }] })
+    expect(await stockOf(t, 'PB-MATCHA-SHOT')).toMatchObject({ onHandMilli: 0 })
+  })
+
+  it('a base whose stock has no production batch (e.g. a count gain) discards as WASTE, never EXPIRED (review m-1)', async () => {
+    const t = await openReadyApi()
+    const shot = await itemId(t, 'PB-MATCHA-SHOT')
+    // stock with no production_batch row at all — as a count gain (Task 7, T4-10) or a seeded opening balance would leave it
+    await t.db.insert(s.itemCostState).values({ itemId: shot, onHandMilli: 150_000, avgCostUsat: 2_000_000, asOfMovementId: null, updatedAt: t.deps.now() })
+    const a = await t.api.discardBase({ actorUserId: t.owner.id, itemId: shot })
+    expect(a).toMatchObject({ reasonCode: 'WASTE', reason: 'ทิ้งเบสที่เหลือ', movements: [{ code: 'PB-MATCHA-SHOT', kind: 'WASTE', qtyMilli: -150_000 }] })
     expect(await stockOf(t, 'PB-MATCHA-SHOT')).toMatchObject({ onHandMilli: 0 })
   })
 })

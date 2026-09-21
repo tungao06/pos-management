@@ -68,9 +68,9 @@ async function writeAdjustment(
  * Controller ruling (Task 6): an item line is looked up with `{ allowInactiveWithStock: true }` — an item turned
  * off while it still holds stock (on-hand ≠ 0) can still be stocked out down to zero, the same escape hatch stock
  * counting already uses (Task 3 controller ruling I-2). A drink line still requires the variant and its product to
- * be active on the menu (M-11); a tracked ingredient its recipe explodes to is looked up the same permissive way,
- * so a base or raw item dropped from the catalog after the recipe was written does not block writing off the
- * ingredients it still holds.
+ * be active on the menu (M-11); its recipe's ingredients are never gated on `is_active` at all — exactly like a
+ * sale (`sale.ts` / `planSale`) and like producing a base — so a drink whose recipe still names a now-inactive
+ * ingredient can be given away or written off the same as it can be sold (fix round 1, review I-1).
  */
 export async function adjustStock(db: RemoteDb, deps: ApiDeps, input: AdjustStockInput): Promise<StockAdjustmentDto> {
   const actor = await requireActiveUser(db, input.actorUserId)
@@ -110,22 +110,12 @@ export async function adjustStock(db: RemoteDb, deps: ApiDeps, input: AdjustStoc
         .innerJoin(s.product, eq(s.product.id, s.productVariant.productId))
         .where(and(inArray(s.productVariant.id, input.drinks.map((d) => d.variantId)), eq(s.productVariant.isActive, true), eq(s.product.isActive, true)))
         .all()
-      const checkedIngredients = new Set<string>()
       for (const d of input.drinks) {
         if (!active.some((v) => v.id === d.variantId)) throw new PosError('BAD_INPUT', `drink ${d.variantId} is not on the menu`)
         const recipe = recipes.find((r) => r.variantId === d.variantId && r.sweetnessId === d.sweetnessId)
         if (!recipe) throw new PosError('NO_RECIPE', `${d.variantId}/${d.sweetnessId}`)
         const lines = await tx.select().from(s.recipeLine).where(eq(s.recipeLine.recipeId, recipe.id)).orderBy(asc(sql`rowid`)).all()
         const exploded = badInputOnRange(() => explodeNeeds(lines.map((l) => ({ itemId: l.itemId, qtyMilli: l.qtyMilli })), d.qty, catalog))
-        // Controller ruling: a tracked ingredient the recipe explodes to goes through the same permissive lookup as
-        // a typed item line — an inactive base or raw item still holding stock can still be written off through a
-        // recipe. Untracked leaves (ice, water, packaging) are not stock items at all and skip this check, same as
-        // `requireStockItem` would refuse them outright by kind.
-        for (const itemId of exploded.keys()) {
-          if (checkedIngredients.has(itemId)) continue
-          checkedIngredients.add(itemId)
-          if (catalog.items.get(itemId)?.isTracked === true) await requireStockItem(tx, itemId, ['raw', 'prepared'], { allowInactiveWithStock: true })
-        }
         mergeNeeds(needs, exploded)
         detail.drinks.push({ variantId: d.variantId, sweetnessId: d.sweetnessId, recipeId: recipe.id, qty: d.qty })
       }
