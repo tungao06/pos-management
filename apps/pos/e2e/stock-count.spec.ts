@@ -34,16 +34,27 @@ test('opening count covers every item, blind until saved, resumed after a reload
   await page.getByTestId('count-close').click()
   await page.getByTestId('count-close-confirm').click()
   await expect(page.getByRole('alert')).toBeVisible()
-  // everything else is empty on this shelf: save each row blank (= 0)
+  // review m-3: the refusal names the still-uncounted items
+  await expect(page.getByRole('alert')).toContainText('RM-POW-01')
+  // review m-2 (fix round 1): the refusal un-arms the confirm — the plain "count-close" button is back, asking again is required
+  await expect(page.getByTestId('count-close-confirm')).toHaveCount(0)
+  await expect(page.getByTestId('count-close')).toBeVisible()
+
+  // everything else is empty on this shelf: save each row with an explicit 0 (review I-2 — a blank field is refused)
   const unsaved = page.locator('[data-testid^="count-save-"]')
   while ((await unsaved.count()) > 0) {
     const n = await unsaved.count()
+    const code = (await unsaved.first().getAttribute('data-testid'))!.slice('count-save-'.length)
+    await page.getByTestId(`count-rest-${code}`).fill('0')
     await unsaved.first().click()
     await expect(unsaved).toHaveCount(n - 1)
   }
+  await page.getByTestId('count-close').click()
   await page.getByTestId('count-close-confirm').click()
   await expect(page.getByTestId('count-closed')).toBeVisible()
   await expect(page.getByTestId('count-start')).toBeVisible()
+  // review I-3: a successful close leaves no stale refusal banner behind
+  await expect(page.getByRole('alert')).toHaveCount(0)
 
   await page.getByTestId('nav-stock').click()
   await expect(page.getByTestId('stock-onhand-RM-TEA-01')).toContainText('800 g')
