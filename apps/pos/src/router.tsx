@@ -4,6 +4,7 @@ import { AdjustScreen } from './screens/AdjustScreen'
 import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
 import { CloseShiftScreen } from './screens/CloseShiftScreen'
+import { CountScreen } from './screens/CountScreen'
 import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
 import { LoginScreen } from './screens/LoginScreen'
@@ -184,6 +185,15 @@ const adjustRoute = createRoute({
     </RequireSession>
   ),
 })
+const countRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/stock/count',
+  component: () => (
+    <RequireSession>
+      <CountScreen />
+    </RequireSession>
+  ),
+})
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -205,6 +215,7 @@ export const routeTree = rootRoute.addChildren([
   receiveRoute,
   produceRoute,
   adjustRoute,
+  countRoute,
 ])
 
 export const router = createRouter({ routeTree })

@@ -301,10 +301,13 @@ export const TH = {
   countBlindHint: 'นับของจริงแล้วกรอกเป็นหน่วยเต็ม + เศษ — ระบบแสดงส่วนต่างหลังบันทึกแต่ละรายการ (แก้ตัวเลขได้ ยอดบัญชียังเป็นของตอนนับครั้งแรก)',
   countSaveLine: 'บันทึก',
   countRecount: 'แก้ตัวเลข', // I-9: the book figure stays as frozen when the item was first counted
+  // m-2 (Task 7 review, carried into Task 12): "แก้ตัวเลข" fixes a typo only — it never re-freezes the book figure.
+  // A genuine recount after sales must go through "ไม่นับรายการนี้" then a fresh save, which does re-freeze it.
+  countRecountHint: 'แก้ตัวเลขที่พิมพ์ผิดเท่านั้น ยอดบัญชียังคงเป็นของตอนนับครั้งแรก — ถ้ามีขายหรือรับของระหว่างที่รอ ให้กด "ไม่นับรายการนี้" แล้วนับใหม่ ระบบจะตั้งยอดบัญชีใหม่ตามปัจจุบัน',
   countUnits: (unit: string, size: string): string => `${unit} เต็ม (${size})`,
   countRest: (useUnit: string): string => `เศษ (${useUnit})`,
   countOpeningHint: 'นับครั้งแรก (ยอดยกมา) — ต้องนับให้ครบทุกรายการ ของที่ไม่มีให้กด "บันทึก" ทั้งที่ช่องว่าง (= 0)',
-  countSkip: 'ไม่นับรายการนี้',
+  countSkip: 'ไม่นับรายการนี้', // m-2: the genuine-recount path — removes the draft line so the next save re-freezes the book figure
   countOpening: 'ยอดยกมาครั้งแรก',
   countCounted: (qty: string): string => `นับได้ ${qty}`,
   countVariance: (qty: string, baht: string): string => `ส่วนต่าง ${qty} (${baht})`,

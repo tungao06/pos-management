@@ -73,6 +73,9 @@ export function StockScreen(): JSX.Element {
         <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' })}>
           {TH.navProduce}
         </button>
+        <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' })}>
+          {o.openCountId === null ? TH.navCount : TH.navCountResume}
+        </button>
         <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' })}>
           {TH.navAdjust}
         </button>
