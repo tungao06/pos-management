@@ -1,5 +1,6 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { RequireSession } from './app/guards'
+import { AdjustScreen } from './screens/AdjustScreen'
 import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
 import { CloseShiftScreen } from './screens/CloseShiftScreen'
@@ -174,6 +175,15 @@ const produceRoute = createRoute({
     </RequireSession>
   ),
 })
+const adjustRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/stock/adjust',
+  component: () => (
+    <RequireSession>
+      <AdjustScreen />
+    </RequireSession>
+  ),
+})
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -194,6 +204,7 @@ export const routeTree = rootRoute.addChildren([
   stockRoute,
   receiveRoute,
   produceRoute,
+  adjustRoute,
 ])
 
 export const router = createRouter({ routeTree })
