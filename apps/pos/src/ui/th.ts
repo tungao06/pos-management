@@ -279,6 +279,7 @@ export const TH = {
   receiveDone: (total: string): string => `บันทึกรับของแล้ว รวม ${total}`,
   errLineTooLarge: (max: string): string => `ราคารวมต่อรายการต้องไม่เกิน ${max}`,
   errTooManyLines: (max: number): string => `รับของเข้าได้สูงสุด ${max} รายการต่อใบ`,
+  errDrawerPayTooLarge: (max: string): string => `จ่ายจากลิ้นชักได้ไม่เกิน ${max} ต่อครั้ง — ลดยอด หรือปิด "จ่ายด้วยเงินในลิ้นชัก" แล้วจ่ายด้วยวิธีอื่น`,
   remove: 'ลบ',
 
   adjustTitle: 'ปรับสต็อก (เบิกของออก)',
@@ -295,6 +296,10 @@ export const TH = {
   errNothingToAdjust: 'ยังไม่มีรายการ',
 
   countTitle: 'นับสต็อก',
+  // review m-1 (final review): the book figure of a counted item is frozen at the moment its line is saved (T4-2) —
+  // a receipt, batch, or "not made" void entered later that same day, but from stock that physically moved before
+  // the count, lands on top of the frozen figure and overstates the item until next week's count corrects it.
+  countCutoffHint: 'บันทึกรับของ/ทำเบสให้ครบก่อนเริ่มนับ',
   countStart: 'เริ่มนับ',
   countScopeKey: 'ชุดหลัก',
   countScopeAll: 'ทั้งหมด',

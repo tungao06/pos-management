@@ -200,7 +200,12 @@ export function CountScreen(): JSX.Element {
       setCount(c)
       setClosed(null) // m-8: a fresh count is not the last one's closed summary
       setError(null) // I-3: a new count starting successfully clears any stale banner
-      await queryClient.invalidateQueries({ queryKey: stockKey }) // m-5: nav-count's "ต่อ" label follows immediately
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: stockKey }), // m-5: nav-count's "ต่อ" label follows immediately
+        // review m-2 (final review): startStockCount queues its own outbox row, so the pending-sync badge
+        // (bootstrapKey → pendingSyncItems) must follow immediately too, not only after the next bootstrap refetch.
+        queryClient.invalidateQueries({ queryKey: bootstrapKey }),
+      ])
     },
     onError,
   })
@@ -263,6 +268,9 @@ export function CountScreen(): JSX.Element {
         </button>
       </div>
       <h1>{TH.countTitle}</h1>
+      <p className="badge" data-testid="count-cutoff-hint">
+        {TH.countCutoffHint}
+      </p>
       {closed !== null && (
         <p className="badge" data-testid="count-closed">
           {TH.countClosed(closed.lines.filter((l) => l.varianceUseMilli !== 0).length, formatBaht(closed.totalVarianceSatang))}

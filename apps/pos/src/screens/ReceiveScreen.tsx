@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
 import { isPriceJump, priceDeviationBp, purchaseUnitCostUsat, unitsToUseMilli } from '@dayo/domain'
+import { MAX_CASH_MOVEMENT_SATANG } from '../api/cash'
 import { posErrorCode } from '../api/errors'
 import { MAX_LINE_SATANG, MAX_STOCK_LINES } from '../api/stock-common'
 import { REASON_MAX_LENGTH, type PurchaseDto, type PurchaseLineInput, type StockItemDto } from '../api/types'
@@ -131,9 +132,18 @@ export function ReceiveScreen(): JSX.Element {
   // fail on save with no hint of which line was the problem.
   const items = stock.data.items.filter((i) => i.kind === 'raw' && i.isActive)
   const sumSatang = lines.reduce((a, l) => a + l.lineTotalSatang, 0)
+  // review I-1 (final review): every path into `submit` re-runs the over-drawer check every time — it is not
+  // skipped just because `overDrawer` is already true. Before this, a second tap on `receive-save` (or on
+  // `receive-confirm-price`) fell through the `!overDrawer` guard and called `save.mutate` directly, bypassing the
+  // warning it had itself just raised. `receive-over-drawer-confirm` is now the *only* way past this check — it
+  // calls `save.mutate` on its own, the same way `CashMoveDialog`'s `confirmOverDrawer` bypasses `submit()` there.
   const submit = (acceptPriceJump: boolean): void => {
+    // review m-3 (final review): a drawer-paid receipt is capped at MAX_CASH_MOVEMENT_SATANG, the same cap
+    // `insertManualCashMovement` (cash.ts) enforces on any manual paid-out — checked here too, so a receipt over it
+    // is refused with a clear Thai message instead of a generic English BAD_INPUT from the server.
+    if (payFromDrawer && sumSatang > MAX_CASH_MOVEMENT_SATANG) return setError(TH.errDrawerPayTooLarge(formatBaht(MAX_CASH_MOVEMENT_SATANG)))
     // Q3b-14 · D54 via Q4-6: more than the drawer should hold → one explicit confirm first (no figure shown)
-    if (payFromDrawer && !overDrawer) {
+    if (payFromDrawer) {
       if (drawer.pending) return
       if (drawer.exceeds(sumSatang)) return setOverDrawer(true)
     }

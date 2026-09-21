@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MAX_CASH_MOVEMENT_SATANG } from '../api/cash'
 import { PosError } from '../api/errors'
 import { MAX_LINE_SATANG, MAX_STOCK_LINES } from '../api/stock-common'
 import type { BootstrapState, PosApi, PurchaseDto, ShiftReportDto, StockItemDto, StockOverviewDto, UserDto } from '../api/types'
@@ -246,6 +247,60 @@ describe('ReceiveScreen — I-1 (Task 9 fix round 1, money): a PRICE_JUMP refusa
   })
 })
 
+describe('ReceiveScreen — I-1 (final review, money): only receive-over-drawer-confirm can save past the over-drawer warning — a second tap on receive-save or receive-confirm-price never bypasses it', () => {
+  it("reproduces the reviewer's exact probe: two taps on receive-save never calls receivePurchase — only the dedicated confirm does", async () => {
+    const receivePurchase = vi.fn(async () => DONE)
+    mount({ receivePurchase, shiftReport: vi.fn(async () => REPORT), bootstrap: vi.fn(async () => bootstrap({ openShift: OPEN_SHIFT })) })
+    await addLine(ITEM_A.code, '0.10') // clean, 10 satang — over the tiny ฿0.05 drawer, no price jump involved
+    await checkPaidFromDrawer()
+
+    fireEvent.click(screen.getByTestId('receive-save')) // 1st tap: raises the warning, saves nothing
+    await waitFor(() => expect(screen.getByTestId('receive-over-drawer-warning')).toBeTruthy())
+    expect(receivePurchase).not.toHaveBeenCalled()
+
+    // mutation-proof: the old `if (payFromDrawer && !overDrawer)` guard skipped the check once overDrawer was
+    // already true, so this second tap called save.mutate(false) directly. It must not, here.
+    fireEvent.click(screen.getByTestId('receive-save')) // 2nd tap, same button, warning still showing
+    expect(screen.getByTestId('receive-over-drawer-warning')).toBeTruthy() // still just a warning, not a save
+
+    fireEvent.click(screen.getByTestId('receive-over-drawer-confirm')) // only this button may bypass the check
+    await waitFor(() => expect(receivePurchase).toHaveBeenCalledTimes(1))
+    expect(receivePurchase).toHaveBeenLastCalledWith(expect.objectContaining({ paidFromDrawer: true }))
+    await waitFor(() => expect(screen.getByTestId('receive-done')).toBeTruthy())
+  })
+
+  it('two taps on receive-confirm-price never bypasses the over-drawer question either, even once a price jump is also confirmed', async () => {
+    const receivePurchase = vi.fn(async (input: { acceptPriceJump: boolean }): Promise<PurchaseDto> => {
+      if (!input.acceptPriceJump) throw new PosError('PRICE_JUMP', ITEM_A.code)
+      return DONE
+    })
+    mount({ receivePurchase, shiftReport: vi.fn(async () => REPORT), bootstrap: vi.fn(async () => bootstrap({ openShift: OPEN_SHIFT })) })
+    await addLine(ITEM_A.code, '0.12') // a jump, added before the drawer is even ticked
+    await waitFor(() => expect((screen.getByTestId('receive-paid-drawer') as HTMLInputElement).disabled).toBe(false))
+
+    fireEvent.click(screen.getByTestId('receive-save')) // payFromDrawer is still false here — refused with PRICE_JUMP only
+    await waitFor(() => expect(screen.getByTestId('receive-confirm-price')).toBeTruthy())
+    expect(receivePurchase).toHaveBeenCalledTimes(1)
+
+    await checkPaidFromDrawer() // now tick the drawer — priceJump stays true, overDrawer stays false so far
+
+    fireEvent.click(screen.getByTestId('receive-confirm-price')) // 1st tap with the drawer now in play: raises the warning
+    await waitFor(() => expect(screen.getByTestId('receive-over-drawer-warning')).toBeTruthy())
+    expect(receivePurchase).toHaveBeenCalledTimes(1) // still only the earlier PRICE_JUMP refusal
+
+    // mutation-proof: the old guard let this second tap fall through submit(true) → save.mutate(true) directly,
+    // accepting both the price jump AND the over-drawer payment with no confirm ever pressed.
+    fireEvent.click(screen.getByTestId('receive-confirm-price')) // 2nd tap, same button, warning still showing
+    expect(receivePurchase).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('receive-over-drawer-warning')).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId('receive-over-drawer-confirm'))
+    await waitFor(() => expect(receivePurchase).toHaveBeenCalledTimes(2))
+    expect(receivePurchase).toHaveBeenLastCalledWith(expect.objectContaining({ acceptPriceJump: true, paidFromDrawer: true }))
+    await waitFor(() => expect(screen.getByTestId('receive-done')).toBeTruthy())
+  })
+})
+
 describe('ReceiveScreen — I-3 mutant M1: addLine must clear a stale PRICE_JUMP confirm on every kind of line-edit (item, qty, price), not only after a remove', () => {
   it.each([
     ['a different item', ITEM_B.code, '1', '0.10'],
@@ -405,5 +460,27 @@ describe('ReceiveScreen — m-3 (Task 9 fix round 1): the client enforces the sa
 
     expect(screen.queryByTestId(`receive-line-${MAX_STOCK_LINES}`)).toBeNull()
     expect(screen.getByText(TH.errTooManyLines(MAX_STOCK_LINES))).toBeTruthy()
+  })
+})
+
+describe('ReceiveScreen — m-3 (final review): a drawer-paid receipt over the ฿100,000 PAID_OUT cap is refused with a Thai message, before ever reaching the over-drawer question', () => {
+  it('refuses to save when the drawer-paid total exceeds MAX_CASH_MOVEMENT_SATANG, without ever showing the over-drawer warning', async () => {
+    const receivePurchase = vi.fn(async () => DONE)
+    mount({ receivePurchase, shiftReport: vi.fn(async () => REPORT), bootstrap: vi.fn(async () => bootstrap({ openShift: OPEN_SHIFT })) })
+    await waitFor(() => expect(screen.getByTestId('receive-item')).toBeTruthy())
+    // two lines at exactly the ฿100,000 per-line cap (MAX_LINE_SATANG) — together well over the drawer-paid cap
+    for (let n = 0; n < 2; n++) {
+      fireEvent.change(screen.getByTestId('receive-item'), { target: { value: ITEM_A.code } })
+      fireEvent.change(screen.getByTestId('receive-qty'), { target: { value: '1' } })
+      fireEvent.change(screen.getByTestId('receive-total'), { target: { value: '100000' } })
+      fireEvent.click(screen.getByTestId('receive-add'))
+    }
+    expect(screen.getByTestId('receive-sum').textContent).toBe(formatBaht(20_000_000))
+    await checkPaidFromDrawer()
+
+    fireEvent.click(screen.getByTestId('receive-save'))
+    await waitFor(() => expect(screen.getByText(TH.errDrawerPayTooLarge(formatBaht(MAX_CASH_MOVEMENT_SATANG)))).toBeTruthy())
+    expect(screen.queryByTestId('receive-over-drawer-warning')).toBeNull() // the cap check runs first — no drawer question at all
+    expect(receivePurchase).not.toHaveBeenCalled()
   })
 })

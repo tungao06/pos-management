@@ -7,6 +7,7 @@ import { PosError } from '../api/errors'
 import { MAX_UNITS_MILLI } from '../api/stock-common'
 import type { PosApi, StockCountDto, StockItemDto, StockOverviewDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
+import { bootstrapKey } from '../app/queries'
 import { SessionProvider, useSession } from '../app/session'
 import { formatQty } from '../ui/format'
 import { TH } from '../ui/th'
@@ -79,7 +80,7 @@ function mount(): PosApi {
  * Every method CountScreen may call, mocked with a sane default so a test can override only what it exercises. Used
  * by the tests below that go beyond the three calls `mount()` covers (recount, remove, close, disable-while-pending).
  */
-function mountFull(overrides: Partial<PosApi> = {}): PosApi {
+function mountFull(overrides: Partial<PosApi> = {}): { api: PosApi; queryClient: QueryClient } {
   const api = {
     stockOverview: vi.fn(async () => OVERVIEW),
     getOpenStockCount: vi.fn(async () => OPEN),
@@ -99,7 +100,7 @@ function mountFull(overrides: Partial<PosApi> = {}): PosApi {
       </ApiProvider>
     </QueryClientProvider>,
   )
-  return api
+  return { api, queryClient }
 }
 
 /**
@@ -269,7 +270,7 @@ describe('CountScreen — a blank count is refused; an explicit 0 is accepted (r
   })
 
   it('accepts an explicit 0 in the rest field with units left blank', async () => {
-    const api = mountFull()
+    const { api } = mountFull()
     await waitFor(() => expect(screen.getByTestId('count-rest-RM-TEA-01')).toBeTruthy())
     fireEvent.change(screen.getByTestId('count-rest-RM-TEA-01'), { target: { value: '0' } })
     act(() => screen.getByTestId('count-save-RM-TEA-01').click())
@@ -418,7 +419,7 @@ describe('CountScreen — resuming a count shows a saved line outside the key se
   })
 })
 
-describe('CountScreen — starting and closing a count invalidate stockKey (review m-5 · m-7 M4)', () => {
+describe('CountScreen — starting and closing a count invalidate stockKey (review m-5 · m-7 M4), and starting also invalidates bootstrapKey (review m-2, final review)', () => {
   it('starting a count invalidates stockKey', async () => {
     const stockOverview = vi.fn(async () => OVERVIEW)
     mountFull({ stockOverview, getOpenStockCount: vi.fn(async () => null), startStockCount: vi.fn(async () => OPEN) })
@@ -428,6 +429,17 @@ describe('CountScreen — starting and closing a count invalidate stockKey (revi
     fireEvent.click(screen.getByTestId('count-start'))
     await waitFor(() => expect(screen.getByTestId('count-close')).toBeTruthy())
     await waitFor(() => expect(stockOverview).toHaveBeenCalledTimes(2)) // refetched after invalidateQueries(stockKey)
+  })
+
+  it('starting a count also invalidates bootstrapKey, so the pending-sync badge does not lag behind the next bootstrap refetch', async () => {
+    const { queryClient } = mountFull({ getOpenStockCount: vi.fn(async () => null), startStockCount: vi.fn(async () => OPEN) })
+    await waitFor(() => expect(screen.getByTestId('count-start')).toBeTruthy())
+    queryClient.setQueryData(bootstrapKey, { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false })
+    expect(queryClient.getQueryState(bootstrapKey)?.isInvalidated).toBe(false)
+
+    fireEvent.click(screen.getByTestId('count-start'))
+    await waitFor(() => expect(screen.getByTestId('count-close')).toBeTruthy())
+    expect(queryClient.getQueryState(bootstrapKey)?.isInvalidated).toBe(true)
   })
 
   it('closing a count invalidates stockKey', async () => {
@@ -446,7 +458,7 @@ describe('CountScreen — starting and closing a count invalidate stockKey (revi
 
 describe('CountScreen — an oversized count is refused client-side, matching MAX_UNITS_MILLI (review m-6)', () => {
   it('refuses a count above MAX_UNITS_MILLI with a Thai message, and keeps the API uncalled', async () => {
-    const api = mountFull()
+    const { api } = mountFull()
     await waitFor(() => expect(screen.getByTestId('count-units-RM-TEA-01')).toBeTruthy())
     fireEvent.change(screen.getByTestId('count-units-RM-TEA-01'), { target: { value: '99999' } }) // 99,999 × 400 g ≫ MAX_UNITS_MILLI
     act(() => screen.getByTestId('count-save-RM-TEA-01').click())
