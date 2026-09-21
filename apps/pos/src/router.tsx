@@ -13,6 +13,7 @@ import { QrPayScreen } from './screens/QrPayScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
 import { ShiftScreen } from './screens/ShiftScreen'
+import { StockScreen } from './screens/StockScreen'
 import { ZListScreen } from './screens/ZListScreen'
 import { ZReportScreen } from './screens/ZReportScreen'
 import { BrandBar } from './ui/BrandBar'
@@ -143,6 +144,17 @@ const closeShiftRoute = createRoute({
   ),
 })
 
+// แผน 4: สต็อก
+const stockRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/stock',
+  component: () => (
+    <RequireSession>
+      <StockScreen />
+    </RequireSession>
+  ),
+})
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
@@ -159,6 +171,7 @@ export const routeTree = rootRoute.addChildren([
   zReportRoute,
   shiftRoute,
   closeShiftRoute,
+  stockRoute,
 ])
 
 export const router = createRouter({ routeTree })

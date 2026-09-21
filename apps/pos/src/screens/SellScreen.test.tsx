@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BootstrapState, MenuDto, PosApi, UserDto } from '../api/types'
+import type { BootstrapState, MenuDto, PosApi, StockOverviewDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { CartProvider } from '../app/cart-context'
 import { SessionProvider, useSession } from '../app/session'
@@ -76,5 +76,41 @@ describe('SellScreen — backup-due banner (Task 8 TH.backupDue wired to the sel
     mount({ bootstrap: vi.fn(async () => bootstrap({ backupDue: false })) })
     await waitFor(() => expect(screen.getByTestId('nav-shift')).toBeTruthy())
     expect(screen.queryByTestId('backup-due')).toBeNull()
+  })
+})
+
+const STOCK: StockOverviewDto = {
+  generatedAt: '2026-09-17T10:00:00.000Z',
+  businessDate: '2026-09-17',
+  items: [
+    {
+      itemId: 'i-shot', code: 'PB-MATCHA-SHOT', name: 'มัทฉะช็อต', kind: 'prepared', category: 'เบส', useUnit: 'ml', onHandMilli: 120_000, avgCostUsat: 95_666_667, priceCheckUsat: 95_666_667,
+      valueSatang: 11_480, reorderPointMilli: 0, status: 'ok', alert: true, isKeyCount: false, units: [], shelfLifeHours: 4,
+      latestBatch: { batchId: 'b1', createdAt: '2026-09-17T03:00:00.000Z', expiresAt: '2026-09-17T07:00:00.000Z', expiry: 'expired' }, bom: null,
+    },
+  ],
+  totalValueSatang: 11_480,
+  alertCount: 3,
+  expiredBaseCodes: ['PB-MATCHA-SHOT'],
+  lastCountAt: null,
+  countDue: true,
+  openCountId: null,
+  openingCountPending: true,
+}
+
+describe('SellScreen — stock badge and expired-base banner (plan 4 · Q4-10)', () => {
+  it('shows the alert count on the stock button and an expired-base banner — selling stays open', async () => {
+    mount({ bootstrap: vi.fn(async () => bootstrap()), stockOverview: vi.fn(async () => STOCK) })
+    await waitFor(() => expect(screen.getByTestId('base-expired')).toBeTruthy())
+    expect(screen.getByTestId('base-expired').textContent).toBe(TH.baseExpiredBanner('มัทฉะช็อต'))
+    expect(screen.getByTestId('nav-stock').textContent).toBe(TH.stockMenuAlerts(3))
+  })
+
+  it('no alerts: a plain stock button and no banner', async () => {
+    const stockOverview = vi.fn(async () => ({ ...STOCK, alertCount: 0, expiredBaseCodes: [] }))
+    mount({ bootstrap: vi.fn(async () => bootstrap()), stockOverview })
+    await waitFor(() => expect(stockOverview).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByTestId('nav-stock').textContent).toBe(TH.stockMenu))
+    expect(screen.queryByTestId('base-expired')).toBeNull()
   })
 })

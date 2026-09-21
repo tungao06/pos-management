@@ -8,7 +8,7 @@ import type { CommitSaleInput, CommitSaleResult, MenuDto, PosApi, UserDto } from
 import { cartReducer, cartTotals, type CartState } from '../state/cart'
 import { ApiProvider } from './api-context'
 import { CartProvider, useCart } from './cart-context'
-import { shiftReportKey } from './queries'
+import { shiftReportKey, stockKey } from './queries'
 import { SessionProvider, useSession } from './session'
 import { useCommitSale } from './use-commit-sale'
 
@@ -178,5 +178,6 @@ describe('useCommitSale — review m-2: the shift-report cache must be invalidat
     // expectedCashSatang or qrSalesSatang, and a stale X report can miss the Q3b-14 over-drawer warning for up to
     // staleTime (5s, main.tsx) afterwards.
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: shiftReportKey })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: stockKey }) // plan 4: the stock badge / page after a sale
   })
 })

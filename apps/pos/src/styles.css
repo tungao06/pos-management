@@ -73,3 +73,8 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
 .figures td { text-align: right; font-variant-numeric: tabular-nums; padding: 6px 4px; }
 .figures tr + tr { border-top: 1px solid var(--line); }
 .figures input { width: 7em; font-size: 20px; text-align: right; }
+
+/* แผน 4: สต็อก */
+.check { display: flex; gap: 12px; align-items: center; }
+.check input { width: 28px; min-height: 28px; }
+.figures small { font-size: 14px; }
