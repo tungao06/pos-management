@@ -104,9 +104,18 @@ export const SQLITE_MIGRATIONS: readonly BundledMigration[] = [
     "bps": true,
     "folderMillis": 1789724617156,
     "hash": "5b813033396dbd1fd39c0207a3389dbc4ce7b19eb888810e643a2b89de4591ff"
+  },
+  {
+    "tag": "0002_stock_adjustment",
+    "sql": [
+      "CREATE TABLE `stock_adjustment` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`business_date` text NOT NULL,\n\t`reason_code` text NOT NULL,\n\t`reason` text NOT NULL,\n\t`detail_json` text,\n\t`device_id` text,\n\t`created_by` text NOT NULL,\n\t`created_at` text NOT NULL,\n\tFOREIGN KEY (`device_id`) REFERENCES `device`(`id`) ON UPDATE no action ON DELETE no action,\n\tFOREIGN KEY (`created_by`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE no action\n);\n"
+    ],
+    "bps": true,
+    "folderMillis": 1789977341065,
+    "hash": "d325bdc7737e454a58830037b9999d0e3b6225da9eb3bcbf0c7ed642e5993b49"
   }
 ]
 
 /** Tables and triggers that migrateSqlite leaves in a fresh database. */
-export const SQLITE_TABLES: readonly string[] = ["audit_log","bom","bom_line","cash_count","cash_movement","category","channel","customer","device","discount","equipment","item","item_cost_state","order","order_event","order_line","order_payment_intent","outbox","payment","price","product","product_variant","production_batch","purchase","purchase_line","purchase_unit","recipe","recipe_line","setting","shift","size","stock_count","stock_count_line","stock_movement","sweetness_level","sync_state","user","z_report"]
+export const SQLITE_TABLES: readonly string[] = ["audit_log","bom","bom_line","cash_count","cash_movement","category","channel","customer","device","discount","equipment","item","item_cost_state","order","order_event","order_line","order_payment_intent","outbox","payment","price","product","product_variant","production_batch","purchase","purchase_line","purchase_unit","recipe","recipe_line","setting","shift","size","stock_adjustment","stock_count","stock_count_line","stock_movement","sweetness_level","sync_state","user","z_report"]
 export const SQLITE_TRIGGERS: readonly string[] = ["cash_movement_no_delete","cash_movement_no_update","order_event_no_delete","order_event_no_update","stock_movement_no_delete","stock_movement_no_update","z_report_no_delete","z_report_no_update"]

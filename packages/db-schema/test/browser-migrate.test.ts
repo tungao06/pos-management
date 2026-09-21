@@ -42,6 +42,22 @@ describe('migrateSqliteRemote (drizzle migrator over sqlite-proxy, browser-safe)
     expect(raw.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
   })
 
+  it('upgrades a device that already has data: only the new migration runs, rows and append-only triggers survive (plan 4 M-5)', async () => {
+    const { raw, db } = open()
+    const before = SQLITE_MIGRATIONS.filter((m) => m.tag !== '0002_stock_adjustment')
+    await migrateSqliteRemote(db, before) // a device installed before plan 4
+    raw.exec(`insert into item (id, code, name, kind, category, use_unit, is_tracked, reorder_point_milli, standard_cost_usat, shelf_life_hours, is_active, note, updated_at)
+      values ('i1', 'RM-TEA-01', 'tea', 'raw', 'x', 'g', 1, 0, 19250000, null, 1, null, '2026-09-17T00:00:00.000Z')`)
+    raw.exec(`insert into stock_movement (id, item_id, kind, qty_milli, unit_cost_usat, ref_type, ref_id, business_date, device_id, created_by, created_at)
+      values ('m1', 'i1', 'SALE', -1000, 19250000, 'order', 'o1', '2026-09-17', null, 'u1', '2026-09-17T03:00:00.000Z')`)
+    expect(names(raw, 'table')).not.toContain('stock_adjustment')
+    expect((await migrateSqliteRemote(db)).applied).toEqual(['0002_stock_adjustment'])
+    expect(names(raw, 'table')).toContain('stock_adjustment')
+    expect(raw.prepare('select count(*) as n from stock_movement').get()).toEqual({ n: 1 })
+    expect(() => raw.exec(`delete from stock_movement where id = 'm1'`)).toThrow(/append-only/)
+    expect(names(raw, 'trigger')).toEqual([...SQLITE_TRIGGERS])
+  })
+
   it('is idempotent', async () => {
     const { db } = open()
     await migrateSqliteRemote(db)

@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
-import { CountStatus, MovementKind } from '@dayo/contracts'
+import { AdjustReason, CountStatus, MovementKind } from '@dayo/contracts'
 import { check, index, sqliteTable, unique } from 'drizzle-orm/sqlite-core'
-import { big, id, int, text, textEnum } from './columns.js'
+import { big, id, int, json, text, textEnum } from './columns.js'
 import { bom, device, item, purchaseUnit, user } from './reference.js'
 
 export const purchase = sqliteTable('purchase', {
@@ -63,6 +63,22 @@ export const stockCountLine = sqliteTable('stock_count_line', {
   varianceUseMilli: int('variance_use_milli').notNull(),
   varianceSatang: int('variance_satang').notNull(),
 }, (t) => [unique().on(t.countId, t.itemId)])
+
+/**
+ * Header of a stock-out without a sale (spec §5 ปรับสต็อก: ของเสีย / หมดอายุ / ทดลองสูตร / อื่น ๆ + เหตุผล ·
+ * D50 Q3-20 แจก/ชดเชย). Its movements reference it (ref_type 'stock_adjustment'); stock_movement has no reason column.
+ * detail_json keeps what was typed (items / drinks with the recipe version used) — plan 4 T4-1.
+ */
+export const stockAdjustment = sqliteTable('stock_adjustment', {
+  id: id(),
+  businessDate: text('business_date').notNull(),
+  reasonCode: textEnum('reason_code', AdjustReason).notNull(),
+  reason: text('reason').notNull(),
+  detailJson: json('detail_json'),
+  deviceId: text('device_id').references(() => device.id),
+  createdBy: text('created_by').notNull().references(() => user.id),
+  createdAt: text('created_at').notNull(),
+})
 
 export const stockMovement = sqliteTable('stock_movement', {
   id: id(),
