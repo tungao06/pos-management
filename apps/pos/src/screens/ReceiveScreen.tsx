@@ -61,6 +61,10 @@ export function ReceiveScreen(): JSX.Element {
   const [paidFromDrawer, setPaidFromDrawer] = useState(false)
   const [priceJump, setPriceJump] = useState(false)
   const [overDrawer, setOverDrawer] = useState(false)
+  // review N-1 (final re-review, money): what the *triggering* submit() call actually asked for — captured the
+  // instant the over-drawer warning is raised, so `receive-over-drawer-confirm` sends exactly that, never `priceJump`
+  // (which only records that the API once refused with PRICE_JUMP, not that anyone pressed "ยืนยันราคานี้" this time).
+  const [pendingAccept, setPendingAccept] = useState(false)
   const hasShift = boot.data?.openShift != null
   // review m-2 (Task 9 fix round 1): derived, not the raw checkbox state — if the open shift disappears from under a
   // ticked checkbox (e.g. closed on another screen, then a bootstrap refetch lands), this goes false on its own, so
@@ -74,6 +78,7 @@ export function ReceiveScreen(): JSX.Element {
   if (!hasShift && paidFromDrawer) {
     setPaidFromDrawer(false)
     setOverDrawer(false)
+    setPendingAccept(false)
   }
   const drawer = useDrawerCheck(payFromDrawer)
   const [error, setError] = useState<string | null>(null)
@@ -97,6 +102,7 @@ export function ReceiveScreen(): JSX.Element {
       setPaidFromDrawer(false)
       setPriceJump(false)
       setOverDrawer(false)
+      setPendingAccept(false)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: stockKey }),
         queryClient.invalidateQueries({ queryKey: bootstrapKey }),
@@ -105,9 +111,9 @@ export function ReceiveScreen(): JSX.Element {
     },
     onError: (e) => {
       // review I-1 (Task 9 fix round 1, money): a PRICE_JUMP refusal must also clear `overDrawer`. Without this, a
-      // second tap on the still-visible `receive-over-drawer-confirm` sends `save.mutate(priceJump)` = `mutate(true)`
-      // — accepting the jump without the owner ever pressing "ยืนยันราคานี้". The only way to `acceptPriceJump: true`
-      // from here on is `receive-confirm-price`, which re-runs the over-drawer check for real before it saves.
+      // second tap on the still-visible `receive-over-drawer-confirm` would send whatever it last sent again — the
+      // only way to `acceptPriceJump: true` from here on is `receive-confirm-price`, which re-runs the over-drawer
+      // check for real (and, per review N-1, re-captures `pendingAccept` from that real submit) before it saves.
       if (posErrorCode(e) === 'PRICE_JUMP') {
         setPriceJump(true)
         setOverDrawer(false)
@@ -145,7 +151,14 @@ export function ReceiveScreen(): JSX.Element {
     // Q3b-14 · D54 via Q4-6: more than the drawer should hold → one explicit confirm first (no figure shown)
     if (payFromDrawer) {
       if (drawer.pending) return
-      if (drawer.exceeds(sumSatang)) return setOverDrawer(true)
+      // review N-1 (final re-review, money): capture what THIS submit call asked for before raising the warning —
+      // pressing บันทึก (acceptPriceJump=false) and then ยืนยันบันทึกทั้งที่เกิน must still send false and be refused
+      // again with PRICE_JUMP; only a submit that actually came from "ยืนยันราคานี้" (acceptPriceJump=true) may have
+      // the drawer confirm send true.
+      if (drawer.exceeds(sumSatang)) {
+        setPendingAccept(acceptPriceJump)
+        return setOverDrawer(true)
+      }
     }
     save.mutate(acceptPriceJump)
   }
@@ -177,6 +190,7 @@ export function ReceiveScreen(): JSX.Element {
     setTotalText('')
     setPriceJump(false)
     setOverDrawer(false)
+    setPendingAccept(false)
     setError(null)
     setDone(null)
   }
@@ -184,6 +198,7 @@ export function ReceiveScreen(): JSX.Element {
     setLines(lines.filter((_, j) => j !== i))
     setPriceJump(false)
     setOverDrawer(false)
+    setPendingAccept(false)
     setError(null) // m-1 (Task 9 fix round 1): a stale PRICE_JUMP message must not outlive the line it was about
   }
 
@@ -273,6 +288,7 @@ export function ReceiveScreen(): JSX.Element {
           onChange={(e) => {
             setPaidFromDrawer(e.target.checked)
             setOverDrawer(false)
+            setPendingAccept(false)
           }}
         />
         {hasShift ? TH.receivePaidDrawer : TH.receivePaidDrawerNoShift}
@@ -294,7 +310,7 @@ export function ReceiveScreen(): JSX.Element {
           </button>
         )}
         {overDrawer && (
-          <button type="button" data-testid="receive-over-drawer-confirm" disabled={save.isPending} onClick={() => save.mutate(priceJump)}>
+          <button type="button" data-testid="receive-over-drawer-confirm" disabled={save.isPending} onClick={() => save.mutate(pendingAccept)}>
             {TH.cashOverDrawerConfirm}
           </button>
         )}

@@ -301,6 +301,50 @@ describe('ReceiveScreen — I-1 (final review, money): only receive-over-drawer-
   })
 })
 
+describe('ReceiveScreen — N-1 (final re-review, money): receive-over-drawer-confirm must send what its own triggering submit asked for, never the stale priceJump flag', () => {
+  it("reproduces the reviewer's probe C: บันทึก → เกินลิ้นชัก → PRICE_JUMP → บันทึก again (not ยืนยันราคานี้) → เกินลิ้นชัก again must send false both times, never true", async () => {
+    const calls: boolean[] = []
+    const receivePurchase = vi.fn(async (input: { acceptPriceJump: boolean }): Promise<PurchaseDto> => {
+      calls.push(input.acceptPriceJump)
+      if (!input.acceptPriceJump) throw new PosError('PRICE_JUMP', ITEM_A.code)
+      return DONE
+    })
+    mount({ receivePurchase, shiftReport: vi.fn(async () => REPORT), bootstrap: vi.fn(async () => bootstrap({ openShift: OPEN_SHIFT })) })
+    await addLine(ITEM_A.code, '0.12') // a price jump, also over the tiny ฿0.05 drawer
+    await checkPaidFromDrawer()
+
+    // step 1: press บันทึก — the over-drawer check runs client-side first, before any server call
+    fireEvent.click(screen.getByTestId('receive-save'))
+    await waitFor(() => expect(screen.getByTestId('receive-over-drawer-confirm')).toBeTruthy())
+    expect(calls).toEqual([])
+
+    // step 2: press ยืนยันบันทึกทั้งที่เกิน — nobody has confirmed the price yet, so this must send false
+    fireEvent.click(screen.getByTestId('receive-over-drawer-confirm'))
+    await waitFor(() => expect(calls).toEqual([false]))
+    await waitFor(() => expect(screen.getByTestId('receive-price-jump')).toBeTruthy())
+    expect(screen.queryByTestId('receive-over-drawer-confirm')).toBeNull() // I-1: cleared the instant PRICE_JUMP comes back
+
+    // step 3: press บันทึก again — NOT ยืนยันราคานี้ — re-raises the over-drawer warning from scratch
+    fireEvent.click(screen.getByTestId('receive-save'))
+    await waitFor(() => expect(screen.getByTestId('receive-over-drawer-confirm')).toBeTruthy())
+
+    // step 4 — N-1 itself: pressing ยืนยันบันทึกทั้งที่เกิน again must still send false. Its label is only about cash;
+    // the person never pressed ยืนยันราคานี้, so it has no business accepting the price this time either.
+    fireEvent.click(screen.getByTestId('receive-over-drawer-confirm'))
+    await waitFor(() => expect(calls).toEqual([false, false]))
+    expect(calls).not.toContain(true)
+
+    // the only legitimate way to accept the jump is ยืนยันราคานี้ itself, which re-asks the drawer question for real
+    fireEvent.click(screen.getByTestId('receive-confirm-price'))
+    await waitFor(() => expect(screen.getByTestId('receive-over-drawer-warning')).toBeTruthy())
+    expect(calls).toEqual([false, false]) // re-raising the warning again saves nothing by itself
+
+    fireEvent.click(screen.getByTestId('receive-over-drawer-confirm'))
+    await waitFor(() => expect(calls).toEqual([false, false, true]))
+    await waitFor(() => expect(screen.getByTestId('receive-done')).toBeTruthy())
+  })
+})
+
 describe('ReceiveScreen — I-3 mutant M1: addLine must clear a stale PRICE_JUMP confirm on every kind of line-edit (item, qty, price), not only after a remove', () => {
   it.each([
     ['a different item', ITEM_B.code, '1', '0.10'],
