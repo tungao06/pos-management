@@ -1,9 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, type JSX } from 'react'
 import { REASON_MAX_LENGTH, type CashMovementInput } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, shiftReportKey } from '../app/queries'
 import { useSession } from '../app/session'
+import { useDrawerCheck } from '../app/use-drawer-check'
 import { errorMessage } from '../ui/errors'
 import { parseBahtInput } from '../ui/format'
 import { TH } from '../ui/th'
@@ -22,7 +23,7 @@ export function CashMoveDialog({ onClose }: { onClose: () => void }): JSX.Elemen
   const api = useApi()
   const queryClient = useQueryClient()
   const { user } = useSession()
-  const report = useQuery({ queryKey: shiftReportKey, queryFn: () => api.shiftReport() })
+  const drawer = useDrawerCheck(true) // Q3b-14 check, shared with the receive screen (plan 4 Q4-6)
   const [kind, setKind] = useState<CashMovementInput['kind'] | null>(null)
   const [amountText, setAmountText] = useState('')
   const [reason, setReason] = useState('')
@@ -51,13 +52,9 @@ export function CashMoveDialog({ onClose }: { onClose: () => void }): JSX.Elemen
     save.mutate({ actorUserId: user?.id ?? '', kind: k, amountSatang, reason })
   }
 
-  // Q3b-14 (review C-1/I-1): only paid-out / drop can overdraw the drawer, and the comparison is only safe once
-  // `expectedCashSatang` is both present and current — `report.isFetching` also covers a refetch still in flight
-  // after a *previous* move's `invalidateQueries`, when `report.data` is already set but to the stale figure. A
-  // local const (rather than repeated `report.data` reads) lets the type checker carry the "defined" narrowing
-  // through both this check and the comparison below.
-  const reportData = report.data
-  const drawerCheckPending = kind !== null && kind !== 'PAID_IN' && (reportData === undefined || report.isFetching)
+  // Q3b-14 (review C-1/I-1): only paid-out / drop can overdraw the drawer, and the comparison is only safe once the
+  // expected cash is both present and current (`useDrawerCheck().pending`).
+  const drawerCheckPending = kind !== null && kind !== 'PAID_IN' && drawer.pending
 
   const submit = (): void => {
     const amountSatang = parseBahtInput(amountText)
@@ -67,8 +64,8 @@ export function CashMoveDialog({ onClose }: { onClose: () => void }): JSX.Elemen
     if (kind !== 'PAID_IN') {
       // Defense in depth: `cash-save` is already disabled while `drawerCheckPending`, so this path should be
       // unreachable — but never let a stale or missing figure silently skip the over-drawer check (review C-1).
-      if (reportData === undefined || report.isFetching) return
-      if (amountSatang > reportData.expectedCashSatang) {
+      if (drawer.pending) return
+      if (drawer.exceeds(amountSatang)) {
         setOverDrawerWarning(true)
         return
       }
