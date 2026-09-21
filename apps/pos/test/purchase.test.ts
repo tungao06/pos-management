@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
+import { applyMovement, rebuildCostState } from '@dayo/domain'
 import type { ReceivePurchaseInput } from '../src/api/types'
 import { openReadyApi, openTestApi, TEST_SETUP, type ReadyApi } from './helpers/db'
 import { defaultUnitId, itemId, movementsOf, outboxKeys, stockOf } from './helpers/stock'
@@ -166,5 +167,42 @@ describe('receivePurchase (spec §5 รับของเข้า · D19 · §4
     expect(cash!.reason).toBe(expectedReason)
     expect(cash!.reason!.endsWith('🎉')).toBe(true) // the emoji survives whole — never a lone surrogate
     expect(Array.from(cash!.reason!).length).toBe(200)
+  })
+  describe('one bill’s same-item lines are averaged as one receipt (Q4-17 ก · D57)', () => {
+    // RM-TEA-01 at −500 g; one bill: 400 g for ฿77 and 400 g for ฿0 (in the use unit)
+    async function negativeTea(): Promise<ReadyApi> {
+      const t = await openReadyApi()
+      await t.api.adjustStock({ actorUserId: t.owner.id, reasonCode: 'WASTE', reason: 'หก', items: [{ itemId: await itemId(t, 'RM-TEA-01'), purchaseUnitId: null, qtyUnitsMilli: 500_000 }], drinks: [] })
+      expect(await stockOf(t, 'RM-TEA-01')).toEqual({ onHandMilli: -500_000, avgCostUsat: 19_250_000 })
+      return t
+    }
+    async function tea(t: ReadyApi, totalSatang: number): Promise<ReceivePurchaseInput['lines'][number]> {
+      return { itemId: await itemId(t, 'RM-TEA-01'), purchaseUnitId: null, qtyUnitsMilli: 400_000, lineTotalSatang: totalSatang }
+    }
+
+    it('at negative on-hand the average does not depend on which line was typed last; audit rows stay one per line', async () => {
+      for (const order of [[7_700, 0], [0, 7_700]]) {
+        const t = await negativeTea()
+        const p = await t.api.receivePurchase(input(t, [await tea(t, order[0]!), await tea(t, order[1]!)], { acceptPriceJump: true }))
+        // ฿77 over 800 g = 9_625_000 usat/g, whichever order
+        expect(await stockOf(t, 'RM-TEA-01')).toEqual({ onHandMilli: 300_000, avgCostUsat: 9_625_000 })
+        expect((await movementsOf(t, 'purchase', p.id)).map((m) => [m.qtyMilli, m.unitCostUsat])).toEqual(order.map((sat) => [400_000, sat === 0 ? 0 : 19_250_000]))
+        // the cache points at the item's last inserted row and agrees with a rebuild over the same rows (spec §4.4)
+        const id = await itemId(t, 'RM-TEA-01')
+        const rows = await t.db.select().from(s.stockMovement).where(eq(s.stockMovement.itemId, id)).orderBy(asc(s.stockMovement.id)).all()
+        const cache = await t.db.select().from(s.itemCostState).where(eq(s.itemCostState.itemId, id)).get()
+        expect(cache!.asOfMovementId).toBe(rows.at(-1)!.id)
+        expect(rebuildCostState(rows, 19_250_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 9_625_000 })
+      }
+    })
+
+    it('a bill with two different items is unaffected: each item is its own one-line receipt', async () => {
+      const t = await negativeTea()
+      const milk = { itemId: await itemId(t, 'RM-MLK-02'), purchaseUnitId: await defaultUnitId(t, 'RM-MLK-02'), qtyUnitsMilli: 1_000, lineTotalSatang: 3_000 }
+      await t.api.receivePurchase(input(t, [await tea(t, 0), milk], { acceptPriceJump: true }))
+      expect(await stockOf(t, 'RM-TEA-01')).toEqual(applyMovement({ onHandMilli: -500_000, avgCostUsat: 19_250_000 }, { qtyMilli: 400_000, unitCostUsat: 0 }))
+      expect(await stockOf(t, 'RM-TEA-01')).toEqual({ onHandMilli: -100_000, avgCostUsat: 0 })
+      expect(await stockOf(t, 'RM-MLK-02')).toEqual({ onHandMilli: 405_000, avgCostUsat: 7_407_407 })
+    })
   })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { EMPTY_COST_STATE, applyMovement, initialCostState, productionMovements, rebuildCostState, scaleQtyMilli } from '../src/stock/costing.js'
+import { EMPTY_COST_STATE, applyInboundGroup, applyMovement, initialCostState, productionMovements, rebuildCostState, scaleQtyMilli } from '../src/stock/costing.js'
+import * as domain from '../src/index.js'
 import { costSatang } from '../src/money.js'
 import type { Bom } from '../src/stock/catalog.js'
 import { milliArb, usatArb } from './arb.js'
@@ -50,6 +51,73 @@ describe('applyMovement (moving weighted average)', () => {
       expect(s.avgCostUsat).toBeLessThanOrEqual(Math.max(...costs))
       expect(s.onHandMilli).toBe(ins.reduce((a, m) => a + m.qtyMilli, 0))
     }))
+  })
+})
+
+describe('applyInboundGroup (one document’s same-item inbound lines as one receipt · Q4-17 ก · D57)', () => {
+  // RM-TEA-01 at −500 g; one bill: 400 g for ฿77 (19_250_000 usat/g) and 400 g for ฿0
+  const paid = { qtyMilli: 400_000, unitCostUsat: 19_250_000 }
+  const free = { qtyMilli: 400_000, unitCostUsat: 0 }
+  const negative = { onHandMilli: -500_000, avgCostUsat: 19_250_000 }
+
+  it('at on-hand <= 0 the whole bill sets avg = total cost ÷ total qty, whatever the line order', () => {
+    // 400_000 × 19_250_000 ÷ 800_000 = 9_625_000 usat/g (฿77 over 800 g)
+    expect(applyInboundGroup(negative, [paid, free])).toEqual({ onHandMilli: 300_000, avgCostUsat: 9_625_000 })
+    expect(applyInboundGroup(negative, [free, paid])).toEqual({ onHandMilli: 300_000, avgCostUsat: 9_625_000 })
+    // folding line by line lets the last line decide (the bug this fixes)
+    expect(applyMovement(applyMovement(negative, paid), free).avgCostUsat).toBe(0)
+    expect(applyMovement(applyMovement(negative, free), paid).avgCostUsat).toBe(19_250_000)
+  })
+  it('a single line equals applyMovement, at on-hand <= 0 and > 0', () => {
+    fc.assert(fc.property(fc.integer({ min: -5_000_000, max: 5_000_000 }), usatArb, milliArb, usatArb, (onHandMilli, avgCostUsat, qtyMilli, unitCostUsat) => {
+      const s = { onHandMilli, avgCostUsat }
+      expect(applyInboundGroup(s, [{ qtyMilli, unitCostUsat }])).toEqual(applyMovement(s, { qtyMilli, unitCostUsat }))
+    }))
+  })
+  it('at on-hand > 0 the group is weighted with the state and rounded once', () => {
+    const s = { onHandMilli: 1_000, avgCostUsat: 0 }
+    const a = { qtyMilli: 1_000, unitCostUsat: 1 }
+    const b = { qtyMilli: 1_000, unitCostUsat: 0 }
+    // (1_000 × 0 + 1_000 × 1 + 1_000 × 0) ÷ 3_000 = 0.33 → 0; line by line would round 0.5 → 1 first and end at 1
+    expect(applyInboundGroup(s, [a, b])).toEqual({ onHandMilli: 3_000, avgCostUsat: 0 })
+    expect(applyInboundGroup(s, [b, a])).toEqual({ onHandMilli: 3_000, avgCostUsat: 0 })
+    expect(applyMovement(applyMovement(s, a), b).avgCostUsat).toBe(1)
+    // 800 g at 0.1925 + two 200 g lines at 0.2 → 0.195 ฿/g
+    expect(applyInboundGroup({ onHandMilli: 800_000, avgCostUsat: 19_250_000 }, [{ qtyMilli: 200_000, unitCostUsat: 20_000_000 }, { qtyMilli: 200_000, unitCostUsat: 20_000_000 }])).toEqual({ onHandMilli: 1_200_000, avgCostUsat: 19_500_000 })
+  })
+  it('line order never matters', () => {
+    fc.assert(fc.property(fc.integer({ min: -5_000_000, max: 5_000_000 }), usatArb, fc.array(fc.record({ qtyMilli: milliArb, unitCostUsat: usatArb }), { minLength: 1, maxLength: 10 }), (onHandMilli, avgCostUsat, lines) => {
+      const s = { onHandMilli, avgCostUsat }
+      expect(applyInboundGroup(s, [...lines].reverse())).toEqual(applyInboundGroup(s, lines))
+    }))
+  })
+  it('an all-฿0 bill at on-hand <= 0 still gives avg 0 (Q4-17 ข not chosen)', () => {
+    expect(applyInboundGroup(negative, [free, free])).toEqual({ onHandMilli: 300_000, avgCostUsat: 0 })
+    expect(applyInboundGroup(initialCostState(19_250_000), [free, free])).toEqual({ onHandMilli: 800_000, avgCostUsat: 0 })
+  })
+  it('an empty group returns the state; a non-positive or non-integer line is a RangeError', () => {
+    expect(applyInboundGroup(negative, [])).toBe(negative)
+    expect(() => applyInboundGroup(negative, [paid, { qtyMilli: 0, unitCostUsat: 1 }])).toThrow(RangeError)
+    expect(() => applyInboundGroup(negative, [{ qtyMilli: -1, unitCostUsat: 1 }])).toThrow(RangeError)
+    expect(() => applyInboundGroup(negative, [{ qtyMilli: 1.5, unitCostUsat: 1 }])).toThrow(RangeError)
+    expect(() => applyInboundGroup(negative, [{ qtyMilli: 1, unitCostUsat: 0.5 }])).toThrow(RangeError)
+    expect(() => applyInboundGroup(EMPTY_COST_STATE, [{ qtyMilli: Number.MAX_SAFE_INTEGER, unitCostUsat: 1 }, { qtyMilli: 1, unitCostUsat: 1 }])).toThrow(RangeError)
+  })
+  it('is exported from the domain index', () => {
+    expect(typeof domain.applyInboundGroup).toBe('function')
+    expect(domain.applyInboundGroup).toBe(applyInboundGroup)
+  })
+  it('rebuildCostState applies consecutive positive same-ref movements as one group; no refs keeps the per-movement fold', () => {
+    const ref = { refType: 'purchase', refId: 'p1' }
+    const sale = { qtyMilli: -500_000, unitCostUsat: 19_250_000, refType: 'order', refId: 'o1' }
+    expect(rebuildCostState([sale, { ...paid, ...ref }, { ...free, ...ref }], 19_250_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 9_625_000 })
+    expect(rebuildCostState([sale, { ...free, ...ref }, { ...paid, ...ref }], 19_250_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 9_625_000 })
+    // two different documents are two receipts
+    expect(rebuildCostState([sale, { ...paid, ...ref }, { ...free, refType: 'purchase', refId: 'p2' }], 19_250_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 0 })
+    // a movement of another document between two lines ends the run
+    expect(rebuildCostState([sale, { ...paid, ...ref }, { qtyMilli: -1_000, unitCostUsat: 0, refType: 'order', refId: 'o2' }, { ...free, ...ref }], 19_250_000)).toEqual({ onHandMilli: 299_000, avgCostUsat: 0 })
+    // no refs: the old fold
+    expect(rebuildCostState([{ qtyMilli: -500_000, unitCostUsat: 0 }, paid, free], 19_250_000)).toEqual({ onHandMilli: 300_000, avgCostUsat: 0 })
   })
 })
 
