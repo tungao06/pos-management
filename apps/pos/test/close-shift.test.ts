@@ -579,7 +579,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     expect(z5.snapshot).toMatchObject({ zNo: 4, chainWarning: null })
   })
 
-  it("a middle Z row deleted (z2 of three) is caught by the last Z's own zNo vs the row count, not silently accepted (review I-1)", async () => {
+  it("a middle Z row deleted (z2 of three) is caught by the last Z's own zNo vs the row count, and chains from that trustworthy last Z (review I-1; Q3b-18 · D55)", async () => {
     const t = await openReadyApi()
     const { z2, z3 } = await closeThreeZs(t)
     t.raw.exec('DROP TRIGGER z_report_no_delete')
@@ -597,18 +597,23 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     expect(counts(t)).toEqual(before)
 
     const z4 = await t.api.closeShift({ ...next, acknowledgeZChainBroken: true })
+    // Q3b-18 · D55: z3 (the last Z) is itself trustworthy, so the new Z chains from z3's OWN zNo/grand — its
+    // stored ฿140 already includes z2's true ฿50, frozen truthfully before z2 was ever deleted. Re-folding just
+    // the survivors (z1 + z3) instead would silently give ฿140, dropping z2's ฿50 from the total that feeds VAT
+    // (D8) — the bug this decision fixes.
     expect(z4.snapshot).toMatchObject({
-      zNo: 3, // z1 and z3 remain (row count 2) + 1
-      grandTotalSatang: 4_000 + 5_000 + 5_000, // z1's ฿40 + z3's ฿50 (both intact) + this shift's ฿50
-      chainWarning: { brokenShiftId: z3.shiftId, recomputedGrandTotalSatang: 9_000 },
+      zNo: 4, // z3.zNo (3) + 1 — never row count (2 survivors) + 1, which would duplicate zNo 3
+      grandTotalSatang: 19_000, // z3's own stored ฿140 (already including z1 + z2) + this shift's ฿50
+      chainWarning: { brokenShiftId: z3.shiftId, storedGrandTotalSatang: 14_000, recomputedGrandTotalSatang: 14_000 },
     })
     // z2's slot (zNo 2) is the only surviving trace that a row was ever deleted from the middle of the chain
     expect(z4.snapshot!.chainWarning!.missingZNos).toEqual([2])
+    expect(z4.snapshot!.chainWarning!.unreadableZs).toEqual([]) // z1 and z3 are each individually fine on their own
 
     t.clock.set('2026-09-21T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
     const z5 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
-    expect(z5.snapshot).toMatchObject({ zNo: 4, chainWarning: null })
+    expect(z5.snapshot).toMatchObject({ zNo: 5, chainWarning: null })
   })
 
   it('a snapshot that is not readable JSON, or is missing sales, is flagged rather than crashing list/get (review I-1)', async () => {

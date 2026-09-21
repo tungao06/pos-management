@@ -146,11 +146,12 @@ function orderForLenientRecompute(rows: readonly ZRawRow[]): ZRawRow[] {
  * denomination (Q3b-1); a variance above `cash.variance_alert_satang` needs a reason; an owner confirms with their
  * PIN (Q3b-2). If the shift's figures moved between the screen showing them and this call — expected cash, sales,
  * QR or voids — nothing is written (SHIFT_CHANGED, Q3b-17 · D54, review m-1). The bank-app QR total is optional and
- * frozen with its difference (Q3b-12). Q3b-16 · D54 (review C-1): a previous Z that fails its hash (or whose earlier
- * chain can't be recomputed at all) always refuses with the dedicated `Z_CHAIN_BROKEN`, never `BAD_INPUT` — it must
- * never block closing forever. Once the owner acknowledges it by entering their PIN again, the new Z chains from a
- * lenient recompute that never throws (`recomputeZChainLenient`), carries `chainWarning` for good (naming every Z
- * whose net it could not trust as-is), and an audit row records the acknowledgement.
+ * frozen with its difference (Q3b-12). Q3b-16 · D54 (review C-1): a previous Z that fails its hash, or whose chain
+ * is otherwise broken (a Z row deleted, review R2-4 · Q3b-18), always refuses with the dedicated `Z_CHAIN_BROKEN`,
+ * never `BAD_INPUT` — it must never block closing forever. Once the owner acknowledges it by entering their PIN
+ * again, the new Z chains from the last Z's own numbers when it is itself trustworthy (Q3b-18 · D55), or otherwise
+ * from a lenient recompute that never throws (`recomputeZChainLenient`); either way it carries `chainWarning` for
+ * good (naming what it can), and an audit row records the acknowledgement.
  */
 export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftInput): Promise<ZReportDto> {
   let tally: ReturnType<typeof tallyCashCount>
@@ -188,20 +189,31 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
       throw new PosError('VARIANCE_REASON_REQUIRED', `variance ${variance} is above ${report.varianceAlertSatang}`)
     }
 
-    // Q3b-16 · D54 (review C-1, NF-1, NF-3, R2-3, R2-4): the previous Z of this device — by insertion order
-    // (`deviceZRows`), never the snapshot's own `zNo` — or null for the first one. The chain is broken when:
-    //   - the last row's hash is bad, or its snapshot is unreadable (`!hashOk` / `snapshot === null`);
-    //   - its own claimed `zNo`, or `grandTotalSatang`, is not a safe integer >= 0, or `zNo` != the Z row count
-    //     (review NF-1/R2-3: catches a hand-edit even where the hash was also recomputed to match it — the hash
-    //     has no secret key — whether that hand-edit targets `zNo` (also catching a middle row deleted) or, with a
-    //     forged hash, `grandTotalSatang` directly);
-    //   - a whole Z row was deleted rather than merely edited (review R2-4): no closed shift of this device may be
-    //     more recent than the last surviving Z's own shift (`deletedShiftIds`) — the row-count check above cannot
-    //     see this when the *last* row is the one deleted, because both `zNo` and the row count shrink by one
-    //     together.
-    // Any of these always refuses with Z_CHAIN_BROKEN first — never a thrown RangeError/BAD_INPUT from here — and
-    // only builds `chainWarning` (from the never-throwing lenient recompute) once acknowledged. A deleted Z's
-    // money is not reconstructed (there is nothing left to read); it is only named in `deletedShiftIds`.
+    // Q3b-16 · D54 (review C-1, NF-1, NF-3, R2-3, R2-4; Q3b-18 · D55): the previous Z of this device — by
+    // insertion order (`deviceZRows`), never the snapshot's own `zNo` — or null for the first one. "Trustworthy"
+    // (`lastHealthy`, below) means the last row's hash verifies, its snapshot is readable, and its own claimed
+    // `grandTotalSatang` is a safe integer >= 0 — deliberately *not* "its `zNo` equals the Z row count" (that used
+    // to be part of "healthy" too, but a middle Z deleted permanently leaves the row count one short forever, so
+    // checking it on every future close would demand the owner's PIN forever once acknowledged — see
+    // `unacknowledgedZNoGap`, below).
+    //
+    // The chain is broken (refuses with `Z_CHAIN_BROKEN` first, never a thrown RangeError/BAD_INPUT) when:
+    //   - the last row is not trustworthy by the above (review NF-1/R2-3: catches a hand-edit even where the hash
+    //     was also recomputed to match it — the hash has no secret key — whether that targets `grandTotalSatang`
+    //     directly or corrupts the snapshot some other way);
+    //   - a whole Z row was deleted rather than merely edited, and it was this device's own *last* Z (review
+    //     R2-4): no closed shift of this device may be more recent than the last surviving Z's own shift
+    //     (`deletedShiftIds`) — trustworthiness above cannot see this, because both the last row's own `zNo` and
+    //     the physical row count shrink by one together;
+    //   - a *middle* Z row was deleted (Q3b-18 · D55): the last row is otherwise perfectly trustworthy, but the
+    //     row count no longer matches its own `zNo` — and this has not already been acknowledged (`chainWarning`
+    //     on the last row is still null; see `unacknowledgedZNoGap`).
+    // Once acknowledged: if the last row is trustworthy, the new Z chains from *its own* `zNo`/`grandTotalSatang`
+    // (Q3b-18 · D55) — never a lenient recompute over the survivors, which would silently drop the missing Z's own
+    // net from the running total that feeds VAT (D8). Only when the last row is itself untrustworthy is there
+    // nothing left to chain from but the never-throwing lenient recompute (Q3b-16 · D54). Either way,
+    // `chainWarning` names what it can (`missingZNos`, `deletedShiftIds`, …) and an audit row records the
+    // acknowledgement; a deleted Z's own money is never reconstructed, only made visible.
     //
     // A *middle* row's own hash failing (without a row being deleted) is deliberately not checked here (no
     // full-chain verify): D53's Q3b-11 wording is "the previous Z" (ใบก่อน), singular, and `listZReports` already
@@ -212,33 +224,47 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     const last = rows[0]
     const deletedIds = await deletedShiftIds(tx, device.id, rows)
     const lastDto = last !== undefined ? toZReportDto(last) : null
-    const lastGrand = lastDto?.snapshot ? safeIntOrNull(lastDto.snapshot.grandTotalSatang) : null
-    const lastHealthy =
-      last !== undefined &&
-      lastDto !== null &&
-      lastDto.hashOk &&
-      lastDto.snapshot !== null &&
-      lastDto.snapshot.zNo === rows.length &&
-      lastGrand !== null &&
-      lastGrand >= 0
+    const lastSnapshot = lastDto?.snapshot ?? null
+    const lastGrand = lastSnapshot !== null ? safeIntOrNull(lastSnapshot.grandTotalSatang) : null
+    // Q3b-18 · D55: "trustworthy" no longer requires `zNo === rows.length` — that check exists only to catch a
+    // *middle* Z row deleted (below), not to decide whether the last Z's own numbers can be trusted.
+    const lastHealthy = last !== undefined && lastDto !== null && lastDto.hashOk && lastSnapshot !== null && lastGrand !== null && lastGrand >= 0
+    // A row count that no longer matches the last Z's own claimed zNo — a middle Z deleted, leaving the physical
+    // count permanently one short forever (the missing row never comes back). Checked only when `last` has not
+    // already acknowledged some gap (`chainWarning === null`): once acknowledged, the SAME shortfall would
+    // otherwise re-demand the owner's PIN on every future close, forever — the very thing Q3b-16 · D54 forbids.
+    // `deletedShiftIds` needs no such guard: it is already bounded to "since the last surviving Z" (review R2-4),
+    // so it naturally stops seeing an old, already-named gap once a new Z has been written on top of it.
+    const unacknowledgedZNoGap = lastHealthy && lastSnapshot !== null && lastSnapshot.chainWarning === null && lastSnapshot.zNo !== rows.length
 
     let prev: { zNo: number; grandTotalSatang: number } | null = null
     let chainWarning: ZChainWarning | null = null
     let maxStoredZNo = 0 // review NF-4: named in the audit row alongside rowCount; 0 when the chain is healthy (nothing to name)
     if (last !== undefined || deletedIds.length > 0) {
-      if (lastHealthy && deletedIds.length === 0 && lastDto !== null && lastDto.snapshot !== null) {
-        prev = { zNo: lastDto.snapshot.zNo, grandTotalSatang: lastDto.snapshot.grandTotalSatang }
+      if (lastHealthy && deletedIds.length === 0 && !unacknowledgedZNoGap && lastSnapshot !== null) {
+        prev = { zNo: lastSnapshot.zNo, grandTotalSatang: lastSnapshot.grandTotalSatang }
       } else if (!input.acknowledgeZChainBroken) {
         throw new PosError('Z_CHAIN_BROKEN', deletedIds[0] ?? last!.shiftId)
       } else {
+        // Naming only (`unreadableZs`/duplicate·missingZNos) — never its own `zNo`/`grandTotalSatang` once the
+        // last Z is itself trustworthy; see below.
         const lenient = recomputeZChainLenient(orderForLenientRecompute(rows).map(toLenientEntry))
-        const storedGrand = last !== undefined ? safeIntOrNull((tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined)?.grandTotalSatang) : null
-        prev = { zNo: lenient.zNo, grandTotalSatang: lenient.grandTotalSatang }
         maxStoredZNo = lenient.maxStoredZNo
+        // Q3b-18 · D55: when the last Z is itself trustworthy, chain from ITS OWN zNo/grand, never the lenient
+        // recompute over the survivors. Its numbers were frozen truthfully at its own close time — before
+        // whatever happened since (a middle Z deleted, this device's own last Z's shift deleted) — so they
+        // already include every earlier Z's true contribution. Re-folding just the survivors instead (the
+        // pre-D55 behaviour) silently dropped the missing Z's own net from the running total that feeds VAT
+        // (D8): deleting the middle Z of three gave ฿140 instead of the true ฿190. Only when the last Z is
+        // itself unreadable/hash-broken/invalid is there nothing trustworthy left to chain from but the lenient
+        // recompute (Q3b-16 · D54, unchanged).
+        const trustLast = lastHealthy && lastSnapshot !== null
+        prev = trustLast ? { zNo: lastSnapshot.zNo, grandTotalSatang: lastSnapshot.grandTotalSatang } : { zNo: lenient.zNo, grandTotalSatang: lenient.grandTotalSatang }
+        const storedGrand = trustLast ? lastGrand : last !== undefined ? safeIntOrNull((tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined)?.grandTotalSatang) : null
         chainWarning = {
           brokenShiftId: deletedIds[0] ?? last!.shiftId,
           storedGrandTotalSatang: storedGrand,
-          recomputedGrandTotalSatang: lenient.grandTotalSatang,
+          recomputedGrandTotalSatang: prev.grandTotalSatang,
           acknowledgedBy: approver.id,
           unreadableZs: lenient.unreadable,
           duplicateZNos: lenient.duplicateZNos,
