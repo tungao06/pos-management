@@ -13,11 +13,13 @@ const vendor = JSON.parse(readFileSync(here('../../dayo-pricing/VENDOR.json'), '
 const r2 = (n: number): number => Math.round(n * 100) / 100
 const REFUSED = { ok: false, itemsSubtotal: 0, itemsDiscount: 0, billDiscountAmount: 0, totalAmount: 0, channelFeeAmount: 0, lines: [], promotionsApplied: [] }
 
-const cases = PARITY_CASES.map(({ id, spec, draft }) => {
+// dayo's case shape (scripts/export-pos-parity.ts): `spec` names the case, `note` says what it checks
+const cases = PARITY_CASES.map(({ id, spec: specRef, draft }) => {
+  const head = { spec: id, note: `spec 04 ${specRef}` }
   let parsed
-  try { parsed = cartFromOrderDraft(draft, catalog) } catch (e) { if (e instanceof CartError) return { id, spec, draft, expected: REFUSED }; throw e }
+  try { parsed = cartFromOrderDraft(draft, catalog) } catch (e) { if (e instanceof CartError) return { ...head, draft, expected: REFUSED }; throw e }
   const q = computeOrder(toOrderDraft(parsed.cart, catalog, parsed.soldAt), withZeroCosts(catalog))
-  return { id, spec, draft, expected: {
+  return { ...head, draft, expected: {
     ok: q.ok, itemsSubtotal: r2(q.itemsSubtotal), itemsDiscount: r2(q.itemsDiscount), billDiscountAmount: r2(q.billDiscountAmount), totalAmount: r2(q.totalAmount), channelFeeAmount: r2(q.channelFeeAmount),
     lines: q.lines.map((l) => ({ lineNo: l.lineNo, unitPrice: r2(l.unitPrice), discountPerCup: r2(l.discountPerCup), lineTotal: r2(l.lineTotal) })),
     promotionsApplied: q.promotionsApplied.map((p) => ({ promotionId: p.promotionId, discountAmount: r2(p.discountAmount) })),

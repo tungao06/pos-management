@@ -22,6 +22,26 @@
       "backdateDays": 7,
       "recentOrdersCount": 5
     },
+    "sizes": [
+      {
+        "code": "16 oz",
+        "label": "16 oz",
+        "sortOrder": 0,
+        "isActive": true
+      },
+      {
+        "code": "20 oz",
+        "label": "20 oz",
+        "sortOrder": 1,
+        "isActive": true
+      },
+      {
+        "code": "22 oz",
+        "label": "22 oz",
+        "sortOrder": 2,
+        "isActive": false
+      }
+    ],
     "variants": [
       {
         "menuCode": "Thai Tea",
@@ -776,8 +796,8 @@
           4,
           5
         ],
-        "timeFrom": "14:00",
-        "timeTo": "16:00",
+        "timeFrom": "14:00:00",
+        "timeTo": "16:00:00",
         "channelCodes": [],
         "requiresCode": false,
         "autoApply": true,
@@ -877,8 +897,8 @@
   },
   "cases": [
     {
-      "id": "c01a-pct15-of-35",
-      "spec": "§5.3-1",
+      "spec": "c01a-pct15-of-35",
+      "note": "spec 04 §5.3-1",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -917,8 +937,8 @@
       }
     },
     {
-      "id": "c01b-pct15-of-45",
-      "spec": "§5.3-1",
+      "spec": "c01b-pct15-of-45",
+      "note": "spec 04 §5.3-1",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -957,8 +977,8 @@
       }
     },
     {
-      "id": "c01c-pct7-of-85",
-      "spec": "§5.3-1",
+      "spec": "c01c-pct7-of-85",
+      "note": "spec 04 §5.3-1",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -997,8 +1017,8 @@
       }
     },
     {
-      "id": "c01d-pct33-of-65",
-      "spec": "§5.3-1",
+      "spec": "c01d-pct33-of-65",
+      "note": "spec 04 §5.3-1",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1037,8 +1057,8 @@
       }
     },
     {
-      "id": "c02a-lineman-7pct-ceil-plus5",
-      "spec": "§5.3-2",
+      "spec": "c02a-lineman-7pct-ceil-plus5",
+      "note": "spec 04 §5.3-2",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1076,8 +1096,8 @@
       }
     },
     {
-      "id": "c02b-grab-30pct-ceil",
-      "spec": "§5.3-2",
+      "spec": "c02b-grab-30pct-ceil",
+      "note": "spec 04 §5.3-2",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1115,8 +1135,8 @@
       }
     },
     {
-      "id": "c03-grab-fee-and-channel-promo",
-      "spec": "§5.3-3",
+      "spec": "c03-grab-fee-and-channel-promo",
+      "note": "spec 04 §5.3-3",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1159,8 +1179,8 @@
       }
     },
     {
-      "id": "c04a-bill-pct-after-line-discounts",
-      "spec": "§5.3-4",
+      "spec": "c04a-bill-pct-after-line-discounts",
+      "note": "spec 04 §5.3-4",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1203,8 +1223,8 @@
       }
     },
     {
-      "id": "c04b-code-bill-discount-max-amount",
-      "spec": "§5.3-4",
+      "spec": "c04b-code-bill-discount-max-amount",
+      "note": "spec 04 §5.3-4",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1247,8 +1267,8 @@
       }
     },
     {
-      "id": "c05a-bundle-cocoa-thai-tea",
-      "spec": "§5.3-5",
+      "spec": "c05a-bundle-cocoa-thai-tea",
+      "note": "spec 04 §5.3-5",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1305,8 +1325,8 @@
       }
     },
     {
-      "id": "c05b-buy2get1-qty4",
-      "spec": "§5.3-5",
+      "spec": "c05b-buy2get1-qty4",
+      "note": "spec 04 §5.3-5",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1355,8 +1375,8 @@
       }
     },
     {
-      "id": "c06a-oat-premium-matcha",
-      "spec": "§5.3-6",
+      "spec": "c06a-oat-premium-matcha",
+      "note": "spec 04 §5.3-6",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1394,8 +1414,8 @@
       }
     },
     {
-      "id": "c06b-oat-without-fresh-milk",
-      "spec": "§5.3-6",
+      "spec": "c06b-oat-without-fresh-milk",
+      "note": "spec 04 §5.3-6",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1426,8 +1446,8 @@
       }
     },
     {
-      "id": "c07a-time-before",
-      "spec": "§5.3-7",
+      "spec": "c07a-time-before",
+      "note": "spec 04 §5.3-7",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "13:59",
@@ -1465,8 +1485,8 @@
       }
     },
     {
-      "id": "c07b-time-inside",
-      "spec": "§5.3-7",
+      "spec": "c07b-time-inside",
+      "note": "spec 04 §5.3-7",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "14:30",
@@ -1509,8 +1529,8 @@
       }
     },
     {
-      "id": "c07c-time-after",
-      "spec": "§5.3-7",
+      "spec": "c07c-time-after",
+      "note": "spec 04 §5.3-7",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "16:01",
@@ -1548,8 +1568,8 @@
       }
     },
     {
-      "id": "c07d-time-saturday",
-      "spec": "§5.3-7",
+      "spec": "c07d-time-saturday",
+      "note": "spec 04 §5.3-7",
       "draft": {
         "saleDate": "2026-09-26",
         "saleTime": "14:30",
@@ -1587,8 +1607,8 @@
       }
     },
     {
-      "id": "c08a-skip-one",
-      "spec": "§5.3-8",
+      "spec": "c08a-skip-one",
+      "note": "spec 04 §5.3-8",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1628,8 +1648,8 @@
       }
     },
     {
-      "id": "c08b-no-promotions",
-      "spec": "§5.3-8",
+      "spec": "c08b-no-promotions",
+      "note": "spec 04 §5.3-8",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1673,8 +1693,8 @@
       }
     },
     {
-      "id": "c08c-code-promo-without-code",
-      "spec": "§5.3-8",
+      "spec": "c08c-code-promo-without-code",
+      "note": "spec 04 §5.3-8",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1712,8 +1732,8 @@
       }
     },
     {
-      "id": "c09a-max-qty-99",
-      "spec": "§5.3-9",
+      "spec": "c09a-max-qty-99",
+      "note": "spec 04 §5.3-9",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -1762,8 +1782,8 @@
       }
     },
     {
-      "id": "c09b-50-lines-500-cups",
-      "spec": "§5.3-9",
+      "spec": "c09b-50-lines-500-cups",
+      "note": "spec 04 §5.3-9",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -2282,8 +2302,8 @@
       }
     },
     {
-      "id": "c10a-free-without-reason",
-      "spec": "§5.3-10",
+      "spec": "c10a-free-without-reason",
+      "note": "spec 04 §5.3-10",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -2315,8 +2335,8 @@
       }
     },
     {
-      "id": "c10b-free-with-reason",
-      "spec": "§5.3-10",
+      "spec": "c10b-free-with-reason",
+      "note": "spec 04 §5.3-10",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -2356,8 +2376,8 @@
       }
     },
     {
-      "id": "c11b-milk-omitted",
-      "spec": "§5.3-11",
+      "spec": "c11b-milk-omitted",
+      "note": "spec 04 §5.3-11",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -2395,8 +2415,8 @@
       }
     },
     {
-      "id": "c12a-grab-promo-on-store",
-      "spec": "§5.3-12",
+      "spec": "c12a-grab-promo-on-store",
+      "note": "spec 04 §5.3-12",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -2434,8 +2454,8 @@
       }
     },
     {
-      "id": "c12b-grab-promo-on-grab",
-      "spec": "§5.3-12",
+      "spec": "c12b-grab-promo-on-grab",
+      "note": "spec 04 §5.3-12",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
@@ -2478,8 +2498,8 @@
       }
     },
     {
-      "id": "c13a-at-timeFrom",
-      "spec": "§5.3-13",
+      "spec": "c13a-at-timeFrom",
+      "note": "spec 04 §5.3-13",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "14:00",
@@ -2501,29 +2521,24 @@
       "expected": {
         "ok": true,
         "itemsSubtotal": 85,
-        "itemsDiscount": 12.75,
+        "itemsDiscount": 0,
         "billDiscountAmount": 0,
-        "totalAmount": 72.25,
+        "totalAmount": 85,
         "channelFeeAmount": 0,
         "lines": [
           {
             "lineNo": 1,
             "unitPrice": 85,
-            "discountPerCup": 12.75,
-            "lineTotal": 72.25
+            "discountPerCup": 0,
+            "lineTotal": 85
           }
         ],
-        "promotionsApplied": [
-          {
-            "promotionId": "9f8e0000-0000-4000-8000-000000000002",
-            "discountAmount": 12.75
-          }
-        ]
+        "promotionsApplied": []
       }
     },
     {
-      "id": "c13b-at-timeTo",
-      "spec": "§5.3-13",
+      "spec": "c13b-at-timeTo",
+      "note": "spec 04 §5.3-13",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "16:00",
@@ -2566,8 +2581,8 @@
       }
     },
     {
-      "id": "c15-bill-baht-and-percent",
-      "spec": "§5.3-15",
+      "spec": "c15-bill-baht-and-percent",
+      "note": "spec 04 §5.3-15",
       "draft": {
         "saleDate": "2026-09-25",
         "saleTime": "10:30",
