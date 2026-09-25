@@ -31,7 +31,7 @@ describe('appendOrderEvents', () => {
   it('chains per device across orders, numbers seq per order, verifies, and queues every event', async () => {
     const { db } = await openTestDb()
     await seedDeviceAndOrders(db, ['o-1', 'o-2'])
-    const newId = sequentialIds('ev')
+    const newId = sequentialIds()
     await db.transaction(async (tx) => {
       await appendOrderEvents(tx, ctxFor('o-1', newId), [{ type: 'CREATED', payload: { a: 1 } }, { type: 'PAID', payload: { receiptNo: 'A-000001' } }])
     })
@@ -58,7 +58,7 @@ describe('appendOrderEvents', () => {
   it('is append-only in the DB, and the chain still detects an edit made behind the triggers', async () => {
     const { db, raw } = await openTestDb()
     await seedDeviceAndOrders(db, ['o-1'])
-    const newId = sequentialIds('ev')
+    const newId = sequentialIds()
     await db.transaction(async (tx) => {
       await appendOrderEvents(tx, ctxFor('o-1', newId), [{ type: 'CREATED', payload: { total: 4500 } }, { type: 'PAID', payload: { total: 4500 } }])
     })
@@ -72,7 +72,7 @@ describe('appendOrderEvents', () => {
   it('rolls back with the surrounding transaction', async () => {
     const { db } = await openTestDb()
     await seedDeviceAndOrders(db, ['o-1'])
-    const newId = sequentialIds('ev')
+    const newId = sequentialIds()
     await expect(
       db.transaction(async (tx) => {
         await appendOrderEvents(tx, ctxFor('o-1', newId), [{ type: 'CREATED', payload: {} }])
@@ -87,7 +87,7 @@ describe('appendOrderEvents', () => {
 describe('enqueueOutbox', () => {
   it('keys rows as <table>:<id>[:suffix] and refuses the same key twice', async () => {
     const { db } = await openTestDb()
-    const newId = sequentialIds('ob')
+    const newId = sequentialIds()
     await enqueueOutbox(db, 'order', { id: 'o-9', status: 'paid' }, AT, newId)
     await enqueueOutbox(db, 'order', { id: 'o-9', status: 'voided' }, AT, newId, 'voided')
     const rows = await db.select().from(s.outbox).all()

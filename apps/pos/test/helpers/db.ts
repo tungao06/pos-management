@@ -8,6 +8,7 @@ import type { ApiDeps } from '../../src/api/deps'
 import { createPosApi } from '../../src/api/pos-api'
 import type { CommitSaleInput, CommitSaleResult, DeviceDto, PosApi, SetupInput, ShiftDto, UserDto } from '../../src/api/types'
 import { initDatabase } from '../../src/db/init'
+import { createMemorySecretStore } from '../../src/sync/secret-store'
 
 // Node's built-ins are taken from `process.getBuiltinModule`, never named in an `import` statement: this helper is
 // also used by a jsdom test file (`test/close-shift-screen.test.tsx`, the close screen driven against the real
@@ -36,9 +37,10 @@ export function testClock(startIso = '2026-09-17T03:00:00.000Z'): TestClock {
   }
 }
 
-export function sequentialIds(prefix = 'id'): () => string {
+/** Deterministic lowercase UUIDs for tests — every id the app writes must pass the contract's Uuid (spec §4.1). */
+export function sequentialIds(): () => string {
   let n = 0
-  return () => `${prefix}-${String(++n).padStart(6, '0')}`
+  return () => `00000000-0000-4000-8000-${(++n).toString(16).padStart(12, '0')}`
 }
 
 export async function openTestDb(): Promise<{ raw: DatabaseSync; db: RemoteDb; init: { migrated: string[]; seeded: boolean } }> {
@@ -58,10 +60,15 @@ export function vacuumInto(raw: DatabaseSync): Uint8Array {
 
 export type TestApi = { api: PosApi; db: RemoteDb; raw: DatabaseSync; clock: TestClock; deps: ApiDeps }
 
-export async function openTestApi(): Promise<TestApi> {
+export async function openTestApi(opts: { fetch?: typeof fetch } = {}): Promise<TestApi> {
   const { raw, db } = await openTestDb()
   const clock = testClock()
-  const deps: ApiDeps = { now: clock.now, newId: sequentialIds(), pinCost: { ...TEST_PIN_COST }, exportDbFile: async () => vacuumInto(raw) }
+  const deps: ApiDeps = {
+    now: clock.now, newId: sequentialIds(), pinCost: { ...TEST_PIN_COST }, exportDbFile: async () => vacuumInto(raw),
+    fetch: opts.fetch ?? (async () => { throw new TypeError('offline in tests') }),
+    secrets: createMemorySecretStore(),
+    random: () => 0.5,
+  }
   return { api: createPosApi(db, deps), db, raw, clock, deps }
 }
 

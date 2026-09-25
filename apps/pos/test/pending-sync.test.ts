@@ -10,7 +10,7 @@ const AT = '2026-09-17T03:00:00.000Z'
 describe('countPendingSyncItems (D50 Q3-26: bills, not outbox rows)', () => {
   it('counts one per bill however many rows the bill queued, and one per non-order record', async () => {
     const { db } = await openTestDb()
-    const newId = sequentialIds('ob')
+    const newId = sequentialIds()
     expect(await countPendingSyncItems(db)).toBe(0)
 
     // An open shift: one record (open and close rows of the same shift still count once).
@@ -44,7 +44,7 @@ describe('countPendingSyncItems (D50 Q3-26: bills, not outbox rows)', () => {
 
   it('ignores rows that are no longer pending', async () => {
     const { db } = await openTestDb()
-    const newId = sequentialIds('ob')
+    const newId = sequentialIds()
     await enqueueOutbox(db, 'order', { id: 'o-1' }, AT, newId)
     await enqueueOutbox(db, 'order_line', { id: 'ol-1', orderId: 'o-1' }, AT, newId)
     await enqueueOutbox(db, 'shift', { id: 'sh-1' }, AT, newId)
@@ -60,7 +60,7 @@ describe('countPendingSyncItems (D50 Q3-26: bills, not outbox rows)', () => {
 describe('countPendingSyncItems — stock documents (plan 4 T4-8)', () => {
   it('a purchase, a production batch, a stock count and an adjustment are one item each with their lines and movements', async () => {
     const { db } = await openTestDb()
-    const newId = sequentialIds('ob')
+    const newId = sequentialIds()
     await enqueueOutbox(db, 'purchase', { id: 'pu-1' }, AT, newId)
     await enqueueOutbox(db, 'purchase_line', { id: 'pl-1', purchaseId: 'pu-1' }, AT, newId)
     await enqueueOutbox(db, 'purchase_line', { id: 'pl-2', purchaseId: 'pu-1' }, AT, newId)
@@ -86,7 +86,7 @@ describe('countPendingSyncItems — stock documents (plan 4 T4-8)', () => {
 
   it('a receipt paid from the drawer is 2 items: the purchase (with its lines and movements) and the paid-out cash record (Task 4 · m-4)', async () => {
     const { db } = await openTestDb()
-    const newId = sequentialIds('ob')
+    const newId = sequentialIds()
     await enqueueOutbox(db, 'purchase', { id: 'pu-2' }, AT, newId)
     await enqueueOutbox(db, 'purchase_line', { id: 'pl-3', purchaseId: 'pu-2' }, AT, newId)
     await enqueueOutbox(db, 'stock_movement', { id: 'm-7', refType: 'purchase', refId: 'pu-2' }, AT, newId)
@@ -96,7 +96,7 @@ describe('countPendingSyncItems — stock documents (plan 4 T4-8)', () => {
 
   it('m-2: a row missing the field its branch reads still counts once, instead of vanishing into a NULL group key', async () => {
     const { db } = await openTestDb()
-    const newId = sequentialIds('ob')
+    const newId = sequentialIds()
     // a hypothetical trimmed purchase_line row without purchaseId, the field that branch reads — every real writer
     // today sends the full row (purchaseId is NOT NULL in the schema), but the badge must never silently undercount
     // if that ever changes.
