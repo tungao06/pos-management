@@ -19,7 +19,23 @@ export type BootstrapState = {
   lastBackupAt: string | null
   /** A Z report was closed after the last one a confirmed backup covered — compared by Z id, not time (Q3b-7 · D52). */
   backupDue: boolean
+  /** A device set up before block 2 (setupShop) that is not linked to dayo yet — it links with an old owner PIN (ruling R7). */
+  legacyDevice: boolean
+  /** dayo.base_url is stored and the API key is in the secret store. */
+  dayoLinked: boolean
+  /** Active dayo staff with a known role who have no PIN on this tablet yet (spec 04 §6.5). */
+  staffNeedingPin: StaffOptionDto[]
+  /** ruling N2: "เชื่อมใหม่ด้วยคีย์ใหม่" is offered (no active owner with a PIN here, or the key was revoked). */
+  ownerRecovery: boolean
 }
+export type StaffOptionDto = { id: string; displayName: string; role: UserRole }
+export type DayoProbeInput = { baseUrl: string; apiKey: string }
+export type DayoProbe = { clientName: string; lastReceiptNo: string | null; requiredPrefix: string | null; catalogVersion: number; owners: { id: string; displayName: string }[]; pricingMatches: boolean }
+export type ConnectShopInput = { baseUrl: string; apiKey: string; receiptPrefix: string; ownerStaffId: string; ownerPin: string; promptPayId: string; legacyApproval: { userId: string; pin: string } | null }
+export type SetStaffPinInput = { staffId: string; pin: string; approverUserId: string; approverPin: string }
+export type ReplaceApiKeyInput = { baseUrl: string; apiKey: string; approverUserId: string; approverPin: string }
+/** ruling N2 — no approver: the new key (issued on the dayo web after a LINE login) is the proof. */
+export type RecoverOwnerInput = { baseUrl: string; apiKey: string; ownerStaffId: string; ownerPin: string }
 export type SetupInput = { deviceName: string; receiptPrefix: string; owners: { displayName: string; pin: string }[]; promptPayId: string }
 export type OpenShiftInput = { userId: string; openingFloatSatang: number }
 /** "เปิดกะด่วน" (spec §4.8): owner only, float 0 (Q3b-10 · D52). */
@@ -342,6 +358,11 @@ export interface PosApi {
   saveCountLine(input: SaveCountLineInput): Promise<StockCountDto>
   removeCountLine(input: RemoveCountLineInput): Promise<StockCountDto>
   closeStockCount(input: CloseStockCountInput): Promise<StockCountDto>
+  probeDayo(input: DayoProbeInput): Promise<DayoProbe>
+  connectShop(input: ConnectShopInput): Promise<void>
+  setStaffPin(input: SetStaffPinInput): Promise<UserDto>
+  replaceApiKey(input: ReplaceApiKeyInput): Promise<void>
+  recoverOwner(input: RecoverOwnerInput): Promise<void>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -374,6 +395,11 @@ export const POS_API_METHODS = [
   'saveCountLine',
   'removeCountLine',
   'closeStockCount',
+  'probeDayo',
+  'connectShop',
+  'setStaffPin',
+  'replaceApiKey',
+  'recoverOwner',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>

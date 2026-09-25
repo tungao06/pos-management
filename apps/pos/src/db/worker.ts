@@ -7,6 +7,7 @@ import { PosError } from '../api/errors'
 import { createPosApi } from '../api/pos-api'
 import { POS_API_METHODS, type PosApi } from '../api/types'
 import { newId } from '../lib/ids'
+import { createIdbSecretStore } from '../sync/secret-store'
 import { initDatabase } from './init'
 
 const DB_FILE = '/dayo-pos.sqlite3'
@@ -38,7 +39,10 @@ async function start(): Promise<PosApi> {
     const db = drizzle(oo1Callback(raw as unknown as Oo1Database))
     await initDatabase(db)
     // spike I3: the pool copies the database file; PosApi calls it inside its serial queue (no open transaction).
-    return createPosApi(db, { now: () => new Date().toISOString(), newId, pinCost: PROD_PIN_COST, exportDbFile: () => pool.exportFile(DB_FILE) })
+    return createPosApi(db, {
+      now: () => new Date().toISOString(), newId, pinCost: PROD_PIN_COST, exportDbFile: () => pool.exportFile(DB_FILE),
+      fetch: (input, init) => fetch(input, init), secrets: createIdbSecretStore(), random: Math.random,
+    })
   } catch (e) {
     throw new PosError('DB_OPEN_FAILED', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
   }

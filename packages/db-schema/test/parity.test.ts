@@ -5,7 +5,19 @@ import { getTableConfig as sqliteConfig, SQLiteSyncDialect, SQLiteTable } from '
 import * as pg from '../src/pg/index.js'
 import * as sqlite from '../src/sqlite/index.js'
 
-const SQLITE_ONLY = new Set(['outbox', 'sync_state'])
+const SQLITE_ONLY = new Set(['outbox', 'sync_state', 'dayo_catalog', 'order_item'])
+/**
+ * Block 2 (spec 04, D59): the pg schema belonged to the plan-5 server that was dropped; block-2 columns live on the
+ * tablet only and pg is left untouched. Keys are "table.column".
+ */
+const SQLITE_ONLY_COLUMNS = new Set([
+  'order.sold_at', 'order.catalog_version', 'order.channel_code', 'order.payment_code', 'order.pricing_json', 'order.excluded_at',
+  'order.central_order_no', 'order.central_computed_total_satang', 'order.central_amount_mismatch', 'order.central_duplicate_of_json',
+  'order.central_dayo_edit_json',
+  'outbox.next_attempt_at', 'outbox.parent_key', 'outbox.result_json',
+])
+/** Nullable on the tablet since block 2 (a block-2 bill has channel_code instead). */
+const DIVERGED_NOT_NULL = new Set(['order.channel_id'])
 const PG_ONLY = new Set(['idempotency_record', 'invariant_run'])
 const PG_ONLY_COLUMNS = new Set(['server_seq', 'server_received_at'])
 
@@ -57,6 +69,7 @@ function shapeOfSqlite(t: SQLiteTable): Shape {
   const c = sqliteConfig(t)
   const columns: Shape['columns'] = {}
   for (const col of c.columns) {
+    if (SQLITE_ONLY_COLUMNS.has(`${c.name}.${col.name}`)) continue
     const cat = category(col.columnType)
     columns[col.name] = { cat: cat === 'big' ? 'int' : cat, notNull: col.notNull, primary: col.primary, unique: col.isUnique }
   }
@@ -86,7 +99,12 @@ describe('schema parity sqlite ↔ pg', () => {
     it(`table ${name} matches`, () => {
       const p = pgTables.get(name)
       expect(p, `pg table ${name} missing`).toBeDefined()
-      expect(shapeOfSqlite(sqliteTables.get(name)!)).toEqual(shapeOfPg(p!))
+      const pgShape = shapeOfPg(p!)
+      const liteShape = shapeOfSqlite(sqliteTables.get(name)!)
+      for (const [col, spec] of Object.entries(liteShape.columns)) {
+        if (DIVERGED_NOT_NULL.has(`${name}.${col}`) && pgShape.columns[col]) spec.notNull = pgShape.columns[col].notNull
+      }
+      expect(liteShape).toEqual(pgShape)
     })
   }
   it('compares column-level uniques and indexes (guards against a parity blind spot)', () => {

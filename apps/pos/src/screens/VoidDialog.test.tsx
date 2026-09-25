@@ -43,6 +43,10 @@ const BOOT: BootstrapState = {
   pendingSyncItems: 0,
   lastBackupAt: null,
   backupDue: false,
+  legacyDevice: false,
+  dayoLinked: true,
+  staffNeedingPin: [],
+  ownerRecovery: false,
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

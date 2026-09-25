@@ -1,5 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "noEmit": true, "types": [] },
-  "include": ["src", "test"]
+  "include": ["src"],
+  "exclude": ["src/dayo-fixture-files.ts"]
 }

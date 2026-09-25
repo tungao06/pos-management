@@ -80,7 +80,7 @@ const DONE: StockAdjustmentDto = {
 }
 
 function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
-  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, ...overrides }
+  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, staffNeedingPin: [], ownerRecovery: false, ...overrides }
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

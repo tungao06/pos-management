@@ -1,0 +1,12 @@
+{
+  "name": "err-401-invalid-key",
+  "spec": "04 §4.1 · §6.3 401 มีหัว CORS (แท็บเล็ตต้องเห็นสถานะ ไม่ใช่เน็ตหลุด)",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": { "api_authenticate": { "ok": false, "error": { "code": "DY401", "message": "invalid_key: API key ไม่ถูกต้องหรือถูกปิดใช้งาน" } } },
+  "request": { "method": "GET", "path": "/api/v1/pos/catalog", "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_revoked_key" } },
+  "response": {
+    "status": 401,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": { "ok": false, "error": { "code": "DY401", "message": "invalid_key: API key ไม่ถูกต้องหรือถูกปิดใช้งาน" } }
+  }
+}

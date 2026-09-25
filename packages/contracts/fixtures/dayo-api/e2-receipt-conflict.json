@@ -1,0 +1,28 @@
+{
+  "name": "e2-receipt-conflict",
+  "spec": "04 §4.5 ข้อ 0 (ข) receipt_no เดิม + pos_order_id ใหม่ = CONFLICT ห้ามเป็น duplicate",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": { "ok": true, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "name": "แท็บเล็ตขาย 1", "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write"] },
+    "api_pos_push": "@data"
+  },
+  "request": {
+    "method": "POST", "path": "/api/v1/pos/push",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" },
+    "body": { "device_time": "2026-09-25T04:00:00.000Z", "rows": [
+      { "key": "order:1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", "kind": "order", "data": {
+        "pos_order_id": "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", "receipt_no": "A-000312", "queue_no": 1,
+        "sale_date": "2026-09-25", "sold_at": "2026-09-25T03:59:10.000Z", "channel": "store", "payment": "qr",
+        "staff_id": "0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d", "catalog_version": 42, "shift_id": null,
+        "lines": [ { "code": "Thai Tea", "size": "16 oz", "sweetness": "50%", "milk": "fresh", "grade": null, "qty": 1 } ],
+        "bill_discount": null, "promo_code": null, "skip_promotion_ids": [], "no_promotions": false,
+        "totals": { "items_subtotal": 35, "items_discount": 0, "bill_discount": 0, "total": 35 }, "note": null } } ] }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": { "ok": true, "data": { "server_time": "2026-09-25T04:00:00.410+00:00", "results": [
+      { "key": "order:1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f", "status": "rejected", "reason": "CONFLICT", "detail": "เลขใบเสร็จ A-000312 ถูกใช้กับบิลอื่นของเครื่องนี้แล้ว" }
+    ] } }
+  }
+}

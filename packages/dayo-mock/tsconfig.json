@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "noEmit": true, "types": [], "resolveJsonModule": true, "lib": ["ES2022", "DOM", "DOM.Iterable"] },
+  "include": ["src"],
+  "exclude": ["src/server.ts"]
+}

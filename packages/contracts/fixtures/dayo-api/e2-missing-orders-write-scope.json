@@ -1,0 +1,23 @@
+{
+  "name": "e2-missing-orders-write-scope",
+  "spec": "04 §4.5 key ที่ไม่มี orders:write = 403 DY403 ทั้งคำขอ ไม่มีคำตัดสินรายแถว (dayo push/route.ts authenticate(req, \"orders:write\") · api_authenticate 0049_pos_catalog.sql:207-214)",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": { "api_authenticate": { "ok": false, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "error": { "code": "DY403", "message": "forbidden: API key ไม่มีสิทธิ์ orders:write" } } },
+  "request": {
+    "method": "POST", "path": "/api/v1/pos/push",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" },
+    "body": { "device_time": "2026-09-25T03:15:03.500Z", "rows": [
+      { "key": "order:0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d", "kind": "order", "data": {
+        "pos_order_id": "0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d", "receipt_no": "A-000363", "queue_no": 63, "sale_date": "2026-09-25", "sold_at": "2026-09-25T03:15:00.000Z",
+        "channel": "store", "payment": "cash", "staff_id": "0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d", "catalog_version": 42, "shift_id": null,
+        "lines": [{ "code": "Thai Tea", "size": "16 oz", "sweetness": "50%", "milk": "fresh", "grade": null, "qty": 1 }],
+        "bill_discount": null, "promo_code": null, "skip_promotion_ids": [], "no_promotions": false,
+        "totals": { "items_subtotal": 35, "items_discount": 0, "bill_discount": 0, "total": 35 }, "note": null } }
+    ] }
+  },
+  "response": {
+    "status": 403,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": { "ok": false, "error": { "code": "DY403", "message": "forbidden: API key ไม่มีสิทธิ์ orders:write" } }
+  }
+}
