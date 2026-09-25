@@ -38,6 +38,9 @@ export const PARITY_CASES: { id: string; spec: string; draft: ParityDraft }[] = 
   { id: 'c11b-milk-omitted', spec: '§5.3-11', draft: d([tt({ milk: null })]) },
   { id: 'c12a-grab-promo-on-store', spec: '§5.3-12', draft: d([cc()]) },
   { id: 'c12b-grab-promo-on-grab', spec: '§5.3-12', draft: d([cc()], { channelCode: 'grab', paymentCode: 'qr' }) },
+  // The test catalog's timeFrom is "14:00:00", as dayo's E1 sends it, and the POS never truncates it. dayo shared then
+  // compares "14:00" < "14:00:00" and gives NO promotion at 14:00 — the seed records that, matching dayo shared but NOT
+  // dayo SQL, which compares times and gives it (dayo bug: E1 should send left(time::text,5) like 0020 does).
   { id: 'c13a-at-timeFrom', spec: '§5.3-13', draft: d([mt()], { saleTime: '14:00' }) },
   { id: 'c13b-at-timeTo', spec: '§5.3-13', draft: d([mt()], { saleTime: '16:00' }) },
   { id: 'c15-bill-baht-and-percent', spec: '§5.3-15', draft: d([tt()], { billDiscountBaht: 5, billDiscountPercent: 10, billDiscountReason: 'ผิดรูป' }) },

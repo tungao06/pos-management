@@ -1,19 +1,74 @@
 import fc from 'fast-check'
-import { describe, expect, it } from 'vitest'
-import { computeOrder } from '@dayo/dayo-pricing'
-import { PosOrderCatalog as PosOrderCatalogSchema } from '@dayo/contracts'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import { computeOrder, type CupSizeEntry, type OrderCatalog } from '@dayo/dayo-pricing'
+import { PosOrderCatalog as PosOrderCatalogSchema, type PosOrderCatalogParsed } from '@dayo/contracts'
+import { loadRichCatalog } from '@dayo/contracts/fixture-files'
 import { edgeBahtToSatang } from '../src/money-edge.js'
-import { CartError, centralDiffSatang, lineOptions, priceCart, sumSatang, toOrderDraft, withZeroCosts, type CartDraft, type CartLineDraft } from '../src/price-cart.js'
+import {
+  CartError, centralDiffSatang, lineOptions, priceCart, sumSatang, toOrderDraft, toPricingCatalog, withZeroCosts,
+  type CartDraft, type CartLineDraft, type PosOrderCatalog, type PosVariant,
+} from '../src/price-cart.js'
 import { POS_CATALOG } from './fixtures/pos-catalog.js'
 
 const line = (over: Partial<CartLineDraft> = {}): CartLineDraft => ({ code: 'Thai Tea', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1, free: false, discountSatang: null, discountPercent: null, discountReason: null, ...over })
 const cart = (lines: CartLineDraft[], over: Partial<CartDraft> = {}): CartDraft => ({ channelCode: 'store', paymentCode: 'cash', lines, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, ...over })
 const FRI_1030 = '2026-09-25T03:30:00.000Z' // Friday 10:30 Bangkok
+const REFUSE = (f: () => unknown, code: CartError['code']): void => {
+  try { f(); expect.unreachable() } catch (e) { expect(e).toBeInstanceOf(CartError); expect((e as CartError).code).toBe(code) }
+}
 
-it('the contracts schema refuses a catalog missing a field the pricing code reads (why toPricingCatalog may cast)', () => {
-  const broken = structuredClone(POS_CATALOG) as unknown as { promotions: { params: Record<string, unknown> }[] }
-  delete broken.promotions[0]!.params['buy_qty']
-  expect(PosOrderCatalogSchema.safeParse(broken).success).toBe(false)
+describe('toPricingCatalog (the E1 catalog as dayo\'s OrderCatalog)', () => {
+  it('the parsed contract type satisfies the POS catalog type with no cast, sizes included', () => {
+    expectTypeOf<PosOrderCatalogParsed>().toExtend<PosOrderCatalog>()
+    expectTypeOf<PosOrderCatalog>().toExtend<Omit<OrderCatalog, 'ingredients'>>()
+    expectTypeOf<PosOrderCatalog['sizes']>().toEqualTypeOf<CupSizeEntry[]>()
+  })
+  it('keeps every size, inactive ones too, exactly as E1 sent them', () => {
+    expect(toPricingCatalog(loadRichCatalog().catalog).sizes).toEqual([
+      { code: '16 oz', label: '16 oz', sortOrder: 0, isActive: true },
+      { code: '20 oz', label: '20 oz', sortOrder: 1, isActive: true },
+      { code: '22 oz', label: '22 oz', sortOrder: 2, isActive: false },
+    ])
+  })
+  it('passes promotion times through unchanged — HH:MM:SS is never cut to HH:MM on the POS side', () => {
+    expect(POS_CATALOG.promotions.filter((p) => p.timeFrom != null).map((p) => [p.timeFrom, p.timeTo])).toEqual([['14:00:00', '16:00:00']])
+  })
+  it('the contracts schema refuses a catalog missing a field the pricing code reads', () => {
+    const broken = structuredClone(POS_CATALOG) as unknown as { promotions: { params: Record<string, unknown> }[] }
+    delete broken.promotions[0]!.params['buy_qty']
+    expect(PosOrderCatalogSchema.safeParse(broken).success).toBe(false)
+  })
+})
+
+describe('sizes (ADR-0054): a line is priced only on an ACTIVE size of catalog.sizes that has the variant', () => {
+  const tt16 = POS_CATALOG.variants.find((v) => v.menuCode === 'Thai Tea' && v.size === '16 oz' && v.sweetness === '50%')!
+  const withSize = (size: string, entry: CupSizeEntry | null, variant: boolean): PosOrderCatalog => ({
+    ...POS_CATALOG,
+    sizes: entry === null ? POS_CATALOG.sizes : [...POS_CATALOG.sizes.filter((s) => s.code !== size), entry],
+    variants: variant ? [...POS_CATALOG.variants, { ...tt16, size, price: 55 } satisfies PosVariant] : POS_CATALOG.variants,
+  })
+  it('an inactive size with no variant (22 oz of the test catalog) is refused before pricing', () => {
+    REFUSE(() => priceCart(cart([line({ size: '22 oz' })]), POS_CATALOG, FRI_1030), 'UNKNOWN_VARIANT')
+  })
+  it('an inactive size is refused even when a variant for it is present', () => {
+    const c = withSize('22 oz', null, true)
+    REFUSE(() => priceCart(cart([line({ size: '22 oz' })]), c, FRI_1030), 'UNKNOWN_VARIANT')
+    REFUSE(() => lineOptions(c, 'Thai Tea', '22 oz', '50%'), 'UNKNOWN_VARIANT')
+  })
+  it('a size missing from catalog.sizes is refused even when a variant for it is present', () => {
+    const c = withSize('24 oz', null, true)
+    REFUSE(() => priceCart(cart([line({ size: '24 oz' })]), c, FRI_1030), 'UNKNOWN_VARIANT')
+    REFUSE(() => lineOptions(c, 'Thai Tea', '24 oz', '50%'), 'UNKNOWN_VARIANT')
+  })
+  it('an active size without a variant for this menu is refused', () => {
+    const c = withSize('24 oz', { code: '24 oz', label: 'จัมโบ้', sortOrder: 3, isActive: true }, false)
+    REFUSE(() => priceCart(cart([line({ size: '24 oz' })]), c, FRI_1030), 'UNKNOWN_VARIANT')
+  })
+  it('a new active size the shop added with its variant is priced like any other', () => {
+    const c = withSize('24 oz', { code: '24 oz', label: 'จัมโบ้', sortOrder: 3, isActive: true }, true)
+    const p = priceCart(cart([line({ size: '24 oz' })]), c, FRI_1030)
+    expect([p.ok, p.lines[0]!.size, p.lines[0]!.unitPriceSatang, p.totalSatang]).toEqual([true, '24 oz', 5500, 5500])
+  })
 })
 
 describe('toOrderDraft', () => {
@@ -48,12 +103,32 @@ describe('priceCart', () => {
     expect(centralDiffSatang(null, 15_500)).toBeNull()
   })
   it('every money field equals edgeBahtToSatang of the vendored computeOrder (random carts)', () => {
-    const variants = POS_CATALOG.variants.filter((v) => !v.isMatcha)
+    const variants = POS_CATALOG.variants
+    // oat only where dayo's option rules allow it (spec §5.3 case 6) — a refused oat line is covered by its own test
+    const oatOk = variants.map((v) => lineOptions(POS_CATALOG, v.menuCode, v.size, v.sweetness).milk.some((m) => m.code === 'oat'))
+    const grades = POS_CATALOG.gradeOptions.map((g) => g.code)
+    const lineDiscount = fc.oneof(
+      fc.constant({ discountSatang: null, discountPercent: null }),
+      fc.integer({ min: 1, max: 50 }).map((p) => ({ discountSatang: null, discountPercent: p })),
+      fc.integer({ min: 1, max: 3000 }).map((s) => ({ discountSatang: s, discountPercent: null })),
+    )
+    const billDiscount = fc.oneof(
+      fc.constant(null),
+      fc.integer({ min: 1, max: 20_000 }).map((satang) => ({ kind: 'satang' as const, satang, reason: 'ลูกค้าประจำ' })),
+      fc.integer({ min: 1, max: 100 }).map((percent) => ({ kind: 'percent' as const, percent, reason: 'ลูกค้าประจำ' })),
+    )
     fc.assert(fc.property(
-      fc.array(fc.record({ v: fc.integer({ min: 0, max: variants.length - 1 }), qty: fc.integer({ min: 1, max: 5 }), pct: fc.option(fc.integer({ min: 1, max: 50 }), { nil: null }) }), { minLength: 1, maxLength: 6 }),
+      fc.array(fc.record({ v: fc.integer({ min: 0, max: variants.length - 1 }), qty: fc.integer({ min: 1, max: 5 }), oat: fc.boolean(), g: fc.nat(), d: lineDiscount }), { minLength: 1, maxLength: 6 }),
       fc.constantFrom('store', 'grab', 'lineman'),
-      (rows, channelCode) => {
-        const c = cart(rows.map((r) => { const v = variants[r.v]!; return line({ code: v.menuCode, size: v.size, sweetness: v.sweetness, qty: r.qty, discountPercent: r.pct }) }), { channelCode })
+      billDiscount,
+      (rows, channelCode, bill) => {
+        const c = cart(rows.map((r) => {
+          const v = variants[r.v]!
+          return line({
+            code: v.menuCode, size: v.size, sweetness: v.sweetness, qty: r.qty, milk: r.oat && oatOk[r.v] ? 'oat' : 'fresh',
+            grade: v.isMatcha ? grades[r.g % grades.length]! : null, ...r.d,
+          })
+        }), { channelCode, billDiscount: bill })
         const p = priceCart(c, POS_CATALOG, FRI_1030)
         const q = computeOrder(toOrderDraft(c, POS_CATALOG, FRI_1030), withZeroCosts(POS_CATALOG))
         expect(p.totalSatang).toBe(edgeBahtToSatang(q.totalAmount))
@@ -61,9 +136,12 @@ describe('priceCart', () => {
         expect(p.itemsDiscountSatang).toBe(edgeBahtToSatang(q.itemsDiscount))
         expect(p.billDiscountSatang).toBe(edgeBahtToSatang(q.billDiscountAmount))
         expect(p.channelFeeSatang).toBe(edgeBahtToSatang(q.channelFeeAmount))
-        expect(p.lines.map((l) => l.lineTotalSatang)).toEqual(q.lines.map((l) => edgeBahtToSatang(l.lineTotal)))
+        expect(p.ok).toBe(q.ok)
+        expect(p.lines.map((l) => [l.unitPriceSatang, l.discountPerCupSatang, l.lineTotalSatang]))
+          .toEqual(q.lines.map((l) => [edgeBahtToSatang(l.unitPrice), edgeBahtToSatang(l.discountPerCup), edgeBahtToSatang(l.lineTotal)]))
+        expect(p.promotionsApplied.map((x) => x.discountSatang)).toEqual(q.promotionsApplied.map((x) => edgeBahtToSatang(x.discountAmount)))
       },
-    ), { numRuns: 300 })
+    ), { numRuns: 500 })
   })
   it.each<[string, CartDraft, CartError['code']]>([
     ['empty', cart([]), 'EMPTY_CART'],
