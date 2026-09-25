@@ -2,9 +2,8 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { readCatalog } from '../sync/catalog'
-import { DAYO_KEYS, readKey } from '../sync/state'
 import { isBackupDue, lastBackupAt, lastBackupZId } from './backup'
-import { ownerRecoveryAllowed } from './connect'
+import { isDayoLinked, ownerRecoveryAllowed } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { staffNeedingPin } from './staff'
@@ -75,7 +74,7 @@ export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
 }
 
 export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapState> {
-  const dayoLinked = (await readKey(db, DAYO_KEYS.baseUrl)) !== null && (await deps.secrets.getApiKey()) !== null
+  const dayoLinked = await isDayoLinked(db, deps)
   if ((await localDeviceId(db)) === null) {
     return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, staffNeedingPin: [], ownerRecovery: false }
   }

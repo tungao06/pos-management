@@ -41,7 +41,8 @@ export async function setStaffPin(db: RemoteDb, deps: ApiDeps, input: SetStaffPi
     } else {
       await tx.update(s.user).set({ pinHash, displayName, role, isActive: true, updatedAt: at, version: before.version + 1 }).where(eq(s.user.id, entry.id))
     }
-    await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'user', entityId: entry.id, action: 'pin_set', beforeJson: null, afterJson: { staffId: entry.id, role, approvedBy: approver.id }, actorUserId: approver.id, at })
+    // fix round 1 (security M3): a changed PIN is its own action — never the PIN or its hash in the row
+    await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'user', entityId: entry.id, action: before === undefined ? 'pin_set' : 'pin_reset', beforeJson: null, afterJson: { staffId: entry.id, role, approvedBy: approver.id }, actorUserId: approver.id, at })
   })
   return { id: entry.id, displayName, role }
 }

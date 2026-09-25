@@ -107,13 +107,19 @@ async function giveOwnerPin(tx: RemoteDb, owner: { id: string; displayName: stri
  */
 export async function connectShop(db: RemoteDb, deps: ApiDeps, input: ConnectShopInput): Promise<void> {
   const existingDeviceId = await localDeviceId(db)
-  if (existingDeviceId !== null && (await deps.secrets.getApiKey()) !== null) throw new PosError('ALREADY_SET_UP', 'this device is already linked to dayo')
+  // "linked" = the same test as bootstrap's dayoLinked: a key without a stored address (or the reverse) is not a link
+  // and must not leave the device stuck at ALREADY_SET_UP (fix round 1, security M1)
+  if (existingDeviceId !== null && (await isDayoLinked(db, deps))) throw new PosError('ALREADY_SET_UP', 'this device is already linked to dayo')
   if (existingDeviceId !== null) {
-    if (input.legacyApproval === null) throw new PosError('ALREADY_SET_UP', 'a device set up before block 2 needs an old owner PIN to link')
+    if (input.legacyApproval === null) throw new PosError('ALREADY_SET_UP', 'a device not linked to dayo yet needs an owner PIN of this tablet to link')
     await requireOwnerPin(db, deps, input.legacyApproval.userId, input.legacyApproval.pin)
   }
   const prefix = input.receiptPrefix.trim()
   if (!/^[A-Z]{1,3}$/.test(prefix)) throw new PosError('BAD_INPUT', 'receipt prefix must be 1-3 letters A-Z')
+  if (existingDeviceId !== null) {
+    const dev = await db.select().from(s.device).where(eq(s.device.id, existingDeviceId)).get()
+    if (dev?.receiptPrefix !== prefix) throw new PosError('BAD_INPUT', `เครื่องนี้ใช้ prefix ${dev?.receiptPrefix ?? '?'} อยู่แล้ว`) // before E1 and before the key is stored
+  }
   let promptPayDigits: string
   try { promptPayDigits = classifyPromptPayId(input.promptPayId).digits } catch (e) { throw new PosError('BAD_INPUT', e instanceof Error ? e.message : String(e)) }
   const target = checkedTarget(input)
@@ -123,8 +129,7 @@ export async function connectShop(db: RemoteDb, deps: ApiDeps, input: ConnectSho
   const owner = activeOwners(v).find((o) => o.id === input.ownerStaffId)
   if (owner === undefined) throw new PosError('BAD_INPUT', 'เลือกเจ้าของจากรายชื่อระบบกลาง (owner ที่ใช้งานอยู่)')
   const last = v.client.last_receipt_no
-  const keyPrefix = requiredPrefix(last)
-  if (keyPrefix !== null && keyPrefix !== prefix) throw new PosError('BAD_INPUT', `กุญแจนี้ใช้เลขใบเสร็จ ${keyPrefix} — ใส่ prefix ${keyPrefix}`)
+  checkKeyBelongsTo({ receiptPrefix: prefix }, last)
   const pinHash = await hashPin(input.ownerPin, deps.pinCost) // slow: outside the transaction
 
   await deps.secrets.setApiKey(target.apiKey)
@@ -138,9 +143,6 @@ export async function connectShop(db: RemoteDb, deps: ApiDeps, input: ConnectSho
         await tx.insert(s.device).values(device)
         await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: deviceId, action: 'create', beforeJson: null, afterJson: device, actorUserId: null, at })
         await tx.insert(s.syncState).values({ key: LOCAL_DEVICE_KEY, value: deviceId })
-      } else {
-        const dev = await tx.select().from(s.device).where(eq(s.device.id, deviceId)).get()
-        if (dev?.receiptPrefix !== prefix) throw new PosError('BAD_INPUT', `เครื่องนี้ใช้ prefix ${dev?.receiptPrefix ?? '?'} อยู่แล้ว`)
       }
       await giveOwnerPin(tx, owner, pinHash, at)
       await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'user', entityId: owner.id, action: 'pin_set', beforeJson: null, afterJson: { staffId: owner.id, role: 'owner', by: 'connectShop', legacyApprovedBy: input.legacyApproval?.userId ?? null }, actorUserId: owner.id, at })
@@ -156,6 +158,28 @@ export async function connectShop(db: RemoteDb, deps: ApiDeps, input: ConnectSho
     throw e
   }
   deps.afterWrite?.()
+}
+
+/** bootstrap's `dayoLinked`: an address is stored AND the key is in the secret store. */
+export async function isDayoLinked(db: RemoteDb, deps: ApiDeps): Promise<boolean> {
+  return (await readKey(db, DAYO_KEYS.baseUrl)) !== null && (await deps.secrets.getApiKey()) !== null
+}
+
+/**
+ * Fix round 1 (security C1/I1) — the same central address rule: a key swap or an owner recovery never moves the tablet
+ * to another server. The typed address must equal the stored `dayo.base_url` (both normalized, whole strings); the
+ * old key and the new one are only ever sent there. Returns null when the stored address is missing or refused by
+ * the shared rule (a restored backup can carry one) — that tablet needs a full setup.
+ */
+async function storedBaseUrl(db: RemoteDb): Promise<string | null> {
+  const raw = await readKey(db, DAYO_KEYS.baseUrl)
+  if (raw === null) return null
+  try {
+    const url = normalizeBaseUrl(raw)
+    return url.endsWith('/api/v1') ? url : null
+  } catch {
+    return null
+  }
 }
 
 /** The linked device, its prefix and the check that a key's last receipt number belongs to it. */
@@ -191,18 +215,20 @@ async function withNewKey(deps: ApiDeps, apiKey: string, save: () => Promise<voi
  */
 export async function replaceApiKey(db: RemoteDb, deps: ApiDeps, input: ReplaceApiKeyInput): Promise<void> {
   const target = checkedTarget(input)
+  const stored = await storedBaseUrl(db)
+  if (stored === null) throw new PosError('NEEDS_SETUP', 'no valid dayo address is stored — set the device up again')
+  if (target.baseUrl !== stored) throw new PosError('BAD_INPUT', 'DAYO_ADDRESS_CHANGED: a new key must be for the same central address')
   await requireOwnerPin(db, deps, input.approverUserId, input.approverPin)
   const device = await linkedDevice(db)
-  const answer = await fetchFullCatalog(deps, target)
+  const answer = await fetchFullCatalog(deps, { baseUrl: stored, apiKey: target.apiKey }) // only ever the stored address
   const v = answer.value
   if (!activeOwners(v).some((o) => o.id === input.approverUserId)) throw new PosError('NOT_OWNER', 'dayo no longer lists this owner — use "เชื่อมใหม่ด้วยคีย์ใหม่"')
   const last = v.client.last_receipt_no
   checkKeyBelongsTo(device, last)
   await withNewKey(deps, target.apiKey, () => db.transaction(async (tx) => {
-    await writeKey(tx, DAYO_KEYS.baseUrl, target.baseUrl)
     if (last !== null) await writeKey(tx, DAYO_KEYS.lastReceiptNo, last)
     await writeCatalogAnswer(tx, deps, v, answer) // api_state = ok, api_retry_at cleared
-    await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: device.id, action: 'api_key_replaced', beforeJson: null, afterJson: { baseUrl: target.baseUrl, by: 'replaceApiKey' }, actorUserId: input.approverUserId, at: deps.now() }) // never the key
+    await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: device.id, action: 'api_key_replaced', beforeJson: null, afterJson: { baseUrl: stored, by: 'replaceApiKey' }, actorUserId: input.approverUserId, at: deps.now() }) // never the key
   }))
   deps.afterWrite?.()
 }
@@ -226,11 +252,14 @@ export async function recoverOwner(db: RemoteDb, deps: ApiDeps, input: RecoverOw
   const target = checkedTarget(input)
   const device = await linkedDevice(db)
   const oldKey = await deps.secrets.getApiKey()
-  if (oldKey === null || (await readKey(db, DAYO_KEYS.baseUrl)) === null) throw new PosError('NEEDS_SETUP', 'this device is not linked to dayo')
+  if (oldKey === null) throw new PosError('NEEDS_SETUP', 'this device is not linked to dayo')
+  // the same central address rule: no stored (valid) address → full setup; another address → refused, nothing sent
+  const stored = await storedBaseUrl(db)
+  if (stored === null) throw new PosError('RECOVERY_NOT_ALLOWED', 'no valid dayo address is stored — set the device up again')
+  if (target.baseUrl !== stored) throw new PosError('RECOVERY_NOT_ALLOWED', 'recovery stays on the stored central address')
   if (!(await ownerRecoveryAllowed(db))) throw new PosError('RECOVERY_NOT_ALLOWED', 'an owner with a PIN can still approve — use replaceApiKey')
   if (target.apiKey === oldKey) throw new PosError('KEY_NOT_NEW', 'issue a new key on the dayo web')
-  // the old key is asked at the dayo the new key belongs to (a stored base URL may be one a restored backup brought)
-  const oldClient = createDayoClient({ baseUrl: target.baseUrl, apiKey: oldKey, fetch: deps.fetch, nowMs: () => Date.parse(deps.now()) })
+  const oldClient = createDayoClient({ baseUrl: stored, apiKey: oldKey, fetch: deps.fetch, nowMs: () => Date.parse(deps.now()) })
   const oldRevoked = await oldClient.getCatalog(0).then(() => false, (e: unknown) => {
     if (!(e instanceof DayoError)) throw e
     if (e.failure.kind === 'unauthorized') return true
@@ -238,7 +267,7 @@ export async function recoverOwner(db: RemoteDb, deps: ApiDeps, input: RecoverOw
     throw new PosError('DAYO_UNREACHABLE', `could not confirm the old key is revoked (${e.failure.kind})`)
   })
   if (!oldRevoked) throw new PosError('OLD_KEY_STILL_ACTIVE', 'revoke the old key on the dayo web first')
-  const answer = await fetchFullCatalog(deps, target)
+  const answer = await fetchFullCatalog(deps, { baseUrl: stored, apiKey: target.apiKey }) // only ever the stored address
   const v = answer.value
   const owner = activeOwners(v).find((o) => o.id === input.ownerStaffId)
   if (owner === undefined) throw new PosError('BAD_INPUT', 'เลือกเจ้าของจากรายชื่อระบบกลาง (owner ที่ใช้งานอยู่)')
@@ -247,12 +276,11 @@ export async function recoverOwner(db: RemoteDb, deps: ApiDeps, input: RecoverOw
   const pinHash = await hashPin(input.ownerPin, deps.pinCost) // slow: outside the transaction
   await withNewKey(deps, target.apiKey, () => db.transaction(async (tx) => {
     const at = deps.now()
-    await writeKey(tx, DAYO_KEYS.baseUrl, target.baseUrl)
     if (last !== null) await writeKey(tx, DAYO_KEYS.lastReceiptNo, last)
     await writeCatalogAnswer(tx, deps, v, answer) // staff from dayo + api_state = ok
     await giveOwnerPin(tx, owner, pinHash, at)
     await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'user', entityId: owner.id, action: 'owner_recovered', beforeJson: null, afterJson: { staffId: owner.id, role: 'owner', by: 'recoverOwner' }, actorUserId: owner.id, at })
-    await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: device.id, action: 'api_key_replaced', beforeJson: null, afterJson: { baseUrl: target.baseUrl, by: 'recoverOwner' }, actorUserId: owner.id, at }) // never the key
+    await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: device.id, action: 'api_key_replaced', beforeJson: null, afterJson: { baseUrl: stored, by: 'recoverOwner' }, actorUserId: owner.id, at }) // never the key
   }))
   deps.afterWrite?.()
 }
