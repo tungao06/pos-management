@@ -505,7 +505,7 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 ### 4.11 วิธีคุมสัญญาให้สองทีมทำขนานกัน
 
 1. สัญญาข้างบน (§4.1–4.9) เป็น zod schema ใน POS `packages/contracts/src/dayo-api.ts`: `PosCatalogResponse`, `PushRequest`, `PushRow` (ต่อชนิด), `PushResponse` (แบบยอมรับค่าที่ไม่รู้จัก — ลอก `ReceivedRowResult` จากแผน 5), `OrdersListResponse`
-2. ตัวอย่าง JSON ในเอกสารนี้เก็บเป็นไฟล์ `packages/contracts/fixtures/dayo-api/*.json` (คำขอ + คำตอบ ต่อสถานการณ์: ใหม่ ซ้ำ ชนใบเสร็จ key เดิมเนื้อหาต่าง ยกเลิกข้ามวัน ยกเลิกนาฬิกาเร็ว รหัสไม่รู้จัก ชนิดไม่รู้จัก error ไม่คาดคิดของแถว ฉบับไม่เปลี่ยน · 401/404/429 พร้อมหัว CORS) · เทสต์ POS: ทุกไฟล์ผ่าน schema · เจ้าของส่งชุดไฟล์เดียวกันให้ session dayo ใช้เป็นเทสต์ของ Route Handler (dayo ไม่ import แพ็กเกจ POS)
+2. ตัวอย่าง JSON ในเอกสารนี้ (คำขอ + คำตอบ ต่อสถานการณ์: ใหม่ ซ้ำ ชนใบเสร็จ key เดิมเนื้อหาต่าง ยกเลิกข้ามวัน ยกเลิกนาฬิกาเร็ว รหัสไม่รู้จัก ชนิดไม่รู้จัก error ไม่คาดคิดของแถว ฉบับไม่เปลี่ยน · 401/404/429 พร้อมหัว CORS) มี **ต้นฉบับอยู่ใน repo dayo** ที่ `apps/web/test/fixtures/pos-contract/` เพราะสะท้อนคำตอบของเซิร์ฟเวอร์จริง (D82) · dayo ใช้เป็นเทสต์ของ Route Handler · POS คัดลอกไปไว้ที่ `packages/contracts/fixtures/dayo-api/*.json` และตรวจ sha256 (แปลง CRLF→LF ก่อนคิด) ว่าตรงกันทุกไฟล์ · เทสต์ POS: ทุกไฟล์ผ่าน schema และ mock server เล่นซ้ำได้ครบ (dayo ไม่ import แพ็กเกจ POS)
 3. ก้อน 2 ใช้ **mock server** ที่สร้างจาก schema + fixture (`apps/pos` dev/test) จนก้อน 1 เสร็จ แล้วทดสอบเชื่อมจริงกับ Supabase local + `npm run dev:web` ของ dayo (`API_V1_ENABLED=1` เฉพาะเครื่อง dev) ก่อนเปิดใน production
 
 ---
