@@ -7,7 +7,7 @@ export { round2 } from './vendor/fmt'
 export { bkkDay, bkkTime } from './vendor/time'
 export { defaultMilkFor, saleSettingsOf } from './vendor/shopSettings'
 export type {
-  AppliedPromotion, BaseEntry, IngredientEntry, MenuOptionGradeEntry, MenuOptionMilkEntry, MenuVariantEntry, MilkCode,
+  AppliedPromotion, BaseEntry, CupSizeEntry, IngredientEntry, MenuOptionGradeEntry, MenuOptionMilkEntry, MenuVariantEntry, MilkCode,
   OrderCatalog, OrderDraft, OrderDraftLine, PaymentMethodEntry, Promotion, QuoteResult, QuotedLine, SalesChannelEntry,
   ShopSaleSettings, Size, Sweetness,
 } from './vendor/types'
