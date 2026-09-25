@@ -2,7 +2,7 @@
   "name": "e1-missing-staff-scope",
   "spec": "04 §4.4 scope catalog:read และ staff:read",
   "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
-  "rpc": { "api_authenticate": { "ok": true, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "name": "แท็บเล็ตขาย 1", "scopes": ["catalog:read", "orders:read", "orders:write"] } },
+  "rpc": { "api_authenticate": { "ok": false, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "error": { "code": "DY403", "message": "forbidden: API key ไม่มีสิทธิ์ staff:read" } } },
   "request": { "method": "GET", "path": "/api/v1/pos/catalog", "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001" } },
   "response": {
     "status": 403,

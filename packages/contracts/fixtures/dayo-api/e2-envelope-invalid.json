@@ -11,6 +11,6 @@
   "response": {
     "status": 422,
     "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
-    "body": { "ok": false, "error": { "code": "DY422", "message": "invalid: rows ต้องเป็นรายการ 1–20 แถว" } }
+    "body": { "ok": false, "error": { "code": "DY422", "message": "invalid: ต้องมี rows เป็น array" } }
   }
 }

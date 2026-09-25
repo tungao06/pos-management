@@ -26,8 +26,8 @@
     "status": 200,
     "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
     "body": { "ok": true, "data": { "server_time": "2026-09-25T07:00:00.200+00:00", "results": [
-      { "key": "shift_open:6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", "status": "deferred", "reason": "UNSUPPORTED", "detail": "ชนิดแถวนี้ระบบกลางรุ่นนี้ยังไม่รองรับ" },
-      { "key": "order:7b8c9d0e-1f2a-4b3c-9d4e-5f6a7b8c9d0e", "status": "deferred", "reason": "UNSUPPORTED", "detail": "มีฟิลด์ที่ระบบกลางรุ่นนี้ยังไม่รู้จัก" }
+      { "key": "shift_open:6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", "status": "deferred", "reason": "UNSUPPORTED", "detail": "ชนิดแถวนี้ระบบกลางยังไม่รองรับ" },
+      { "key": "order:7b8c9d0e-1f2a-4b3c-9d4e-5f6a7b8c9d0e", "status": "deferred", "reason": "UNSUPPORTED", "detail": "มีฟิลด์ที่ระบบกลางยังไม่รองรับ" }
     ] } }
   }
 }

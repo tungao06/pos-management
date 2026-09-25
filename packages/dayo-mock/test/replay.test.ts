@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { header, type CentralOrder, type OrderRowData } from '@dayo/contracts'
 import { listContractFixtures, loadContractFixture } from '@dayo/contracts/fixture-files'
 import { basename } from 'node:path'
-import { createMockDayo, type MockDayo, type MockMode } from '../src/index.js'
+import { ALL_SCOPES, createMockDayo, type MockDayo, type MockMode } from '../src/index.js'
 
 type Fx = ReturnType<typeof loadContractFixture>
 const accepted = loadContractFixture('e2-order-accepted')
@@ -22,6 +22,10 @@ const SETUP: Partial<Record<string, (m: MockDayo, fx: Fx) => void>> = {
   'e2-unknown-code-other-row-ok': (m) => m.setNextOrderNo('2026-09-25', 20),
   'e2-order-and-void-same-batch': (m) => m.setNextOrderNo('2026-09-25', 30),
   'e2-void-cross-day': (m) => m.preloadOrder({ posOrderId: '5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a', receiptNo: 'A-000300', saleDate: '2026-09-25', soldAt: '2026-09-25T05:00:00.000Z', orderNo: 'L260925-040', total: 35 }),
+  'e2-order-promo-closed-before-sale': (m) => {
+    m.closePromotion('9f8e0000-0000-4000-8000-000000000001', '2026-09-25T03:00:00.000Z') // dayo's promotion_status_history row
+    m.setNextOrderNo('2026-09-25', 62)
+  },
   'e2-row-server-error': (m) => {
     m.override({ match: { key: 'order:8c9d0e1f-2a3b-4c4d-8e5f-6a7b8c9d0e1f' }, verdict: { status: 'deferred', reason: 'SERVER_ERROR', detail: 'SQLSTATE XX000' }, times: 1 })
     m.setNextOrderNo('2026-09-25', 51)
@@ -34,14 +38,16 @@ function mockFor(fx: Fx): MockDayo {
   const mode: MockMode = fx.env['API_V1_ENABLED'] !== '1' ? 'api_disabled'
     : auth?.$throw !== undefined ? 'server_down'
     : auth?.error?.code === 'DY429' ? 'rate_limited'
-    : auth?.ok === true && fx.request.path.startsWith('/api/v1/pos/catalog') && !(auth.scopes ?? []).includes('staff:read') ? 'forbidden'
     : 'normal'
+  // the key's scopes: from a passing api_authenticate, or every scope but the ones its DY403 names (0049:207-214) — the mock's own check answers
+  const missing = auth?.error?.code === 'DY403' ? auth.error.message.replace(/^forbidden: API key ไม่มีสิทธิ์ /, '').split(', ') : []
+  const scopes = auth?.ok === true && auth.scopes !== undefined ? auth.scopes : ALL_SCOPES.filter((x) => !missing.includes(x))
   const data = (fx.response.body as { data?: Record<string, unknown> } | undefined)?.data
   const now = typeof data?.['server_time'] === 'string' ? (data['server_time'] as string) : '2026-09-25T02:00:00.120Z'
   const manifest = fx.env['DAYO_PRICING_MANIFEST'] as { commit: string; files_sha256: Record<string, string> } | undefined
   const m = createMockDayo({
     apiKey: 'dayo_fixture_key_0001', origins: String(fx.env['POS_ORIGINS'] ?? '').split(','), now, mode,
-    retryAfterSec: auth?.retry_after ?? 30, forbiddenMessage: 'forbidden: API key ไม่มีสิทธิ์ staff:read',
+    retryAfterSec: auth?.retry_after ?? 30, scopes,
     ...(fx.name === 'e1-catalog-changed' ? { catalog: data as never } : {}),
     ...(manifest === undefined ? {} : { pricing: manifest }),
     ...(fx.name === 'e3-orders-today' ? { seedOrders: (data as unknown as CentralOrder[]) } : {}),
