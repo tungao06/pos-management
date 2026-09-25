@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: 'e2e',
+  testIgnore: ['**/hidden-stock/**'], // Task 16: the stock screens are unreachable — kept for a later task
   timeout: 120_000,
   expect: { timeout: 20_000 },
   workers: 1,

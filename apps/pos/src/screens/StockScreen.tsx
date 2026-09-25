@@ -67,16 +67,17 @@ export function StockScreen(): JSX.Element {
         <button type="button" data-testid="nav-sell" onClick={() => void navigate({ to: '/sell' })}>
           {TH.back}
         </button>
-        <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' })}>
+        {/* Task 16 removed the /stock* routes from the routeTree; these links are unreachable until a later task restores them */}
+        <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' as any })}>
           {TH.navReceive}
         </button>
-        <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' })}>
+        <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' as any })}>
           {TH.navProduce}
         </button>
-        <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' })}>
+        <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' as any })}>
           {o.openCountId === null ? TH.navCount : TH.navCountResume}
         </button>
-        <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' })}>
+        <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' as any })}>
           {TH.navAdjust}
         </button>
       </div>

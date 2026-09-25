@@ -1,23 +1,18 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
 import { RequireSession } from './app/guards'
-import { AdjustScreen } from './screens/AdjustScreen'
 import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
 import { CloseShiftScreen } from './screens/CloseShiftScreen'
-import { CountScreen } from './screens/CountScreen'
 import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
 import { LoginScreen } from './screens/LoginScreen'
 import { OpenShiftScreen } from './screens/OpenShiftScreen'
 import { OrderDetailScreen } from './screens/OrderDetailScreen'
 import { OrdersScreen } from './screens/OrdersScreen'
-import { ProduceScreen } from './screens/ProduceScreen'
 import { QrPayScreen } from './screens/QrPayScreen'
-import { ReceiveScreen } from './screens/ReceiveScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
 import { ShiftScreen } from './screens/ShiftScreen'
-import { StockScreen } from './screens/StockScreen'
 import { ZListScreen } from './screens/ZListScreen'
 import { ZReportScreen } from './screens/ZReportScreen'
 import { BrandBar } from './ui/BrandBar'
@@ -148,53 +143,7 @@ const closeShiftRoute = createRoute({
   ),
 })
 
-// แผน 4: สต็อก
-const stockRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock',
-  component: () => (
-    <RequireSession>
-      <StockScreen />
-    </RequireSession>
-  ),
-})
-const receiveRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock/receive',
-  component: () => (
-    <RequireSession>
-      <ReceiveScreen />
-    </RequireSession>
-  ),
-})
-const produceRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock/produce',
-  component: () => (
-    <RequireSession>
-      <ProduceScreen />
-    </RequireSession>
-  ),
-})
-const adjustRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock/adjust',
-  component: () => (
-    <RequireSession>
-      <AdjustScreen />
-    </RequireSession>
-  ),
-})
-const countRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock/count',
-  component: () => (
-    <RequireSession>
-      <CountScreen />
-    </RequireSession>
-  ),
-})
-
+// Task 16: the stock screens (แผน 4) are hidden from the routeTree — component files stay for a later task.
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
@@ -211,11 +160,6 @@ export const routeTree = rootRoute.addChildren([
   zReportRoute,
   shiftRoute,
   closeShiftRoute,
-  stockRoute,
-  receiveRoute,
-  produceRoute,
-  adjustRoute,
-  countRoute,
 ])
 
 export const router = createRouter({ routeTree })

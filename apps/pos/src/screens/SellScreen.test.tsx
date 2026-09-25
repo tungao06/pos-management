@@ -98,19 +98,12 @@ const STOCK: StockOverviewDto = {
   openingCountPending: true,
 }
 
-describe('SellScreen — stock badge and expired-base banner (plan 4 · Q4-10)', () => {
-  it('shows the alert count on the stock button and an expired-base banner — selling stays open', async () => {
-    mount({ bootstrap: vi.fn(async () => bootstrap()), stockOverview: vi.fn(async () => STOCK) })
-    await waitFor(() => expect(screen.getByTestId('base-expired')).toBeTruthy())
-    expect(screen.getByTestId('base-expired').textContent).toBe(TH.baseExpiredBanner('มัทฉะช็อต'))
-    expect(screen.getByTestId('nav-stock').textContent).toBe(TH.stockMenuAlerts(3))
-  })
-
-  it('no alerts: a plain stock button and no banner', async () => {
-    const stockOverview = vi.fn(async () => ({ ...STOCK, alertCount: 0, expiredBaseCodes: [] }))
+describe('Task 16: the stock screens are hidden from the sell screen', () => {
+  it('has no nav-stock link and never calls stockOverview', async () => {
+    const stockOverview = vi.fn(async () => STOCK)
     mount({ bootstrap: vi.fn(async () => bootstrap()), stockOverview })
-    await waitFor(() => expect(stockOverview).toHaveBeenCalled())
-    await waitFor(() => expect(screen.getByTestId('nav-stock').textContent).toBe(TH.stockMenu))
-    expect(screen.queryByTestId('base-expired')).toBeNull()
+    await waitFor(() => expect(screen.getByTestId('nav-shift')).toBeTruthy())
+    expect(screen.queryByTestId('nav-stock')).toBeNull()
+    expect(stockOverview).not.toHaveBeenCalled()
   })
 })
