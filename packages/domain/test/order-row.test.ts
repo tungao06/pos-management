@@ -34,11 +34,13 @@ describe('buildOrderRowData (spec §4.5 row kind order)', () => {
   it('orderRowToCart undoes buildOrderRowData', () => {
     expect(orderRowToCart(data)).toEqual({ cart: CART, soldAt: SOLD_AT })
   })
-  it('refuses a size the E2 contract cannot carry (dayo Size is any "<n> oz" since ADR-0054)', () => {
-    const odd: CartDraft = { ...CART, lines: [{ ...CART.lines[0]!, size: '24 oz' }] }
-    try {
-      buildOrderRowData({ posOrderId: '0b6c1e2a-4f3d-4c1b-9a8e-7d6c5b4a3f21', receiptNo: 'A-000312', queueNo: 12, staffId: '0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', catalogVersion: 42, cart: odd, priced, note: null })
-      expect.unreachable()
-    } catch (e) { expect(e).toBeInstanceOf(CartError); expect((e as CartError).code).toBe('UNKNOWN_VARIANT') }
+  it('a size the shop no longer sells never reaches a row: priceCart refuses it first (ADR-0054)', () => {
+    const odd: CartDraft = { ...CART, lines: [{ ...CART.lines[0]!, size: '22 oz' }] }
+    try { priceCart(odd, POS_CATALOG, SOLD_AT); expect.unreachable() } catch (e) { expect(e).toBeInstanceOf(CartError); expect((e as CartError).code).toBe('UNKNOWN_VARIANT') }
+  })
+  it('carries any priced "<n> oz" size as is (dayo Size is free text since ADR-0054)', () => {
+    const c: CartDraft = { ...CART, lines: [{ ...CART.lines[0]!, size: '20 oz' }] }
+    const row = buildOrderRowData({ posOrderId: '0b6c1e2a-4f3d-4c1b-9a8e-7d6c5b4a3f21', receiptNo: 'A-000312', queueNo: 12, staffId: '0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', catalogVersion: 42, cart: c, priced: priceCart(c, POS_CATALOG, SOLD_AT), note: null })
+    expect(OrderRowData.parse(row).lines[0]!.size).toBe('20 oz')
   })
 })

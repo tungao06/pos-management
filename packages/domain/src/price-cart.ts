@@ -5,10 +5,13 @@ import {
 import type { PosOrderCatalogParsed } from '@dayo/contracts'
 import { edgeBahtToSatang, edgeSatangToBaht } from './money-edge.js'
 
-/** E1 catalog: OrderCatalog without ingredient cost (spec 04 §4.4 rule 1) + two display-only variant fields (rule 2). */
+/**
+ * E1 catalog = dayo's OrderCatalog with one difference only: ingredients carry no cost (spec 04 §4.4 rule 1). Variants
+ * (with categoryLabel/menuSortOrder) and sizes are dayo's own types.
+ */
 export type PosIngredient = Omit<IngredientEntry, 'costPerUseUnit'>
-export type PosVariant = MenuVariantEntry & { categoryLabel?: string; menuSortOrder?: number }
-export type PosOrderCatalog = Omit<OrderCatalog, 'ingredients' | 'variants'> & { ingredients: Record<string, PosIngredient>; variants: PosVariant[] }
+export type PosVariant = MenuVariantEntry
+export type PosOrderCatalog = Omit<OrderCatalog, 'ingredients'> & { ingredients: Record<string, PosIngredient> }
 
 export type CartLineDraft = {
   code: string; size: Size; sweetness: Sweetness; milk: MilkCode; grade: string | null; qty: number
@@ -53,8 +56,15 @@ export function withZeroCosts(c: PosOrderCatalog): OrderCatalog {
   return { ...c, ingredients }
 }
 
-function findVariant(c: PosOrderCatalog, code: string, size: string, sweetness: string): PosVariant | undefined {
-  return c.variants.find((v) => v.menuCode === code && v.size === size && v.sweetness === sweetness)
+/**
+ * The variant a line may be sold as: its size must be an ACTIVE entry of catalog.sizes (ADR-0054 — dayo stops selling a
+ * closed size even if a stale variant row were still around) and the variant must exist.
+ */
+function findSellableVariant(c: PosOrderCatalog, code: string, size: string, sweetness: string): PosVariant {
+  if (!c.sizes.some((s) => s.code === size && s.isActive)) throw new CartError('UNKNOWN_VARIANT', `${code} ${size} ${sweetness}: ${size} is not an active size of the shop`)
+  const v = c.variants.find((x) => x.menuCode === code && x.size === size && x.sweetness === sweetness)
+  if (v === undefined) throw new CartError('UNKNOWN_VARIANT', `${code} ${size} ${sweetness}`)
+  return v
 }
 
 function checkCart(cart: CartDraft, catalog: PosOrderCatalog): void {
@@ -65,8 +75,7 @@ function checkCart(cart: CartDraft, catalog: PosOrderCatalog): void {
   cart.lines.forEach((l, i) => {
     if (!Number.isSafeInteger(l.qty) || l.qty < 1 || l.qty > maxQty) throw new CartError('QTY_OUT_OF_RANGE', `line ${i + 1}: qty ${l.qty} (1–${maxQty})`)
     cups += l.qty
-    const v = findVariant(catalog, l.code, l.size, l.sweetness)
-    if (!v) throw new CartError('UNKNOWN_VARIANT', `${l.code} ${l.size} ${l.sweetness}`)
+    const v = findSellableVariant(catalog, l.code, l.size, l.sweetness)
     if (v.isMatcha !== (l.grade !== null)) throw new CartError('GRADE_RULE', `${l.code}: ${v.isMatcha ? 'a matcha menu needs a grade' : 'grade must be null'}`)
     if (l.discountSatang !== null && l.discountPercent !== null) throw new CartError('BAD_DISCOUNT', `line ${i + 1}: baht and percent together`)
     if (l.discountSatang !== null && (!Number.isSafeInteger(l.discountSatang) || l.discountSatang < 0)) throw new CartError('BAD_DISCOUNT', `line ${i + 1}: discount must be whole satang ≥ 0`)
@@ -78,12 +87,18 @@ function checkCart(cart: CartDraft, catalog: PosOrderCatalog): void {
   if (d !== null && d.kind === 'percent' && !(d.percent > 0 && d.percent <= 100)) throw new CartError('BAD_DISCOUNT', 'bill percent must be 0–100')
 }
 
+/**
+ * Only for pricing a case of dayo's parity export that has no saleTime (dayo priced it with the time absent). A sale
+ * always prices with the time of sold_at — never pass this on the sale path.
+ */
+export type PriceOptions = { omitSaleTime?: boolean }
+
 /** The exact draft dayo's pricing code sees. `soldAtIso` is the payment instant (spec §5.1: re-price at sold_at). */
-export function toOrderDraft(cart: CartDraft, catalog: PosOrderCatalog, soldAtIso: string): OrderDraft {
+export function toOrderDraft(cart: CartDraft, catalog: PosOrderCatalog, soldAtIso: string, opts: PriceOptions = {}): OrderDraft {
   const d = cart.billDiscount
   return {
     saleDate: bkkDay(0, Date.parse(soldAtIso)),
-    saleTime: bkkTime(soldAtIso),
+    ...(opts.omitSaleTime === true ? {} : { saleTime: bkkTime(soldAtIso) }),
     channelCode: cart.channelCode,
     paymentCode: cart.paymentCode,
     lines: cart.lines.map((l) => ({
@@ -101,9 +116,9 @@ export function toOrderDraft(cart: CartDraft, catalog: PosOrderCatalog, soldAtIs
   }
 }
 
-export function priceCart(cart: CartDraft, catalog: PosOrderCatalog, soldAtIso: string): PricedCart {
+export function priceCart(cart: CartDraft, catalog: PosOrderCatalog, soldAtIso: string, opts: PriceOptions = {}): PricedCart {
   checkCart(cart, catalog)
-  const draft = toOrderDraft(cart, catalog, soldAtIso)
+  const draft = toOrderDraft(cart, catalog, soldAtIso, opts)
   const q = computeOrder(draft, withZeroCosts(catalog))
   // spec §5.1: only these fields are money; costTotal/grossProfit/gpPercent/unitCost are not converted
   const priced: Omit<PricedCart, 'discountSatang'> = {
@@ -157,8 +172,7 @@ export function defaultMilkForLine(catalog: PosOrderCatalog, variant: PosVariant
 }
 
 export function lineOptions(catalog: PosOrderCatalog, code: string, size: Size, sweetness: Sweetness): { milk: MilkChoice[]; grades: GradeChoice[]; defaultMilk: MilkCode; defaultGrade: string | null } {
-  const v = findVariant(catalog, code, size, sweetness)
-  if (!v) throw new CartError('UNKNOWN_VARIANT', `${code} ${size} ${sweetness}`)
+  const v = findSellableVariant(catalog, code, size, sweetness)
   const milk: MilkChoice[] = [{ code: 'fresh', priceAddSatang: 0 }]
   const oat = applyOptions(v, { milk: 'oat', grade: null }, catalog)
   if (oat.ok) milk.push({ code: 'oat', priceAddSatang: edgeBahtToSatang(oat.priceAdd) })
@@ -173,13 +187,12 @@ export function lineOptions(catalog: PosOrderCatalog, code: string, size: Size, 
 }
 
 /**
- * The E1 catalog after zod validation (contracts `PosOrderCatalog`). zod infers optional keys as `T | undefined`, which
- * `exactOptionalPropertyTypes` will not assign to dayo's interfaces; the schema checks every field the pricing code
- * reads (a test pins that), so this cast is the one sanctioned bridge. If zod's inferred type ever assigns directly,
- * drop the cast.
+ * The E1 catalog after zod validation (contracts `PosOrderCatalog`) as the pricing code's type — no cast: the schema
+ * infers optional keys without `| undefined` (zod exactOptional) and requires every key dayo's interfaces require, so a
+ * field the schema stops checking fails to compile here (a type test pins it).
  */
 export function toPricingCatalog(parsed: PosOrderCatalogParsed): PosOrderCatalog {
-  return parsed as unknown as PosOrderCatalog
+  return parsed
 }
 
 /** Unit price on a channel before options and promotions — for the menu grid only (dayo channelPrice, then the edge). */

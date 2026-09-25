@@ -1,19 +1,13 @@
-import { SizeCode, type OrderRowData } from '@dayo/contracts'
+import type { OrderRowData } from '@dayo/contracts'
 import { edgeBahtToSatang, edgeSatangToBaht } from './money-edge.js'
 import { CartError, type BillDiscountDraft, type CartDraft, type CartLineDraft, type PricedCart } from './price-cart.js'
 
 export type OrderRowInput = { posOrderId: string; receiptNo: string; queueNo: number; staffId: string; catalogVersion: number; cart: CartDraft; priced: PricedCart; note: string | null }
 
-/** dayo's Size is any "<n> oz" since ADR-0054 (vendored 135679c); the E2 contract carries only SizeCode. */
-function rowSize(size: string): OrderRowData['lines'][number]['size'] {
-  const r = SizeCode.safeParse(size)
-  if (!r.success) throw new CartError('UNKNOWN_VARIANT', `size ${size} is not an E2 size`)
-  return r.data
-}
-
+/** The size goes as is: priceCart already refused any size that is not an active size of catalog.sizes (ADR-0054). */
 function lineToRow(l: CartLineDraft): OrderRowData['lines'][number] {
   return {
-    code: l.code, size: rowSize(l.size), sweetness: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty,
+    code: l.code, size: l.size, sweetness: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty,
     ...(l.free ? { free: true } : {}),
     ...(l.discountSatang !== null ? { discount_baht: edgeSatangToBaht(l.discountSatang) } : {}),
     ...(l.discountPercent !== null ? { discount_percent: l.discountPercent } : {}),

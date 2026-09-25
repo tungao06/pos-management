@@ -38,17 +38,24 @@ export const Baht = z.number().finite().nonnegative().max(99_999_999.99).refine(
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u001f\u007f]/
 export const Text200 = z.string().refine((s) => !CONTROL_RE.test(s), 'control character').refine((s) => { const n = [...s].length; return n >= 1 && n <= TEXT_MAX_CODE_POINTS }, '1–200 code points')
-export const SizeCode = z.enum(['16 oz', '20 oz'])
+/** A cup size code — any "<n> oz" since ADR-0054 (dayo cup_sizes CHECK, 0048_cup_sizes.sql:33 = shared SIZE_CODE_PATTERN). The shop's real sizes come in E1 `catalog.sizes`. */
+export const SIZE_CODE_RE = /^[1-9][0-9]{0,2} oz$/
+export const SizeCode = z.string().regex(SIZE_CODE_RE)
 export const SweetnessCode = z.enum(['0%', '25%', '50%', '75%', '100%'])
 export const MilkCodeSchema = z.enum(['fresh', 'oat'])
 const UseUnit = z.enum(['ml', 'g', 'ชิ้น'])
 const HHMM = z.string().regex(/^\d{2}:\d{2}$/)
+/**
+ * Promotion times: dayo sends the Postgres `time` as is, "HH:MM:SS" and possibly fractional seconds
+ * (0048_cup_sizes.sql:1552); passed through unchanged — never trimmed here (the pricing code must see what dayo's shared sees).
+ */
+const PromoTime = z.string().regex(/^\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/)
 
 // ── E1 catalog = OrderCatalog of @dayo/shared without cost (spec §4.4 rule 1) ──────────────────────────────────────
 // Anything the vendored pricing code reads is checked here; a catalog it cannot understand is refused whole (ruling R12).
-const RecipeLine = z.looseObject({ ingredientId: z.string().nullable().optional(), baseId: z.string().nullable().optional(), qty: z.number().finite(), unit: UseUnit })
+const RecipeLine = z.looseObject({ ingredientId: z.string().nullable().exactOptional(), baseId: z.string().nullable().exactOptional(), qty: z.number().finite(), unit: UseUnit })
 const Variant = z.looseObject({
-  menuCode: z.string().min(1), menuNameTh: z.string(), family: z.string(), categoryLabel: z.string().optional(), menuSortOrder: z.number().optional(),
+  menuCode: z.string().min(1), menuNameTh: z.string(), family: z.string(), categoryLabel: z.string().nullable(), menuSortOrder: z.number(),
   size: SizeCode, sweetness: SweetnessCode, price: z.number().finite().nonnegative(), allowOatMilk: z.boolean(), isMatcha: z.boolean(), recipeLines: z.array(RecipeLine),
 })
 const Ingredient = z.looseObject({ id: z.string(), code: z.string(), name: z.string(), useUnit: UseUnit })
@@ -59,23 +66,31 @@ const Channel = z.looseObject({ code: z.string().min(1), name: z.string(), alias
 const PaymentMethod = z.looseObject({ code: z.string().min(1), name: z.string(), aliases: z.array(z.string()) })
 const promoCommon = {
   id: z.string(), code: z.string().nullable(), name: z.string(),
-  startsOn: Ymd.nullable().optional(), endsOn: Ymd.nullable().optional(), daysOfWeek: z.array(z.number().int().min(0).max(6)).nullable().optional(),
-  timeFrom: HHMM.nullable().optional(), timeTo: HHMM.nullable().optional(), channelCodes: z.array(z.string()).nullable().optional(),
+  startsOn: Ymd.nullable().exactOptional(), endsOn: Ymd.nullable().exactOptional(), daysOfWeek: z.array(z.number().int().min(0).max(6)).nullable().exactOptional(),
+  timeFrom: PromoTime.nullable().exactOptional(), timeTo: PromoTime.nullable().exactOptional(), channelCodes: z.array(z.string()).nullable().exactOptional(),
   requiresCode: z.boolean(), autoApply: z.boolean(), priority: z.number().finite(), stackable: z.boolean(), isActive: z.boolean(),
 }
 const codes = z.array(z.string())
 const Promotion = z.discriminatedUnion('kind', [
-  z.looseObject({ ...promoCommon, kind: z.literal('buy_n_get_m'), params: z.looseObject({ buy_qty: z.number().int().min(1), get_qty: z.number().int().min(1), menu_codes: codes, max_sets: z.number().int().optional() }) }),
-  z.looseObject({ ...promoCommon, kind: z.literal('item_discount'), params: z.looseObject({ menu_codes: codes, amount_baht: z.number().finite().optional(), percent: z.number().finite().optional() }) }),
-  z.looseObject({ ...promoCommon, kind: z.literal('bill_discount'), params: z.looseObject({ min_subtotal: z.number().finite().optional(), amount_baht: z.number().finite().optional(), percent: z.number().finite().optional(), max_amount: z.number().finite().optional() }) }),
-  z.looseObject({ ...promoCommon, kind: z.literal('bundle'), params: z.looseObject({ items: z.array(z.looseObject({ menu_codes: codes, qty: z.number().int().min(1) })).min(1), bundle_price: z.number().finite(), max_sets: z.number().int().optional() }) }),
+  z.looseObject({ ...promoCommon, kind: z.literal('buy_n_get_m'), params: z.looseObject({ buy_qty: z.number().int().min(1), get_qty: z.number().int().min(1), menu_codes: codes, max_sets: z.number().int().exactOptional() }) }),
+  z.looseObject({ ...promoCommon, kind: z.literal('item_discount'), params: z.looseObject({ menu_codes: codes, amount_baht: z.number().finite().exactOptional(), percent: z.number().finite().exactOptional() }) }),
+  z.looseObject({ ...promoCommon, kind: z.literal('bill_discount'), params: z.looseObject({ min_subtotal: z.number().finite().exactOptional(), amount_baht: z.number().finite().exactOptional(), percent: z.number().finite().exactOptional(), max_amount: z.number().finite().exactOptional() }) }),
+  z.looseObject({ ...promoCommon, kind: z.literal('bundle'), params: z.looseObject({ items: z.array(z.looseObject({ menu_codes: codes, qty: z.number().int().min(1) })).min(1), bundle_price: z.number().finite(), max_sets: z.number().int().exactOptional() }) }),
 ])
 const SaleSettings = z.looseObject({
-  shopName: z.string(), defaultSize: SizeCode, defaultSweetness: SweetnessCode, defaultChannelCode: z.string(), defaultMilk: MilkCodeSchema,
-  maxQtyPerLine: z.number().int().min(1), backdateDays: z.number().int(), recentOrdersCount: z.number().int(),
-}).partial()
+  shopName: z.string().exactOptional(), defaultSize: SizeCode.exactOptional(), defaultSweetness: SweetnessCode.exactOptional(), defaultChannelCode: z.string().exactOptional(),
+  defaultMilk: MilkCodeSchema.exactOptional(), maxQtyPerLine: z.number().int().min(1).exactOptional(), backdateDays: z.number().int().exactOptional(), recentOrdersCount: z.number().int().exactOptional(),
+})
+/**
+ * One cup size (dayo CupSizeEntry · cup_sizes via get_full_catalog.sizes, 0048_cup_sizes.sql:30-37,1482-1487). The label
+ * is display-only and dayo trims and counts it its own way, so no upper bound: a long label must not reject the whole E1.
+ */
+export const CupSize = z.looseObject({ code: SizeCode, label: z.string().min(1), sortOrder: z.number().int(), isActive: z.boolean() })
+export type CupSize = z.infer<typeof CupSize>
 export const PosOrderCatalog = z.looseObject({
-  settings: SaleSettings.nullable().optional(),
+  settings: SaleSettings.nullable().exactOptional(),
+  /** Every size of the shop, INACTIVE ones included (ADR-0054 rule 5); variants only carry active sizes (0048:1503-1504). */
+  sizes: z.array(CupSize),
   variants: z.array(Variant), ingredients: z.record(z.string(), Ingredient), bases: z.record(z.string(), Base),
   milkOptions: z.array(MilkOption), gradeOptions: z.array(GradeOption), channels: z.array(Channel), paymentMethods: z.array(PaymentMethod), promotions: z.array(Promotion),
 })
@@ -83,8 +98,13 @@ export type PosOrderCatalogParsed = z.infer<typeof PosOrderCatalog>
 
 export const StaffEntry = z.looseObject({ id: Uuid, display_name: z.string().nullable(), role: z.string(), active: z.boolean() })
 export type StaffEntry = z.infer<typeof StaffEntry>
-export const PricingInfo = z.looseObject({ commit: z.string(), files_sha256: z.record(z.string(), z.string()) })
-export const ClientInfo = z.looseObject({ name: z.string(), last_receipt_no: z.string().regex(RECEIPT_NO_RE).nullable() })
+/** commit is JSON null when the build passed none (0049_pos_catalog.sql:303-305). */
+export const PricingInfo = z.looseObject({ commit: z.string().nullable(), files_sha256: z.record(z.string(), z.string()) })
+/**
+ * last_receipt_no = the latest `external_ref` of this key as stored (0049_pos_catalog.sql:321-325), so any text: one odd
+ * value must not throw the whole E1 away. The receipt counter checks RECEIPT_NO_RE where it uses it.
+ */
+export const ClientInfo = z.looseObject({ name: z.string(), last_receipt_no: z.string().nullable() })
 const e1Common = {
   catalog_version: z.number().int().min(1), server_time: IsoReceived, pricing: PricingInfo,
   supported_kinds: z.array(z.string()), supported_fields: z.record(z.string(), z.array(z.string())),
@@ -150,7 +170,15 @@ export type PushResponseData = z.infer<typeof PushResponseData>
 export const PushResponse = z.looseObject({ ok: z.literal(true), data: PushResponseData })
 export const ApiErrorBody = z.looseObject({ ok: z.literal(false), error: z.looseObject({ code: z.string(), message: z.string() }) })
 
-// ── E3 (spec §4.6) ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ── E3 (spec §4.6 · dayo list_api_orders, 0052_pos_push.sql:785-846) ─────────────────────────────────────────────────
+/**
+ * The owner's latest edit/cancel of a bill on the dayo web (ADR-0050 · dayo_order_dayo_edit, 0051_multi_source_sales.sql:1479-1497);
+ * null when there is none. edited_by_name and reason are null for a key without staff:read (0052_pos_push.sql:830-831).
+ */
+export const DayoEdit = z.looseObject({
+  kind: z.enum(['edit', 'cancel']), edited_at: IsoReceived, edited_by_name: z.string().nullable(), reason: z.string().nullable(), version: z.number().int().nullable(),
+})
+export type DayoEdit = z.infer<typeof DayoEdit>
 export const CentralOrder = z.looseObject({
   order_no: z.string(), sale_date: Ymd, status: z.string(), source: z.string(), external_ref: z.string().nullable(), version: z.number().int(),
   channel: z.string().nullable(), payment: z.string().nullable(),
@@ -158,6 +186,9 @@ export const CentralOrder = z.looseObject({
   amount_mismatch: z.boolean().nullable(), updated_at: IsoReceived.nullable(),
   sold_at: IsoReceived.nullable().optional(), created_by_name: z.string().nullable().optional(), pos_receipt_no: z.string().nullable().optional(),
   pos_queue_no: z.number().int().nullable().optional(), catalog_version: z.number().int().nullable().optional(), duplicate_suspect: z.boolean().optional(),
+  /** Only on this key's own bills, else null (0052_pos_push.sql:826). */
+  pos_order_id: Uuid.nullable().optional(),
+  dayo_edit: DayoEdit.nullable().optional(),
 })
 export type CentralOrder = z.infer<typeof CentralOrder>
 export const OrdersListResponse = z.looseObject({ ok: z.literal(true), data: z.array(CentralOrder) })
@@ -179,8 +210,9 @@ export function isRowSupported(kind: string, data: Record<string, unknown>, s: S
   return fieldsUsed(data).every((f) => allowed.has(f))
 }
 
-// ── parity file = pos-parity.json of dayo scripts/export-pos-parity.ts (block-1 plan Task 13 · spec §5.2 layer B → C) ──
-// draft = dayo's own OrderDraft (camelCase); expected = ParityMoney in baht (moneyFromSql of quote_order).
+// ── parity file = pos-parity.json of dayo scripts/export-pos-parity.ts:230-238 (spec §5.2 layer B → C) ─────────────────
+// {dayo_commit, generated_at, pricing_files_sha256, catalog, cases:[{spec, note, draft, expected}]} — no catalog_version, cases named by `spec`.
+// draft = dayo's own OrderDraft (camelCase); expected = dayo's QuoteResult in baht (ParityMoney reads the money part).
 const DraftLine = z.looseObject({
   code: z.string(), size: SizeCode.nullable().optional(), sweetness: SweetnessCode.nullable().optional(), milk: MilkCodeSchema.nullable().optional(),
   grade: z.string().nullable().optional(), qty: z.number(), free: z.boolean().optional(),
@@ -198,8 +230,12 @@ export const ParityMoney = z.looseObject({
   promotionsApplied: z.array(z.looseObject({ promotionId: z.string(), discountAmount: z.number() })),
 })
 export type ParityMoney = z.infer<typeof ParityMoney>
+export const ParityCase = z.looseObject({ spec: z.string().min(1), note: z.string().optional(), draft: ParityDraft, expected: ParityMoney })
+export type ParityCase = z.infer<typeof ParityCase>
 export const ParityFile = z.looseObject({
-  dayo_commit: z.string(), pricing_files_sha256: z.record(z.string(), z.string()), generated_at: z.string(), catalog_version: z.number().int(),
+  dayo_commit: z.string(), pricing_files_sha256: z.record(z.string(), z.string()), generated_at: z.string(),
+  /** dayo's export does not write it yet. */
+  catalog_version: z.number().int().optional(),
   catalog: PosOrderCatalog,
-  cases: z.array(z.looseObject({ id: z.string().min(1), spec: z.string(), draft: ParityDraft, expected: ParityMoney })).min(1),
+  cases: z.array(ParityCase).min(1),
 })
