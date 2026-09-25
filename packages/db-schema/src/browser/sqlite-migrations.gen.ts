@@ -150,6 +150,15 @@ export const SQLITE_MIGRATIONS: readonly BundledMigration[] = [
     "bps": true,
     "folderMillis": 1790354704892,
     "hash": "e54f944203567ff6aed14323822c5ca830c7e27ff0e3362da36510d5d7fad302"
+  },
+  {
+    "tag": "0005_order_central_dayo_edit",
+    "sql": [
+      "-- block 2 (ADR-0050): dayo's E3 dayo_edit for this bill — the owner's latest edit/cancel on the dayo web, null = none.\n-- Display only on the tablet: total_satang, payment and status stay what was collected (spec 04 §4.6 · O1 pending).\nALTER TABLE `order` ADD `central_dayo_edit_json` text;\n"
+    ],
+    "bps": true,
+    "folderMillis": 1790357711385,
+    "hash": "34c7b939d3682f17660d8bb8ae16bfe803df4de9396883d3e82c620c44f3ac78"
   }
 ]
 

@@ -13,6 +13,7 @@ const SQLITE_ONLY = new Set(['outbox', 'sync_state', 'dayo_catalog', 'order_item
 const SQLITE_ONLY_COLUMNS = new Set([
   'order.sold_at', 'order.catalog_version', 'order.channel_code', 'order.payment_code', 'order.pricing_json', 'order.excluded_at',
   'order.central_order_no', 'order.central_computed_total_satang', 'order.central_amount_mismatch', 'order.central_duplicate_of_json',
+  'order.central_dayo_edit_json',
   'outbox.next_attempt_at', 'outbox.parent_key', 'outbox.result_json',
 ])
 /** Nullable on the tablet since block 2 (a block-2 bill has channel_code instead). */
