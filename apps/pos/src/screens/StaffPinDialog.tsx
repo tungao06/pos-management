@@ -37,7 +37,10 @@ export function StaffPinDialog({
       await queryClient.invalidateQueries({ queryKey: bootstrapKey })
       onDone()
     },
-    onError: (e) => setError(errorMessage(e)),
+    onError: (e) => {
+      setError(errorMessage(e))
+      setApproverPin('') // M4 (fix round 1): a refused approval must not leave the owner's PIN sitting in state
+    },
   })
 
   const mismatched = pin === '' || pin2 === '' || pin !== pin2 || !PIN_RE.test(pin)
@@ -65,15 +68,48 @@ export function StaffPinDialog({
         </label>
         <label>
           {TH.staffPinApproverPin}
-          <input data-testid="staff-pin-approver-pin" type="password" inputMode="numeric" autoComplete="off" value={approverPin} onChange={(e) => setApproverPin(e.target.value)} required />
+          <input
+            data-testid="staff-pin-approver-pin"
+            type="text"
+            className="text-mask"
+            name="staff-approver-pin"
+            inputMode="numeric"
+            autoComplete="off"
+            autoCapitalize="off"
+            value={approverPin}
+            onChange={(e) => setApproverPin(e.target.value)}
+            required
+          />
         </label>
         <label>
           {TH.staffPinNew}
-          <input data-testid="staff-pin-new" type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={(e) => setPin(e.target.value)} required />
+          <input
+            data-testid="staff-pin-new"
+            type="text"
+            className="text-mask"
+            name="staff-new-pin"
+            inputMode="numeric"
+            autoComplete="off"
+            autoCapitalize="off"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            required
+          />
         </label>
         <label>
           {TH.staffPinNew2}
-          <input data-testid="staff-pin-new2" type="password" inputMode="numeric" autoComplete="off" value={pin2} onChange={(e) => setPin2(e.target.value)} required />
+          <input
+            data-testid="staff-pin-new2"
+            type="text"
+            className="text-mask"
+            name="staff-new-pin-confirm"
+            inputMode="numeric"
+            autoComplete="off"
+            autoCapitalize="off"
+            value={pin2}
+            onChange={(e) => setPin2(e.target.value)}
+            required
+          />
         </label>
         {error !== null && (
           <p role="alert" className="error">

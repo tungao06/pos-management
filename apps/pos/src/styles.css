@@ -25,6 +25,10 @@ button:focus-visible { outline: 3px solid var(--forest); outline-offset: 2px; }
 button.primary { background: var(--forest); color: var(--cream); border-color: var(--forest); font-weight: 700; }
 button[aria-pressed='true'] { outline: 3px solid var(--forest); background: var(--selected); font-weight: 700; }
 input, textarea, select { font: inherit; color: var(--forest); background: var(--surface); min-height: 56px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; width: 100%; }
+/* controller ruling SECURITY I1 (Task 17 fix round 1): the dayo key and every PIN render as type="text" so Chrome
+   never offers to save them to Google Password Manager (it ignores autocomplete=off on type="password" inside a
+   form) — this is the only thing that still hides the value on screen. Chrome-only (the tablet's one browser). */
+.text-mask { -webkit-text-security: disc; }
 input:focus-visible { outline: 3px solid var(--forest); }
 label { display: grid; gap: 4px; }
 fieldset { border: 1px solid var(--line); border-radius: 12px; }

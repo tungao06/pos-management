@@ -37,7 +37,12 @@ export const TH = {
   setupLegacyPin: 'PIN เจ้าของเดิม (อนุมัติการเชื่อมเครื่อง)',
   persistOk: 'เก็บข้อมูลถาวร: ได้',
   persistNo: 'เก็บข้อมูลถาวร: ไม่ได้ — อย่าล้างข้อมูลเบราว์เซอร์',
+  setupContinue: 'ไปหน้าขาย',
   errChooseOwner: 'เลือกเจ้าของก่อน',
+  // spec §7 ข้อ 1 "สแกนหรือวาง" — quality review (fix round 1): the browser's own text (permission wording, "no
+  // barcode" wording) never reaches the screen; every scan failure gets its own Thai message instead.
+  scanCameraDenied: 'เปิดกล้องไม่ได้ — อนุญาตให้แอปใช้กล้องแล้วลองใหม่ หรือวางกุญแจด้วยตัวเอง',
+  scanNoCode: 'ไม่พบ QR โค้ดในกล้อง — ลองใหม่ หรือวางกุญแจด้วยตัวเอง',
   dayoBadKey: 'กุญแจไม่ถูกต้องหรือถูกยกเลิก',
   dayoNoScope: 'กุญแจนี้ไม่มีสิทธิ์อ่านเมนู/พนักงาน',
   dayoApiOff: 'ระบบกลางปิด API อยู่',

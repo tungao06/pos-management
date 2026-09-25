@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { useRef, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import type { DayoProbe } from '../api/types'
 import { useApi } from '../app/api-context'
 import { errorMessage } from '../ui/errors'
@@ -16,6 +16,11 @@ export type ConnectFieldsValue = { baseUrl: string; apiKey: string }
  *
  * R1 (security, controller ruling, Task 17): `lockBaseUrl` makes the address field read-only — recovery and a key
  * swap may only ever target the central address already stored on this tablet, never one typed fresh.
+ *
+ * SECURITY I1 (controller ruling, fix round 1): the key field renders as `type="text"` with CSS
+ * `-webkit-text-security` (`.text-mask`) instead of `type="password"` — Chrome ignores `autocomplete="off"` on a
+ * password input inside a form and offers to save it to Google Password Manager regardless; a masked text input
+ * never triggers that at all.
  */
 export function ConnectFields({
   value,
@@ -30,6 +35,14 @@ export function ConnectFields({
 }): JSX.Element {
   const api = useApi()
   const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  // Quality review (fix round 1): `onChange` must always write the LATEST value, even though the scan loop below
+  // is a long-lived async closure started at one point in time — without this ref, editing `value.baseUrl` while
+  // a scan is still running would be silently overwritten by whatever `value` was when the scan began.
+  const valueRef = useRef(value)
+  useEffect(() => {
+    valueRef.current = value
+  }, [value])
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
 
@@ -38,38 +51,55 @@ export function ConnectFields({
     onSuccess: (p) => onProbed(p),
   })
 
-  // Reads one QR frame at a time off the live preview until it finds a code or the person cancels — the camera
-  // stream is stopped either way so the tablet is never left recording in the background.
+  // Only asks for the camera and flips `scanning` on — the actual stream/detect loop runs in the effect below,
+  // once React has committed the `<video>` element `scanning` reveals (quality review: reading `videoRef.current`
+  // right here, before that commit, is why the scan could never succeed before this fix).
   const startScan = async (): Promise<void> => {
     setScanError(null)
-    let stream: MediaStream
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-    } catch (e) {
-      setScanError(e instanceof Error ? e.message : String(e))
+      streamRef.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    } catch {
+      setScanError(TH.scanCameraDenied)
       return
     }
     setScanning(true)
-    const video = videoRef.current
-    if (video === null) { stream.getTracks().forEach((t) => t.stop()); setScanning(false); return }
-    video.srcObject = stream
-    await video.play().catch(() => undefined)
-    try {
-      for (let attempt = 0; attempt < 50; attempt++) {
-        try {
-          const key = await scanQrOnce(video)
-          onChange({ ...value, apiKey: key })
-          return
-        } catch {
-          await new Promise((r) => setTimeout(r, 200))
-        }
-      }
-      setScanError('no QR code found')
-    } finally {
-      stream.getTracks().forEach((t) => t.stop())
-      setScanning(false)
-    }
   }
+
+  useEffect(() => {
+    if (!scanning) return
+    const stream = streamRef.current
+    const video = videoRef.current
+    if (stream === null || video === null) {
+      setScanning(false)
+      return
+    }
+    let cancelled = false
+    video.srcObject = stream
+    const run = async (): Promise<void> => {
+      await video.play().catch(() => undefined)
+      try {
+        for (let attempt = 0; attempt < 50 && !cancelled; attempt++) {
+          try {
+            const key = await scanQrOnce(video)
+            if (!cancelled) onChange({ ...valueRef.current, apiKey: key })
+            return
+          } catch {
+            await new Promise((r) => setTimeout(r, 200))
+          }
+        }
+        if (!cancelled) setScanError(TH.scanNoCode)
+      } finally {
+        stream.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+        if (!cancelled) setScanning(false)
+      }
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onChange is the parent's setter identity, stable enough here; re-running this effect on it would restart the scan mid-flight.
+  }, [scanning])
 
   return (
     <div className="list">
@@ -77,9 +107,12 @@ export function ConnectFields({
         {TH.setupBaseUrl}
         <input
           data-testid="setup-base-url"
+          name="dayo-base-url"
           value={value.baseUrl}
           readOnly={lockBaseUrl}
-          onChange={(e) => { if (!lockBaseUrl) onChange({ ...value, baseUrl: e.target.value }) }}
+          onChange={(e) => {
+            if (!lockBaseUrl) onChange({ ...value, baseUrl: e.target.value })
+          }}
           required
         />
       </label>
@@ -87,8 +120,11 @@ export function ConnectFields({
         {TH.setupApiKey}
         <input
           data-testid="setup-api-key"
-          type="password"
+          type="text"
+          className="text-mask"
+          name="dayo-connect-key"
           autoComplete="off"
+          autoCapitalize="off"
           spellCheck={false}
           value={value.apiKey}
           onChange={(e) => onChange({ ...value, apiKey: e.target.value })}

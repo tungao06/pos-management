@@ -171,8 +171,11 @@ export async function isDayoLinked(db: RemoteDb, deps: ApiDeps): Promise<boolean
  * to another server. The typed address must equal the stored `dayo.base_url` (both normalized, whole strings); the
  * old key and the new one are only ever sent there. Returns null when the stored address is missing or refused by
  * the shared rule (a restored backup can carry one) — that tablet needs a full setup.
+ *
+ * M3 (fix round 1 round 2, security): exported so `bootstrap()` shows the UI exactly the same null/normalized
+ * value this function itself would refuse or accept — never the unvalidated raw column.
  */
-async function storedBaseUrl(db: RemoteDb): Promise<string | null> {
+export async function storedBaseUrl(db: RemoteDb): Promise<string | null> {
   const raw = await readKey(db, DAYO_KEYS.baseUrl)
   if (raw === null) return null
   try {

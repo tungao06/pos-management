@@ -23,9 +23,10 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      // VITE_DAYO_BASE_URL is baked into the build by `pnpm build` (Vite exposes VITE_-prefixed env vars through
-      // import.meta.env) — it is only the setup screen's default, never trusted on its own (checkedTarget, Task 11).
-      command: 'pnpm build && pnpm exec vite preview --port 4173 --strictPort',
+      // security M1 (fix round 1): built with `--mode e2e`, not plain `pnpm build` — `SetupScreen` only reads
+      // VITE_DAYO_BASE_URL in that mode, so a normal production build never embeds this address even if the var
+      // is left set in someone's shell (test/build-check.test.ts checks this for real).
+      command: 'pnpm exec tsc --noEmit && pnpm exec vite build --mode e2e && pnpm exec vite preview --port 4173 --strictPort',
       url: 'http://localhost:4173',
       env: { VITE_DAYO_BASE_URL: DAYO_MOCK_URL },
       reuseExistingServer: !process.env['CI'],

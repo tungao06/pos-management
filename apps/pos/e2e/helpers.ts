@@ -25,6 +25,10 @@ export async function setupDevice(page: Page): Promise<void> {
   await page.getByTestId('setup-pin2').fill(OWNER.pin)
   await page.getByTestId('setup-promptpay').fill(PROMPTPAY_ID)
   await page.getByTestId('setup-save').click()
+  // quality review (fix round 1): the persist-storage result is shown and waited on now, not flashed and
+  // immediately navigated past (spec §6.9) — "setup-continue" is what leaves the setup screen.
+  await expect(page.getByTestId('setup-persist-status')).toBeVisible()
+  await page.getByTestId('setup-continue').click()
 
   await expect(page.getByTestId(`needs-pin-${OTHER.name}`)).toBeVisible()
   await page.getByTestId(`needs-pin-${OTHER.name}`).click()

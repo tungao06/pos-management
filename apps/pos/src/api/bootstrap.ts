@@ -2,9 +2,8 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { readCatalog } from '../sync/catalog'
-import { DAYO_KEYS, readKey } from '../sync/state'
 import { isBackupDue, lastBackupAt, lastBackupZId } from './backup'
-import { isDayoLinked, ownerRecoveryAllowed } from './connect'
+import { isDayoLinked, ownerRecoveryAllowed, storedBaseUrl } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { staffNeedingPin } from './staff'
@@ -78,7 +77,9 @@ export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapS
   const dayoLinked = await isDayoLinked(db, deps)
   // Not a secret (controller ruling R1): read regardless of `dayoLinked` so a device whose key was revoked or
   // cleared, but whose address is still stored, can still offer a locked address on the recovery screen.
-  const dayoBaseUrl = await readKey(db, DAYO_KEYS.baseUrl)
+  // M3 (fix round 1 round 2, security): the normalized `storedBaseUrl` — never the raw column — so the UI shows
+  // null in exactly the cases `replaceApiKey`/`recoverOwner` themselves would refuse (e.g. a corrupt stored value).
+  const dayoBaseUrl = await storedBaseUrl(db)
   if ((await localDeviceId(db)) === null) {
     return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl, staffNeedingPin: [], ownerRecovery: false }
   }

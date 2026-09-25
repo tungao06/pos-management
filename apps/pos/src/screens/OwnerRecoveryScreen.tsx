@@ -33,7 +33,14 @@ export function OwnerRecoveryScreen(): JSX.Element {
   const dayoBaseUrl = boot.data?.dayoBaseUrl ?? null
 
   const save = useMutation({
-    mutationFn: () => api.recoverOwner({ baseUrl: dayoBaseUrl ?? '', apiKey, ownerStaffId: ownerId ?? '', ownerPin: pin }),
+    mutationFn: () => {
+      // quality review (fix round 1): a proper narrowing instead of `dayoBaseUrl ?? ''` — the save button only
+      // ever renders once `dayoBaseUrl !== null` (below), so this never actually throws; it exists so the type
+      // checker, not a silent empty string, is what would catch a future change that renders it too early.
+      const baseUrl = dayoBaseUrl
+      if (baseUrl === null) throw new Error('NEEDS_SETUP: no stored dayo address')
+      return api.recoverOwner({ baseUrl, apiKey, ownerStaffId: ownerId ?? '', ownerPin: pin })
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: bootstrapKey })
       void navigate({ to: '/login' })
@@ -77,11 +84,33 @@ export function OwnerRecoveryScreen(): JSX.Element {
               </div>
               <label>
                 {TH.setupPin}
-                <input data-testid="recovery-pin" type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={(e) => setPin(e.target.value)} required />
+                <input
+                  data-testid="recovery-pin"
+                  type="text"
+                  className="text-mask"
+                  name="recovery-owner-pin"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  required
+                />
               </label>
               <label>
                 {TH.setupPinConfirm}
-                <input data-testid="recovery-pin2" type="password" inputMode="numeric" autoComplete="off" value={pin2} onChange={(e) => setPin2(e.target.value)} required />
+                <input
+                  data-testid="recovery-pin2"
+                  type="text"
+                  className="text-mask"
+                  name="recovery-owner-pin-confirm"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  value={pin2}
+                  onChange={(e) => setPin2(e.target.value)}
+                  required
+                />
               </label>
               {error !== null && (
                 <p role="alert" className="error">

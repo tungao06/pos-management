@@ -33,14 +33,14 @@ export type FakeApi = { [K in keyof PosApi]?: (...args: never[]) => unknown }
  * minus the on-device Worker and (see above) the router. `api` stands in for the Comlink `PosApi` (Task 11); its
  * methods are typically `vi.fn()` returning only the fields the screen under test reads.
  */
-export function renderWithApi(ui: JSX.Element, api: FakeApi): { queryClient: QueryClient } {
+export function renderWithApi(ui: JSX.Element, api: FakeApi): { queryClient: QueryClient; container: HTMLElement } {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  render(
+  const { container } = render(
     <QueryClientProvider client={queryClient}>
       <ApiProvider api={api as unknown as PosApi}>
         <SessionProvider>{ui}</SessionProvider>
       </ApiProvider>
     </QueryClientProvider>,
   )
-  return { queryClient }
+  return { queryClient, container }
 }

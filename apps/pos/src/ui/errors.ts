@@ -65,8 +65,11 @@ export function errorMessage(e: unknown): string {
   }
   // "ปรับตาม dayo": the detail is dayo's raw client.last_receipt_no (never a secret) — named so the owner can
   // check the tablet's key against the right device on the dayo web instead of guessing from a shape description.
+  // M2 (fix round 1, security): it is dayo's own text, unescaped — a bidi override or any other control/format
+  // character in it must never reach the screen, and it is bounded so a hostile answer cannot push arbitrary
+  // length into the UI. Stripped before it is ever interpolated into the message.
   if (code === 'DAYO_RECEIPT_NO_INVALID') {
-    const value = raw.slice(code.length + 2)
+    const value = raw.slice(code.length + 2).replace(/\p{C}/gu, '').slice(0, 32)
     return value === '' ? MESSAGES[code] : TH.dayoReceiptNoInvalid(value)
   }
   // m-3 (Task 12 fix round 1): closeStockCount sends the missing item codes as the detail (stock-count.ts) — shown

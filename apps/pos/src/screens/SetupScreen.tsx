@@ -18,6 +18,18 @@ function lockedPrefix(probe: DayoProbe, existingPrefix: string | undefined): str
 }
 
 /**
+ * security M1 (fix round 1): the e2e run's own address (playwright.config.ts bakes it into `VITE_DAYO_BASE_URL`)
+ * is only ever a convenience default, and only for the dedicated e2e build — never a plain `pnpm build`. Reading
+ * it unconditionally would leave `localhost:8787` sitting in a production bundle whenever a shell that built it
+ * happened to still have the var set. Gating on `MODE` means a default-mode build's dead-code elimination drops
+ * the reference (and the literal) entirely; `test/build-check.test.ts` builds for real and checks this.
+ */
+function defaultBaseUrl(): string {
+  if (import.meta.env.MODE !== 'e2e') return ''
+  return (import.meta.env.VITE_DAYO_BASE_URL as string | undefined) ?? ''
+}
+
+/**
  * spec 04 §7 ข้อ 1, §6.5, §6.6, §6.9: connects this tablet to dayo with an owner-issued API key (`connectShop`,
  * Task 11) — a brand-new device, or a plan-3/4 ("legacy") device not linked yet, approved here with an existing
  * owner PIN of this tablet (ruling R7). One page, no wizard steps: everything past "ทดสอบกุญแจ" only appears once
@@ -30,7 +42,7 @@ export function SetupScreen(): JSX.Element {
   const navigate = useNavigate()
   const boot = useBootstrap()
 
-  const [target, setTarget] = useState<ConnectFieldsValue>({ baseUrl: (import.meta.env.VITE_DAYO_BASE_URL as string | undefined) ?? '', apiKey: '' })
+  const [target, setTarget] = useState<ConnectFieldsValue>({ baseUrl: defaultBaseUrl(), apiKey: '' })
   const [probed, setProbed] = useState<DayoProbe | null>(null)
   const [prefix, setPrefix] = useState('')
   const [ownerId, setOwnerId] = useState<string | null>(null)
@@ -43,6 +55,7 @@ export function SetupScreen(): JSX.Element {
   const [persisted, setPersisted] = useState<boolean | null>(null)
 
   const legacyDevice = boot.data?.legacyDevice === true
+  const legacyOwners = (boot.data?.users ?? []).filter((u) => u.role === 'owner')
 
   const onProbed = (p: DayoProbe): void => {
     setProbed(p)
@@ -71,9 +84,13 @@ export function SetupScreen(): JSX.Element {
       }
       setPersisted(ok)
       await queryClient.invalidateQueries({ queryKey: bootstrapKey })
-      void navigate({ to: '/' })
+      // quality review (fix round 1): stay on this screen so the persist-storage result is actually seen —
+      // "setup-continue" (below) is what leaves it.
     },
-    onError: (e) => setError(errorMessage(e)),
+    onError: (e) => {
+      setError(errorMessage(e))
+      setLegacyPin('') // M4 (fix round 1): a refused approval must not leave this PIN sitting in state
+    },
   })
 
   const submit = (ev: FormEvent): void => {
@@ -89,6 +106,18 @@ export function SetupScreen(): JSX.Element {
 
   if (boot.isError) return <DbErrorScreen error={boot.error} />
 
+  if (save.isSuccess) {
+    return (
+      <main className="page">
+        <h1>{TH.setupTitle}</h1>
+        <p data-testid="setup-persist-status">{persisted === true ? TH.persistOk : TH.persistNo}</p>
+        <button type="button" className="primary" data-testid="setup-continue" onClick={() => void navigate({ to: '/' })}>
+          {TH.setupContinue}
+        </button>
+      </main>
+    )
+  }
+
   return (
     <main className="page">
       <h1>{TH.setupTitle}</h1>
@@ -96,12 +125,13 @@ export function SetupScreen(): JSX.Element {
         <ConnectFields value={target} onChange={setTarget} onProbed={onProbed} />
         {legacyDevice && (
           // Proof of who is linking this specific tablet — independent of testing the new key, so it does not
-          // wait on `probed` (test 4, ruling R7): an old owner PIN of THIS device, not anything from dayo.
+          // wait on `probed` (test 4, ruling R7): an old OWNER's PIN of THIS device (quality review: only owners
+          // may approve a link, so only owners are offered here), not anything from dayo.
           <fieldset className="list">
             <legend>{TH.setupLinkTitle}</legend>
             <p>{TH.setupLegacyUser}</p>
             <div className="choices">
-              {(boot.data?.users ?? []).map((u) => (
+              {legacyOwners.map((u) => (
                 <button
                   key={u.id}
                   type="button"
@@ -115,7 +145,18 @@ export function SetupScreen(): JSX.Element {
             </div>
             <label>
               {TH.setupLegacyPin}
-              <input data-testid="setup-legacy-pin" type="password" inputMode="numeric" autoComplete="off" value={legacyPin} onChange={(e) => setLegacyPin(e.target.value)} required />
+              <input
+                data-testid="setup-legacy-pin"
+                type="text"
+                className="text-mask"
+                name="legacy-owner-pin"
+                inputMode="numeric"
+                autoComplete="off"
+                autoCapitalize="off"
+                value={legacyPin}
+                onChange={(e) => setLegacyPin(e.target.value)}
+                required
+              />
             </label>
           </fieldset>
         )}
@@ -142,11 +183,33 @@ export function SetupScreen(): JSX.Element {
             </label>
             <label>
               {TH.setupPin}
-              <input data-testid="setup-pin" type="password" inputMode="numeric" autoComplete="off" value={pin} onChange={(e) => setPin(e.target.value)} required />
+              <input
+                data-testid="setup-pin"
+                type="text"
+                className="text-mask"
+                name="owner-pin"
+                inputMode="numeric"
+                autoComplete="off"
+                autoCapitalize="off"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                required
+              />
             </label>
             <label>
               {TH.setupPinConfirm}
-              <input data-testid="setup-pin2" type="password" inputMode="numeric" autoComplete="off" value={pin2} onChange={(e) => setPin2(e.target.value)} required />
+              <input
+                data-testid="setup-pin2"
+                type="text"
+                className="text-mask"
+                name="owner-pin-confirm"
+                inputMode="numeric"
+                autoComplete="off"
+                autoCapitalize="off"
+                value={pin2}
+                onChange={(e) => setPin2(e.target.value)}
+                required
+              />
             </label>
             <label>
               {TH.setupPromptPayId}
@@ -157,7 +220,6 @@ export function SetupScreen(): JSX.Element {
                 {error}
               </p>
             )}
-            {persisted !== null && <p data-testid="setup-persist-status">{persisted ? TH.persistOk : TH.persistNo}</p>}
             <button type="submit" className="primary" data-testid="setup-save" disabled={save.isPending}>
               {TH.setupSave}
             </button>

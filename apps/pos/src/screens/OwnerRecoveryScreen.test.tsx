@@ -56,6 +56,38 @@ describe('OwnerRecoveryScreen (ruling N2 · R1)', () => {
     await waitFor(() => expect(api.recoverOwner).toHaveBeenCalledWith({ baseUrl: STORED_URL, apiKey: KEY, ownerStaffId: 'dcm', ownerPin: '2468' }))
   })
 
+  // M5 (fix round 1): the address field is read-only, but this pins that even a forced DOM change event on it
+  // can never leak through to a network call — probeDayo and recoverOwner still get the stored address.
+  it('M5: a change event on the locked address field has no effect — probeDayo and recoverOwner still get the stored address', async () => {
+    const probe = { clientName: 'แท็บเล็ตขาย 1', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 1, owners: [{ id: 'dcm', displayName: 'DCm' }], pricingMatches: true }
+    const api: FakeApi = { bootstrap: boot({}), probeDayo: vi.fn(async () => probe), recoverOwner: vi.fn(async () => undefined) }
+    renderWithApi(<OwnerRecoveryScreen />, api)
+    const field = await screen.findByTestId('setup-base-url')
+    fireEvent.change(field, { target: { value: 'https://evil.example/api/v1' } })
+    expect(field).toHaveValue(STORED_URL) // the forced change never reached state
+    fireEvent.change(await screen.findByTestId('setup-api-key'), { target: { value: KEY } })
+    fireEvent.click(screen.getByTestId('setup-probe'))
+    await waitFor(() => expect(api.probeDayo).toHaveBeenCalledWith({ baseUrl: STORED_URL, apiKey: KEY }))
+    fireEvent.click(await screen.findByTestId('recovery-owner-DCm'))
+    fireEvent.change(screen.getByTestId('recovery-pin'), { target: { value: '2468' } })
+    fireEvent.change(screen.getByTestId('recovery-pin2'), { target: { value: '2468' } })
+    fireEvent.click(screen.getByTestId('recovery-save'))
+    await waitFor(() => expect(api.recoverOwner).toHaveBeenCalledWith({ baseUrl: STORED_URL, apiKey: KEY, ownerStaffId: 'dcm', ownerPin: '2468' }))
+  })
+
+  // SECURITY I1 (fix round 1)
+  it('every PIN and the key field are masked with CSS text-security, never native password fields', async () => {
+    const probe = { clientName: 'แท็บเล็ตขาย 1', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 1, owners: [{ id: 'dcm', displayName: 'DCm' }], pricingMatches: true }
+    const api: FakeApi = { bootstrap: boot({}), probeDayo: vi.fn(async () => probe), recoverOwner: vi.fn(async () => undefined) }
+    const { container } = renderWithApi(<OwnerRecoveryScreen />, api)
+    fireEvent.change(await screen.findByTestId('setup-api-key'), { target: { value: KEY } })
+    expect(screen.getByTestId('setup-api-key')).toHaveClass('text-mask')
+    fireEvent.click(screen.getByTestId('setup-probe'))
+    fireEvent.click(await screen.findByTestId('recovery-owner-DCm'))
+    for (const testId of ['recovery-pin', 'recovery-pin2']) expect(screen.getByTestId(testId)).toHaveClass('text-mask')
+    expect(container.querySelectorAll('input[type="password"]')).toHaveLength(0)
+  })
+
   it('says to revoke the old key when dayo still accepts it', async () => {
     const api: FakeApi = {
       bootstrap: boot({}),
