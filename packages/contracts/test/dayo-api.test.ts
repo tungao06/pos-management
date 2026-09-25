@@ -31,12 +31,20 @@ describe('E2 request (spec §4.5)', () => {
     ['sale_date not the Thai date of sold_at', { sale_date: '2026-09-24' }],
     ['milk null', { lines: [{ ...SPEC_ORDER.lines[0], milk: null }] }],
     ['bill discount baht and percent', { bill_discount: { baht: 5, percent: 10, reason: null } }],
+    ['line discount baht and percent', { lines: [{ ...SPEC_ORDER.lines[0], discount_baht: 5, discount_percent: 10 }] }],
     ['sold_at without milliseconds', { sold_at: '2026-09-25T03:15:03Z' }],
     ['more than 2 decimals', { totals: { ...SPEC_ORDER.totals, total: 155.001 } }],
     ['unknown field', { tip: 5 }],
     ['21 lines is fine but 51 is not', { lines: Array.from({ length: 51 }, () => SPEC_ORDER.lines[0]) }],
   ])('%s → invalid', (_, over) => {
     expect(OrderRowData.safeParse({ ...SPEC_ORDER, ...over }).success).toBe(false)
+  })
+  it('a line discount in baht or percent alone is valid', () => {
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, lines: [{ ...SPEC_ORDER.lines[0], discount_baht: 5, discount_percent: null }] }).success).toBe(true)
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, lines: [{ ...SPEC_ORDER.lines[0], discount_percent: 10 }] }).success).toBe(true)
+  })
+  it('21 lines is a valid order', () => {
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, lines: Array.from({ length: 21 }, () => SPEC_ORDER.lines[0]) }).success).toBe(true)
   })
   it('21 rows is an envelope error', () => {
     expect(PushRequest.safeParse({ device_time: '2026-09-25T03:15:03.120Z', rows: Array.from({ length: 21 }, () => row()) }).success).toBe(false)

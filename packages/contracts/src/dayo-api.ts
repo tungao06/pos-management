@@ -111,7 +111,7 @@ export const OrderLineData = z.strictObject({
   code: z.string().min(1).max(100), size: SizeCode, sweetness: SweetnessCode, milk: MilkCodeSchema, grade: z.string().min(1).max(50).nullable(),
   qty: z.number().int().min(1).max(999),
   free: z.boolean().optional(), discount_baht: Baht.nullable().optional(), discount_percent: z.number().min(0).max(100).nullable().optional(), discount_reason: Text200.nullable().optional(),
-})
+}).refine((l) => l.discount_baht == null || l.discount_percent == null, 'not both discount_baht and discount_percent')
 const BillDiscountData = z.strictObject({ baht: Baht.optional(), percent: z.number().min(0).max(100).optional(), reason: Text200.nullable().optional() })
   .refine((b) => (b.baht === undefined) !== (b.percent === undefined), 'exactly one of baht or percent')
 export const OrderRowData = z.strictObject({
