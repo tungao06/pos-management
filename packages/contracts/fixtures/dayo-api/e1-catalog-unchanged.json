@@ -1,0 +1,33 @@
+{
+  "name": "e1-catalog-unchanged",
+  "spec": "04 §4.4 (changed:false)",
+  "env": {
+    "API_V1_ENABLED": "1",
+    "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173",
+    "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555",
+    "DAYO_PRICING_MANIFEST": { "commit": "3f2a9c1e5b7d9f0a2c4e6a8b0d1f3a5c7e9b1d3f", "files_sha256": { "packages/shared/src/money.ts": "9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b" } }
+  },
+  "rpc": {
+    "api_authenticate": { "ok": true, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "name": "แท็บเล็ตขาย 1", "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write"] },
+    "api_pos_catalog": "@data"
+  },
+  "request": { "method": "GET", "path": "/api/v1/pos/catalog?known_version=42", "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001" } },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": {
+      "ok": true,
+      "data": {
+        "pricing": { "commit": "3f2a9c1e5b7d9f0a2c4e6a8b0d1f3a5c7e9b1d3f", "files_sha256": { "packages/shared/src/money.ts": "9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b" } },
+        "changed": false,
+        "catalog_version": 42,
+        "server_time": "2026-09-25T02:00:00.120+00:00",
+        "supported_kinds": ["order", "order_void"],
+        "supported_fields": {
+          "order": ["pos_order_id", "receipt_no", "queue_no", "sale_date", "sold_at", "channel", "payment", "staff_id", "catalog_version", "shift_id", "lines", "lines.code", "lines.size", "lines.sweetness", "lines.milk", "lines.grade", "lines.qty", "lines.free", "lines.discount_baht", "lines.discount_percent", "lines.discount_reason", "bill_discount", "promo_code", "skip_promotion_ids", "no_promotions", "totals", "note"],
+          "order_void": ["pos_order_id", "voided_at", "staff_id", "approved_by", "reason"]
+        }
+      }
+    }
+  }
+}

@@ -3,8 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "vitest run", "typecheck": "tsc --noEmit" },
+  "exports": { ".": "./src/index.ts", "./fixture-files": "./src/dayo-fixture-files.ts", "./fixtures/*": "./fixtures/*" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "fixtures:hashes": "tsx scripts/fixture-hashes.ts"
+  },
   "dependencies": { "zod": "^4.6.0" },
-  "devDependencies": { "typescript": "~5.9.0", "vitest": "^5.0.0" }
+  "devDependencies": { "@types/node": "^22.0.0", "tsx": "4.23.13", "typescript": "~5.9.0", "vitest": "^5.0.0" }
 }

@@ -1,0 +1,24 @@
+{
+  "name": "e3-orders-today",
+  "spec": "04 §4.6 GET /v1/orders ฟิลด์ใหม่",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": { "ok": true, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "name": "แท็บเล็ตขาย 1", "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write"] },
+    "api_list_orders": "@data"
+  },
+  "request": { "method": "GET", "path": "/api/v1/orders?from=2026-09-25&to=2026-09-25", "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001" } },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": { "ok": true, "data": [
+      { "order_no": "L260925-014", "sale_date": "2026-09-25", "status": "ok", "source": "pos", "external_ref": "A-000312", "version": 1,
+        "channel": "store", "payment": "cash", "totals": { "items_subtotal": 190, "items_discount": 35, "bill_discount": 0, "total": 155, "fee": 0 },
+        "amount_mismatch": false, "updated_at": "2026-09-25T03:15:04.012+00:00", "sold_at": "2026-09-25T03:15:03.12+00:00", "created_by_name": "DCm",
+        "pos_receipt_no": "A-000312", "pos_queue_no": 12, "catalog_version": 42, "duplicate_suspect": true },
+      { "order_no": "L260925-013", "sale_date": "2026-09-25", "status": "ok", "source": "line", "external_ref": null, "version": 1,
+        "channel": "store", "payment": "cash", "totals": { "items_subtotal": 190, "items_discount": 35, "bill_discount": 0, "total": 155, "fee": 0 },
+        "amount_mismatch": false, "updated_at": "2026-09-25T03:12:40.603+00:00", "sold_at": "2026-09-25T03:12:40.551+00:00", "created_by_name": "TungAo",
+        "pos_receipt_no": null, "pos_queue_no": null, "catalog_version": 42, "duplicate_suspect": true }
+    ] }
+  }
+}
