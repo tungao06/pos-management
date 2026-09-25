@@ -21,13 +21,15 @@ export type PaymentMethod = z.infer<typeof PaymentMethod>
 export const VerifyStatus = z.enum(['manual', 'verified', 'pending'])
 export type VerifyStatus = z.infer<typeof VerifyStatus>
 
-export const EventType = z.enum(['CREATED', 'LINE_ADDED', 'LINE_REMOVED', 'DISCOUNT_APPLIED', 'PAYMENT_CLAIMED', 'PAID', 'READY', 'PICKED_UP', 'CANCELLED', 'REJECTED', 'VOIDED', 'STOCK_DEDUCTED', 'STOCK_RETURNED', 'NOTE'])
+// plan 3 events + block-2 owner remedies of the "ส่งไม่ผ่าน" page (spec 04 §6.4) — all go into the device hash chain
+export const EventType = z.enum(['CREATED', 'LINE_ADDED', 'LINE_REMOVED', 'DISCOUNT_APPLIED', 'PAYMENT_CLAIMED', 'PAID', 'READY', 'PICKED_UP', 'CANCELLED', 'REJECTED', 'VOIDED', 'STOCK_DEDUCTED', 'STOCK_RETURNED', 'NOTE', 'RECEIPT_RENUMBERED', 'CODE_REMAPPED', 'STAFF_REMAPPED', 'EXCLUDED_FROM_SYNC'])
 export type EventType = z.infer<typeof EventType>
 
 export const ActorType = z.enum(['user', 'customer', 'system'])
 export type ActorType = z.infer<typeof ActorType>
 
-export const UserRole = z.enum(['owner', 'staff'])
+// spec 04 §7 ข้อ 6: roles come from dayo staff.role
+export const UserRole = z.enum(['owner', 'manager', 'staff'])
 export type UserRole = z.infer<typeof UserRole>
 
 /**
@@ -51,8 +53,10 @@ export const CashMovementKind = z.enum(['PAID_IN', 'PAID_OUT', 'DROP', 'VOID_REF
 export type CashMovementKind = z.infer<typeof CashMovementKind>
 
 /**
- * outbox.status on the device (spec §6.1). `pending` = waiting or retrying · `sent` = the server accepted it ·
- * `dead` = the server rejected it for good (dead-letter, shown on the settings screen, never retried automatically).
+ * outbox.status on the device (spec 04 §6.1). `pending` = waiting or retrying · `sent` = dayo accepted it (or answered
+ * duplicate) · `dead` = on the "ส่งไม่ผ่าน" page (rejected, STUCK, ENVELOPE, PARENT_REJECTED) — never retried
+ * automatically, the owner presses "ลองใหม่" · `local_only` = never sent: rows of the plan-3/4 format, shift/cash rows
+ * of block 2, and rows the owner closed as "นอกระบบกลาง".
  */
-export const OutboxStatus = z.enum(['pending', 'sent', 'dead'])
+export const OutboxStatus = z.enum(['pending', 'sent', 'dead', 'local_only'])
 export type OutboxStatus = z.infer<typeof OutboxStatus>
