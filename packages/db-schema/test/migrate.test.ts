@@ -14,8 +14,10 @@ import { seedToRows } from '../src/seed/rows.js'
 import { openPglite, openSqliteMemory, seedOpts, sqliteRows } from './helpers.js'
 
 // 37 shared tables (18 reference + 8 stock + 10 sales/shift + audit_log) + 2 dialect-only tables per side.
-// Plan 4 T4-1 added stock_adjustment (the 8th stock table).
+// Plan 4 T4-1 added stock_adjustment (the 8th stock table). Block 2 (0003) adds two tablet-only tables,
+// dayo_catalog and order_item; pg is left untouched (spec 04, D59).
 const TABLES_PER_DIALECT = 39
+const SQLITE_TABLES_COUNT = TABLES_PER_DIALECT + 2
 /** Largest usat value in the shop's file (Global Constraints) — above 2^31, so it needs a 64-bit column. */
 const BIG_USAT = 2_499_000_000
 
@@ -27,14 +29,14 @@ const bigItem = {
 }
 
 describe('migrations', () => {
-  it('sqlite: creates all 39 tables and the FK from cash_movement to order', async () => {
+  it('sqlite: creates all 41 tables and the FK from cash_movement to order', async () => {
     const { db, raw } = await openSqliteMemory()
     migrateSqlite(db)
     const names = sqliteRows(raw, `select name from sqlite_master where type = 'table' and name not like '__drizzle%' and name not like 'sqlite_%' order by name`).map((r) => r['name'] as string)
     expect(names).toContain('order')
     expect(names).toContain('outbox')
     expect(names).not.toContain('invariant_run')
-    expect(names).toHaveLength(TABLES_PER_DIALECT)
+    expect(names).toHaveLength(SQLITE_TABLES_COUNT)
     const fks = sqliteRows(raw, `select "table", "from" from pragma_foreign_key_list('cash_movement')`)
     expect(fks).toContainEqual({ table: 'order', from: 'order_id' })
   })
@@ -56,7 +58,7 @@ describe('migrations', () => {
     const before = sqliteRows(raw, 'select count(*) as n from __drizzle_migrations')[0]!['n']
     migrateSqlite(db)
     expect(sqliteRows(raw, 'select count(*) as n from __drizzle_migrations')[0]!['n']).toBe(before)
-    expect(sqliteRows(raw, `select count(*) as n from sqlite_master where type = 'table' and name not like '__drizzle%' and name not like 'sqlite_%'`)[0]!['n']).toBe(TABLES_PER_DIALECT)
+    expect(sqliteRows(raw, `select count(*) as n from sqlite_master where type = 'table' and name not like '__drizzle%' and name not like 'sqlite_%'`)[0]!['n']).toBe(SQLITE_TABLES_COUNT)
   })
   it('pg: running migrate twice is a no-op', async () => {
     const { db, client } = await openPglite()

@@ -115,7 +115,8 @@ describe('append-only ledger tables (M6)', () => {
 
     it('has an update and a delete trigger on every append-only table after all migrations', () => {
       const names = sqliteRows(raw, `select name from sqlite_master where type = 'trigger' order by name`).map((r) => r['name'])
-      expect(names).toEqual(APPEND_ONLY.flatMap((t) => [`${t}_no_delete`, `${t}_no_update`]))
+      // order_item (block 2, 0004) is append-only on the tablet only — pg has no such table
+      expect(names).toEqual([...APPEND_ONLY, 'order_item'].sort().flatMap((t) => [`${t}_no_delete`, `${t}_no_update`]))
     })
     for (const t of APPEND_ONLY) {
       it(`${t}: UPDATE and DELETE are rejected`, () => {
