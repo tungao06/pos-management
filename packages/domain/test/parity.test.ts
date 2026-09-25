@@ -18,7 +18,7 @@ describe(`parity layer C (spec 04 §5.2) — ${FILE === REAL ? 'dayo export' : '
     expect(parity.pricing_files_sha256, 'ตัวคิดราคาในเครื่องไม่ตรงรุ่นกับ dayo').toEqual(vendor.files)
   })
   for (const c of parity.cases) {
-    const skip = TABLET_UNREACHABLE.get(c.id)
+    const skip = TABLET_UNREACHABLE.get(c.spec)
     it.skipIf(skip !== undefined)(`${c.id}: 0 satang difference on every money field`, () => {
       let priced
       try {
