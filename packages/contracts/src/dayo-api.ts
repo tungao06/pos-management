@@ -45,14 +45,17 @@ export const SweetnessCode = z.enum(['0%', '25%', '50%', '75%', '100%'])
 export const MilkCodeSchema = z.enum(['fresh', 'oat'])
 const UseUnit = z.enum(['ml', 'g', 'ชิ้น'])
 const HHMM = z.string().regex(/^\d{2}:\d{2}$/)
-/** Promotion times: dayo sends the Postgres `time` as is, "HH:MM:SS" (0048_cup_sizes.sql:1552); passed through unchanged — never trimmed here (the pricing code must see what dayo's shared sees). */
-const PromoTime = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/)
+/**
+ * Promotion times: dayo sends the Postgres `time` as is, "HH:MM:SS" and possibly fractional seconds
+ * (0048_cup_sizes.sql:1552); passed through unchanged — never trimmed here (the pricing code must see what dayo's shared sees).
+ */
+const PromoTime = z.string().regex(/^\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/)
 
 // ── E1 catalog = OrderCatalog of @dayo/shared without cost (spec §4.4 rule 1) ──────────────────────────────────────
 // Anything the vendored pricing code reads is checked here; a catalog it cannot understand is refused whole (ruling R12).
-const RecipeLine = z.looseObject({ ingredientId: z.string().nullable().optional(), baseId: z.string().nullable().optional(), qty: z.number().finite(), unit: UseUnit })
+const RecipeLine = z.looseObject({ ingredientId: z.string().nullable().exactOptional(), baseId: z.string().nullable().exactOptional(), qty: z.number().finite(), unit: UseUnit })
 const Variant = z.looseObject({
-  menuCode: z.string().min(1), menuNameTh: z.string(), family: z.string(), categoryLabel: z.string().nullable().optional(), menuSortOrder: z.number().optional(),
+  menuCode: z.string().min(1), menuNameTh: z.string(), family: z.string(), categoryLabel: z.string().nullable(), menuSortOrder: z.number(),
   size: SizeCode, sweetness: SweetnessCode, price: z.number().finite().nonnegative(), allowOatMilk: z.boolean(), isMatcha: z.boolean(), recipeLines: z.array(RecipeLine),
 })
 const Ingredient = z.looseObject({ id: z.string(), code: z.string(), name: z.string(), useUnit: UseUnit })
@@ -63,26 +66,29 @@ const Channel = z.looseObject({ code: z.string().min(1), name: z.string(), alias
 const PaymentMethod = z.looseObject({ code: z.string().min(1), name: z.string(), aliases: z.array(z.string()) })
 const promoCommon = {
   id: z.string(), code: z.string().nullable(), name: z.string(),
-  startsOn: Ymd.nullable().optional(), endsOn: Ymd.nullable().optional(), daysOfWeek: z.array(z.number().int().min(0).max(6)).nullable().optional(),
-  timeFrom: PromoTime.nullable().optional(), timeTo: PromoTime.nullable().optional(), channelCodes: z.array(z.string()).nullable().optional(),
+  startsOn: Ymd.nullable().exactOptional(), endsOn: Ymd.nullable().exactOptional(), daysOfWeek: z.array(z.number().int().min(0).max(6)).nullable().exactOptional(),
+  timeFrom: PromoTime.nullable().exactOptional(), timeTo: PromoTime.nullable().exactOptional(), channelCodes: z.array(z.string()).nullable().exactOptional(),
   requiresCode: z.boolean(), autoApply: z.boolean(), priority: z.number().finite(), stackable: z.boolean(), isActive: z.boolean(),
 }
 const codes = z.array(z.string())
 const Promotion = z.discriminatedUnion('kind', [
-  z.looseObject({ ...promoCommon, kind: z.literal('buy_n_get_m'), params: z.looseObject({ buy_qty: z.number().int().min(1), get_qty: z.number().int().min(1), menu_codes: codes, max_sets: z.number().int().optional() }) }),
-  z.looseObject({ ...promoCommon, kind: z.literal('item_discount'), params: z.looseObject({ menu_codes: codes, amount_baht: z.number().finite().optional(), percent: z.number().finite().optional() }) }),
-  z.looseObject({ ...promoCommon, kind: z.literal('bill_discount'), params: z.looseObject({ min_subtotal: z.number().finite().optional(), amount_baht: z.number().finite().optional(), percent: z.number().finite().optional(), max_amount: z.number().finite().optional() }) }),
-  z.looseObject({ ...promoCommon, kind: z.literal('bundle'), params: z.looseObject({ items: z.array(z.looseObject({ menu_codes: codes, qty: z.number().int().min(1) })).min(1), bundle_price: z.number().finite(), max_sets: z.number().int().optional() }) }),
+  z.looseObject({ ...promoCommon, kind: z.literal('buy_n_get_m'), params: z.looseObject({ buy_qty: z.number().int().min(1), get_qty: z.number().int().min(1), menu_codes: codes, max_sets: z.number().int().exactOptional() }) }),
+  z.looseObject({ ...promoCommon, kind: z.literal('item_discount'), params: z.looseObject({ menu_codes: codes, amount_baht: z.number().finite().exactOptional(), percent: z.number().finite().exactOptional() }) }),
+  z.looseObject({ ...promoCommon, kind: z.literal('bill_discount'), params: z.looseObject({ min_subtotal: z.number().finite().exactOptional(), amount_baht: z.number().finite().exactOptional(), percent: z.number().finite().exactOptional(), max_amount: z.number().finite().exactOptional() }) }),
+  z.looseObject({ ...promoCommon, kind: z.literal('bundle'), params: z.looseObject({ items: z.array(z.looseObject({ menu_codes: codes, qty: z.number().int().min(1) })).min(1), bundle_price: z.number().finite(), max_sets: z.number().int().exactOptional() }) }),
 ])
 const SaleSettings = z.looseObject({
-  shopName: z.string(), defaultSize: SizeCode, defaultSweetness: SweetnessCode, defaultChannelCode: z.string(), defaultMilk: MilkCodeSchema,
-  maxQtyPerLine: z.number().int().min(1), backdateDays: z.number().int(), recentOrdersCount: z.number().int(),
-}).partial()
-/** One cup size (dayo CupSizeEntry · cup_sizes via get_full_catalog.sizes, 0048_cup_sizes.sql:30-37,1482-1487). */
-export const CupSize = z.looseObject({ code: SizeCode, label: z.string().min(1).max(30), sortOrder: z.number().int(), isActive: z.boolean() })
+  shopName: z.string().exactOptional(), defaultSize: SizeCode.exactOptional(), defaultSweetness: SweetnessCode.exactOptional(), defaultChannelCode: z.string().exactOptional(),
+  defaultMilk: MilkCodeSchema.exactOptional(), maxQtyPerLine: z.number().int().min(1).exactOptional(), backdateDays: z.number().int().exactOptional(), recentOrdersCount: z.number().int().exactOptional(),
+})
+/**
+ * One cup size (dayo CupSizeEntry · cup_sizes via get_full_catalog.sizes, 0048_cup_sizes.sql:30-37,1482-1487). The label
+ * is display-only and dayo trims and counts it its own way, so no upper bound: a long label must not reject the whole E1.
+ */
+export const CupSize = z.looseObject({ code: SizeCode, label: z.string().min(1), sortOrder: z.number().int(), isActive: z.boolean() })
 export type CupSize = z.infer<typeof CupSize>
 export const PosOrderCatalog = z.looseObject({
-  settings: SaleSettings.nullable().optional(),
+  settings: SaleSettings.nullable().exactOptional(),
   /** Every size of the shop, INACTIVE ones included (ADR-0054 rule 5); variants only carry active sizes (0048:1503-1504). */
   sizes: z.array(CupSize),
   variants: z.array(Variant), ingredients: z.record(z.string(), Ingredient), bases: z.record(z.string(), Base),

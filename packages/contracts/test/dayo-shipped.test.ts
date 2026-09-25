@@ -22,13 +22,15 @@ describe('E1 sizes (ADR-0054 · dayo 0048_cup_sizes.sql:33, 1482-1487)', () => {
     expect(got.sizes.map((s) => [s.code, s.isActive])).toEqual([['16 oz', true], ['20 oz', true], ['22 oz', false]])
     expect(PosOrderCatalog.safeParse({ ...catalog(), sizes: undefined }).success).toBe(false)
   })
-  it('a size entry follows cup_sizes (code shape · label 1–30 · integer sortOrder · boolean isActive)', () => {
+  it('a size entry follows cup_sizes (code shape · non-empty label · integer sortOrder · boolean isActive)', () => {
     const bad = (e: Record<string, unknown>) => PosOrderCatalog.safeParse(catalog({ sizes: [{ ...SIZES[0], ...e }] })).success
     expect(bad({ code: '16oz' })).toBe(false)
     expect(bad({ label: '' })).toBe(false)
-    expect(bad({ label: 'x'.repeat(31) })).toBe(false)
     expect(bad({ sortOrder: 1.5 })).toBe(false)
     expect(bad({ isActive: 'yes' })).toBe(false)
+  })
+  it('a long size label never rejects the catalog: it is display-only and dayo trims and counts it its own way', () => {
+    expect(PosOrderCatalog.safeParse(catalog({ sizes: [{ ...SIZES[0], label: 'แก้วใหญ่พิเศษ '.repeat(5) }] })).success).toBe(true)
   })
   it('a variant, the default size and an E2 line may use any "<n> oz" size', () => {
     expect(PosOrderCatalog.safeParse(catalog({ variants: [{ ...VARIANT, size: '22 oz' }], settings: { defaultSize: '22 oz' } })).success).toBe(true)
@@ -43,11 +45,29 @@ describe('E1 values dayo sends as-is', () => {
   it('categoryLabel may be null (menu_items.category_label · 0048_cup_sizes.sql:1491)', () => {
     expect(PosOrderCatalog.safeParse(catalog({ variants: [{ ...VARIANT, categoryLabel: null }] })).success).toBe(true)
   })
+  it('every variant carries categoryLabel and menuSortOrder: dayo always builds both keys (0048_cup_sizes.sql:1491) and its MenuVariantEntry requires them', () => {
+    const { categoryLabel: _c, ...noLabel } = VARIANT
+    const { menuSortOrder: _s, ...noSort } = VARIANT
+    expect(PosOrderCatalog.safeParse(catalog({ variants: [noLabel] })).success).toBe(false)
+    expect(PosOrderCatalog.safeParse(catalog({ variants: [noSort] })).success).toBe(false)
+  })
+  it('optional catalog keys infer without `| undefined`, so the parsed catalog assigns to dayo\'s interfaces under exactOptionalPropertyTypes', () => {
+    type Promo = PosOrderCatalogParsed['promotions'][number]
+    expectTypeOf<Promo['timeFrom']>().toEqualTypeOf<string | null | undefined>()
+    expectTypeOf<{ timeFrom?: string | null }>().toExtend<Pick<Promo, 'timeFrom'>>()
+    expectTypeOf<Pick<Promo, 'timeFrom'>>().toExtend<{ timeFrom?: string | null }>()
+    expectTypeOf<Pick<PosOrderCatalogParsed, 'settings'>>().toExtend<{ settings?: { maxQtyPerLine?: number } | null }>()
+  })
   it('timeFrom/timeTo come as Postgres time "HH:MM:SS" and pass through unchanged (0048_cup_sizes.sql:1552)', () => {
     const got = PosOrderCatalog.parse(catalog({ promotions: [{ ...PROMO, timeFrom: '17:00:00', timeTo: '20:00:00' }] }))
     expect([got.promotions[0]!.timeFrom, got.promotions[0]!.timeTo]).toEqual(['17:00:00', '20:00:00'])
     expect(PosOrderCatalog.safeParse(catalog({ promotions: [{ ...PROMO, timeFrom: '17:00', timeTo: '20:00' }] })).success).toBe(true)
     expect(PosOrderCatalog.safeParse(catalog({ promotions: [{ ...PROMO, timeFrom: '17:0' }] })).success).toBe(false)
+  })
+  it('a time with fractional seconds is accepted and passed through unchanged, never truncated', () => {
+    const got = PosOrderCatalog.parse(catalog({ promotions: [{ ...PROMO, timeFrom: '17:00:00.5', timeTo: '20:00:00.123456' }] }))
+    expect([got.promotions[0]!.timeFrom, got.promotions[0]!.timeTo]).toEqual(['17:00:00.5', '20:00:00.123456'])
+    expect(PosOrderCatalog.safeParse(catalog({ promotions: [{ ...PROMO, timeFrom: '17:00.5' }] })).success).toBe(false)
   })
   it('pricing.commit is null when the build sent none (0049_pos_catalog.sql:303-305)', () => {
     expect(PricingInfo.safeParse({ commit: null, files_sha256: {} }).success).toBe(true)
