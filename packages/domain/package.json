@@ -9,6 +9,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
+    "@dayo/contracts": "workspace:*",
+    "@dayo/dayo-pricing": "workspace:*",
     "@noble/hashes": "^2.4.0"
   },
   "devDependencies": {
