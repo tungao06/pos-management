@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { ActorType, CashMovementKind, EventType, OrderOrigin, OrderStatus, PaymentMethod, ShiftStatus, VerifyStatus } from '@dayo/contracts'
 import { check, index, sqliteTable, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { id, int, json, text, textEnum } from './columns.js'
+import { bool, id, int, json, text, textEnum } from './columns.js'
 import { channel, customer, device, productVariant, recipe, sweetnessLevel, user } from './reference.js'
 
 export const shift = sqliteTable('shift', {
@@ -64,7 +64,8 @@ export const order = sqliteTable('order', {
   queueNo: int('queue_no'),
   businessDate: text('business_date').notNull(),
   shiftId: text('shift_id').references(() => shift.id),
-  channelId: text('channel_id').notNull().references(() => channel.id),
+  // plan-3 bills only; a block-2 bill carries channel_code instead (spec 04 §4.5) — the check below keeps one of them
+  channelId: text('channel_id').references(() => channel.id),
   customerId: text('customer_id').references(() => customer.id),
   status: textEnum('status', OrderStatus).notNull(),
   subtotalSatang: int('subtotal_satang').notNull(),
@@ -79,6 +80,17 @@ export const order = sqliteTable('order', {
   paidAt: text('paid_at'),
   readyAt: text('ready_at'),
   voidedAt: text('voided_at'),
+  // block 2 (spec 04 §4.3, §4.5, §6.4): set on every bill priced with dayo's catalog
+  soldAt: text('sold_at'),
+  catalogVersion: int('catalog_version'),
+  channelCode: text('channel_code'),
+  paymentCode: text('payment_code'),
+  pricingJson: json('pricing_json'),            // { draft, priced } frozen at payment — what the customer was charged
+  excludedAt: text('excluded_at'),              // owner closed the row as "นอกระบบกลาง" (ruling R8)
+  centralOrderNo: text('central_order_no'),     // E2 accepted data.order_no
+  centralComputedTotalSatang: int('central_computed_total_satang'), // E2 computed_total through edgeBahtToSatang
+  centralAmountMismatch: bool('central_amount_mismatch'),
+  centralDuplicateOfJson: json('central_duplicate_of_json'),        // E2 duplicate_of (order_no of bot/web bills)
 }, (t) => [
   unique().on(t.deviceId, t.receiptNo),
   // D47 item 5: the queue number is unique per device per business day (not globally).
@@ -91,6 +103,7 @@ export const order = sqliteTable('order', {
   check('order_discount_nonneg_ck', sql`${t.discountSatang} >= 0`),
   check('order_total_nonneg_ck', sql`${t.totalSatang} >= 0`),
   check('order_discount_le_subtotal_ck', sql`${t.discountSatang} <= ${t.subtotalSatang}`),
+  check('order_channel_ck', sql`${t.channelId} is not null or ${t.channelCode} is not null`),
 ])
 
 export const orderLine = sqliteTable('order_line', {
@@ -110,6 +123,29 @@ export const orderLine = sqliteTable('order_line', {
 }, (t) => [
   unique().on(t.orderId, t.lineNo),
   check('order_line_qty_positive_ck', sql`${t.qty} > 0`),
+])
+
+/** Lines of a block-2 bill as dayo's pricing code quoted them (spec 04 §5.1). Append-only (0004 triggers). */
+export const orderItem = sqliteTable('order_item', {
+  id: id(),
+  orderId: text('order_id').notNull().references(() => order.id),
+  lineNo: int('line_no').notNull(),
+  menuCode: text('menu_code').notNull(),
+  menuNameTh: text('menu_name_th').notNull(),
+  size: text('size').notNull(),
+  sweetness: text('sweetness').notNull(),
+  milk: text('milk').notNull(),
+  grade: text('grade'),
+  qty: int('qty').notNull(),
+  unitPriceSatang: int('unit_price_satang').notNull(),
+  discountPerCupSatang: int('discount_per_cup_satang').notNull(),
+  discountReason: text('discount_reason'),
+  promotionId: text('promotion_id'),
+  lineTotalSatang: int('line_total_satang').notNull(),
+}, (t) => [
+  unique().on(t.orderId, t.lineNo),
+  check('order_item_qty_positive_ck', sql`${t.qty} > 0`),
+  check('order_item_money_nonneg_ck', sql`${t.unitPriceSatang} >= 0 and ${t.discountPerCupSatang} >= 0 and ${t.lineTotalSatang} >= 0`),
 ])
 
 export const payment = sqliteTable('payment', {
