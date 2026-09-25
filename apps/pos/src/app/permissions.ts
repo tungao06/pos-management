@@ -31,5 +31,5 @@ const TABLE: Record<PosRole, ReadonlySet<Action>> = {
 }
 
 export function can(role: PosRole, action: Action): boolean {
-  return TABLE[role].has(action)
+  return TABLE[role]?.has(action) ?? false
 }
