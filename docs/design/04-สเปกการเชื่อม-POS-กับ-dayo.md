@@ -4,6 +4,7 @@
 สถานะ: **การตัดสินใจบันทึกแล้วใน D59–D78** (`00-บันทึกการตัดสินใจ.md`) · สเปกแก้ตามรีวิวรอบ 1 แล้ว (§13.2) · **เจ้าของรับรองสเปกแล้ว** และเลือก Q54 ทาง ก (รหัสครั้งเดียวจากเว็บ — §4.10 ก้อน 4, §7 ข้อ 10) · สัญญาก้อน 1–2 ล็อก
 ที่มา: คำตอบเจ้าของรอบ grilling 1–6 (Q1–Q37, 25 ก.ย. 2026) · `03-ประเมินสถาปัตยกรรม-POS-กับ-LINE-bot.md` §10–11 · โค้ดและ ADR ของ dayo ณ วันที่เขียน (migration ล่าสุด `0047_shop_settings.sql`, ADR ล่าสุด 0047)
 ร่าง ADR ที่ต้องส่งให้ session ของ dayo: `dayo-adr-drafts/` (P1–P8)
+**ปรับตาม dayo ที่ ship แล้ว (26 ก.ย. 2569)**: dayo ยอมรับ ADR-0048–0055 และทำก้อน 1A เสร็จ (migration 0048–0052 · dayo `main` `232bf57`) · สเปกนี้แก้ให้ตรงกับที่ dayo ทำจริงแล้ว ดูรายการและที่มาใน §13.6 · **ถ้าข้อความในสเปกนี้ขัดกับ SQL ของ dayo ให้ถือ SQL เป็นความจริง** (ไม่ใช่ `docs/API.md` ของ dayo) แล้วแจ้ง architect · จุดที่ **รอเจ้าของ** ติดป้าย "รอเจ้าของ O1/O2/O3" (O1 = ADR-0050 กับ D76 · O2 = ADR-0051 กับ D64/D67 · O3 = ADR-0055 กับ D79) — ระหว่างรอ ห้ามถือข้อความฝั่งใดฝั่งหนึ่งเป็นข้อยุติ
 
 คำที่ใช้ในเอกสารนี้
 - **dayo** = ระบบ LINE bot + เว็บ (`D:\TungAo-Project\line-bot\dayo-shop-system`) · **ฐานกลาง** = Supabase ของ dayo
@@ -78,14 +79,14 @@
 | พนักงาน + บทบาท (`owner`/`manager`/`staff`) | เว็บ dayo (owner — ADR-0034) | บอท เว็บ แท็บเล็ต | ในก้อนเดียวกับแคตตาล็อก (Q9) |
 | PIN ของพนักงาน | แท็บเล็ต | แท็บเล็ตเท่านั้น | ไม่ออกจากเครื่อง |
 | สต็อก (รับเข้า นับ ของเสีย) | เว็บ dayo (+ บอท `รับ`) | เว็บ บอท | ไม่ผ่านแท็บเล็ต (Q11) |
-| บิลที่ขายที่แท็บเล็ต + การยกเลิก | แท็บเล็ต | เว็บ (อ่านอย่างเดียว) บอท แดชบอร์ด | `POST /v1/pos/push` แถวชนิด `order` / `order_void` |
+| บิลที่ขายที่แท็บเล็ต + การยกเลิก | แท็บเล็ต (**รอเจ้าของ O1**: dayo ship ให้ owner แก้/ยกเลิกบนเว็บได้ด้วย — §4.7) | เว็บ บอท แดชบอร์ด · แท็บเล็ตอ่านการแก้ของ owner ผ่าน `dayo_edit` ของ E3 (§4.6) | `POST /v1/pos/push` แถวชนิด `order` / `order_void` |
 | บิลที่ขายที่บอท/เว็บ + การแก้/ยกเลิก | บอท/เว็บ (ADR-0029) | แท็บเล็ต (ดูกันซ้ำ + นับเงินสดตอนปิดกะ) | บอท/เว็บเขียนฐานกลางตรง · แท็บเล็ตอ่าน `GET /v1/orders` และ (ก้อน 3) `GET /v1/pos/shift-cash` |
 | ธงบิลน่าจะซ้ำ | ฐานกลาง (ตรวจอัตโนมัติ) · owner ปิดธงบนเว็บ | เว็บ แท็บเล็ต | คำตอบของ push + `GET /v1/orders` |
 | กะ เงินเข้า-ออกลิ้นชัก นับเงิน ใบปิดกะ (Z) | แท็บเล็ต | เว็บ (อ่าน + สรุป 1 บรรทัดบนแดชบอร์ด — Q20) | push ชนิด `shift_open` `cash_movement` `cash_count` `shift_close` (ก้อน 3) |
 | ค่าใช้จ่าย | แท็บเล็ตเท่านั้น (Q46) | เว็บ (อ่าน + รายงานกำไรสุทธิ) | push ชนิด `expense` `expense_void` (ก้อน 4) |
 | หมวดค่าใช้จ่าย | เว็บ dayo (owner) | แท็บเล็ต | ในก้อนแคตตาล็อก (ก้อน 4) |
 | ต้นทุนเฉลี่ยเคลื่อนที่ของวัตถุดิบ | ฐานกลาง (คิดจากการรับเข้า) · owner ปรับเองได้พร้อมเหตุผล (Q49) | เว็บ | ไม่ส่งออก API รายวัตถุดิบ (ADR-0035 ข้อ 3) |
-| รายงานกำไรสุทธิ (ยอดรวม) | ฐานกลาง (RPC คิด) | เว็บ (owner) · แท็บเล็ต **เฉพาะเมื่อผู้ล็อกอินเป็น owner** (Q45) | `POST /v1/pos/profit` (ก้อน 4) · ไม่เก็บในเครื่อง |
+| รายงานกำไรสุทธิ (ยอดรวม) | ฐานกลาง (RPC คิด) | เว็บ (owner) · แท็บเล็ต **เฉพาะเมื่อผู้ล็อกอินเป็น owner** (Q45) | `POST /v1/pos/profit` (ก้อน 4) · ไม่เก็บในเครื่อง · **รอเจ้าของ O3**: ADR-0055 ให้แท็บเล็ตแค่เปิดหน้าเว็บ dayo (§4.10 ก้อน 4) |
 | ตอกบัตร อัตราค่าจ้าง ใบเงินเดือน | แท็บเล็ต | เว็บ (อ่าน) | push ชนิด `pay_profile` `time_punch` `time_punch_fix` `pay_sheet` (ก้อน 6) |
 | โซ่แฮชของ event บิล (`order_event`) | แท็บเล็ต | แท็บเล็ต | ไม่ส่ง (Q23) · อยู่ในไฟล์สำรองของแท็บเล็ต |
 | ไฟล์ `DA-YO_เมนู.xlsx` | — | ตัวนำเข้าครั้งแรกของ dayo | นำเข้าครั้งแรกครั้งเดียว (ADR-0025) · หลังจากนั้นใช้เทมเพลตของระบบ (P8) |
@@ -102,7 +103,7 @@
 | เปิด/ปิด | `/api/v1/**` ตอบ 404 เมื่อ `API_V1_ENABLED` ไม่ใช่ `1` (ADR-0042) · แท็บเล็ตแปลง 404 ที่ `/api/v1/*` เป็นสถานะ "ระบบกลางปิด API อยู่" ไม่ใช่ error ของแถว |
 | ยืนยันตัว | `Authorization: Bearer <api_key>` · 1 เครื่อง = 1 key ในตาราง `api_clients` (§7) |
 | scope ที่แท็บเล็ตขายต้องมี | `catalog:read` `staff:read` (ใหม่ — P1) `orders:read` `orders:write` · ก้อน 3: `shift:write` · ก้อน 4: `expense:write` · ก้อน 6: `payroll:write` · ไม่บังคับ (owner เปิดเอง): `reports:profit` (ก้อน 4 — Q45) |
-| CORS | origin ที่อนุญาต = env `POS_ORIGINS` (คั่นด้วยจุลภาค) · **ทุกคำตอบใต้ `/api/v1/*` รวม error ทุกชนิด** (404 จากสวิตช์ `API_V1_ENABLED`, 401, 403, 422, 429, 5xx) มีหัว `Access-Control-Allow-Origin: <origin ที่ตรง>` + `Vary: Origin` + `Access-Control-Expose-Headers: Retry-After` · `OPTIONS` ตอบ **204 เสมอ** (แม้ API ปิด · ไม่แตะฐานข้อมูล) พร้อม `Access-Control-Allow-Headers: Authorization, Content-Type` · `Access-Control-Allow-Methods: GET, POST, OPTIONS` · `Access-Control-Max-Age: 7200` · origin ที่ไม่อยู่ในรายการ = ไม่มีหัว CORS · ทำที่จุดเดียวใน `apps/web/src/lib/api/response.ts` (`apiHandler` — ที่เดียวกับสวิตช์ 404) (P1) |
+| CORS | origin ที่อนุญาต = env `POS_ORIGINS` (คั่นด้วยจุลภาค) · **ทุกคำตอบใต้ `/api/v1/*` รวม error ทุกชนิด** (404 จากสวิตช์ `API_V1_ENABLED`, 401, 403, 422, 429, 5xx) มีหัว `Access-Control-Allow-Origin: <origin ที่ตรง>` + `Vary: Origin` + `Access-Control-Expose-Headers: Retry-After` · `OPTIONS` ตอบ **204 เสมอ** (แม้ API ปิด · ไม่แตะฐานข้อมูล) พร้อม `Access-Control-Allow-Headers: Authorization, Content-Type` (dayo ship เพิ่ม `Idempotency-Key` ด้วย — แท็บเล็ตไม่ส่งหัวนี้) · ต้องเป็น origin `https://` ตรงตัว ไม่รับ wildcard/preview ของ Pages (ยกเว้น `http://localhost`/`127.0.0.1`) · `Access-Control-Allow-Methods: GET, POST, OPTIONS` · `Access-Control-Max-Age: 7200` · origin ที่ไม่อยู่ในรายการ = ไม่มีหัว CORS · ทำที่จุดเดียวใน `apps/web/src/lib/api/response.ts` (`apiHandler` — ที่เดียวกับสวิตช์ 404) (P1) |
 | อัตราคำขอ | 60 คำขอ/นาที/key (มีอยู่แล้ว — `api_authenticate`) · เกิน = 429 + `Retry-After` |
 | รูปคำตอบ | `{ "ok": true, "data": … }` หรือ `{ "ok": false, "error": { "code": "DY422", "message": "…" } }` (เหมือนเดิม) |
 | เวลา (ส่งเข้า) | ISO-8601 UTC มีมิลลิวินาที `2026-09-25T03:15:03.120Z` |
@@ -110,12 +111,12 @@
 | วันขาย | `YYYY-MM-DD` เวลาไทย (Asia/Bangkok) · ร้านปิดก่อนเที่ยงคืน (ADR-0024) |
 | เงิน | บาท เป็นเลข JSON ทศนิยมไม่เกิน 2 ตำแหน่ง (`35`, `35.5`, `12.25`) — กติกาแปลงอยู่ §4.2 |
 | เปอร์เซ็นต์ | **สองแบบ ห้ามสลับ**: ช่องทาง `priceMarkupPct` / `feePct` เป็น **สัดส่วน** (`0.30` = 30%) · ส่วนลดรายแก้ว/ทั้งบิล/โปร `percent` เป็น **ร้อยละ** (`10` = 10%) — ตามที่ dayo ใช้อยู่ (DATA-CONTRACT §2.4, §4.2–4.3) |
-| ขนาด / ความหวาน | ข้อความตรงตัว `"16 oz"` `"20 oz"` / `"0%"` `"25%"` `"50%"` `"75%"` `"100%"` |
+| ขนาด / ความหวาน | **ขนาดตั้งได้ (ADR-0054)**: ข้อความรูป `^[1-9][0-9]{0,2} oz$` (เช่น `"16 oz"` `"20 oz"` `"22 oz"`) · รายการขนาดของร้านมากับ E1 ใน `catalog.sizes` (§4.4 ข้อ 12) · **ห้ามตายตัวเป็น 2 ค่า** ทั้งใน schema หน้าจอ และตัวคิดราคา · ตอนนี้ร้านมี `16 oz` `20 oz` · ความหวาน: `"0%"` `"25%"` `"50%"` `"75%"` `"100%"` (คงเดิม) |
 | ข้อความ | UTF-8 · ห้ามมีอักขระควบคุม C0 และ DEL · ความยาวนับเป็น code point · `reason`/`note` ≤ 200 · `description` ≤ 200 |
 | id | UUID ตัวเล็ก รูป `8-4-4-4-12` · แถวที่แท็บเล็ตสร้าง ใช้ id ที่แท็บเล็ตสร้าง (UUIDv4 หรือ v7) |
 | ความเข้ากันได้ | ฝั่งรับต้อง **ยอมรับฟิลด์ที่ไม่รู้จักในคำตอบ** และค่า `status`/`reason` ที่ไม่รู้จัก (ถือเป็นข้อความ — บทเรียนแผน 5 `ReceivedRowResult`) · ฟิลด์หรือชนิดแถวที่ dayo ยังไม่รู้จักในคำขอ = คำตัดสินรายแถว **`deferred UNSUPPORTED`** (ลองใหม่ได้เมื่อ dayo อัปเดต ไม่ใช่ rejected) · กติกาปล่อยรุ่น: **dayo deploy ก่อนเสมอ** แล้ว POS รุ่นที่ใช้ฟิลด์/ชนิดใหม่จึงขึ้นได้ · E1 ส่ง `supported_kinds` และ `supported_fields` (รายชื่อฟิลด์ของ `data` ต่อชนิด) · แท็บเล็ต **เก็บแถวรอ** (ไม่ใช่ rejected) จนกว่าชนิดและทุกฟิลด์ที่แถวใช้จะปรากฏในรายการ |
 
-**endpoint เดิม** (`GET /v1/catalog`, `GET /v1/promotions`, `POST /v1/orders`, `PATCH /v1/orders/{order_no}`, `GET /v1/stock`, `POST /v1/stock/movements`) คงอยู่ไม่เปลี่ยน · **แท็บเล็ตไม่ใช้** ยกเว้น `GET /v1/orders` (ขยายฟิลด์ใน §4.6) · เหตุผล: `GET /v1/catalog` ไม่มีข้อมูลพอให้คิดราคาเอง (ไม่มีสูตร ไม่มีกติกาช่องทาง ไม่มีค่าเริ่มต้นร้าน และ `etag` ครอบแค่เมนู) และ `POST /v1/orders` ส่งได้ทีละบิลไม่มีคำตัดสินรายแถว
+**endpoint เดิม** (`GET /v1/catalog`, `GET /v1/promotions`, `GET /v1/stock`, `POST /v1/stock/movements`) คงอยู่ไม่เปลี่ยน · **`POST /v1/orders` และ `PATCH /v1/orders/{order_no}` ถูกถอดแล้ว (404 — ADR-0049 ข้อ 8)** · **แท็บเล็ตไม่ใช้** ยกเว้น `GET /v1/orders` (ขยายฟิลด์ใน §4.6) · เหตุผล: `GET /v1/catalog` ไม่มีข้อมูลพอให้คิดราคาเอง (ไม่มีสูตร ไม่มีกติกาช่องทาง ไม่มีค่าเริ่มต้นร้าน และ `etag` ครอบแค่เมนู) และ `POST /v1/orders` ส่งได้ทีละบิลไม่มีคำตัดสินรายแถว
 
 ### 4.2 เงินที่ขอบสัญญา: สตางค์ ↔ บาท (ล็อก)
 
@@ -152,7 +153,7 @@ export function edgeSatangToBaht(satang: number): number
 ### 4.3 ฉบับแคตตาล็อก `catalog_version` (ล็อก)
 
 - ตารางใหม่ `catalog_versions (shop_id uuid pk → shops, version bigint not null default 1, changed_at timestamptz not null)` (P1)
-- trigger ระดับแถว `after insert or update or delete` เพิ่ม `version = version + 1, changed_at = now()` ของร้านนั้น เมื่อแถวในตารางเหล่านี้เปลี่ยน:
+- trigger `after insert or update or delete` (dayo ship เป็น **ระดับคำสั่ง** ไม่ใช่ระดับแถว — ADR-0048 ข้อ 1 · ไม่กระทบแท็บเล็ตเพราะเทียบแค่เท่ากัน) เพิ่ม `version = version + 1, changed_at = now()` ของร้านนั้น เมื่อแถวในตารางเหล่านี้เปลี่ยน:
   `menu_items` · `menu_variants` · `recipe_lines` · `bases` · `base_lines` · `menu_options` · `sales_channels` · `payment_methods` · `promotions` · `shop_settings` · `staff` (เฉพาะเมื่อ `display_name`/`role`/`status` เปลี่ยน) · `ingredients` (เฉพาะเมื่อ `code`/`name`/`use_unit`/`is_active` เปลี่ยน — การรับเข้าที่แก้ `buy_price` ไม่ทำให้ฉบับเปลี่ยน) · ก้อน 4 เพิ่ม `expense_categories`
 - ธุรกรรมเดียวอาจเพิ่มหลายครั้ง — แท็บเล็ตเทียบแค่ **เท่ากัน/ไม่เท่ากัน** ห้ามคิดว่าเลขต่อเนื่อง
 - ทุกบิลที่แท็บเล็ตส่ง บอก `catalog_version` ที่ใช้คิดราคา (Q17) → เก็บใน `orders.catalog_version` · บิลจากบอท/เว็บเก็บฉบับ ณ ตอนบันทึก (RPC อ่านจาก `catalog_versions`)
@@ -194,6 +195,9 @@ scope: `catalog:read` **และ** `staff:read` · RPC ใหม่ `api_pos_ca
       { "id": "0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d", "display_name": "DCm", "role": "staff", "active": true }
     ],
     "catalog": {
+      "sizes": [ { "code": "16 oz", "label": "16 oz", "sortOrder": 0, "isActive": true },
+                 { "code": "20 oz", "label": "20 oz", "sortOrder": 1, "isActive": true },
+                 { "code": "22 oz", "label": "22 oz", "sortOrder": 2, "isActive": false } ],
       "settings": { "shopName": "DA-YO", "defaultSize": "16 oz", "defaultSweetness": "100%", "defaultChannelCode": "store",
                     "defaultMilk": "fresh", "maxQtyPerLine": 99, "backdateDays": 7, "recentOrdersCount": 5 },
       "variants": [
@@ -221,24 +225,26 @@ scope: `catalog:read` **และ** `staff:read` · RPC ใหม่ `api_pos_ca
 }
 ```
 
-id ที่ย่อด้วย `…` ในตัวอย่างของ §4.4–4.5 เป็น UUID เต็มในไฟล์ fixture (§4.11) — ย่อเพื่ออ่านง่ายเท่านั้น
+id ที่ย่อด้วย `…` ในตัวอย่างของ §4.4–4.5 เป็น UUID เต็มในไฟล์ fixture (§4.11) — ย่อเพื่ออ่านง่ายเท่านั้น · ขนาด `22 oz` ที่ปิดอยู่ในตัวอย่างมีไว้แสดงว่า `sizes` รวมขนาดที่ปิด (ร้านจริงยังไม่มี 22 oz) · ค่าจริงที่ dayo ส่งและตัวอย่างไม่ได้แสดง: `categoryLabel: null` · `timeFrom: "17:00:00"` · `pricing.commit: null` (ข้อ 2, 9, 13)
 
 กติกาของ E1 (ล็อก)
 1. `catalog` = **รูป `OrderCatalog` ของ `@dayo/shared` ตรงตัว** (ชื่อฟิลด์ camelCase ตาม `packages/shared/src/types.ts`) เพื่อให้ตัวคิดราคาที่แท็บเล็ตใช้ (สำเนา — §5) รับไปได้โดยไม่แปลงชื่อ · สร้างจาก `dayo_impl_get_full_catalog` ตัวเดียวกับที่บอทใช้ แล้ว **ตัดต้นทุนออก**: `ingredients[*]` ไม่มี `costPerUseUnit` (แท็บเล็ตเติม 0 ก่อนส่งเข้าตัวคิดราคา — ต้นทุนไม่มีผลกับราคา) · E1 ไม่มีต้นทุนเสมอ (ADR-0035 ข้อ 3 — ข้อยกเว้นเดียวคือรายงานกำไรของ owner ใน §4.10 ก้อน 4)
-2. `variants` มีเฉพาะเมนูและตัวแปรที่ active (เหมือน `get_full_catalog`) เรียงตาม `menuSortOrder`, `menuCode`, ขนาด, ความหวาน · `categoryLabel` และ `menuSortOrder` เป็นฟิลด์เพิ่มสำหรับหน้าขาย (ตัวคิดราคาไม่ใช้)
+2. `variants` มีเฉพาะเมนูและตัวแปรที่ active **และขนาดที่ active** (ตัวแปรของขนาดที่ปิดไม่ส่ง) เรียงตาม `menuSortOrder`, `menuCode`, ขนาด (`sortOrder` ของ `sizes`), ความหวาน · `categoryLabel` และ `menuSortOrder` เป็นฟิลด์เพิ่มสำหรับหน้าขาย (ตัวคิดราคาไม่ใช้) · **`categoryLabel` เป็น `null` ได้** (ส่ง `menu_items.category_label` ดิบ ไม่ coalesce) → แท็บเล็ตใช้ `family` แทนเมื่อเป็น null · schema ฝั่งแท็บเล็ตต้องรับ null ไม่งั้นแคตตาล็อกทั้งก้อนถูกปฏิเสธ
 3. `recipeLines` จำเป็น: ตัวคิดราคาใช้ตัดสินว่าเมนูเปลี่ยนเป็นนมโอ๊ตได้ไหม (สูตรต้องมีวัตถุดิบนมสด) และบรรทัดผงของเกรดมัตจะ (DATA-CONTRACT §4.1)
 4. `promotions` = โปรที่ `is_active` ทั้งหมด (รวมที่ยังไม่ถึงวัน/หมดวันแล้ว — ตัวคิดราคาเช็กวันเวลาเอง)
 5. `staff` = พนักงานสถานะ `active` (`active: true`) และ `removed` (`active: false` — แท็บเล็ตห้ามล็อกอิน แต่ยังแสดงชื่อในบิลเก่าได้) · **ไม่มี** `pending` · **ไม่มี** `line_user_id` · `display_name` ว่างได้ → แท็บเล็ตแสดง "พนักงาน " + 4 ตัวท้ายของ `id`
-6. `client.last_receipt_no` = `external_ref` ของบิลล่าสุดที่ key นี้ส่งเข้ามา (เรียงตาม `created_at`) หรือ `null` · ใช้ตอนตั้งเครื่องใหม่/ติดตั้งแอปใหม่ด้วย key เดิม เพื่อเลขใบเสร็จไม่ซ้ำของเดิม (§6.6)
+6. `client.last_receipt_no` = `external_ref` ของบิลล่าสุดที่ key นี้ส่งเข้ามา (เรียงตาม `created_at`) หรือ `null` · ใช้ตอนตั้งเครื่องใหม่/ติดตั้งแอปใหม่ด้วย key เดิม เพื่อเลขใบเสร็จไม่ซ้ำของเดิม (§6.6) · schema ฝั่งแท็บเล็ตรับเป็น `string | null` **ไม่ตรวจรูปใน schema** (ค่าเป็น `external_ref` ดิบ — ถ้ารูปผิดแม้ใบเดียว E1 จะใช้ไม่ได้ทั้งก้อน) แล้วตรวจรูป `^[A-Z]{1,3}-\d{6}$` ตอนตั้งเลขใบเสร็จ: รูปผิด = หยุดตั้งเครื่องพร้อมข้อความให้ owner ตรวจ (ไม่เดาเลข)
 7. `server_time` มีทุกคำตอบ → กติกานาฬิกา §6.7
 8. ขนาดคำตอบประมาณ 150–250 KB (240 ตัวแปร × สูตร ~6 บรรทัด) · Route Handler ส่งต่อข้อความ JSON จาก RPC โดยไม่ parse ซ้ำถ้าวัด CPU แล้วเกิน 5 ms (§10)
-9. `pricing` (มีทั้งสองแบบของคำตอบ ทั้ง `changed` true/false): `commit` = commit ของ dayo ที่ deploy อยู่ (ค่าเดียวกับเวอร์ชันระบบ ADR-0045) · `files_sha256` = sha256 ของไฟล์ตัวคิดราคาใน `packages/shared/src/` ที่ build นั้นใช้ (คำนวณตอน build) · แท็บเล็ตเทียบกับ `VENDOR.json` ของตัวเอง: ไฟล์ใดต่าง → แถบเหลือง "ตัวคิดราคาในเครื่องไม่ตรงกับระบบกลาง" ถาวร (ยังขายได้ · ส่วนต่างจะเห็นใน `computed_total`) และแจ้งทีม POS ให้ `vendor:update` + parity ใหม่
+9. `pricing` (มีทั้งสองแบบของคำตอบ ทั้ง `changed` true/false): `commit` = commit ของ dayo ที่ deploy อยู่ (ค่าเดียวกับเวอร์ชันระบบ ADR-0045) **หรือ JSON `null` เมื่อ build ไม่ได้ใส่ค่า** (dev/local) → แท็บเล็ตแสดง "ไม่ทราบ" และไม่ถือเป็นความผิด (การเทียบใช้ `files_sha256` เท่านั้น) · `files_sha256` = sha256 ของไฟล์ตัวคิดราคาใน `packages/shared/src/` ที่ build นั้นใช้ (คำนวณตอน build) · แท็บเล็ตเทียบกับ `VENDOR.json` ของตัวเอง: ไฟล์ใดต่าง → แถบเหลือง "ตัวคิดราคาในเครื่องไม่ตรงกับระบบกลาง" ถาวร (ยังขายได้ · ส่วนต่างจะเห็นใน `computed_total`) และแจ้งทีม POS ให้ `vendor:update` + parity ใหม่
 10. `supported_kinds` และ `supported_fields` (มีทั้งสองแบบของคำตอบ) = ชนิดแถว E2 ที่ dayo รุ่นนี้รับ (ก้อน 1–2: `order`, `order_void`) และรายชื่อฟิลด์ของ `data` ต่อชนิด (`{"order": ["pos_order_id", "receipt_no", …], "order_void": [...]}` — ฟิลด์ซ้อนเขียนแบบจุด เช่น `lines.milk`) · แท็บเล็ตไม่ส่งแถวที่ชนิดไม่อยู่ในรายการ หรือมีฟิลด์ที่ไม่อยู่ในรายการ (เก็บรอใน outbox ไม่นับเป็นครั้งลองใหม่)
 11. ตั้งแต่ก้อน 4: `expense_categories` อยู่ **ระดับเดียวกับ `staff`** (ไม่อยู่ใน `catalog` เพราะ `catalog` ต้องเป็นรูป `OrderCatalog` ตรงตัว)
+12. **`catalog.sizes`** (บังคับ — ADR-0054) = `[{code, label, sortOrder, isActive}]` **ทุกขนาดของร้าน รวมที่ปิด** เรียง `sortOrder` · `settings.defaultSize` เป็นขนาดใดก็ได้ที่ active · ปุ่มขนาดบนหน้าขาย = ขนาดใน `sizes` ที่ `isActive` และเมนูนั้นมีตัวแปร เรียง `sortOrder` · **ก่อนเก็บเงิน** แท็บเล็ตตรวจว่าขนาดของทุกบรรทัดอยู่ใน `sizes` ที่ active และมีตัวแปร (ไม่งั้นปฏิเสธการขายในเครื่อง — ไม่ปล่อยให้ dayo ตอบ `UNKNOWN_CODE` ทีหลัง) · ขนาดที่ไม่ตรงรูป = แคตตาล็อกอ่านไม่ได้ (เก็บฉบับเดิม)
+13. **`timeFrom`/`timeTo` ของโปรส่งเป็น `"HH:MM:SS"`** (ชนิด `time` ดิบ) ไม่ใช่ `"HH:MM"` · schema ฝั่งแท็บเล็ตรับทั้งสองรูป · **ห้ามแท็บเล็ตตัด/แปลงค่าเอง** ต้องส่งเข้าตัวคิดราคาตรงตัวเพื่อคิดเหมือน shared ของ dayo ทุกตัวอักษร · ผลข้างเคียงที่รู้แล้ว: shared เทียบสตริง `"17:00" < "17:00:00"` จึงไม่ให้โปรในนาทีแรกของช่วง ขณะที่ SQL (`quote_order`) ให้ → บิลนาทีแรกของโปรจำกัดเวลาจะมี `computed_total ≠ total` · **แจ้ง dayo ให้แก้ที่ต้นทาง** (ส่ง `left(time::text, 5)` แบบ `0020_api_v1.sql:126`) — ไม่แก้ฝั่งแท็บเล็ต
 
 ### 4.5 E2 — `POST /v1/pos/push` (ล็อก)
 
-scope: ตรวจ **ต่อแถว** ตามชนิด (`order`/`order_void` ต้องมี `orders:write`) · key ที่ไม่มี scope ของชนิดใด → แถวนั้น `rejected / FORBIDDEN` แถวอื่นทำต่อ · RPC ใหม่ `api_pos_push(p_shop_id, p_api_client_id, p_scopes, p_rows)` ก้อนเดียว (P2)
+scope: **ที่ dayo ship จริง** — key ที่ไม่มี `orders:write` ได้ **HTTP 403 `DY403` ทั้งคำขอ** ก่อนถึงแถวใด (`0052_pos_push.sql:725-726`) · การตรวจต่อแถว (`rejected / FORBIDDEN`) ยังอยู่ในโค้ดแต่ไปไม่ถึงในก้อน 1–2 (มีชนิดเดียวที่ต้องใช้ scope เดียว) · ก้อน 3–6 ที่มีหลาย scope: ตรวจต่อแถวตามชนิด (ล็อกใหม่ตอนเริ่มก้อน 3) · แท็บเล็ตทำกับ 403 ทั้งคำขอตาม §6.3 · RPC ใหม่ `api_pos_push(p_shop_id, p_api_client_id, p_scopes, p_rows)` ก้อนเดียว (P2)
 
 **คำขอ**
 
@@ -266,7 +272,7 @@ scope: ตรวจ **ต่อแถว** ตามชนิด (`order`/`order
 | `pos_order_id` | uuid | ✓ | `order.id` ในแท็บเล็ต → `orders.pos_order_id` (unique ต่อ `api_client_id`) |
 | `receipt_no` | string `^[A-Z]{1,3}-\d{6}$` | ✓ | เลขใบเสร็จ POS → `orders.external_ref` (unique ต่อ `api_client_id` ตามเดิม) |
 | `queue_no` | int 1–9999 | ✓ | เลขคิว → `orders.pos_queue_no` |
-| `sale_date` | `YYYY-MM-DD` | ✓ | ต้องเท่ากับวันที่ไทยของ `sold_at` · ≤ วันนี้ · ≥ วันนี้ − 60 วัน |
+| `sale_date` | `YYYY-MM-DD` | ✓ | ต้องเท่ากับวันที่ไทยของ `sold_at` (ไม่ตรง = `INVALID`) · **> วันนี้ของเซิร์ฟเวอร์ = `deferred CLOCK_AHEAD`** (ไม่ใช่ rejected — `0052_pos_push.sql:357-358`) · ≥ วันนี้ − 60 วัน (ไม่ตรง = `INVALID`) |
 | `sold_at` | ISO UTC | ✓ | เวลาชำระ → `orders.sold_at` · `sale_time` ของการคิดโปร = `to_char(sold_at at time zone 'Asia/Bangkok', 'HH24:MI')` (ตัดวินาที ไม่ปัด) (เชื่อได้ — ADR-0040 ข้อ 4) · เกินเวลาเซิร์ฟเวอร์ + 5 นาที → `deferred CLOCK_AHEAD` |
 | `channel` | string | ✓ | `sales_channels.code` |
 | `payment` | string | ✓ | `payment_methods.code` (แท็บเล็ต: `cash` หรือ `qr`) |
@@ -275,7 +281,7 @@ scope: ตรวจ **ต่อแถว** ตามชนิด (`order`/`order
 | `shift_id` | uuid หรือ null | ก้อน 2: **ส่ง null เสมอ** (กะช่วงก้อน 2 ไม่มีในฐานกลาง) · ก้อน 3: บังคับ **ยกเว้นบิลของกะที่เป็น `local_only` (เปิดก่อนก้อน 3 ใช้งานจริง) ส่ง null เสมอ แม้ก้อน 3 ใช้งานแล้ว** | → `orders.pos_shift_id` · **ผูกทีหลังได้**: ไม่มี FK และ dayo ไม่รอกะ — บิลไม่ถูกบล็อกเพราะกะยังไม่มา/ถูกปฏิเสธ (§4.10 ก้อน 3) |
 | `lines` | array 1–50 | ✓ | รวม ≤ 500 แก้ว (กติกา `DY422 too_large` เดิม) |
 | `lines[].code` | string | ✓ | `menu_items.code` |
-| `lines[].size` / `sweetness` | string | ✓ | ค่าตาม §4.1 |
+| `lines[].size` / `sweetness` | string | ✓ | ค่าตาม §4.1 · dayo ตรวจแค่เป็นข้อความ ≤ 20 / ≤ 10 ตัว แล้วหาตัวแปร `(menu, size, sweetness)` (รวมที่ปิดใช้) · ไม่พบ = `UNKNOWN_CODE` (`0052_pos_push.sql:293, 381-386`) |
 | `lines[].milk` | `"fresh"`/`"oat"` | ✓ | **ห้าม null** — แท็บเล็ตส่งค่าที่ตีความแล้ว ณ ตอนขาย (ค่าเริ่มต้นร้านอาจเปลี่ยนก่อนบิลมาถึง) |
 | `lines[].grade` | string/null | ✓ | เมนูมัตจะ (`isMatcha`) ต้องส่งรหัสเกรดที่ตีความแล้ว (ห้าม null) · เมนูอื่นต้องเป็น null |
 | `lines[].qty` | int 1–999 | ✓ | บิล POS **ไม่ตรวจ/ไม่บีบ** กับ `maxQtyPerLine` ปัจจุบัน (ค่านั้นใช้ตอนขายบนแท็บเล็ต) · เพดาน 1–999 ตาม check ของ `order_items.qty` |
@@ -315,19 +321,20 @@ scope: ตรวจ **ต่อแถว** ตามชนิด (`order`/`order
 ```
 
 กติกาฝั่ง dayo ของแถว `order` (ล็อก — รายละเอียดใน P2)
-0. **ตรวจก่อนเรียก `create_order` ตามลำดับนี้ (ล็อก)** (ใน `api_pos_push`): **(1) เทียบ hash เนื้อหาของ key กันซ้ำก่อนเสมอ** — มี key นี้ใน `api_idempotency_keys` (ผลที่บันทึกสำเร็จภายใน 30 วัน): hash เท่า → `duplicate` ผลเดิม · hash ต่าง → **`CONFLICT`** แล้วหยุด · ไม่มี key → ไปข้อ (2) · **(2)** (ก0) `pos_order_id` นี้อยู่ใน `pos_excluded_orders` แล้ว → `rejected CONFLICT` (ก) มีบิล `(api_client_id, pos_order_id)` นี้แล้ว → `duplicate` คืนบิลนั้น (ข) มีบิล `(api_client_id, external_ref = receipt_no)` แต่ `pos_order_id` ต่างหรือว่าง → **`CONFLICT` เสมอ ห้ามเป็น `duplicate`** (ค) ไม่พบทั้งคู่ → สร้าง · ทางลัด "external_ref ซ้ำ = คืนบิลเดิม" ภายใน `create_order` (0008) ต้องเทียบ `pos_order_id` ด้วย: ไม่ตรง → raise `DY409 external_ref_taken` → แผนที่เป็น `CONFLICT` (กรณีสองคำขอชนกันพร้อมกัน)
+0. **ตรวจก่อนเรียก `create_order` ตามลำดับนี้ (ล็อก)** (ใน `api_pos_push`): **(1) เทียบ hash เนื้อหาของ key กันซ้ำก่อนเสมอ** — มี key นี้ใน `api_idempotency_keys` (ผลที่บันทึกสำเร็จภายใน 30 วัน): hash เท่า → `duplicate` ผลเดิม · hash ต่าง → **`CONFLICT`** แล้วหยุด · ไม่มี key → ไปข้อ (2) · **(2)** (ก0) `pos_order_id` นี้อยู่ใน `pos_excluded_orders` แล้ว → `rejected CONFLICT` (**ยังไม่ทำ** — dayo เลื่อนไปพร้อม ADR-0056 ก้อน 3 · ADR-0049 ข้อ 3) (ก) มีบิล `(api_client_id, pos_order_id)` นี้แล้ว → `duplicate` คืนบิลนั้น (ข) มีบิล `(api_client_id, external_ref = receipt_no)` แต่ `pos_order_id` ต่างหรือว่าง → **`CONFLICT` เสมอ ห้ามเป็น `duplicate`** (ค) ไม่พบทั้งคู่ → สร้าง · ทางลัด "external_ref ซ้ำ = คืนบิลเดิม" ภายใน `create_order` (0008) ต้องเทียบ `pos_order_id` ด้วย: ไม่ตรง → raise `DY409 external_ref_taken` → แผนที่เป็น `CONFLICT` (กรณีสองคำขอชนกันพร้อมกัน)
 1. เรียก `create_order` ภายใน (quote ซ้ำ · แช่แข็งต้นทุน · หักสต็อก · `amount_mismatch` เมื่อต่าง > ฿1 · เก็บ `pos_computed_total` ทุกบิล) ด้วย actor = `{api_client_id, staff_id}`
-2. **บิลจากแท็บเล็ตไม่ถูกปฏิเสธเพราะแคตตาล็อกเปลี่ยนหลังขาย**: เมนู/ตัวแปร/ตัวเลือก/ช่องทาง/วิธีชำระ/โปรที่ถูกปิดใช้แล้วยังใช้คิดได้ (ขยาย `include_inactive` ที่ `dayo_quote` ทำกับเมนูอยู่แล้วให้ครอบตัวเลือก ช่องทาง วิธีชำระ) · ถูกปฏิเสธเฉพาะ **รหัสที่ไม่มีในร้านเลย** (`UNKNOWN_CODE`)
+2. **บิลจากแท็บเล็ตไม่ถูกปฏิเสธเพราะแคตตาล็อกเปลี่ยนหลังขาย**: เมนู/ตัวแปร/ตัวเลือก/ช่องทาง/วิธีชำระที่ถูกปิดใช้แล้วยังใช้คิดได้ (ขยาย `include_inactive` ที่ `dayo_quote` ทำกับเมนูอยู่แล้วให้ครอบตัวเลือก ช่องทาง วิธีชำระ) · ถูกปฏิเสธเฉพาะ **รหัสที่ไม่มีในร้านเลย** (`UNKNOWN_CODE`) · **โปร (แก้ตาม ADR-0049 ข้อ 5 + ADR-0053)**: dayo หาสถานะโปร **ณ `sold_at`** จากประวัติเปิด/ปิด — โปรที่ปิด *หลัง* เวลาขายยังคิดให้ · โปรที่ปิด *ก่อน* เวลาขาย **ไม่ถูกคิด** แม้แท็บเล็ตใช้ (แคตตาล็อกในเครื่องเก่า) → บิลไม่ถูกปฏิเสธ แต่ `computed_total ≠ total` (และ `amount_mismatch` เมื่อต่าง > ฿1) ขึ้นในรายการ "ยอดไม่ตรงระบบกลาง" ของแท็บเล็ต · บิลมีหมายเหตุ `closed_promotions` ฝั่ง dayo (ไม่กระทบเงิน)
 3. ไม่ใช้เพดานบันทึกย้อนหลังตามบทบาท (ADR-0020/0046) กับบิลจากแท็บเล็ต — ใช้ช่วง ≤ 60 วันในตาราง
 4. `staff_id` ต้องเป็นพนักงานของร้านสถานะ `active` **หรือ** `removed` (ขายไปก่อนถูกปลด) · `pending`/ไม่พบ → `UNKNOWN_STAFF`
 5. ตรวจธงบิลน่าจะซ้ำ (§4.8) หลังบันทึก
+6. **ลำดับตรวจแถวที่ dayo ship จริง** (`0052_pos_push.sql:560-620` — mock ของ POS ต้องทำตามนี้): แถวไม่ใช่ออบเจกต์ `INVALID` → `key` ผิดรูป `BAD_KEY` → `kind` ไม่ใช่ข้อความ `INVALID` → ชนิดใน key ≠ `kind` `BAD_KEY` → ชนิดไม่รู้จัก `deferred UNSUPPORTED` → `data` ไม่ใช่ออบเจกต์ `INVALID` → ฟิลด์ไม่รู้จัก (รวม `lines.*`) `deferred UNSUPPORTED` → ไม่มี `orders:write` `FORBIDDEN` → `pos_order_id` ไม่ใช่ uuid `INVALID` → uuid ใน key ≠ `pos_order_id` `BAD_KEY` → hash ของ key (ข้อ 0 (1)) → ตรวจตามชนิด (`order`: รูปฟิลด์ → เวลา/`CLOCK_AHEAD` → วันขาย → ผู้ขาย → รหัส · `order_void`: รูปฟิลด์ → ผู้ทำ → `CLOCK_AHEAD` → 60 วัน → หาบิล)
 
 **แถวชนิด `order_void`** — key = `order_void:<pos_order_id>` (บิลละครั้งเดียว)
 
 | ฟิลด์ | ชนิด | บังคับ | กติกา |
 |---|---|---|---|
 | `pos_order_id` | uuid | ✓ | บิลที่ยกเลิก (ต้องเป็นบิลของ API key นี้) |
-| `voided_at` | ISO UTC | ✓ | เวลายกเลิกในเครื่อง · วันที่ไทยต้อง **เท่ากับ `sale_date` ของบิล** (ไม่ตรง = `FORBIDDEN`) · ≥ `sold_at` (ไม่ตรง = `INVALID`) · เกินเวลาเซิร์ฟเวอร์ + 5 นาที = **`deferred CLOCK_AHEAD`** (ไม่ใช่ rejected — ส่งซ้ำทีหลังผ่านได้) |
+| `voided_at` | ISO UTC | ✓ | เวลายกเลิกในเครื่อง · วันที่ไทยต้อง **เท่ากับ `sale_date` ของบิล** (ไม่ตรง = `FORBIDDEN`) · ≥ `sold_at` (ไม่ตรง = `INVALID`) · เกินเวลาเซิร์ฟเวอร์ + 5 นาที = **`deferred CLOCK_AHEAD`** (ไม่ใช่ rejected — ส่งซ้ำทีหลังผ่านได้) · **เก่ากว่าเวลาเซิร์ฟเวอร์ − 60 วัน = `rejected INVALID`** (ตรวจก่อนหาบิล — `0052_pos_push.sql:491-494`) |
 | `staff_id` | uuid | ✓ | คนกดยกเลิก → `orders.cancelled_by` |
 | `approved_by` | uuid/null | | owner ที่อนุมัติด้วย PIN (D50 Q3-22) → เก็บใน `audit_log.after` |
 | `reason` | string 1–200 | ✓ | → `orders.cancel_reason` |
@@ -371,13 +378,13 @@ scope: ตรวจ **ต่อแถว** ตามชนิด (`order`/`order
 | `UNKNOWN_STAFF` | `staff_id`/`approved_by` ไม่ใช่พนักงาน active หรือ removed ของร้าน |
 | `CONFLICT` | key เดิมแต่เนื้อหาต่างจากที่เคย **บันทึกสำเร็จ** · `receipt_no` นี้ถูกใช้แล้วกับ `pos_order_id` อื่น (หรือว่าง) ของ API key เดียวกัน |
 | `ALREADY_PRESENT` | (ตระกูล `CONFLICT`) `order_excluded` ของบิลที่มีอยู่ในฐานกลางแล้ว — ห้ามกันบิลจริงออก (ก้อน 3) |
-| `FORBIDDEN` | key ไม่มี scope ของชนิดนี้ · ยกเลิกบิลที่ไม่ใช่ของ key นี้ · ผิดกติกาวันยกเลิก (`voided_at` คนละวันกับ `sale_date`) |
+| `FORBIDDEN` | key ไม่มี scope ของชนิดนี้ (ก้อน 1–2 ไปไม่ถึง — dayo ตอบ 403 ทั้งคำขอก่อน) · ยกเลิกบิลที่ไม่ใช่ของ key นี้ · ผิดกติกาวันยกเลิก (`voided_at` คนละวันกับ `sale_date`) |
 
 | reason (`deferred`) | เกิดเมื่อ |
 |---|---|
 | `PARENT_PENDING` | แถวอ้างบิล/กะที่ยังไม่มีในฐานกลางและไม่อยู่ก่อนหน้าในคำขอเดียวกัน (เช่น `order_void` ของบิลที่ยังมาไม่ถึง) — ฝั่ง dayo ไม่ตอบ "ไม่พบ" แบบถาวรเด็ดขาด เพราะแถวแม่อาจกำลังมา |
 | `BUSY` | ล็อกชน / deadlock / serialization / หมดเวลา / คีย์กำลังถูกใช้โดยคำขออื่น |
-| `CLOCK_AHEAD` | `sold_at`/`voided_at` เกินเวลาเซิร์ฟเวอร์ + 5 นาที |
+| `CLOCK_AHEAD` | `sold_at`/`voided_at` เกินเวลาเซิร์ฟเวอร์ + 5 นาที · `sale_date` เป็นวันพรุ่งนี้ของเซิร์ฟเวอร์ |
 | `UNSUPPORTED` | `kind` หรือฟิลด์ที่ dayo รุ่นนี้ยังไม่รู้จัก (§4.1 ความเข้ากันได้) |
 | `SERVER_ERROR` | error อื่นทุกชนิดที่ไม่ได้แผนที่ไว้ในตารางด้านล่าง — **เฉพาะแถวนั้น** ไม่ทำให้ทั้งคำขอเป็น 5xx · `detail` = SQLSTATE + รหัส DY (ไม่มีข้อความดิบ) · ฝั่ง dayo `console.error` → Discord (ADR-0044) |
 
@@ -407,14 +414,23 @@ scope: ตรวจ **ต่อแถว** ตามชนิด (`order`/`order
 - `heartbeat` ลบ `api_idempotency_keys` ที่เก่ากว่า 30 วัน — หลังจากนั้นกันซ้ำด้วยการตรวจข้อ 0: `pos_order_id` เดิม = `duplicate` · `external_ref` เดิมแต่ `pos_order_id` ต่าง = **`CONFLICT`** (ห้ามเป็น `duplicate` เด็ดขาด — ไม่งั้นบิลใหม่หายเงียบ) · ข้อจำกัดที่ยอมรับ: หลังคีย์ถูกลบ ส่ง `pos_order_id` เดิมด้วยเนื้อหาต่าง = `duplicate` (ไม่ใช่ `CONFLICT`) — ไม่มีเงินหาย เพราะบิลนั้นอยู่ในฐานแล้ว
 - แต่ละแถวทำใน savepoint ของตัวเอง (`begin … exception … end` ใน plpgsql) → แถวที่ล้มไม่ย้อนแถวอื่น · แถวถัดไปเห็นแถวก่อนหน้าในคำขอเดียวกัน (บิล + ยกเลิกบิลเดียวกันในก้อนเดียวผ่านได้)
 
-error ทั้งคำขอ (ไม่มี `results`): 401 key ผิด/ถูกเพิกถอน · 403 key ไม่มี scope ใดเลยที่ endpoint นี้ต้องใช้ · 404 API ปิด · 422 ซองผิด · 429 เกินอัตรา · 5xx **เฉพาะเมื่อเรียก RPC ไม่ได้เลย** (ต่อฐานไม่ได้/Worker ล้ม) — error ของแถวไม่เป็น 5xx · ทุกกรณีมีหัว CORS (§4.1) → แท็บเล็ตทำตาม §6.3
+error ทั้งคำขอ (ไม่มี `results`): 401 key ผิด/ถูกเพิกถอน · 403 key ไม่มี `orders:write` (ก้อน 1–2 · ดูบรรทัด scope ต้น §4.5) · 404 API ปิด · 422 ซองผิด · 429 เกินอัตรา · 5xx **เฉพาะเมื่อเรียก RPC ไม่ได้เลย** (ต่อฐานไม่ได้/Worker ล้ม) — error ของแถวไม่เป็น 5xx · ทุกกรณีมีหัว CORS (§4.1) → แท็บเล็ตทำตาม §6.3
 
 ### 4.6 E3 — `GET /v1/orders?from=&to=&updated_since=` (มีอยู่แล้ว · ขยายฟิลด์ — ล็อก)
 
 scope `orders:read` · ใช้แสดง "บิลจากบอท/เว็บของวันนี้" บนแท็บเล็ต (กันคนบันทึกซ้ำ — 03 §8 ข้อ 3) · แท็บเล็ตดึงเมื่อเปิดหน้านั้น และทุก 5 นาทีระหว่างที่หน้าเปิดอยู่
 เพิ่มฟิลด์ต่อบิล (P2): `sold_at` (ISO หรือ null) · `created_by_name` (ชื่อพนักงาน หรือ null) · `pos_receipt_no` (= `external_ref` เมื่อ `source='pos'`) · `pos_queue_no` · `catalog_version` · `duplicate_suspect` (bool — มีธงเปิดอยู่) · ฟิลด์เดิมคงเดิมทั้งหมด (ไม่มีต้นทุน/กำไร)
+**ฟิลด์ที่ dayo ship เพิ่ม (ADR-0050 ข้อ 3/6 · `0052_pos_push.sql:821-831`)**:
+- **`dayo_edit`**: `{kind: "edit" | "cancel", edited_at, edited_by_name, reason, version}` หรือ `null` (= บิลไม่เคยถูกแก้/ยกเลิกจากฝั่ง dayo) · เป็นการแก้ล่าสุดที่ **ไม่ได้มาจาก API key** (การยกเลิกของแท็บเล็ตเองไม่นับ) · `edited_by_name` และ `reason` เป็น `null` ถ้า key ไม่มี `staff:read` (เช่นเดียวกับ `created_by_name`)
+- **`pos_order_id`**: uuid ของบิลในเครื่อง **เฉพาะบิลของ API key นี้** · บิลอื่น = `null`
+- `updated_at` **ไม่เป็น null อีก** (`coalesce(updated_at, created_at)`) — schema ฝั่งแท็บเล็ตยังรับ null ได้
+- หลัง owner แก้บิล POS บนเว็บ: `totals`/`status` ใน E3 เป็นยอดที่ dayo คิดใหม่ · ยอดที่ POS รายงานเดิมแช่แข็งใน `orders.pos_reported_amounts` (ไม่ส่งใน E3)
 
-### 4.7 แหล่งและผู้บันทึกของบิล · บิลจาก POS อ่านอย่างเดียวบนเว็บ (ล็อก)
+แท็บเล็ตใช้ E3 สองทาง: (1) หน้า "บิลบอท/เว็บวันนี้" = บิลที่ `source ≠ 'pos'` (เดิม) (2) **บิล POS ของตัวเอง** (`pos_order_id` ไม่ว่าง) → เก็บ `dayo_edit` ลงบิลในเครื่อง แล้วแสดง **แบบอ่านอย่างเดียว** บนรายละเอียดบิล ("เจ้าของแก้/ยกเลิกบนเว็บ: <เหตุผล>") · `kind = 'cancel'` → ซ่อนปุ่มยกเลิกบนแท็บเล็ต · **ใบเสร็จ ยอดบิล และยอดกะในเครื่องคงเป็นเงินที่เก็บจริง** ไม่เปลี่ยนตามยอดใหม่ของ dayo (ส่วนการกระทบยอดเงินสด: **รอเจ้าของ O1** และก้อน 3)
+
+### 4.7 แหล่งและผู้บันทึกของบิล · บิลจาก POS อ่านอย่างเดียวบนเว็บ (ล็อก — ยกเว้นข้อสุดท้าย: **รอเจ้าของ O1**)
+
+> **รอเจ้าของ O1** — dayo ship ADR-0050 ข้อ 3 ไปแล้ว (เจ้าของอนุมัติฝั่ง dayo): **owner แก้และยกเลิกบิล `source='pos'` บนเว็บได้ทุกวัน ต้องกรอกเหตุผล** (บอท/manager/staff/API ทำไม่ได้) · ขัดกับข้อสุดท้ายของหัวข้อนี้และ **D76** (บิล POS ของวันที่ปิดแล้วอ่านอย่างเดียว) · สเปกยังไม่เลือกข้างจนเจ้าของตอบ O1 (บันทึก D ใหม่ว่า ADR-0050 แทน D76 หรือไม่ และยอมรับหรือไม่ว่ายอดในเครื่อง/เงินในลิ้นชักจะต่างจากยอดกลางจนก้อน 3) · **ระหว่างรอ งานก้อน 2 ทำเท่าที่ไม่ขึ้นกับคำตอบ**: แท็บเล็ตแสดง `dayo_edit` แบบอ่านอย่างเดียว (§4.6) เพราะ dayo ส่งมาแน่แล้ว · ไม่มีฟีเจอร์แก้บิลบนแท็บเล็ต · ไม่ปรับยอดในเครื่อง
 
 - แหล่ง = `orders.source` ค่าเดิมของ dayo: `pos` (แท็บเล็ต) · `line` (บอท — หน้าจอแสดงคำว่า "บอท") · `web` · **ไม่เปลี่ยนชื่อค่า** (brief เรียก `bot` แต่ค่าจริงในฐานคือ `line`)
 - ผู้บันทึก = `orders.created_by` → `staff` · บิลจากแท็บเล็ตต้องมีเสมอ (`staff_id` บังคับใน E2) · บิลจากบอท/เว็บมีอยู่แล้ว (ADR-0024 ข้อ 2)
@@ -435,7 +451,7 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 - ตรวจใน RPC ทุกครั้งที่บิลถูกสร้าง หรือถูกแก้รายการ (ไม่สนว่าบิลไหนมาถึงก่อน — บิลแท็บเล็ตที่มาถึงช้าก็จับคู่ได้)
 - เจอคู่ → แทรก `order_duplicate_flags (id, shop_id, order_a_id, order_b_id, detected_at, status 'open', resolved_by, resolved_at, resolution_note)` · unique คู่ `(least(a,b), greatest(a,b))`
 - **ไม่บล็อกการบันทึกเด็ดขาด** · คำตอบ E2 มี `duplicate_of` · แท็บเล็ตแสดงป้าย "อาจซ้ำกับบิลบอท L260925-013" บนหน้ารายละเอียดบิล (ไม่เด้งกลางการขาย)
-- ปิดธง: owner บนแดชบอร์ดเว็บ กด "ไม่ซ้ำ" (`resolved_not_duplicate` + หมายเหตุ) หรือยกเลิกบิลใดบิลหนึ่ง → ธงปิดเองเป็น `resolved_cancelled` · บิล POS ยกเลิกที่แท็บเล็ตในวันเดียวกันเท่านั้น (§4.7) จึงแนะนำให้ยกเลิกฝั่งบอท/เว็บ
+- ปิดธง: owner บนแดชบอร์ดเว็บ กด "ไม่ซ้ำ" (`resolved_not_duplicate` + หมายเหตุ) หรือยกเลิกบิลใดบิลหนึ่ง → ธงปิดเองเป็น `resolved_cancelled` · บิล POS ยกเลิกที่แท็บเล็ตในวันเดียวกันเท่านั้น (§4.7) จึงแนะนำให้ยกเลิกฝั่งบอท/เว็บ (dayo ship ให้ owner ยกเลิกบิล POS บนเว็บได้ด้วย → ธงปิดเป็น `resolved_cancelled` — **รอเจ้าของ O1**)
 - แดชบอร์ด owner แสดงจำนวนธงที่เปิดอยู่ · คำตอบ `ยอดวันนี้` ของ owner ในบอทเติม "⚠ บิลที่อาจซ้ำ N ใบ" (reply ไม่เสียโควตา)
 
 ### 4.9 สิ่งที่เปลี่ยนในฐานกลางสำหรับก้อน 1–2 (ล็อก — migration ใหม่ของ dayo)
@@ -448,7 +464,7 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 | `api_clients` | scope ที่อนุญาตเพิ่ม `staff:read` (ก้อน 1) · `shift:write` `expense:write` `payroll:write` (เพิ่มในก้อนนั้น ๆ) |
 | `api_idempotency_keys` | `endpoint` check เพิ่ม `'pos_push'` |
 | `menu_items` `sales_channels` `payment_methods` | `code` ที่ถูกบิลอ้างแล้วเปลี่ยนไม่ได้ (`DY422` แบบเดียวกับรหัสตัวเลือกใน 0005 · แก้ `save_menu_item` `save_channel` `save_payment_method` ที่ตอนนี้เปลี่ยน `code` ได้เมื่อส่ง id) — กันบิลออฟไลน์อ้างรหัสที่หายไป (Q51) |
-| RPC | ใหม่ `api_pos_catalog` `api_pos_push` · แก้ `create_order` (เติม `sold_at` `catalog_version` `items_signature` + ตรวจซ้ำ) · `update_order` (ตรวจซ้ำใหม่เมื่อแก้รายการ + ห้ามแก้บิล POS จาก staff actor) · `cancel_order` (ปิดธง + ห้ามยกเลิกบิล POS จาก staff actor) · `dashboard_*` (ธงซ้ำ) · `backup_dump_table` (ตารางใหม่) |
+| RPC | ใหม่ `api_pos_catalog` `api_pos_push` · แก้ `create_order` (เติม `sold_at` `catalog_version` `items_signature` + ตรวจซ้ำ) · `update_order` (ตรวจซ้ำใหม่เมื่อแก้รายการ + ห้ามแก้บิล POS จาก staff actor — dayo ship เป็น "owner แก้ได้พร้อมเหตุผล" **รอเจ้าของ O1**) · `cancel_order` (ปิดธง + ห้ามยกเลิกบิล POS จาก staff actor — เช่นเดียวกัน O1) · `dashboard_*` (ธงซ้ำ) · `backup_dump_table` (ตารางใหม่) |
 | Route Handler | `app/api/v1/pos/catalog/route.ts` · `app/api/v1/pos/push/route.ts` · CORS ใน `lib/api/response.ts` (`apiHandler` — ที่เดียวกับสวิตช์ `API_V1_ENABLED`) + `OPTIONS` ของทุก route · `lib/api/orders.ts` (`listApiOrders` ฟิลด์ใหม่) · build ของเว็บเขียน `pricing.commit` + `files_sha256` |
 
 ### 4.10 ก้อน 3–6: โครงข้อมูลและ endpoint ระดับร่าง — **ล็อกก่อนเริ่มก้อนนั้น**
@@ -456,6 +472,9 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 ทุกตารางในส่วนนี้: `id uuid` จากแท็บเล็ต · `shop_id` · `api_client_id` · `created_at` · RLS เปิดไม่มี policy · **append-only** (trigger raise เมื่อ update/delete ยกเว้นคอลัมน์ "ปิด" ที่ตั้งได้ครั้งเดียวจาก null) · ลงไฟล์สำรอง · เงิน `numeric(10,2)` บาท · เข้าทาง `POST /v1/pos/push` ชนิดใหม่ (คำตัดสิน/กันซ้ำแบบเดียวกับ §4.5)
 
 **ก้อน 3 — กะ เงินสด นับเงิน ใบปิดกะ** (P3 · scope `shift:write`)
+
+> dayo **เลื่อน ADR-0056** ไปตัดสินตอนเริ่มก้อน 3 พร้อมคำถามใหม่ 3 ข้อ (ขัด ADR-0024 ข้อ 2 · `pos_excluded_orders` ทำให้รายได้อยู่นอก `orders` — เสนอ "บิลพิเศษใน `orders`" แทน · ต้องล็อกลำดับ lane) · เนื้อหาก้อน 3 ข้างล่าง (`order_excluded`, `ALREADY_PRESENT`) อาจเขียนใหม่ · ต้องออกแบบการกระทบยอดเงินสดเมื่อ owner แก้บิล POS บนเว็บด้วย (**O1**)
+
 - `shifts`: `business_date`, `opened_by`, `opened_at`, `opening_float`, `closed_by`, `closed_at` (ตั้งครั้งเดียว), `status` `open` → `counted` (รับนับเงินแล้ว รอ Z — Q43) → `closed` (รับ Z แล้ว) · unique สถานะ `open` ต่อ `api_client_id` (กะถัดไปเปิดได้ขณะกะก่อนเป็น `counted`)
 - `cash_movements`: `shift_id`, `kind` (`PAID_IN`/`PAID_OUT`/`DROP`/`VOID_REFUND` — enum เดียวกับ POS), `amount > 0`, `pos_order_id` (เฉพาะ `VOID_REFUND`), `reason`, `created_by`, `created_at` (เวลาเครื่อง) · **`VOID_REFUND` เป็นแหล่งความจริงเดียวของเงินคืนจากบิลที่ยกเลิก** (`order_void` ไม่มีข้อมูลคืนเงิน)
 - `cash_counts`: `shift_id`, `lines jsonb [{denomination, count}]` (9 ชนิด 1000…1 บาท — D52), `counted`, `expected`, `variance`, `reason`, `counted_by`, `counted_at` (เวลาเครื่องตอนนับ)
@@ -471,6 +490,9 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 - แดชบอร์ด dayo: 1 บรรทัดต่อกะ "กะ 25 ก.ย. · เปิด 09:02 TungAo · ปิด 20:41 · ขาด ฿20" (Q20)
 
 **ก้อน 4 — ค่าใช้จ่าย + กำไรสุทธิ** (P4 · scope `expense:write`)
+
+> **รอเจ้าของ O3** — dayo ยอมรับ **ADR-0055** แทน P4 ข้อ 6: API **ไม่ส่งตัวเลขกำไรเลย** · ปุ่ม "ดูกำไร" บนแท็บเล็ตเรียก `POST /v1/pos/profit-view` (scope `reports:profit`) ได้ `{request_id, url, method, expires_at}` แล้ว **เปิดหน้าเว็บ dayo** แบบอ่านอย่างเดียว · ยืนยันด้วย OTP ทาง LINE หรือรหัส 6 หลักที่ owner ตั้ง · session 15 นาที · `POST /v1/pos/profit-session` `/profit` และรหัสปลดล็อกข้างล่าง **ถูก dayo ยกเลิก** (ADR-0055 ข้อ 1–4) · ขัดกับ **D79** (Q54 ทาง ก) และข้อ "ปลดล็อกรายงานกำไร…" `POST /v1/pos/profit` ข้างล่าง · ไม่กระทบก้อน 2 · ข้อความข้างล่างคงไว้จนเจ้าของตอบ O3 แล้วเขียนใหม่ตอนล็อกก้อน 4 · ADR-0057 (ค่าใช้จ่าย) ยังเลื่อน มีคำถามเปิดว่าเว็บบันทึกค่าใช้จ่ายได้ด้วยหรือไม่ (อาจเปลี่ยน Q46/D70)
+
 - `expense_categories` (แก้บนเว็บ owner · มากับ E1 เป็น `expense_categories: [{id, name, counts_in_profit, active}]` **ระดับเดียวกับ `staff`**): `counts_in_profit = false` สำหรับ "ซื้อวัตถุดิบเข้าสต็อก" (ต้นทุนนับผ่านต้นทุนขายแล้ว — กันนับซ้ำ)
 - `expenses`: `spent_on date`, `category_id`, `description`, `amount > 0`, `paid_from` `drawer`/`bank`, `shift_id` (บังคับเมื่อ `drawer`), `pay_sheet_id` (ก้อน 6), `created_by`, `voided_at/voided_by/void_reason` (ตั้งครั้งเดียว)
 - ชนิด push: `expense` · `expense_void` (จ่ายจากลิ้นชักยกเลิกได้เมื่อ `voided_at` ≤ `counted_at` ของการนับเงินของกะนั้น หรือกะยังไม่ถูกนับ — ตัดสินด้วยเวลาในแถว · จากธนาคารยกเลิกได้เสมอ)
@@ -505,7 +527,11 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 ### 4.11 วิธีคุมสัญญาให้สองทีมทำขนานกัน
 
 1. สัญญาข้างบน (§4.1–4.9) เป็น zod schema ใน POS `packages/contracts/src/dayo-api.ts`: `PosCatalogResponse`, `PushRequest`, `PushRow` (ต่อชนิด), `PushResponse` (แบบยอมรับค่าที่ไม่รู้จัก — ลอก `ReceivedRowResult` จากแผน 5), `OrdersListResponse`
-2. ตัวอย่าง JSON ในเอกสารนี้ (คำขอ + คำตอบ ต่อสถานการณ์: ใหม่ ซ้ำ ชนใบเสร็จ key เดิมเนื้อหาต่าง ยกเลิกข้ามวัน ยกเลิกนาฬิกาเร็ว รหัสไม่รู้จัก ชนิดไม่รู้จัก error ไม่คาดคิดของแถว ฉบับไม่เปลี่ยน · 401/404/429 พร้อมหัว CORS) มี **ต้นฉบับอยู่ใน repo dayo** ที่ `apps/web/test/fixtures/pos-contract/` เพราะสะท้อนคำตอบของเซิร์ฟเวอร์จริง (D82) · dayo ใช้เป็นเทสต์ของ Route Handler · POS คัดลอกไปไว้ที่ `packages/contracts/fixtures/dayo-api/*.json` และตรวจ sha256 (แปลง CRLF→LF ก่อนคิด) ว่าตรงกันทุกไฟล์ · เทสต์ POS: ทุกไฟล์ผ่าน schema และ mock server เล่นซ้ำได้ครบ (dayo ไม่ import แพ็กเกจ POS)
+2. ตัวอย่าง JSON ในเอกสารนี้ (คำขอ + คำตอบ ต่อสถานการณ์: ใหม่ ซ้ำ ชนใบเสร็จ key เดิมเนื้อหาต่าง ยกเลิกข้ามวัน ยกเลิกนาฬิกาเร็ว รหัสไม่รู้จัก ชนิดไม่รู้จัก error ไม่คาดคิดของแถว ฉบับไม่เปลี่ยน · 401/404/429 พร้อมหัว CORS) เป็นไฟล์ fixture สัญญา · **เจ้าของไฟล์ตอนนี้ = POS** (คำวินิจฉัยของผู้คุมงาน O4 · 26 ก.ย. 2569) เพราะ dayo ship ก้อน 1A โดยไม่มีชุด fixture (ไม่มี `apps/web/test/fixtures/pos-contract/` ใน repo dayo) และแท็บเล็ตรอไม่ได้:
+   - ต้นฉบับอยู่ที่ POS `packages/contracts/fixtures/dayo-api/*.json` (+ `.gitattributes` `*.json text eol=lf`) · **สร้างจาก SQL ของ dayo `main`** (ไม่ใช่จาก `docs/API.md` ของ dayo) และเมื่อเชื่อมจริงได้ ให้แทนด้วย **คำตอบจริงของ `dayo-test`/Supabase local** · ห้ามแก้เนื้อหาเพื่อให้เทสต์ POS ผ่าน — ต่างจากคำตอบจริง = แก้ fixture ให้ตรงของจริงแล้วแก้โค้ด
+   - เทสต์ POS: ทุกไฟล์ผ่าน schema และ mock server เล่นซ้ำได้ครบ · sha256 หลังแปลง CRLF→LF (`fixtures:hashes`) ใช้เทียบเมื่อมีสำเนาอีกฝั่ง
+   - ส่งชุดนี้ให้ dayo รับไปเป็นเทสต์ Route Handler ของตัวเองในก้อน 1B · **เมื่อ dayo มีชุดของตัวเองแล้ว** ค่อยตัดสินใหม่ว่าใครเป็นเจ้าของ (dayo ไม่ import แพ็กเกจ POS)
+   - **D82** (dayo เป็นเจ้าของ fixture) **ถูกแทนชั่วคราว** — รอบันทึกเป็น D ใหม่พร้อมคำตอบ O1–O3 · ส่วนที่อ้าง D82 ในแผนก้อน 1–2 ให้อ่านตามข้อนี้
 3. ก้อน 2 ใช้ **mock server** ที่สร้างจาก schema + fixture (`apps/pos` dev/test) จนก้อน 1 เสร็จ แล้วทดสอบเชื่อมจริงกับ Supabase local + `npm run dev:web` ของ dayo (`API_V1_ENABLED=1` เฉพาะเครื่อง dev) ก่อนเปิดใน production
 
 ---
@@ -514,10 +540,11 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 
 ### 5.1 แท็บเล็ตใช้ตัวคิดราคาของ dayo (Q8)
 
-- **สำเนาโค้ดที่ปักรุ่น** (Q48): คัดลอก `packages/shared/src/{money,promotions,cost,fmt,shopSettings,types}.ts` และไฟล์ที่ไฟล์เหล่านี้ import (ไม่รวม `xlsx`) ไปไว้ที่ POS `packages/dayo-pricing/src/vendor/` ไม่แก้แม้แต่บรรทัดเดียว · `packages/dayo-pricing/VENDOR.json` = `{ "repo": "dayo-shop-system", "commit": "<sha>", "files": { "<path>": "<sha256>" } }`
+- **สำเนาโค้ดที่ปักรุ่น** (Q48): คัดลอก `packages/shared/src/{money,promotions,cost,fmt,shopSettings,types,time}.ts` (`time.ts` เพราะไฟล์อื่น import — ชุดเดียวกับที่ E1 รายงานใน `files_sha256`) · ไม่รวม `xlsx` ไปไว้ที่ POS `packages/dayo-pricing/src/vendor/` ไม่แก้แม้แต่บรรทัดเดียว · `packages/dayo-pricing/VENDOR.json` = `{ "repo": "dayo-shop-system", "commit": "<sha>", "files": { "<path>": "<sha256>" } }`
 - สคริปต์ `pnpm --filter @dayo/dayo-pricing vendor:check` เทียบ sha256 ของไฟล์ในโฟลเดอร์กับ `VENDOR.json` (รันในเทสต์เสมอ) · `vendor:update <path-to-dayo>` คัดลอกใหม่ + อัปเดต `VENDOR.json` (ทำโดยคนเมื่อ dayo เปลี่ยนตัวคิดราคา)
 - ตัวห่อ `@dayo/domain` → `priceCart(cart, catalog, now)` เรียก `computeOrder` แล้วแปลงด้วย `edgeBahtToSatang` (§4.2) **เฉพาะฟิลด์เงินเหล่านี้**: `itemsSubtotal` `itemsDiscount` `billDiscountAmount` `totalAmount` `channelFeeAmount` · `lines[].unitPrice` `lines[].discountPerCup` `lines[].lineTotal` · `promotionsApplied[].discountAmount` · **ไม่แปลง** `costTotal` `grossProfit` `gpPercent` `lines[].unitCost` (ต้นทุนเป็น 0 ในแท็บเล็ต · `gpPercent` ไม่ใช่เงิน) · `packages/domain/src/pricing.ts` เดิมของ POS เลิกใช้ (§11)
 - **คิดราคาใหม่ ณ วินาทีชำระ**: ตอนกดชำระ แท็บเล็ตเรียก `priceCart(cart, catalog, sold_at)` ด้วย `sold_at` ตัวเดียวกับที่จะส่ง (`sale_time` ตัดวินาทีตาม §4.5) · ผลต่างจากยอดที่ลูกค้าเห็น → กลไก `PRICE_CHANGED` (D50 Q3-27) · `totals` ของ E2 = ผลของการคิดครั้งนี้เท่านั้น
+- **ขนาดและเวลาโปร (ADR-0054 · §4.4 ข้อ 12–13)**: `size` ในตะกร้าเป็น `string` ตาม `Size` ของตัวที่คัดลอก · `priceCart` ส่ง `catalog.sizes` ต่อให้ `OrderCatalog` ตรงตัว · `timeFrom`/`timeTo` ส่งผ่านตรงตัว (ไม่ตัดวินาที) · ตัวตรวจตะกร้าก่อนเก็บเงินปฏิเสธบรรทัดที่ขนาดไม่อยู่ใน `sizes` ที่ active หรือไม่มีตัวแปร
 - ร่างที่ส่งเข้า `computeOrder` ใช้ค่าที่ตีความแล้วเสมอ (`milk`, `grade` ไม่เป็น null ตาม §4.5) · `no_promotions` = ส่ง `skipPromotionIds` เป็น id โปรทุกตัว
 - ชื่อแพ็กเกจ: dayo ใช้ `@dayo/shared` · POS ใช้ scope `@dayo/*` เหมือนกัน → ห้ามตั้งชื่อ POS ว่า `@dayo/shared` (สำเนาอยู่ใต้ `@dayo/dayo-pricing` เท่านั้น)
 
@@ -526,7 +553,7 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 | ชั้น | อยู่ที่ | ตรวจอะไร |
 |---|---|---|
 | ก | dayo (มีอยู่แล้ว + เพิ่มเคส) | `computeOrder` ของ shared = `quote_order` ของ SQL (กฎเหล็กข้อ 3 ของ dayo) · P1 เพิ่มเคสในข้อ 5.3 ลงเทสต์ที่มีอยู่ |
-| ข | dayo → POS | สคริปต์ dayo `scripts/export-pos-parity.ts` (P1) **รันบน commit ที่ deploy อยู่จริง** (= `pricing.commit` ของ E1 production) · ดึง catalog ด้วย **`api_pos_catalog` จริง** (ไม่ประกอบเอง — จับบั๊กการแปลงชื่อฟิลด์) · รันเคสใน 5.3 กับ `quote_order` บน Supabase local แล้วเขียน `pos-parity.json` = `{dayo_commit, pricing_files_sha256, catalog, cases:[{draft, expected}]}` · เจ้าของคัดลอกไฟล์มา POS `packages/dayo-pricing/fixtures/` |
+| ข | dayo → POS | สคริปต์ dayo `scripts/export-pos-parity.ts` (P1) **รันบน commit ที่ deploy อยู่จริง** (= `pricing.commit` ของ E1 production) · ดึง catalog ด้วย **`api_pos_catalog` จริง** (ไม่ประกอบเอง — จับบั๊กการแปลงชื่อฟิลด์) · รันเคสใน 5.3 กับ `quote_order` บน Supabase local แล้วเขียน `pos-parity.json` · เจ้าของคัดลอกไฟล์มา POS `packages/dayo-pricing/fixtures/` · **ที่ dayo ship จริง (ยังไม่เป็นไปตามชั้นนี้ — แจ้ง dayo แล้ว)**: สคริปต์ **ประกอบแคตตาล็อกเองและคิด `expected` ด้วย `computeOrder` ของ shared** ไม่ใช่ `api_pos_catalog` + `quote_order` (`scripts/export-pos-parity.ts:5-11`) จึงจับบั๊กแบบ `timeFrom` `HH:MM:SS` (§4.4 ข้อ 13) ไม่ได้ · รูปไฟล์จริง = `{dayo_commit, generated_at, pricing_files_sha256, catalog, cases:[{spec, note, draft, expected}]}` — **ไม่มี `catalog_version` และไม่มี `id`** (ใช้ `spec` เป็นตัวระบุเคส) · `expected` เป็น `QuoteResult` เต็ม (มี `lines` `promotionsApplied` `warnings`) · 20 จาก 25 เคสไม่มี `saleTime` · ไฟล์แรกอยู่ที่ `docs/design/pos-parity.json` (dayo `a0f76e2`) · ระหว่างนี้ชั้น ค ของ POS ใช้ไฟล์รูปนี้ได้ (ตรวจตัวห่อ+การแปลง) แต่ **ไม่นับเป็นหลักฐาน SQL = shared** จนกว่าสคริปต์เป็นชั้น ข จริง |
 | ค | POS | ต่อทุกเคสใน `pos-parity.json`: `priceCart` ได้สตางค์ **เท่ากันทุกฟิลด์เงิน** กับ `edgeBahtToSatang(expected.*)` (ต่าง 0 สตางค์) · `pricing_files_sha256` ของ fixture ต้องเท่ากับ `VENDOR.json.files` ไม่งั้นเทสต์ล้มพร้อมข้อความ "ตัวคิดราคาในเครื่องไม่ตรงรุ่นกับ dayo" · ทุกครั้งที่ E1 production รายงาน `files_sha256` ต่างจาก `VENDOR.json` → `vendor:update` + export ใหม่ + รันชั้น ค ก่อน deploy POS |
 
 ### 5.3 เคสที่ต้องมีในชุด parity (หลุมจาก 03 §11.4 และจากโค้ดจริง)
@@ -543,9 +570,10 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 10. แก้วฟรี/ลดจนเหลือ 0 ที่ไม่มีหมายเหตุ (ต้อง `ok=false` ทั้งสองฝั่ง)
 11. ร้านตั้ง `defaultMilk = oat` (แท็บเล็ตส่ง `milk` ที่ตีความแล้ว)
 12. โปรที่มี `channelCodes` (ใช้ได้เฉพาะบางช่องทาง)
-13. ขอบเวลา: `sold_at` นาทีเดียวกับ `timeTo` และ `timeFrom` (เช่น 14:00:59 เทียบ `timeTo` 14:00) · การตัดวินาทีของ `sale_time`
-14. ตัวแปร/ตัวเลือก/โปรที่ถูกปิดใช้หลังขาย (ฝั่ง dayo คิดด้วย include_inactive ต้องได้ยอดเดียวกับตอนขาย)
+13. ขอบเวลา: `sold_at` นาทีเดียวกับ `timeTo` และ `timeFrom` (เช่น 14:00:59 เทียบ `timeTo` 14:00) · การตัดวินาทีของ `sale_time` · **และแคตตาล็อกที่ `timeFrom`/`timeTo` เป็น `HH:MM:SS`** (รูปที่ E1 ส่งจริง — §4.4 ข้อ 13): `sold_at` นาทีแรกของช่วง ต้องเทียบ shared กับ SQL (คาดว่าต่างจนกว่า dayo แก้ต้นทาง)
+14. ตัวแปร/ตัวเลือกที่ถูกปิดใช้หลังขาย (ฝั่ง dayo คิดด้วย include_inactive ต้องได้ยอดเดียวกับตอนขาย) · **โปร (แก้ตาม ADR-0049 ข้อ 5 / ADR-0053)**: โปรที่ปิด *หลัง* `sold_at` ยังได้ = ยอดเท่าตอนขาย · โปรที่ปิด *ก่อน* `sold_at` ไม่ได้ = `computed_total` ต่างจากยอดของแท็บเล็ต (คาดไว้ ไม่ใช่บั๊ก — เคสนี้ตรวจที่ชั้นเชื่อมจริง ไม่ใช่ชั้น ค)
 15. `bill_discount` ที่ส่งทั้ง `baht` และ `percent` → แท็บเล็ตไม่สร้างร่างแบบนี้ และ dayo ตอบ `INVALID`
+16. **ขนาดที่ 3** (ADR-0054): แคตตาล็อกที่มี `sizes` 3 ขนาด (หนึ่งขนาดปิด) · ราคาขนาดใหม่ที่ active · ขนาดที่ปิดไม่มีตัวแปรใน E1
 
 ### 5.4 หลุมอื่นที่ต้องระวัง (ล็อก)
 
@@ -608,7 +636,7 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 
 ### 6.6 เลขใบเสร็จ
 - 1 เครื่อง = 1 prefix (`A`, `B`…) = 1 API key · เลขต่อเนื่องไม่มีช่องว่าง (spec POS §4.7 เดิม)
-- ติดตั้งแอปใหม่ด้วย key เดิม: ตั้งเลขถัดไปจาก `client.last_receipt_no` ของ E1 (ต้องออนไลน์ตอนตั้งเครื่อง) · ถ้ายังชนได้ E2 ตอบ `CONFLICT` ไม่ใช่ `duplicate` (เพราะ `pos_order_id` ต่าง) — บิลไม่หายเงียบ
+- ติดตั้งแอปใหม่ด้วย key เดิม: ตั้งเลขถัดไปจาก `client.last_receipt_no` ของ E1 (ต้องออนไลน์ตอนตั้งเครื่อง · ค่าที่รูปไม่ใช่ `^[A-Z]{1,3}-\d{6}$` = หยุดตั้งเครื่องพร้อมข้อความ ไม่เดาเลข — §4.4 ข้อ 6) · ถ้ายังชนได้ E2 ตอบ `CONFLICT` ไม่ใช่ `duplicate` (เพราะ `pos_order_id` ต่าง) — บิลไม่หายเงียบ
 
 ### 6.7 นาฬิกา
 - `sold_at`/`voided_at`/`counted_at` มาจากนาฬิกาเครื่องและ dayo เชื่อ (ADR-0040 ข้อ 4) · E1/E2 คืน `server_time` → **ตามหลักเดิมของ D58 ที่ยกมาใช้ต่อ — รอบันทึกเป็น D ใหม่ (D79) พร้อม Q54**: นาฬิกาต่างเกิน 5 นาที = **แถบเตือนบนหน้าขาย + บรรทัดในหน้าสถานะระบบ · ไม่บล็อกการขาย** (ไม่บล็อกการยกเลิก เปิด/ปิดกะ นับเงินด้วย) · ออฟไลน์ไม่รู้เวลาเซิร์ฟเวอร์ = ใช้ความต่างล่าสุดที่วัดได้
@@ -634,7 +662,7 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 7. **CORS** จำกัด origin (§4.1) — ไม่ใช่กำแพงความปลอดภัย (คำขอนอกเบราว์เซอร์ไม่สน CORS) แต่กันหน้าเว็บอื่นใช้ key ที่รั่วในเบราว์เซอร์
 8. **ข้อความตอบกลับสะท้อนค่าที่ส่งมาได้เฉพาะ** วันที่/เวลา รหัสเมนู-ช่องทาง-วิธีชำระ เลขใบเสร็จ และ SQLSTATE · **ห้าม** สะท้อน id พนักงาน ข้อความอิสระ หรือข้อความ error ดิบของ Postgres (แบบ `resolveStaffRef` เดิม)
 9. **ค่าลับทั้งหมดเจ้าของถือ**: API key · Supabase secret · DB URL สำหรับสำรอง · รหัสเข้ารหัสไฟล์สำรอง · token OneDrive · Discord webhook — agent ไม่เห็น ไม่อ่าน `.env*` / `.dev.vars` ของทั้งสอง repo
-10. **รายงานกำไรบนแท็บเล็ต (Q45 + Q54 ทาง ก) — จุดที่ security-reviewer ต้องตรวจ**
+10. **รายงานกำไรบนแท็บเล็ต (Q45 + Q54 ทาง ก) — จุดที่ security-reviewer ต้องตรวจ** · **รอเจ้าของ O3** (ADR-0055 ให้ดูกำไรบนหน้าเว็บ dayo แทน — §4.10 ก้อน 4)
     - **หลักฐานว่าเป็น owner = การล็อกอิน LINE บนเว็บ dayo** ผ่านรหัส 6 หลักครั้งเดียว (อายุ 5 นาที · ผูก API key · ผิด 5 ครั้งยกเลิก) → สิทธิ์ชั่วคราว `session_token` (ถึงสิ้นวันทำการ ≤ 16 ชม. · เก็บเป็น sha256 · เพิกถอนได้จากเว็บ) · เซิร์ฟเวอร์ไม่เชื่อ `staff_id` ที่แท็บเล็ตอ้าง (ตรงกับ D69 "เซิร์ฟเวอร์เป็นคนตรวจ role จริง")
     - key ที่มี `reports:profit` รั่วอย่างเดียว **ไม่พอ** จะดูกำไร — ต้องมีรหัสที่ owner ออกจากเว็บด้วย · เดารหัส: 6 หลัก ผิด 5 ครั้งรหัสเป็นโมฆะ + อายุ 5 นาที + อัตรา 60/นาที/key → โอกาสเดาถูกต่อรหัส ≤ 5 ใน 1,000,000
     - **ความเสี่ยงที่เหลือ**: แท็บเล็ตที่ **ยังปลดล็อกอยู่ระหว่างวันขณะ owner มีสิทธิ์ดูกำไรค้างอยู่** (token อยู่รอดการสลับหน้า) — คนที่หยิบเครื่องได้ก่อนล็อกจอเปิดหน้ากำไรได้โดยไม่ต้องใช้รหัส · รับมือ: ล็อกจออัตโนมัติ 10 นาที (Q3-24) ล้าง token · ออกจากระบบ/สลับผู้ใช้/โหลดแอปใหม่ ล้าง token · token หมดอายุสิ้นวันทำการ · ตัวเลขกำไรล้างเมื่อออกจากหน้ากำไร · owner เพิกถอนสิทธิ์/เพิกถอน key จากเว็บได้ทันที · `audit_log` ทุกการออกรหัส แลกรหัส และดูกำไร + บรรทัด "ดูกำไรล่าสุด" บนแดชบอร์ด
@@ -644,6 +672,8 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 ---
 
 ## 8. สำรองข้อมูล (P7 — เพิ่มจาก ADR-0021 ไม่แทนที่)
+
+> **รอเจ้าของ O2** — dayo commit **ADR-0051 เป็น "เลื่อน"** แล้ว (dayo `368c00f`: เจ้าของใช้การสำรองแบบกดเองตาม ADR-0021 ไปก่อน) และเปลี่ยนเงื่อนไขเปิด `/api/v1` ใน ADR-0048 ข้อ 8 เป็น "owner กดสำรองเองภายใน 24 ชม. ก่อนเปิด + ซ้อมกู้ลง `dayo-test` สำเร็จ 1 ครั้ง" · ขัดกับ **D64/D67** (สำรองอัตโนมัติไป OneDrive) และ D65 ข้อ 1 (ก้อน 1 รวมสำรองอัตโนมัติ) · ตารางข้างล่างคงไว้จนเจ้าของยืนยัน O2 (ถ้ายืนยันเลื่อน: บันทึก D ใหม่ แล้วย้ายหัวข้อนี้เป็นงานภายหลัง) · ไม่กระทบโค้ดก้อน 2 · กระทบเงื่อนไขเปิด production ใน Task 23 ของแผนก้อน 2
 
 | เรื่อง | กติกา |
 |---|---|
@@ -674,8 +704,8 @@ scope `orders:read` · ใช้แสดง "บิลจากบอท/เว
 
 | ก้อน | ฝั่ง | ส่งมอบ | เกณฑ์เสร็จ (ตรวจได้) |
 |---|---|---|---|
-| 1 | dayo | P1 + P2 + P7: `catalog_versions` + trigger · E1 · E2 (ชนิด `order`/`order_void`) · ฟิลด์ใหม่ E3 · CORS · QR ของคีย์ · scope `staff:read` · คอลัมน์ใหม่ `orders` · ธงบิลซ้ำ + แดชบอร์ด · บิล POS อ่านอย่างเดียวบนเว็บ/บอท · รหัสเมนูที่ถูกอ้างเปลี่ยนไม่ได้ · สคริปต์ `export-pos-parity` · สำรองอัตโนมัติ + ซ้อมกู้ | `npm run ci` ผ่าน · ทุกไฟล์ fixture ใน §4.11 ผ่านเทสต์ Route Handler · เทสต์ DB: ส่งแถวเดิมซ้ำ = `duplicate` · key เดิมเนื้อหาต่าง = `CONFLICT` · **`receipt_no` เดิม + `pos_order_id` ใหม่ (ทั้งก่อนและหลังลบคีย์ 30 วัน) = `CONFLICT` ไม่ใช่ `duplicate`** · แถวที่ถูก rejected แล้วส่ง key เดิมด้วยข้อมูลที่แก้ = `accepted` · ทุกแถวในตารางแผนที่ error §4.5 ได้คำตัดสินตามตาราง และ error ที่ไม่ได้แผนที่ (เช่นบังคับ raise `XX000` ในเทสต์) = `deferred SERVER_ERROR` เฉพาะแถวนั้น HTTP 200 · `voided_at` เกินเวลาเซิร์ฟเวอร์ 7 นาที = `deferred CLOCK_AHEAD` · ชนิด/ฟิลด์ไม่รู้จัก = `deferred UNSUPPORTED` · `computed_total` มีทุกบิล · CORS: 401/404 (API ปิด)/429/5xx ทุกตัวมี `Access-Control-Allow-Origin` + `Vary: Origin` + `Access-Control-Expose-Headers: Retry-After` · `OPTIONS` = 204 แม้ API ปิด · E1 มี `pricing` และ `supported_kinds` · เปลี่ยนรหัสช่องทาง/วิธีชำระที่มีบิลอ้าง = `DY422` · ยกเลิกที่ `voided_at` วันเดียวกันแต่ส่งวันถัดไป = ผ่าน · `voided_at` คนละวัน = `FORBIDDEN` · พนักงาน `removed` = ผ่าน · ตัวแปรที่ปิดใช้แล้ว = ผ่าน · รหัสเมนูไม่รู้จัก = `UNKNOWN_CODE` แถวอื่นในก้อนยังผ่าน · แก้ราคาเมนู → ฉบับเพิ่ม · รับเข้าที่แก้ `buy_price` → ฉบับไม่เพิ่ม · บิลบอท + บิล POS รายการ/ยอดเดียวกันห่าง 9 นาที = ติดธง, ห่าง 11 นาที = ไม่ติด, แหล่งเดียวกัน = ไม่ติด · owner แก้บิล POS บนเว็บ = `DY403` · workflow สำรองรันสำเร็จ 3 คืนติด ไฟล์อยู่ใน OneDrive ถอดรหัสได้ · ซ้อมกู้ผ่าน 1 ครั้ง · บังคับให้ล้ม 1 ครั้งแล้ว Discord ได้ข้อความ · `API_V1_ENABLED` ยังปิดใน production |
-| 2 | POS | ตารางแคตตาล็อกในเครื่องตามรูป E1 · `@dayo/dayo-pricing` (สำเนา + `VENDOR.json` + parity) · `money-edge.ts` · หน้าขาย: นมโอ๊ต/เกรดผง/โปรอัตโนมัติ/"ไม่ใช้โปร"/ราคาตามช่องทาง · ใบเสร็จแสดงเลขใบเสร็จ + คิว · พนักงานจาก E1 + ตั้ง PIN · ตัวส่ง outbox + คำตัดสินรายแถว + หน้า "ส่งไม่ผ่าน" · หน้าบิลบอท/เว็บวันนี้ (E3) · ตั้งเครื่องด้วยคีย์ · zod schema + fixture + mock server · ซ่อนงานสต็อก | `pnpm turbo run typecheck test` ผ่าน · parity ทุกเคสต่าง 0 สตางค์ · `vendor:check` ผ่าน · property test ของขอบเงินผ่าน · e2e (mock): ขายออฟไลน์ 5 บิล → ออนไลน์ → ส่งครบ ได้ `order_no` · ยกเลิกบิลก่อนส่ง → ส่งทั้งคู่ถูกลำดับ · แถว `rejected` ไม่ทำให้คิวค้าง · 401 หยุดส่ง (ในเบราว์เซอร์จริง ไม่ใช่เห็นเป็นเน็ตหลุด) · แก้แถว `CONFLICT` ด้วย "ออกเลขใบเสร็จใหม่" แล้วผ่าน · เทสต์เชื่อมจริงกับ dayo local บน commit ที่จะ deploy (ก้อน 1 เสร็จแล้ว): ขาย 20 บิลหลายแบบ (ครอบเคส §5.3) **`computed_total − total = 0` สตางค์ทุกบิล** · `pricing.files_sha256` ของ E1 = `VENDOR.json` · จากนั้นเจ้าของเปิด `API_V1_ENABLED=1` ใน production |
+| 1 | dayo | P1 + P2 + P7: `catalog_versions` + trigger · E1 · E2 (ชนิด `order`/`order_void`) · ฟิลด์ใหม่ E3 · CORS · QR ของคีย์ · scope `staff:read` · คอลัมน์ใหม่ `orders` · ธงบิลซ้ำ + แดชบอร์ด · บิล POS อ่านอย่างเดียวบนเว็บ/บอท · รหัสเมนูที่ถูกอ้างเปลี่ยนไม่ได้ · สคริปต์ `export-pos-parity` · สำรองอัตโนมัติ + ซ้อมกู้ | `npm run ci` ผ่าน · ทุกไฟล์ fixture ใน §4.11 ผ่านเทสต์ Route Handler · เทสต์ DB: ส่งแถวเดิมซ้ำ = `duplicate` · key เดิมเนื้อหาต่าง = `CONFLICT` · **`receipt_no` เดิม + `pos_order_id` ใหม่ (ทั้งก่อนและหลังลบคีย์ 30 วัน) = `CONFLICT` ไม่ใช่ `duplicate`** · แถวที่ถูก rejected แล้วส่ง key เดิมด้วยข้อมูลที่แก้ = `accepted` · ทุกแถวในตารางแผนที่ error §4.5 ได้คำตัดสินตามตาราง และ error ที่ไม่ได้แผนที่ (เช่นบังคับ raise `XX000` ในเทสต์) = `deferred SERVER_ERROR` เฉพาะแถวนั้น HTTP 200 · `voided_at` เกินเวลาเซิร์ฟเวอร์ 7 นาที = `deferred CLOCK_AHEAD` · ชนิด/ฟิลด์ไม่รู้จัก = `deferred UNSUPPORTED` · `computed_total` มีทุกบิล · CORS: 401/404 (API ปิด)/429/5xx ทุกตัวมี `Access-Control-Allow-Origin` + `Vary: Origin` + `Access-Control-Expose-Headers: Retry-After` · `OPTIONS` = 204 แม้ API ปิด · E1 มี `pricing` และ `supported_kinds` · เปลี่ยนรหัสช่องทาง/วิธีชำระที่มีบิลอ้าง = `DY422` · ยกเลิกที่ `voided_at` วันเดียวกันแต่ส่งวันถัดไป = ผ่าน · `voided_at` คนละวัน = `FORBIDDEN` · พนักงาน `removed` = ผ่าน · ตัวแปรที่ปิดใช้แล้ว = ผ่าน · รหัสเมนูไม่รู้จัก = `UNKNOWN_CODE` แถวอื่นในก้อนยังผ่าน · แก้ราคาเมนู → ฉบับเพิ่ม · รับเข้าที่แก้ `buy_price` → ฉบับไม่เพิ่ม · บิลบอท + บิล POS รายการ/ยอดเดียวกันห่าง 9 นาที = ติดธง, ห่าง 11 นาที = ไม่ติด, แหล่งเดียวกัน = ไม่ติด · owner แก้บิล POS บนเว็บ = `DY403` (**รอเจ้าของ O1** — dayo ship เป็น "owner แก้ได้พร้อมเหตุผล") · workflow สำรองรันสำเร็จ 3 คืนติด ไฟล์อยู่ใน OneDrive ถอดรหัสได้ · ซ้อมกู้ผ่าน 1 ครั้ง · บังคับให้ล้ม 1 ครั้งแล้ว Discord ได้ข้อความ (**รอเจ้าของ O2** — dayo เลื่อนสำรองอัตโนมัติ) · `API_V1_ENABLED` ยังปิดใน production · **สถานะจริง 26 ก.ย.**: dayo ทำก้อน 1A เสร็จและขึ้น prod/test แล้ว API ยังปิด · ที่ยังไม่มี: fixture สัญญา (→ POS เป็นเจ้าของตาม O4 §4.11) · parity ชั้น ข จริง (§5.2) · สำรองอัตโนมัติ (O2) |
+| 2 | POS | ตารางแคตตาล็อกในเครื่องตามรูป E1 · `@dayo/dayo-pricing` (สำเนา + `VENDOR.json` + parity) · `money-edge.ts` · หน้าขาย: นมโอ๊ต/เกรดผง/โปรอัตโนมัติ/"ไม่ใช้โปร"/ราคาตามช่องทาง · ใบเสร็จแสดงเลขใบเสร็จ + คิว · พนักงานจาก E1 + ตั้ง PIN · ตัวส่ง outbox + คำตัดสินรายแถว + หน้า "ส่งไม่ผ่าน" · หน้าบิลบอท/เว็บวันนี้ (E3) · ตั้งเครื่องด้วยคีย์ · zod schema + fixture + mock server · ซ่อนงานสต็อก | `pnpm turbo run typecheck test` ผ่าน · parity ทุกเคสต่าง 0 สตางค์ · `vendor:check` ผ่าน · property test ของขอบเงินผ่าน · e2e (mock): ขายออฟไลน์ 5 บิล → ออนไลน์ → ส่งครบ ได้ `order_no` · ยกเลิกบิลก่อนส่ง → ส่งทั้งคู่ถูกลำดับ · แถว `rejected` ไม่ทำให้คิวค้าง · 401 หยุดส่ง (ในเบราว์เซอร์จริง ไม่ใช่เห็นเป็นเน็ตหลุด) · แก้แถว `CONFLICT` ด้วย "ออกเลขใบเสร็จใหม่" แล้วผ่าน · เทสต์เชื่อมจริงกับ dayo local บน commit ที่จะ deploy (ก้อน 1 เสร็จแล้ว): ขาย 20 บิลหลายแบบ (ครอบเคส §5.3) **`computed_total − total = 0` สตางค์ทุกบิล** · `pricing.files_sha256` ของ E1 = `VENDOR.json` · ขนาดจาก `catalog.sizes` (ไม่ตายตัว) · บิล POS ที่ owner แก้บนเว็บแสดง `dayo_edit` แบบอ่านอย่างเดียว · จากนั้นเจ้าของเปิด `API_V1_ENABLED=1` ใน production (เงื่อนไขเปิดตาม ADR-0048 ข้อ 8 — **รอเจ้าของ O2**) |
 | 3 | dayo ∥ POS | P3: ตารางกะ/เงินสด/นับเงิน/Z + ชนิด push + `GET /v1/pos/shift-cash` + บรรทัดสรุปบนแดชบอร์ด ∥ POS: หน้าเปิด/ปิดกะ เงินเข้า-ออก นับเงิน Z ที่รวมบิลเงินสดจากบอท ส่งขึ้นฐานกลาง | ปิดกะที่มีบิลเงินสดจากบอท 3 ใบ → เงินสดที่ควรมีรวมบิลบอท · Z ในฐานกลาง `recompute_status='matched'` · **ขายออฟไลน์ทั้งกะแล้ว Z มาถึงก่อนบิล → `waiting_bills` (ไม่ใช่ mismatch) · บิลทยอยมาครบ → `matched` โดยไม่ต้องส่งอะไรเพิ่ม** · บิลในรายการมาครบแต่ตัวเลขต่าง → `mismatch` · บิลที่ owner ปิดเป็นนอกระบบกลาง (`excluded` / `order_excluded`) ไม่ทำให้ค้าง `waiting_bills` · `order_excluded` ที่ id ไม่อยู่ใน snapshot / ไม่ติด excluded / ยอดหรือ `sold_at` ไม่ตรง = `INVALID` · `staff_id` ไม่ใช่ owner = ปฏิเสธ · บิลที่ยกเลิกใน snapshot นับรายได้ 0 · `order` ของ `pos_order_id` ที่ถูกกันออกแล้ว = `CONFLICT` · ขายเงินสด ฿100 แล้วยกเลิกคืนเงิน → expected ไม่หักซ้ำ · สองกะในวันเดียว บิลบอทแต่ละใบอยู่ใน Z เดียว · แถว `local_only` ของกะก่อนก้อน 3 ไม่ถูกส่งและไม่ขึ้นหน้า "ส่งไม่ผ่าน" · ส่งกะซ้ำ = `duplicate` · ออฟไลน์ตอนปิดกะทำตาม Q43 (นับได้ · Z รอออนไลน์ · กะถัดไปเปิดได้) · แดชบอร์ดแสดงบรรทัดกะ · แก้ `cash_movements`/`z_reports` ในฐาน = raise |
 | 4 | dayo ∥ POS | P4: `expense_categories` `expenses` + ชนิด push + `dashboard_net_profit` + `POST /v1/pos/profit` (scope `reports:profit`) ∥ POS: หน้าบันทึกค่าใช้จ่าย (ลิ้นชัก/ธนาคาร) · ค่าใช้จ่ายจากลิ้นชักลดเงินสดที่ควรมี · หน้ากำไรเฉพาะ owner | ค่าใช้จ่าย ฿120 จากลิ้นชัก → เงินสดที่ควรมีลด 120.00 ทั้งแท็บเล็ตและ RPC · หมวด "ซื้อวัตถุดิบเข้าสต็อก" ไม่ลดกำไรสุทธิ · กำไรสุทธิของเดือนตัวอย่างตรงกับที่คิดมือ · `/v1/pos/profit` ไม่มี token / token หมดอายุ / ถูกยกเลิก / ของ key อื่น / owner ที่เปิดถูกลดบทบาท = `DY403` ข้อความเดียวกัน · ส่ง `staff_id` ของ owner อย่างเดียว (ไม่มี token) = 403 · key ไม่มี scope = 403 · รหัส 6 หลัก: หมดอายุหลัง 5 นาที · ใช้ซ้ำไม่ได้ · ใช้กับ key อื่นไม่ได้ · ผิด 5 ครั้งเป็นโมฆะ · ทุกกรณีมี `audit_log` · มีแถว `profit_code_issued` เมื่อออกรหัส · `profit_session_created` เมื่อแลก · `profit_session_revoke` เมื่อเพิกถอน (เองและอัตโนมัติ) · `profit_code_voided` + ข้อความ Discord เมื่อผิดครบ 5 ครั้ง · ส่งผิดพร้อมกัน 10 คำขอยังนับไม่เกิน 5 · ส่งรหัส/token ผิดรูปไม่มี `22P02` และไม่มี `dps_` ใน log · token ใช้ได้ถึง 23:59:59.999 และใช้ไม่ได้ตั้งแต่ 00:00 ไทย · token หมดอายุสิ้นวันทำการไทย (≤ 16 ชม.) · เพิกถอนจากเว็บแล้วคำขอถัดไป 403 · ไม่มีรหัส/token แบบข้อความเปล่าในฐาน · ทุกการเรียกมีแถว `audit_log` `profit_view` · e2e แท็บเล็ต: ออกจากหน้ากำไรแล้วกลับมา → ตัวเลขถูกล้างแต่ดูใหม่ได้โดยไม่ต้องใส่รหัส (token ยังอยู่) · ออกจากระบบ/สลับผู้ใช้/ล็อกจอ/โหลดใหม่/token หมดอายุ → token หาย ต้องใช้รหัสใหม่ · token และตัวเลขไม่มีใน OPFS/IndexedDB/localStorage/sessionStorage/Cache Storage · security-reviewer ตรวจก้อนนี้ |
 | 5 | dayo | P5: ต้นทุนถัวเฉลี่ย · ราคาอ้างอิง · นำเข้าเปลี่ยนแค่ราคาอ้างอิง · บิลแช่แข็งต้นทุน avg | รับ 2 ครั้งราคาต่างกัน → avg ตามสูตร 6 ตำแหน่ง · คงเหลือติดลบแล้วรับ → avg = ราคาที่รับ · นำเข้าเทมเพลตแก้ราคา → avg ไม่เปลี่ยน · บิลเก่าไม่เปลี่ยนต้นทุน · เทสต์ ±0.01 ของ ADR-0026 ปรับตามความหมายใหม่ |
@@ -777,9 +807,9 @@ Q40–Q53 บันทึกแล้วใน D67–D77 (`00-บันทึก
 | Q49 | owner ปรับต้นทุนเฉลี่ยเอง | ได้ ต้องใส่เหตุผล มีประวัติใน `audit_log` · ไม่แก้บิลเก่า | §4.10 ก้อน 5 · P5 |
 | Q50 | นำเข้าแบบทับทั้งหมดที่ไฟล์ขาดชีต/คอลัมน์ | ปฏิเสธทั้งไฟล์ **ก่อนเขียนอะไร** และบอกเป็นภาษาไทยว่าขาดชีตไหน และชีตไหนขาดคอลัมน์บังคับอะไร | P8 |
 | Q51 | รหัสเมนูที่มีบิลอ้างแล้ว | ล็อก เปลี่ยนไม่ได้ (เปลี่ยนชื่อไทย/ชื่อพ้องแทน) · ผู้คุมงานขยายไปถึงรหัสช่องทางและวิธีชำระ (รีวิวข้อ 13) | §4.9 · P2 |
-| Q52 | บิล POS ของวันที่ปิดแล้ว | อ่านอย่างเดียวทั้งเว็บและแท็บเล็ต · ส่วนต่างแก้ด้วยการปรับในกะ (`cash_movement` `PAID_IN`/`PAID_OUT` พร้อมเหตุผลอ้างเลขใบเสร็จ) หรือบันทึกเป็นค่าใช้จ่าย · ธงซ้ำให้ยกเลิกฝั่งบอท/เว็บ | §4.7 · §4.8 |
+| Q52 | บิล POS ของวันที่ปิดแล้ว | (**รอเจ้าของ O1** — ADR-0050 ให้ owner แก้บนเว็บได้) อ่านอย่างเดียวทั้งเว็บและแท็บเล็ต · ส่วนต่างแก้ด้วยการปรับในกะ (`cash_movement` `PAID_IN`/`PAID_OUT` พร้อมเหตุผลอ้างเลขใบเสร็จ) หรือบันทึกเป็นค่าใช้จ่าย · ธงซ้ำให้ยกเลิกฝั่งบอท/เว็บ | §4.7 · §4.8 |
 | Q53 | บอทเป็นช่องทางขายเท่ากับ POS | ใช่ ไม่ใช่ทางสำรอง · P2 แก้ข้อความ ADR-0006 และ ADR-0035 ข้อ 5 | P2 |
-| Q54 | การพิสูจน์ตัวตน owner ของรายงานกำไรบนแท็บเล็ต | **ทาง ก**: owner ล็อกอิน LINE บนเว็บ กด "เปิดดูกำไรบนแท็บเล็ต" ได้รหัส 6 หลัก (5 นาที · ครั้งเดียว · ผูก key · ผิด 5 ครั้งเป็นโมฆะ) → แท็บเล็ตแลกเป็นสิทธิ์ชั่วคราวถึงสิ้นวันทำการ (≤ 16 ชม.) เก็บในหน่วยความจำ · เพิกถอนได้จากเว็บ · `staff_id` ที่อ้างไม่ใช่หลักฐานอีกต่อไป · บันทึกเป็น D79 (พร้อมกฎนาฬิกาเตือนไม่บล็อก) | §4.10 ก้อน 4 · §7 ข้อ 10 · §9 · P4 |
+| Q54 | การพิสูจน์ตัวตน owner ของรายงานกำไรบนแท็บเล็ต | (**รอเจ้าของ O3** — ADR-0055 แทนกลไกนี้) **ทาง ก**: owner ล็อกอิน LINE บนเว็บ กด "เปิดดูกำไรบนแท็บเล็ต" ได้รหัส 6 หลัก (5 นาที · ครั้งเดียว · ผูก key · ผิด 5 ครั้งเป็นโมฆะ) → แท็บเล็ตแลกเป็นสิทธิ์ชั่วคราวถึงสิ้นวันทำการ (≤ 16 ชม.) เก็บในหน่วยความจำ · เพิกถอนได้จากเว็บ · `staff_id` ที่อ้างไม่ใช่หลักฐานอีกต่อไป · บันทึกเป็น D79 (พร้อมกฎนาฬิกาเตือนไม่บล็อก) | §4.10 ก้อน 4 · §7 ข้อ 10 · §9 · P4 |
 
 ---
 
@@ -860,3 +890,47 @@ Q40–Q53 บันทึกแล้วใน D67–D77 (`00-บันทึก
 | L2 | ต่ำ | ไม่มีสัญญาณเมื่อมีคนเดารหัส | รหัสเป็นโมฆะเพราะผิดครบ 5 ครั้ง → Discord ช่องระบบ | §4.10 ก้อน 4 ข้อ 5 · P4 |
 | L3 | ต่ำ | รหัส/token อาจรั่วทาง log หรือข้อความ `22P02` | route ห้าม log body · RPC ตรวจรูปก่อน cast · เทสต์ไม่มี `dps_` ใน log | §4.10 ก้อน 4 ข้อ 5 · P4 |
 | L4 | ต่ำ | หมดอายุ "23:59:59" มีช่องว่าง 1 วินาที | ใช้ `< เที่ยงคืนไทยถัดไป` · เซิร์ฟเวอร์ตัดสิน แท็บเล็ตแสดงผลเท่านั้น | §4.10 ก้อน 4 · P4 |
+
+### 13.6 ปรับตาม dayo ที่ ship แล้ว (ADR-0048–0059 · 26 ก.ย. 2569)
+
+ที่มา: รายงานส่วนต่าง `.superpowers/sdd/2026-09-25-07-block2-pos-sell-central/dayo-adr-delta.md` (M7–M8) · หมายเหตุจาก dayo `06-การเปลี่ยนสเปกจากฝั่ง-dayo.md` · อ่าน repo dayo `main` `232bf57` (อ่านอย่างเดียว) · path ของ dayo: SQL = `supabase/migrations/…` · ADR = `docs/adr/…` · "สถานะ" = ✅ แก้แล้วในสเปก · ⏳ รอเจ้าของ (ไม่เลือกข้าง) · 📨 แจ้ง dayo
+
+| # | เรื่อง | เปลี่ยนในสเปก | ที่มาใน dayo (file:line) | สถานะ | ที่ |
+|---|---|---|---|---|---|
+| S1 | ขนาดแก้วตั้งได้ | ขนาด = ข้อความรูป `^[1-9][0-9]{0,2} oz$` ไม่ใช่ 2 ค่าตายตัว | `packages/shared/src/types.ts:5-11` · `docs/adr/0054-configurable-cup-sizes.md:6-10` | ✅ | §4.1 |
+| S2 | `catalog.sizes` | บังคับ · รวมขนาดที่ปิด · ตัวแปรของขนาดที่ปิดไม่ส่ง · ปุ่มขนาดจาก `sizes` · ตรวจขนาดก่อนเก็บเงิน | `0048_cup_sizes.sql:20, 1470-1482` · `packages/shared/src/types.ts:238` | ✅ | §4.4 ตัวอย่าง + ข้อ 2, 12 · §5.1 · §5.3 ข้อ 16 |
+| S3 | `categoryLabel` null ได้ | schema รับ null · แท็บเล็ตใช้ `family` แทน | `0048_cup_sizes.sql:1491` | ✅ | §4.4 ข้อ 2 |
+| S4 | เวลาโปร `HH:MM:SS` | schema รับสองรูป · ห้ามแปลงเอง · นาทีแรกของโปรต่าง shared/SQL | `0048_cup_sizes.sql:1552` · เทียบ `0020_api_v1.sql:126` · `packages/shared/src/promotions.ts:62-64` | ✅ + 📨 (ขอ dayo ส่ง `left(time::text,5)`) | §4.4 ข้อ 13 · §5.3 ข้อ 13 |
+| S5 | `pricing.commit` null ได้ | แสดง "ไม่ทราบ" · เทียบด้วย `files_sha256` เท่านั้น | `0049_pos_catalog.sql:304` | ✅ | §4.4 ข้อ 9 |
+| S6 | `last_receipt_no` = `external_ref` ดิบ | schema ไม่ตรวจรูป · ตรวจตอนตั้งเลข | `0049_pos_catalog.sql:321-325` | ✅ | §4.4 ข้อ 6 · §6.6 |
+| S7 | trigger ฉบับแคตตาล็อก | ระดับคำสั่ง (ไม่กระทบแท็บเล็ต) | `docs/adr/0048-pos-catalog-endpoint.md:6` | ✅ | §4.3 |
+| S8 | ถอด `POST/PATCH /v1/orders` | ไม่คงอยู่อีก | `docs/adr/0049-pos-push-row-verdicts.md:17` | ✅ | §4.1 |
+| S9 | CORS | Allow-Headers มี `Idempotency-Key` · origin `https://` ตรงตัว | `06-การเปลี่ยนสเปกจากฝั่ง-dayo.md` §6 (หมายเหตุจาก dayo) | ✅ | §4.1 |
+| S10 | 403 ทั้งคำขอ | key ไม่มี `orders:write` = HTTP 403 ก่อนถึงแถว (ไม่ใช่ `FORBIDDEN` ต่อแถว) | `0052_pos_push.sql:725-726` (ต่อแถว `593-594` ไปไม่ถึง) | ✅ | §4.5 scope · ตารางเหตุผล · error ทั้งคำขอ |
+| S11 | `sale_date` วันพรุ่งนี้ | `deferred CLOCK_AHEAD` | `0052_pos_push.sql:357-358` | ✅ | §4.5 ตาราง `order` · ตาราง deferred |
+| S12 | `order_void` เก่ากว่า 60 วัน | `rejected INVALID` | `0052_pos_push.sql:491-494` | ✅ | §4.5 ตาราง `order_void` |
+| S13 | ขนาดไม่พบตัวแปร | `UNKNOWN_CODE` (ตรวจแค่ข้อความ ≤ 20) | `0052_pos_push.sql:293, 381-386` | ✅ | §4.5 ตาราง `order` |
+| S14 | ลำดับตรวจแถว | ตามโค้ดจริง (mock ต้องตาม) | `0052_pos_push.sql:560-620` | ✅ | §4.5 ข้อ 6 |
+| S15 | โปรที่ปิดก่อน `sold_at` | dayo ไม่คิดให้ → ยอดต่าง ไม่ปฏิเสธ (เดิมสเปกเขียนว่ายังใช้ได้) | `docs/adr/0049-pos-push-row-verdicts.md:14` · `docs/adr/0053-promotion-status-history.md` · `0051_multi_source_sales.sql:435` | ✅ | §4.5 ข้อ 2 · §5.3 ข้อ 14 |
+| S16 | (ก0) `pos_excluded_orders` | ยังไม่ทำ (รอ ADR-0056) | `docs/adr/0049-pos-push-row-verdicts.md:8` · `docs/adr/0056-pos-shifts-cash-drawer.md:3` | ✅ | §4.5 ข้อ 0 · §4.10 ก้อน 3 |
+| S17 | E3 `dayo_edit` | ฟิลด์ใหม่ · null ได้ · ชื่อ/เหตุผล null เมื่อไม่มี `staff:read` · แท็บเล็ตแสดงแบบอ่านอย่างเดียว | `0052_pos_push.sql:830-831` · `0051_multi_source_sales.sql:1479-1497` · `docs/adr/0050-multi-source-sales-and-pos-bill-edits.md:10` | ✅ | §4.6 |
+| S18 | E3 `pos_order_id` | เฉพาะบิลของ key นี้ · แท็บเล็ตใช้จับคู่บิลของตัวเอง | `0052_pos_push.sql:826` | ✅ | §4.6 |
+| S19 | E3 `updated_at` | ไม่เป็น null อีก | `0052_pos_push.sql:821` | ✅ | §4.6 |
+| S20 | owner แก้/ยกเลิกบิล POS บนเว็บ | ขัด §4.7 ข้อสุดท้าย + D76 + Q52 + เกณฑ์ก้อน 1 "`DY403`" · ติดป้าย ไม่เลือกข้าง | `docs/adr/0050-multi-source-sales-and-pos-bill-edits.md:8-11` | ⏳ **O1** | §3 · §4.6 · §4.7 · §4.8 · §4.10 ก้อน 3 · §9 · §12 Q52 |
+| S21 | สำรองอัตโนมัติเลื่อน | ขัด D64/D67/D65 · เงื่อนไขเปิด API เปลี่ยน · ติดป้าย ไม่เลือกข้าง | `docs/adr/0051-nightly-auto-backup-onedrive.md:3` · `docs/adr/0048-pos-catalog-endpoint.md:18` (dayo `368c00f`) | ⏳ **O2** | §8 · §9 |
+| S22 | ดูกำไรผ่านหน้าเว็บ dayo | ขัด D79 (Q54 ทาง ก) · endpoint `/profit-session` `/profit` ถูก dayo ยกเลิก · ติดป้าย ไม่เลือกข้าง | `docs/adr/0055-profit-view-from-pos-via-web.md:6-11` | ⏳ **O3** | §3 · §4.10 ก้อน 4 · §7 ข้อ 10 · §12 Q54 |
+| S23 | เจ้าของ fixture สัญญา | POS เป็นเจ้าของชั่วคราว (คำวินิจฉัยผู้คุมงาน O4) · D82 ถูกแทนจนมี D ใหม่ | dayo ไม่มีโฟลเดอร์ `apps/web/test/fixtures/` เลย (`git ls-files` ที่ `232bf57` ไม่มี `pos-contract`) · งานค้างของ dayo `docs/HANDOFF.md:37-39` ไม่มีรายการ fixture | ✅ | §4.11 ข้อ 2 · §9 ก้อน 1 |
+| S24 | parity ชั้น ข ยังไม่จริง · รูปไฟล์ต่าง | สคริปต์ประกอบแคตตาล็อกเอง/คิดด้วย shared · ไม่มี `catalog_version`/`id` · มี `spec`/`note` · 20/25 เคสไม่มี `saleTime` | `scripts/export-pos-parity.ts:5-11, 166-173` · ไฟล์ `docs/design/pos-parity.json` (dayo `a0f76e2`) | ✅ + 📨 | §5.2 ชั้น ข |
+| S25 | ไฟล์ตัวคิดราคาที่คัดลอก | เพิ่ม `time.ts` | `06-การเปลี่ยนสเปกจากฝั่ง-dayo.md` §7 | ✅ | §5.1 |
+| S26 | ADR-0056 กะ/ลิ้นชัก เลื่อน | ก้อน 3 อาจเขียนใหม่ (บิลพิเศษใน `orders` แทน `pos_excluded_orders`) | `docs/adr/0056-pos-shifts-cash-drawer.md:3-9` | ✅ (หมายเหตุ) | §4.10 ก้อน 3 |
+| S27 | เลข ADR ที่อ้างผิด | กติกา "API ไม่ส่งต้นทุน/กำไร" คือ **ADR-0040 ข้อ 3** + DATA-CONTRACT §8 ไม่ใช่ ADR-0035 ข้อ 3 — ที่อ้าง "ADR-0035 ข้อ 3" ในสเปกนี้ให้อ่านเป็น ADR-0040 ข้อ 3 | `06-การเปลี่ยนสเปกจากฝั่ง-dayo.md` §1 | ✅ (หมายเหตุ ไม่แก้ทุกจุด) | §4.4 ข้อ 1 · §5.4 · §12 Q45 |
+
+เรื่องที่แจ้ง dayo (ไม่ต้องให้เจ้าของ POS ตัดสิน): S4 เวลาโปร `HH:MM:SS` · S24 parity ชั้น ข + ใส่ `catalog_version` + เติม `saleTime` · ตัวอย่างใน `docs/API.md` ของ dayo ยังผิดบางจุด (ให้ถือ SQL เป็นความจริง)
+
+### 13.7 แก้หลังรีวิว A3 (26 ก.ย. 2569)
+
+| # | เรื่อง | แก้เป็น | ที่มาฝั่ง dayo |
+|---|---|---|---|
+| S28 | คีย์ย่อยที่ไม่รู้จักใน `bill_discount`/`totals` | `rejected INVALID` (ไม่ใช่ `deferred UNSUPPORTED`) | `0052_pos_push.sql:316,339` · ตัวตรวจฟิลด์ `0052:587-591` ดูแค่ชั้นบนกับ `lines.*` |
+| S29 | จำนวน fixture สัญญา | ไม่ตายตัว — ตาม `CONTRACT_FIXTURE_NAMES` (27 ไฟล์หลัง A3) · §4.11 ที่เขียน 22 หมายถึงชุดเริ่มต้น | — |
+| S30 | `key` ในคำตอบรายแถว | เป็น `null` ได้เมื่อ key ที่ส่งไม่ใช่ข้อความ · แท็บเล็ตถือว่าจับคู่ไม่ได้ ยัง pending | `0052_pos_push.sql:748` |
