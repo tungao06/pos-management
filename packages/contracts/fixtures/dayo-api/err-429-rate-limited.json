@@ -1,0 +1,12 @@
+{
+  "name": "err-429-rate-limited",
+  "spec": "04 §4.1 เกิน 60/นาที = 429 + Retry-After ที่ JS อ่านได้",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": { "api_authenticate": { "ok": false, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "retry_after": 17, "error": { "code": "DY429", "message": "rate_limited: เกินจำนวนคำขอต่อนาที (60/min)" } } },
+  "request": { "method": "GET", "path": "/api/v1/pos/catalog?known_version=42", "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001" } },
+  "response": {
+    "status": 429,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After", "Retry-After": "17" },
+    "body": { "ok": false, "error": { "code": "DY429", "message": "rate_limited: เกินจำนวนคำขอต่อนาที (60/min)" } }
+  }
+}

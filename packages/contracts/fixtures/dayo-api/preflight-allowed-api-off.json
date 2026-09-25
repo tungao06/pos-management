@@ -1,0 +1,14 @@
+{
+  "name": "preflight-allowed-api-off",
+  "spec": "04 §4.1 OPTIONS = 204 เสมอ แม้ API ปิด",
+  "env": { "API_V1_ENABLED": "0", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {},
+  "request": { "method": "OPTIONS", "path": "/api/v1/pos/push", "headers": { "Origin": "https://pos.dayo.test", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "authorization,content-type" } },
+  "response": {
+    "status": 204,
+    "headers": {
+      "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "7200"
+    }
+  }
+}
