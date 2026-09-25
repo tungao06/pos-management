@@ -6,6 +6,7 @@
 import { bkkTime, computeOrder, round2, type OrderCatalog, type OrderDraft, type Sweetness } from '@dayo/dayo-pricing'
 import type { CatalogPromotion, MockOrderData, MockState } from './state.js'
 
+// A test's `expected` for a closed-promotion bill must come from a fixture or hand calculation, never from this mock's own output — the mock only copies the tablet's pricing deltas, so its answer can never check itself.
 export function computedTotalAt(s: MockState, o: MockOrderData, soldAt: number): number {
   const closed = [...s.closedPromotions.values()]
   const closedBefore = closed.filter((c) => c.closedAt <= soldAt).map((c) => c.promotion) // changed_at ≤ ts = the closed state counts

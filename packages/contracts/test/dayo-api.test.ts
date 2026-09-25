@@ -69,6 +69,11 @@ describe('E2 response is tolerant (spec §4.1 ความเข้ากัน�
     expect(PushResponse.safeParse(body).success).toBe(true)
     expect(ReceivedRowResult.safeParse({ key: 'k', status: 'accepted' }).success).toBe(true)
   })
+  it('accepts a null key — dayo sets it null when the sent key was not a string (0052_pos_push.sql:748)', () => {
+    const body = { ok: true, data: { server_time: '2026-09-25T03:15:04.010+00:00', results: [{ key: null, status: 'rejected', reason: 'BAD_KEY', detail: 'key ต้องเป็นรูป <kind>:<uuid>' }] } }
+    expect(PushResponse.safeParse(body).success).toBe(true)
+    expect(ReceivedRowResult.safeParse({ key: null, status: 'rejected' }).success).toBe(true)
+  })
 })
 
 describe('supported kinds and fields (spec §4.4 rule 10)', () => {
