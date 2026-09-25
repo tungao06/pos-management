@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { bkkDay } from '@dayo/dayo-pricing'
 import { cartFromOrderDraft } from '../src/order-draft.js'
-import { CartError, priceCart } from '../src/price-cart.js'
+import { CartError } from '../src/price-cart.js'
 import { POS_CATALOG } from './fixtures/pos-catalog.js'
 
 describe('cartFromOrderDraft (dayo OrderDraft → the tablet cart)', () => {
@@ -20,17 +19,5 @@ describe('cartFromOrderDraft (dayo OrderDraft → the tablet cart)', () => {
   })
   it('refuses a case without saleTime: the tablet always sends the time', () => {
     expect(() => cartFromOrderDraft({ saleDate: '2026-09-25', channelCode: 'store', lines: [{ code: 'Thai Tea', qty: 1 }] }, POS_CATALOG)).toThrow(/NO_SALE_TIME/)
-  })
-  it('with allowMissingSaleTime (dayo export only) the time stays absent: no invented time reaches the pricing code', () => {
-    const got = cartFromOrderDraft({ saleDate: '2026-09-25', channelCode: 'store', lines: [{ code: 'Matcha Latte', qty: 1 }] }, POS_CATALOG, { allowMissingSaleTime: true })
-    expect(got.omitSaleTime).toBe(true)
-    expect(bkkDay(0, Date.parse(got.soldAt))).toBe('2026-09-25')
-    const priced = priceCart(got.cart, POS_CATALOG, got.soldAt, { omitSaleTime: true })
-    expect(priced.draft.saleTime).toBeUndefined()
-    expect(priced.saleTime).toBe('')
-  })
-  it('a case with a time keeps it even with the option', () => {
-    const got = cartFromOrderDraft({ saleDate: '2026-09-25', saleTime: '15:00', channelCode: 'store', lines: [{ code: 'Thai Tea', qty: 1 }] }, POS_CATALOG, { allowMissingSaleTime: true })
-    expect([got.omitSaleTime, got.soldAt]).toEqual([false, '2026-09-25T08:00:00.000Z'])
   })
 })

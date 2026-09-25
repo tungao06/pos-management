@@ -3,7 +3,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { ParityFile, type ParityCase } from '@dayo/contracts'
-import { CartError, cartFromOrderDraft, edgeBahtToSatang, priceCart, toPricingCatalog, type CartErrorCode } from '../src/index.js'
+import { CartError, edgeBahtToSatang, toPricingCatalog, type CartErrorCode } from '../src/index.js'
+import { priceParityCase } from '../src/parity-support.js'
 
 const at = (p: string): string => fileURLToPath(new URL(p, import.meta.url))
 /** dayo's own export (scripts/export-pos-parity.ts), copied verbatim — the block-2 gate. */
@@ -26,7 +27,7 @@ const TABLET_REFUSES = new Map<string, { code: CartErrorCode; why: string }>([
 
 const title = (c: ParityCase): string => (c.note === undefined ? c.spec : `${c.spec} — ${c.note}`)
 
-function paritySuite(file: string, isReal: boolean): void {
+function paritySuite(file: string, isReal: boolean, expectedCases: number): void {
   const parity = ParityFile.parse(JSON.parse(readFileSync(file, 'utf8')))
   const catalog = toPricingCatalog(parity.catalog)
   const noTime = parity.cases.filter((c) => c.draft.saleTime === undefined)
@@ -43,16 +44,20 @@ function paritySuite(file: string, isReal: boolean): void {
         expect([lfHash, sha256(text.replace(/\n/g, '\r\n'))], `${path}: ตัวคิดราคาในเครื่องไม่ตรงรุ่นกับ dayo`).toContain(parity.pricing_files_sha256[path])
       }
     })
-    it('case names are unique', () => {
+    it(`holds all ${expectedCases} cases, uniquely named — a thinner export fails loudly`, () => {
+      expect(parity.cases.length).toBe(expectedCases)
       expect(new Set(parity.cases.map((c) => c.spec)).size).toBe(parity.cases.length)
+    })
+    it('every case the tablet refuses by design is still in the file', () => {
+      const specs = new Set(parity.cases.map((c) => c.spec))
+      expect([...refuses.keys()].filter((k) => !specs.has(k))).toEqual([])
     })
     for (const c of parity.cases) {
       const refusal = refuses.get(c.spec)
       if (refusal !== undefined) {
         it(`${title(c)}: the tablet refuses (${refusal.code}) where dayo warns`, () => {
-          expect(c.expected['warnings'], 'dayo must flag this bill').not.toEqual([])
-          const { cart, soldAt, omitSaleTime } = cartFromOrderDraft(c.draft, catalog, { allowMissingSaleTime: true })
-          try { priceCart(cart, catalog, soldAt, { omitSaleTime }); expect.unreachable() } catch (e) {
+          expect(c.expected['warnings'], 'dayo must flag this bill').toEqual(expect.arrayContaining([expect.any(String)]))
+          try { priceParityCase(c.draft, catalog, { allowMissingSaleTime: true }); expect.unreachable() } catch (e) {
             expect(e).toBeInstanceOf(CartError)
             expect((e as CartError).code).toBe(refusal.code)
           }
@@ -63,8 +68,7 @@ function paritySuite(file: string, isReal: boolean): void {
         let priced
         try {
           // dayo's export only: a case without saleTime is priced with the time absent, exactly as dayo priced it
-          const { cart, soldAt, omitSaleTime } = cartFromOrderDraft(c.draft, catalog, { allowMissingSaleTime: isReal })
-          priced = priceCart(cart, catalog, soldAt, { omitSaleTime })
+          priced = priceParityCase(c.draft, catalog, { allowMissingSaleTime: isReal })
         } catch (e) {
           if (!(e instanceof CartError)) throw e
           expect(c.expected.ok, `the tablet refuses ${c.spec} (${e.code}) but dayo accepts it`).toBe(false)
@@ -92,5 +96,5 @@ function paritySuite(file: string, isReal: boolean): void {
 it('the block-2 gate runs on dayo\'s own export, not only the seed', () => {
   expect(existsSync(REAL), 'packages/dayo-pricing/fixtures/pos-parity.json (dayo pos:parity output) is missing').toBe(true)
 })
-paritySuite(REAL, true)
-paritySuite(SEED, false)
+paritySuite(REAL, true, 25)
+paritySuite(SEED, false, 30)
