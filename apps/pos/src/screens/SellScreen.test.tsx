@@ -39,6 +39,10 @@ function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
     pendingSyncItems: 0,
     lastBackupAt: null,
     backupDue: false,
+    legacyDevice: false,
+    dayoLinked: true,
+    staffNeedingPin: [],
+    ownerRecovery: false,
     ...overrides,
   }
 }

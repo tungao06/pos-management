@@ -28,6 +28,17 @@ const MESSAGES: Record<PosErrorCode, string> = {
   PRICE_JUMP: TH.errPriceJump,
   STOCK_COUNT_NOT_OPEN: TH.errStockCountNotOpen,
   OPENING_COUNT_INCOMPLETE: TH.errOpeningCountIncomplete,
+  // Task 11 codes — placeholder Thai text so the Record stays complete; Task 17 (stream D) moves them into th.ts
+  DAYO_BAD_KEY: 'กุญแจไม่ถูกต้องหรือถูกยกเลิก',
+  DAYO_KEY_NO_SCOPE: 'กุญแจนี้ไม่มีสิทธิ์อ่านเมนู/พนักงาน',
+  DAYO_API_DISABLED: 'ระบบกลางปิด API อยู่',
+  DAYO_UNREACHABLE: 'ติดต่อระบบกลางไม่ได้ — ต้องออนไลน์ตอนตั้งเครื่อง',
+  DAYO_BAD_RESPONSE: 'ระบบกลางตอบรูปแบบที่เครื่องนี้อ่านไม่ได้ — แจ้งทีม POS',
+  DAYO_RECEIPT_NO_INVALID: 'เลขใบเสร็จล่าสุดจากระบบกลางอ่านไม่ได้ — แจ้งทีม POS',
+  NO_CATALOG: 'ยังไม่มีเมนูจากระบบกลาง — ต่อเน็ตแล้วกด "ส่งตอนนี้"',
+  RECOVERY_NOT_ALLOWED: "ยังมีเจ้าของที่ใช้ PIN อนุมัติได้ — ใช้ 'เปลี่ยนกุญแจ' ที่หน้าสถานะ",
+  KEY_NOT_NEW: 'นี่คือกุญแจเดิม — ออกกุญแจใหม่บนเว็บ',
+  OLD_KEY_STILL_ACTIVE: 'ยังไม่ได้เพิกถอนกุญแจเก่าบนเว็บ — เพิกถอนก่อนแล้วกดอีกครั้ง',
 }
 
 /**

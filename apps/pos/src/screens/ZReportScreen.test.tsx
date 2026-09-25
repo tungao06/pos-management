@@ -18,6 +18,10 @@ const bootstrap: BootstrapState = {
   pendingSyncItems: 0,
   lastBackupAt: null,
   backupDue: false,
+  legacyDevice: false,
+  dayoLinked: true,
+  staffNeedingPin: [],
+  ownerRecovery: false,
 }
 
 function renderZReport(shiftId: string, api: Partial<PosApi>): void {
