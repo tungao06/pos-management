@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { firstRun } from './helpers'
+import { firstRun } from '../helpers'
 
 test('receive goods paid from the drawer → stock and X report; a price jump and an over-drawer payment each need a confirm (spec §5 · D19 · D47-3 · Q4-6)', async ({ page }) => {
   await firstRun(page) // float ฿500

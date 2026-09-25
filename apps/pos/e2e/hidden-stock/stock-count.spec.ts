@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { firstRun, login } from './helpers'
+import { firstRun, login } from '../helpers'
 
 test('opening count covers every item, blind until saved, resumed after a reload; later counts offer the key set (spec §4.5 · D30 · Q4-2/3/12/13/14)', async ({ page }) => {
   await firstRun(page)
