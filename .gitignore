@@ -5,6 +5,8 @@ coverage/
 *.log
 .env
 .env.*
-.claude/
+.claude/*
+!.claude/agents/
+!.claude/settings.json
 test-results/
 playwright-report/
