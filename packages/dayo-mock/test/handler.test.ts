@@ -39,11 +39,11 @@ describe('mock dayo', () => {
     const r = await (await m.fetch('http://mock/api/v1/pos/push', { method: 'POST', headers: auth, body: JSON.stringify(b) })).json() as { data: { results: { status: string; reason: string }[] } }
     expect(r.data.results[0]).toMatchObject({ status: 'deferred', reason: 'CLOCK_AHEAD' })
   })
-  it('an unknown sub-key of bill_discount or totals is deferred UNSUPPORTED (block-1 interpretation 5)', async () => {
+  it('an unknown sub-key of totals is rejected INVALID — dayo checks sub-keys in dayo_pos_order, not the field list (0052:313-343, over block-1 interpretation 5)', async () => {
     const m = createMockDayo({ now: '2026-09-25T03:15:04.010Z' })
     const b = JSON.parse(acceptedBody()) as { rows: { data: { totals: Record<string, unknown> } }[] }
     b.rows[0]!.data.totals['service'] = 0
     const r = await (await m.fetch('http://mock/api/v1/pos/push', { method: 'POST', headers: auth, body: JSON.stringify(b) })).json() as { data: { results: { reason: string }[] } }
-    expect(r.data.results[0]!.reason).toBe('UNSUPPORTED')
+    expect(r.data.results[0]!.reason).toBe('INVALID')
   })
 })
