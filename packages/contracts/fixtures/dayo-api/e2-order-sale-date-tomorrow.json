@@ -1,0 +1,28 @@
+{
+  "name": "e2-order-sale-date-tomorrow",
+  "spec": "04 §4.5 sale_date เป็นวันพรุ่งนี้ (ไทย) ของเซิร์ฟเวอร์ แม้ sold_at ยังอยู่ในช่วง 5 นาที = deferred CLOCK_AHEAD (dayo 0052_pos_push.sql:357-359)",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": { "ok": true, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "name": "แท็บเล็ตขาย 1", "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write"] },
+    "api_pos_push": "@data"
+  },
+  "request": {
+    "method": "POST", "path": "/api/v1/pos/push",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" },
+    "body": { "device_time": "2026-09-25T16:58:00.000Z", "rows": [
+      { "key": "order:7d8e9f0a-1b2c-4d3e-9f4a-5b6c7d8e9f0a", "kind": "order", "data": {
+        "pos_order_id": "7d8e9f0a-1b2c-4d3e-9f4a-5b6c7d8e9f0a", "receipt_no": "A-000361", "queue_no": 61, "sale_date": "2026-09-26", "sold_at": "2026-09-25T17:01:00.000Z",
+        "channel": "store", "payment": "cash", "staff_id": "0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d", "catalog_version": 42, "shift_id": null,
+        "lines": [{ "code": "Thai Tea", "size": "16 oz", "sweetness": "50%", "milk": "fresh", "grade": null, "qty": 1 }],
+        "bill_discount": null, "promo_code": null, "skip_promotion_ids": [], "no_promotions": false,
+        "totals": { "items_subtotal": 35, "items_discount": 0, "bill_discount": 0, "total": 35 }, "note": null } }
+    ] }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": { "ok": true, "data": { "server_time": "2026-09-25T16:58:00.120+00:00", "results": [
+      { "key": "order:7d8e9f0a-1b2c-4d3e-9f4a-5b6c7d8e9f0a", "status": "deferred", "reason": "CLOCK_AHEAD", "detail": "sale_date 2026-09-26 เป็นวันพรุ่งนี้ของเซิร์ฟเวอร์" }
+    ] } }
+  }
+}

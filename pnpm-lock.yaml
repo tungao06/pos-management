@@ -168,6 +168,9 @@ importers:
       '@dayo/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@dayo/dayo-pricing':
+        specifier: workspace:*
+        version: link:../dayo-pricing
       '@noble/hashes':
         specifier: ^2.4.0
         version: 2.4.0

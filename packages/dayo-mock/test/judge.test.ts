@@ -26,7 +26,7 @@ describe('mock verdict rules not covered by the contract fixtures (spec §4.5 �
     expect((await push(m, bad))[0]).toMatchObject({ status: 'rejected', reason: 'UNKNOWN_CODE' })
     expect((await push(m, row({ pos_order_id: base.pos_order_id })))[0]!.status).toBe('accepted')
   })
-  it('check order = block-1 Task 3b Step 4: (1) key hash before (f) shapes · (e) fields before a forced server error', async () => {
+  it('check order = dayo 0052:555-620: key hash before the field shapes · unknown fields before a forced server error', async () => {
     const m = createMockDayo({ now: '2026-09-25T03:15:04.010Z' })
     expect((await push(m, row({ pos_order_id: base.pos_order_id })))[0]!.status).toBe('accepted')
     expect((await push(m, row({ pos_order_id: base.pos_order_id, queue_no: -1 })))[0]).toMatchObject({ status: 'rejected', reason: 'CONFLICT' }) // not INVALID
