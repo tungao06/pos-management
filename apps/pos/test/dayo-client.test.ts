@@ -1,8 +1,10 @@
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMockDayo, MOCK_API_KEY } from '@dayo/dayo-mock'
 import { createDayoClient, DayoError, FETCH_TIMEOUT_MS } from '../src/sync/dayo-client'
 
-const BASE = 'http://mock/api/v1/'
+const BASE = 'https://mock/api/v1/' // http is only allowed for localhost / 127.0.0.1 (security review item 1)
 const client = (mock = createMockDayo({ now: '2026-09-25T02:00:00.120Z' }), apiKey = MOCK_API_KEY) =>
   ({ mock, c: createDayoClient({ baseUrl: BASE, apiKey, fetch: mock.fetch, nowMs: () => Date.parse('2026-09-25T02:00:00.000Z') }) })
 async function failureOf(p: Promise<unknown>) { try { await p; return null } catch (e) { expect(e).toBeInstanceOf(DayoError); return (e as DayoError).failure } }
@@ -34,9 +36,77 @@ describe('dayo client (spec 04 §4.1, §6.3)', () => {
     expect(await failureOf(c.getCatalog(0))).toEqual(failure)
   })
   it('a wrong key is 401 and the key never appears in the error', async () => {
+    expect.assertions(2)
     const wrong = `dayo_${'f'.repeat(64)}`
     const { c } = client(undefined, wrong)
-    try { await c.getCatalog(0) } catch (e) { expect(String((e as Error).message) + JSON.stringify((e as DayoError).failure)).not.toContain(wrong) }
+    try { await c.getCatalog(0) } catch (e) {
+      expect((e as DayoError).failure).toEqual({ kind: 'unauthorized' })
+      expect(String((e as Error).message) + String((e as Error).stack) + JSON.stringify((e as DayoError).failure)).not.toContain(wrong)
+    }
+  })
+  it('a key that is not dayo_<64 hex> is unauthorized without calling fetch (security review item 3)', async () => {
+    const f = vi.fn<typeof fetch>()
+    for (const bad of ['', 'dayo_short', `dayo_${'F'.repeat(64)}`, `Bearer dayo_${'0'.repeat(64)}`, `dayo_${'0'.repeat(64)}\r\nX-Evil: 1`]) {
+      const c = createDayoClient({ baseUrl: BASE, apiKey: bad, fetch: f, nowMs: () => 0 })
+      expect(await failureOf(c.getCatalog(0))).toEqual({ kind: 'unauthorized' })
+      expect(await failureOf(c.push({ device_time: '2026-09-25T02:00:00.000Z', rows: [] as never }))).toEqual({ kind: 'unauthorized' })
+      expect(await failureOf(c.listOrders({ from: '2026-09-25', to: '2026-09-25' }))).toEqual({ kind: 'unauthorized' })
+    }
+    expect(f).not.toHaveBeenCalled()
+  })
+  it('refuses a base URL that is not https (or http on this machine) before any fetch (security review item 1)', () => {
+    const f = vi.fn<typeof fetch>()
+    for (const baseUrl of ['http://evil.example.com/api/v1', 'http://localhost.evil.com/api/v1', 'not a url', '']) {
+      expect(() => createDayoClient({ baseUrl, apiKey: MOCK_API_KEY, fetch: f, nowMs: () => 0 })).toThrow(/^BAD_BASE_URL/)
+    }
+    expect(f).not.toHaveBeenCalled()
+  })
+  it.each(['https://dayo.example.com/api/v1/', 'http://localhost:8787/api/v1/', 'http://127.0.0.1:4010/api/v1'])('sends to %s', async (baseUrl) => {
+    const mock = createMockDayo({ now: '2026-09-25T02:00:00.120Z' })
+    const urls: string[] = []
+    const f: typeof fetch = (input, init) => { urls.push(String(input)); return mock.fetch(input, init) }
+    const c = createDayoClient({ baseUrl, apiKey: MOCK_API_KEY, fetch: f, nowMs: () => 0 })
+    await c.getCatalog(0)
+    expect(urls).toEqual([`${baseUrl.replace(/\/+$/, '')}/pos/catalog?known_version=0`])
+  })
+  it('every request refuses redirects (security review item 2)', async () => {
+    const seen: (RequestRedirect | undefined)[] = []
+    const mock = createMockDayo({ now: '2026-09-25T02:00:00.120Z' })
+    const f: typeof fetch = (input, init) => { seen.push(init?.redirect); return mock.fetch(input, init) }
+    const c = createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: f, nowMs: () => 0 })
+    await c.getCatalog(0)
+    await failureOf(c.push({ device_time: '2026-09-25T02:00:00.000Z', rows: [] as never }))
+    await c.listOrders({ from: '2026-09-25', to: '2026-09-25' })
+    expect(seen).toEqual(['error', 'error', 'error'])
+  })
+  it.each([301, 302, 307, 308])('a %i that reaches the client anyway is a network failure', async (status) => {
+    const f: typeof fetch = async () => new Response(null, { status, headers: { location: 'https://evil.example.com/steal' } })
+    const c = createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: f, nowMs: () => 0 })
+    expect((await failureOf(c.getCatalog(0)))?.kind).toBe('network')
+  })
+  it('real fetch: a 307 from the server is a network failure and the key is not sent on', async () => {
+    const hits: string[] = []
+    const server = createServer((req, res) => {
+      hits.push(req.url ?? '')
+      if (req.url?.startsWith('/api/v1/')) { res.writeHead(307, { location: '/steal' }); res.end(); return }
+      res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}')
+    })
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()))
+    try {
+      const { port } = server.address() as AddressInfo
+      const c = createDayoClient({ baseUrl: `http://127.0.0.1:${port}/api/v1`, apiKey: MOCK_API_KEY, fetch: globalThis.fetch, nowMs: () => 0 })
+      expect((await failureOf(c.getCatalog(0)))?.kind).toBe('network')
+      expect(hits).toEqual(['/api/v1/pos/catalog?known_version=0'])
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()))
+    }
+  })
+  it('an answer that is neither 200 nor a mapped error is a server failure', async () => {
+    for (const status of [400, 409, 418]) {
+      const f: typeof fetch = async () => new Response('{}', { status })
+      const c = createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: f, nowMs: () => 0 })
+      expect(await failureOf(c.getCatalog(0))).toEqual({ kind: 'server', status })
+    }
   })
   it('a hung request becomes a network failure after 20 seconds', async () => {
     vi.useFakeTimers()

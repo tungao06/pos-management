@@ -64,7 +64,9 @@ export function encodeLastError(reason: string, detail: string, extra: { support
 export function decodeLastError(raw: string | null): { reason: string; detail: string; supportedHash?: string; farAhead?: true } {
   if (raw === null) return { reason: '', detail: '' }
   try {
-    const p = JSON.parse(raw) as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown }
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { reason: '', detail: raw }
+    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown }
     return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}) }
   } catch {
     return { reason: '', detail: raw }
