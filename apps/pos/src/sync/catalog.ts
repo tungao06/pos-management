@@ -85,7 +85,8 @@ async function applyStaff(tx: RemoteDb, deps: ApiDeps, staff: StaffEntry[], at: 
     await tx.update(s.user).set({ ...next, updatedAt: at, version: u.version + 1 }).where(eq(s.user.id, u.id))
     await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'user', entityId: u.id, action: 'update', beforeJson: { displayName: u.displayName, role: u.role, isActive: u.isActive }, afterJson: { ...next, source: 'dayo' }, actorUserId: null, at })
   }
-  // users dayo does not list (plan-3 owners with random ids, deleted staff) can no longer log in (ruling R7)
+  // users dayo does not list (plan-3 owners with random ids, deleted staff) can no longer log in (ruling R7) — the last
+  // owner with a PIN included (ruling N2: the list has another active owner, checked above; recovery = recoverOwner, Task 11)
   const listed = staff.map((e) => e.id)
   const stale = await tx.select().from(s.user).where(and(eq(s.user.isActive, true), notInArray(s.user.id, listed))).all()
   for (const u of stale) {
@@ -106,6 +107,8 @@ export async function apiBlocked(db: RemoteDb, nowIso: string): Promise<boolean>
  * ruling R12: staff, supported_*, pricing and server_time are applied from EVERY answer; `catalog` is checked on its
  * own, and one the pricing code cannot read keeps the old copy (catalog_version unchanged, so the next pull asks again).
  * client.last_receipt_no is stored as sent — its shape is checked where it is used (Task 11/12).
+ * Any answer that parses — unchanged included — ends an earlier BAD_RESPONSE; catalog/staff problems are only
+ * re-judged by a `changed` answer (a refused catalog keeps the old version, so dayo keeps sending it).
  */
 export async function writeCatalogAnswer(tx: RemoteDb, deps: ApiDeps, data: PosCatalogLooseData, timing: { sentAtMs: number; receivedAtMs: number }): Promise<'changed' | 'unchanged' | 'catalog_rejected'> {
   const at = deps.now()
@@ -116,7 +119,10 @@ export async function writeCatalogAnswer(tx: RemoteDb, deps: ApiDeps, data: PosC
   await writeKey(tx, DAYO_KEYS.apiState, 'ok')
   await deleteKey(tx, DAYO_KEYS.apiRetryAt)
   await writeKey(tx, DAYO_KEYS.catalogCheckedAt, at)
-  if (!data.changed) return 'unchanged'
+  if (!data.changed) {
+    if ((await readKey(tx, DAYO_KEYS.catalogError))?.startsWith(BAD_RESPONSE) === true) await deleteKey(tx, DAYO_KEYS.catalogError)
+    return 'unchanged'
+  }
   const problems: string[] = []
   if ((await applyStaff(tx, deps, data.staff, at)) === 'no_active_owner') problems.push('NO_ACTIVE_OWNER: the staff list from dayo has no active owner — not applied')
   const catalog = PosOrderCatalogSchema.safeParse(data.catalog)
@@ -133,13 +139,17 @@ export async function writeCatalogAnswer(tx: RemoteDb, deps: ApiDeps, data: PosC
   return catalog.success ? 'changed' : 'catalog_rejected'
 }
 
+/** Prefix of a catalogError that came from an answer breaking the contract (not from its catalog or staff). */
+export const BAD_RESPONSE = 'BAD_RESPONSE'
+
 export async function recordDayoFailure(db: RemoteDb, deps: ApiDeps, f: DayoFailure): Promise<void> {
   if (f.kind === 'unauthorized') await writeKey(db, DAYO_KEYS.apiState, 'unauthorized')
   else if (f.kind === 'forbidden') await writeKey(db, DAYO_KEYS.apiState, 'forbidden')
   else if (f.kind === 'api_disabled') {
     await writeKey(db, DAYO_KEYS.apiState, 'disabled')
     await writeKey(db, DAYO_KEYS.apiRetryAt, new Date(Date.parse(deps.now()) + API_DISABLED_RETRY_MS).toISOString())
-  } else if (f.kind === 'bad_response') await writeKey(db, DAYO_KEYS.catalogError, f.message)
+  } else if (f.kind === 'bad_base_url') await writeKey(db, DAYO_KEYS.apiState, 'bad_base_url')
+  else if (f.kind === 'bad_response') await writeKey(db, DAYO_KEYS.catalogError, `${BAD_RESPONSE}: ${f.message}`)
   // network / server / rate_limited: nothing to remember here — the scheduler backs off (Task 14)
 }
 
@@ -154,8 +164,11 @@ export async function pullCatalog(ctx: SyncContext): Promise<CatalogPullResult> 
     client = createDayoClient({ ...cfg, fetch: ctx.deps.fetch, nowMs: () => Date.parse(ctx.deps.now()) })
   } catch (e) {
     // Task 9 review note: a stored base URL the client refuses (a restored backup can carry one) throws synchronously —
-    // a failed pull with nothing sent, never an exception out of the worker. The message never echoes the URL.
-    return { outcome: 'failed', failure: { kind: 'network', message: e instanceof Error ? e.message : 'BAD_BASE_URL' } }
+    // a failed pull with nothing sent, never an exception out of the worker. Its own failure and apiState, not
+    // 'network': backing off cannot fix it, the owner must re-link. The message never echoes the URL.
+    const failure: DayoFailure = { kind: 'bad_base_url', message: e instanceof Error ? e.message : 'BAD_BASE_URL' }
+    await ctx.serial(() => recordDayoFailure(ctx.db, ctx.deps, failure))
+    return { outcome: 'failed', failure }
   }
   try {
     const r = await client.getCatalog(known) // network outside the serial queue

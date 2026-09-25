@@ -23,7 +23,7 @@ export const DAYO_KEYS = {
   pushSingleThrough: 'dayo.push_single_through',
   lastPushAt: 'dayo.last_push_at',
 } as const
-export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled'
+export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled' | 'bad_base_url'
 
 export const CLOCK_WARN_MS = 5 * 60_000            // D80
 export const BACKOFF_MS = [5_000, 15_000, 60_000, 300_000, 900_000] as const // spec §6.3

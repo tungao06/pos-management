@@ -1,9 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
-import { loadRichCatalog } from '@dayo/contracts/fixture-files'
 import { createMockDayo, MOCK_API_KEY } from '@dayo/dayo-mock'
-import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 import { pullCatalog, readCatalog, staffDisplayName } from '../src/sync/catalog'
 import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
 import { openTestApi } from './helpers/db'
@@ -11,9 +9,7 @@ import { openTestApi } from './helpers/db'
 const PIN = 'argon2id$t=1,m=64,p=1$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000'
 
 async function linked(mockNow = '2026-09-25T02:00:00.120Z') {
-  // the test catalog's pricing hashes are dayo's at 65d3af2; the tablet vendors 135679c (Task 2 · shopSettings.ts and
-  // types.ts differ) — serve the pinned VENDOR.json hashes so "same pricing" is the starting point of every test
-  const mock = createMockDayo({ now: mockNow, catalog: { ...loadRichCatalog(), pricing: { commit: vendor.commit, files_sha256: { ...vendor.files } } } })
+  const mock = createMockDayo({ now: mockNow })
   const t = await openTestApi({ fetch: mock.fetch })
   await writeKey(t.db, DAYO_KEYS.baseUrl, 'https://mock/api/v1') // http only for localhost since Task 9 (security review item 1)
   await t.deps.secrets.setApiKey(MOCK_API_KEY)
@@ -141,8 +137,21 @@ describe('pullCatalog (spec 04 §4.4, §6.5)', () => {
     await writeKey(t.db, DAYO_KEYS.baseUrl, 'http://evil.example/api/v1') // plain http off localhost
     const r = await pullCatalog(ctx)
     expect(r.outcome).toBe('failed')
-    expect(r.failure?.kind).toBe('network')
+    expect(r.failure?.kind).toBe('bad_base_url') // not 'network': retrying cannot help, the owner must fix the link
+    expect(await readKey(t.db, DAYO_KEYS.apiState)).toBe('bad_base_url')
     expect(mock.requests()).toHaveLength(0)
+    await writeKey(t.db, DAYO_KEYS.baseUrl, 'https://mock/api/v1') // the link is fixed → the next pull works and clears the state
+    expect((await pullCatalog(ctx)).outcome).toBe('changed')
+    expect(await readKey(t.db, DAYO_KEYS.apiState)).toBe('ok')
+  })
+  it('a bad answer is forgotten by the next answer that parses, unchanged included', async () => {
+    const { ctx, t } = await linked()
+    expect((await pullCatalog(ctx)).outcome).toBe('changed')
+    const garbled = { ...ctx, deps: { ...t.deps, fetch: (async () => new Response(JSON.stringify({ ok: true, data: { changed: 'maybe' } }), { status: 200 })) as typeof fetch } }
+    expect((await pullCatalog(garbled)).failure?.kind).toBe('bad_response')
+    expect(await readKey(t.db, DAYO_KEYS.catalogError)).toMatch(/^BAD_RESPONSE/)
+    expect((await pullCatalog(ctx)).outcome).toBe('unchanged')
+    expect(await readKey(t.db, DAYO_KEYS.catalogError)).toBeNull()
   })
 })
 
@@ -188,6 +197,15 @@ describe('staff from E1 (spec 04 §4.4 rule 5, §6.5, ruling R7/R10/R12)', () =>
     await pullCatalog(ctx)
     const u = await t.db.select().from(s.user).where(eq(s.user.id, '7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f')).get()
     expect(u!.isActive && u!.role === 'owner').toBe(false)
+  })
+  it('the last owner with a PIN whom dayo no longer lists is switched off here too (ruling N2 · recovery = Task 11 recoverOwner)', async () => {
+    const { ctx, t, mock } = await linked()
+    const at = t.clock.now()
+    await t.db.insert(s.user).values({ id: '7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f', displayName: 'TungAo', role: 'owner', pinHash: PIN, isActive: true, createdAt: at, updatedAt: at, version: 1 })
+    mock.bumpCatalog((c) => { c.staff = c.staff.filter((x) => x.display_name !== 'TungAo') }) // DCm stays an active owner in dayo (no PIN here)
+    await pullCatalog(ctx)
+    expect((await t.db.select().from(s.user).where(eq(s.user.id, '7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f')).get())?.isActive).toBe(false)
+    expect(await readKey(t.db, DAYO_KEYS.catalogError)).toBeNull()
   })
   it('an empty display name shows as "พนักงาน" + the last 4 of the id', () => {
     expect(staffDisplayName({ id: '4e5f6071-8293-44a5-b6c7-d8e9f0a1b2c3', display_name: '', role: 'staff', active: true })).toBe('พนักงาน b2c3')
