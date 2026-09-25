@@ -1,14 +1,14 @@
 { "ok": true, "data": {
     "changed": true, "catalog_version": 42, "server_time": "2026-09-25T02:00:00.120+00:00",
     "client": { "name": "แท็บเล็ตขาย 1", "last_receipt_no": null },
-    "pricing": { "commit": "65d3af2ba9fce1f6c3aa591379890a8d61fe9755", "files_sha256": {
+    "pricing": { "commit": "135679ceefc0016ade2d94508fe3de615be0da3e", "files_sha256": {
         "packages/shared/src/cost.ts": "83df8f024306ad4e4575d84e3b2b32b0ff1579d765138d76c4eacfb7160202a8",
         "packages/shared/src/fmt.ts": "df31505296c9c99d2e1cc984d02a7fc86706b7ce668b7680554008fbc74334ac",
         "packages/shared/src/money.ts": "96abf33a850979298e3d3f3996acc03cdbbd6a17b33630b22a3cfcdb1407699e",
         "packages/shared/src/promotions.ts": "4850b98d5084e703bb1deb84ea4629253f510f37d6e0ab80161e2e5dab15ea11",
-        "packages/shared/src/shopSettings.ts": "6ae3480f4c980a5cfbd8aadad99eafa2170b8b74e92c7f39a90c4c4392d88b3c",
+        "packages/shared/src/shopSettings.ts": "7b1fdd25231fece6527bd82b938217ec94f0cb403e14071d4a4edb6edd5ec34d",
         "packages/shared/src/time.ts": "c634692b8b9c5dd30876cca15e94b3b642da7c685966db5017a34682c3cc1de1",
-        "packages/shared/src/types.ts": "de361ebdd0c7d08d556d347867d9068511039dcc2af29c7684468296e86d9bda" }  },
+        "packages/shared/src/types.ts": "0c6e790ea3e16a8dcdbf93b36c32c224f422c3fefe6ee34e791a2dc8e42edaa0" }  },
     "supported_kinds": ["order", "order_void"],
     "supported_fields": {
       "order": ["pos_order_id", "receipt_no", "queue_no", "sale_date", "sold_at", "channel", "payment", "staff_id", "catalog_version", "shift_id", "lines", "lines.code", "lines.size", "lines.sweetness", "lines.milk", "lines.grade", "lines.qty", "lines.free", "lines.discount_baht", "lines.discount_percent", "lines.discount_reason", "bill_discount", "promo_code", "skip_promotion_ids", "no_promotions", "totals", "note"],

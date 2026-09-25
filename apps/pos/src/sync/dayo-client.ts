@@ -10,6 +10,8 @@ export type DayoFailure =
   | { kind: 'rate_limited'; retryAfterMs: number }
   | { kind: 'server'; status: number }
   | { kind: 'bad_response'; message: string }
+  /** The stored base URL is refused before any fetch (normalizeBaseUrl) — retrying cannot help; the owner must re-link. */
+  | { kind: 'bad_base_url'; message: string }
 
 export class DayoError extends Error {
   readonly failure: DayoFailure
