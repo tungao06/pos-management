@@ -205,7 +205,8 @@ export function ReceiveScreen(): JSX.Element {
   return (
     <main className="page">
       <div className="actions">
-        <button type="button" data-testid="nav-stock" onClick={() => void navigate({ to: '/stock' })}>
+        {/* Task 16 removed the /stock route from the routeTree; this link is unreachable until a later task restores it */}
+        <button type="button" data-testid="nav-stock" onClick={() => void navigate({ to: '/stock' as any })}>
           {TH.back}
         </button>
       </div>

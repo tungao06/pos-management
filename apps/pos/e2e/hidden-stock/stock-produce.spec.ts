@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { addItem, firstRun } from './helpers'
+import { addItem, firstRun } from '../helpers'
 
 test('a sale before brewing makes the base negative → half a batch → throw the leftover out (spec §4.4, §4.6 · D17 · D28)', async ({ page }) => {
   await firstRun(page)
