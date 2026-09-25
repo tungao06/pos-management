@@ -161,7 +161,8 @@ export type PushRequest = z.infer<typeof PushRequest>
 export const PushEnvelope = z.looseObject({ device_time: z.string(), rows: z.array(z.unknown()).min(1).max(MAX_PUSH_ROWS) })
 
 // ── E2 response: what the tablet RECEIVES is tolerant (spec §4.1 · plan-5 ReceivedRowResult) ───────────────────────
-export const ReceivedRowResult = z.looseObject({ key: z.string(), status: z.string(), reason: z.string().optional(), detail: z.string().optional(), data: z.unknown().optional() })
+/** key is null when dayo could not read a string key off the sent row (0052_pos_push.sql:748) — the receive side stays tolerant of both. */
+export const ReceivedRowResult = z.looseObject({ key: z.string().nullable(), status: z.string(), reason: z.string().optional(), detail: z.string().optional(), data: z.unknown().optional() })
 export type ReceivedRowResult = z.infer<typeof ReceivedRowResult>
 export const OrderAcceptedData = z.looseObject({ order_no: z.string(), version: z.number().int(), computed_total: z.number().finite().nonnegative(), amount_mismatch: z.boolean(), duplicate_of: z.array(z.string()), warnings: z.array(z.string()) })
 export const OrderVoidAcceptedData = z.looseObject({ order_no: z.string(), version: z.number().int() })

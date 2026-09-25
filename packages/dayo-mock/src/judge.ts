@@ -58,7 +58,7 @@ const staffOk = (s: MockState, id: string): boolean => s.catalog.staff.some((x) 
 
 /** `testRaise` = header x-dayo-test-raise (dayo 0052:556-566): "XX000:<key>" makes that row raise XX000. */
 export function judgeRow(s: MockState, raw: unknown, now: number, testRaise: string | null = null): ReceivedRowResult {
-  const keyOut = isObj(raw) && typeof raw['key'] === 'string' ? clipCodePoints(raw['key'], 200) : '' // dayo: null (the contract keeps a string)
+  const keyOut = isObj(raw) && typeof raw['key'] === 'string' ? clipCodePoints(raw['key'], 200) : null // dayo main 0052_pos_push.sql:748: null when the sent key is not a string
   try {
     return pushRow(s, raw, now, testRaise)
   } catch (e) {

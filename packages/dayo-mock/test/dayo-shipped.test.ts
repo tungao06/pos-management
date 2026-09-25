@@ -93,6 +93,19 @@ describe('scopes: a key without the route\'s scope is a 403 of the whole request
   })
 })
 
+describe('route order: Content-Length 422 → 401 → 403 → 429 (dayo main auth.ts + api_authenticate)', () => {
+  it('the legacy forbidden mode answers 403 even with rate_limited\'s retryAfterSec also configured, never 429', async () => {
+    const m = createMockDayo({ now: NOW, mode: 'forbidden', retryAfterSec: 5 }) // both rate_limited's and forbidden's settings present at once
+    const r = await m.fetch('http://mock/api/v1/orders', { headers: auth })
+    expect([r.status, await r.json(), r.headers.get('retry-after')]).toEqual([403, { ok: false, error: { code: 'DY403', message: 'forbidden: API key ไม่มีสิทธิ์ staff:read' } }, null])
+  })
+  it('rate_limited alone still answers 429 with Retry-After (order swap does not break it)', async () => {
+    const m = createMockDayo({ now: NOW, mode: 'rate_limited', retryAfterSec: 5 })
+    const r = await m.fetch('http://mock/api/v1/orders', { headers: auth })
+    expect([r.status, r.headers.get('retry-after')]).toEqual([429, '5'])
+  })
+})
+
 describe('promotions closed before sold_at are not applied (ADR-0049 rule 5 · ADR-0053 · dayo_promo_active_at)', () => {
   it('the bill is accepted, computed_total is dayo\'s price without the promotion, amount_mismatch when it differs by more than ฿1', async () => {
     const m = createMockDayo({ now: NOW })
@@ -118,6 +131,12 @@ describe('check order = dayo_pos_push_row then dayo_pos_order / dayo_pos_void (0
     expect(await one(m, { ...order(), key: `Order:${ID}`, kind: 3 })).toMatchObject({ reason: 'BAD_KEY', detail: 'key ต้องเป็นรูป <kind>:<uuid>' })
     expect(await one(m, { ...order(), kind: 3 })).toMatchObject({ reason: 'INVALID', detail: 'kind ต้องเป็นข้อความ' })
     expect(await one(m, { ...order(), kind: 'order_void' })).toMatchObject({ reason: 'BAD_KEY', detail: 'ชนิดใน key ไม่ตรงกับ kind' })
+  })
+  it('when the sent key is not a string the result key is null, like dayo (0052_pos_push.sql:748), never ""', async () => {
+    const m = m0()
+    expect(await one(m, 7)).toMatchObject({ key: null, status: 'rejected', reason: 'INVALID' }) // raw itself is not an object
+    expect(await one(m, { kind: 'order', data: order().data })).toEqual({ key: null, status: 'rejected', reason: 'BAD_KEY', detail: 'key ต้องเป็นรูป <kind>:<uuid>' }) // key absent
+    expect(await one(m, { key: 5, kind: 'order', data: order().data })).toEqual({ key: null, status: 'rejected', reason: 'BAD_KEY', detail: 'key ต้องเป็นรูป <kind>:<uuid>' }) // key not a string
   })
   it('unknown field comes before a bad pos_order_id and before a key/pos_order_id mismatch', async () => {
     const m = m0()
