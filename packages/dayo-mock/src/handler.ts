@@ -80,8 +80,8 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       : isPush ? ['orders:write'] : req.method === 'GET' && url.pathname === '/api/v1/orders' ? ['orders:read'] : []
     const denied = scopeError(required, h)
     if (denied !== null) return denied
+    if (s.mode === 'forbidden') return err(403, 'DY403', s.forbiddenMessage, h) // legacy 403 mode before 429 (dayo order: 403 before 429)
     if (s.mode === 'rate_limited') return err(429, 'DY429', 'rate_limited: เกินจำนวนคำขอต่อนาที (60/min)', { ...h, 'Retry-After': String(s.retryAfterSec) })
-    if (s.mode === 'forbidden') return err(403, 'DY403', s.forbiddenMessage, h)
 
     if (req.method === 'GET' && url.pathname === '/api/v1/pos/catalog') {
       const c = s.catalog
@@ -113,7 +113,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     try {
       return judgeRow(s, row, t, raise)
     } catch {
-      const key = row !== null && typeof row === 'object' && typeof (row as { key?: unknown }).key === 'string' ? [...(row as { key: string }).key].slice(0, 200).join('') : ''
+      const key = row !== null && typeof row === 'object' && typeof (row as { key?: unknown }).key === 'string' ? [...(row as { key: string }).key].slice(0, 200).join('') : null // dayo: null when the sent key is not a string
       return { key, status: 'deferred', reason: 'SERVER_ERROR', detail: 'SQLSTATE XX000' }
     }
   }
