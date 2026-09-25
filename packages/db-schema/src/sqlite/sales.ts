@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { ActorType, CashMovementKind, EventType, OrderOrigin, OrderStatus, PaymentMethod, ShiftStatus, VerifyStatus } from '@dayo/contracts'
+import { ActorType, CashMovementKind, type DayoEdit, EventType, OrderOrigin, OrderStatus, PaymentMethod, ShiftStatus, VerifyStatus } from '@dayo/contracts'
 import { check, index, sqliteTable, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { bool, id, int, json, text, textEnum } from './columns.js'
 import { channel, customer, device, productVariant, recipe, sweetnessLevel, user } from './reference.js'
@@ -91,6 +91,9 @@ export const order = sqliteTable('order', {
   centralComputedTotalSatang: int('central_computed_total_satang'), // E2 computed_total through edgeBahtToSatang
   centralAmountMismatch: bool('central_amount_mismatch'),
   centralDuplicateOfJson: json('central_duplicate_of_json'),        // E2 duplicate_of (order_no of bot/web bills)
+  // E3 dayo_edit of this bill (ADR-0050): the owner's latest edit/cancel on the dayo web, null = none. Display only —
+  // total_satang, payment and status stay what was collected here (spec 04 §4.6 · owner decision O1 pending).
+  centralDayoEditJson: json('central_dayo_edit_json').$type<DayoEdit | null>(),
 }, (t) => [
   unique().on(t.deviceId, t.receiptNo),
   // D47 item 5: the queue number is unique per device per business day (not globally).

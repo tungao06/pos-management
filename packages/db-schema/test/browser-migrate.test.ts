@@ -42,7 +42,7 @@ describe('migrateSqliteRemote (drizzle migrator over sqlite-proxy, browser-safe)
     expect(raw.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
   })
 
-  it('upgrades a device that already has data: only the new migration runs, rows and append-only triggers survive (plan 4 M-5)', async () => {
+  it('upgrades a device that already has data: only the pending migrations run, rows and append-only triggers survive (plan 4 M-5)', async () => {
     const { raw, db } = open()
     // a device installed before plan 4: migrations up to 0001 (drizzle applies by journal time, so a later file cannot stay behind)
     const before = SQLITE_MIGRATIONS.slice(0, SQLITE_MIGRATIONS.findIndex((m) => m.tag === '0002_stock_adjustment'))
