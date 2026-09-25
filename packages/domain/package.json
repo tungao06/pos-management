@@ -6,7 +6,8 @@
   "exports": { ".": "./src/index.ts" },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "parity:seed": "tsx scripts/gen-parity-seed.ts"
   },
   "dependencies": {
     "@dayo/contracts": "workspace:*",
@@ -16,6 +17,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "fast-check": "^4.10.0",
+    "tsx": "4.23.13",
     "typescript": "~5.9.0",
     "vitest": "^5.0.0"
   }
