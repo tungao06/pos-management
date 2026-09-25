@@ -23,6 +23,9 @@ export type BootstrapState = {
   legacyDevice: boolean
   /** dayo.base_url is stored and the API key is in the secret store. */
   dayoLinked: boolean
+  /** The stored `dayo.base_url`, or null when nothing is stored — not a secret. Controller ruling R1 (security):
+   * the recovery and key-swap screens read this to lock their address field to the tablet's own central address. */
+  dayoBaseUrl: string | null
   /** Active dayo staff with a known role who have no PIN on this tablet yet (spec 04 §6.5). */
   staffNeedingPin: StaffOptionDto[]
   /** ruling N2: "เชื่อมใหม่ด้วยคีย์ใหม่" is offered (no active owner with a PIN here, or the key was revoked). */

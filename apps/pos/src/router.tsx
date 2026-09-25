@@ -9,6 +9,7 @@ import { LoginScreen } from './screens/LoginScreen'
 import { OpenShiftScreen } from './screens/OpenShiftScreen'
 import { OrderDetailScreen } from './screens/OrderDetailScreen'
 import { OrdersScreen } from './screens/OrdersScreen'
+import { OwnerRecoveryScreen } from './screens/OwnerRecoveryScreen'
 import { QrPayScreen } from './screens/QrPayScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
@@ -31,6 +32,8 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: IndexRedirect })
 const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: SetupScreen })
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginScreen })
+// ruling N2: reached from the login screen's banner with nobody signed in yet — outside `<RequireSession>`.
+const ownerRecoveryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/owner-recovery', component: OwnerRecoveryScreen })
 const openShiftRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/shift/open',
@@ -148,6 +151,7 @@ export const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
   loginRoute,
+  ownerRecoveryRoute,
   openShiftRoute,
   sellRoute,
   payCashRoute,

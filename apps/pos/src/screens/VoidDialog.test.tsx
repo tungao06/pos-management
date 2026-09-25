@@ -45,6 +45,7 @@ const BOOT: BootstrapState = {
   backupDue: false,
   legacyDevice: false,
   dayoLinked: true,
+  dayoBaseUrl: 'https://dayo.example/api/v1',
   staffNeedingPin: [],
   ownerRecovery: false,
 }
