@@ -63,11 +63,12 @@ function activeOwners(answer: ChangedAnswer): DayoProbe['owners'] {
 /**
  * spec §4.4 ข้อ 6 · A1: `client.last_receipt_no` is dayo's raw external_ref — the schema no longer checks it, so every
  * reader checks it here before parseReceiptNo. A value of another shape stops the flow; nothing is written and no
- * prefix is guessed.
+ * prefix is guessed. The detail carries the raw value itself (never a secret, just dayo's receipt counter) so the
+ * setup screen's Thai message (Task 17, "ปรับตาม dayo") can name it for the owner.
  */
 function requiredPrefix(last: string | null): string | null {
   if (last === null) return null
-  if (!RECEIPT_NO_RE.test(last)) throw new PosError('DAYO_RECEIPT_NO_INVALID', 'client.last_receipt_no is not <A-Z{1,3}>-<6 digits>')
+  if (!RECEIPT_NO_RE.test(last)) throw new PosError('DAYO_RECEIPT_NO_INVALID', last)
   return parseReceiptNo(last).prefix
 }
 

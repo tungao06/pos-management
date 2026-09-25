@@ -12,16 +12,62 @@ export const TH = {
   storageNotPersistent: 'ข้อมูลในเครื่องยังไม่ถูกล็อกไว้ (อาจถูกล้าง) — ติดตั้งแอปลงหน้าจอหลัก',
   errUnexpected: 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง',
 
-  setupTitle: 'ตั้งค่าเครื่องครั้งแรก',
+  // เดิม (setupShop) — เก็บไว้จนสาย C ลบ setupShop
   setupDeviceName: 'ชื่อเครื่อง',
   setupDeviceNameDefault: 'แท็บเล็ตหน้าร้าน',
-  setupReceiptPrefix: 'อักษรนำหน้าเลขที่บิล (A–Z)',
   setupOwner: (n: number): string => `เจ้าของคนที่ ${n}`,
   setupDisplayName: 'ชื่อที่แสดง',
+
+  // Task 17 — ตั้งเครื่องด้วยกุญแจ dayo (spec 04 §7 ข้อ 1, §6.5, §6.6, §6.9)
+  setupTitle: 'ตั้งเครื่องขาย',
+  setupLinkTitle: 'เชื่อมเครื่องนี้กับระบบกลาง',
+  setupReceiptPrefix: 'อักษรนำหน้าเลขที่บิล (A–Z)',
   setupPin: 'PIN ตัวเลข 4–6 หลัก',
   setupPinConfirm: 'ยืนยัน PIN อีกครั้ง',
   setupPromptPayId: 'หมายเลขพร้อมเพย์ (เบอร์มือถือ 10 หลัก / เลขบัตร 13 หลัก / e-Wallet 15 หลัก)',
   setupSave: 'บันทึกและเริ่มใช้งาน',
+  setupBaseUrl: 'ที่อยู่ระบบกลาง (dayo)',
+  setupApiKey: 'กุญแจเครื่อง (API key)',
+  setupScan: 'สแกน QR',
+  setupProbe: 'ทดสอบกุญแจ',
+  setupConnectedTo: (name: string): string => `เชื่อมกับ: ${name}`,
+  pricingMismatchSetup: 'ตัวคิดราคาในเครื่องไม่ตรงกับระบบกลาง — ขายได้ แต่แจ้งทีม POS',
+  setupChooseOwner: 'เลือกเจ้าของร้าน (จากระบบกลาง)',
+  setupLegacyUser: 'เจ้าของเดิมของเครื่องนี้',
+  setupLegacyPin: 'PIN เจ้าของเดิม (อนุมัติการเชื่อมเครื่อง)',
+  persistOk: 'เก็บข้อมูลถาวร: ได้',
+  persistNo: 'เก็บข้อมูลถาวร: ไม่ได้ — อย่าล้างข้อมูลเบราว์เซอร์',
+  errChooseOwner: 'เลือกเจ้าของก่อน',
+  dayoBadKey: 'กุญแจไม่ถูกต้องหรือถูกยกเลิก',
+  dayoNoScope: 'กุญแจนี้ไม่มีสิทธิ์อ่านเมนู/พนักงาน',
+  dayoApiOff: 'ระบบกลางปิด API อยู่',
+  dayoUnreachable: 'ติดต่อระบบกลางไม่ได้ — ต้องออนไลน์ตอนตั้งเครื่อง',
+  dayoBadResponse: 'ระบบกลางตอบรูปแบบที่เครื่องนี้อ่านไม่ได้ — แจ้งทีม POS',
+  // "ปรับตาม dayo" (สเปก §4.4 ข้อ 6 · §6.6): the value dayo actually sent, so the owner can check the tablet's key
+  // against the right device on the dayo web instead of guessing from a shape description.
+  dayoReceiptNoInvalid: (value: string): string => `เลขใบเสร็จล่าสุดที่ระบบกลางจำไว้ (${value}) ไม่ใช่รูปแบบของแท็บเล็ต — ให้เจ้าของตรวจกุญแจเครื่องบนเว็บ dayo`,
+  noCatalog: 'ยังไม่มีเมนูจากระบบกลาง — ต่อเน็ตแล้วกด "ส่งตอนนี้"',
+  // ruling N2 + controller ruling R1 (security): recovery only ever targets the address already stored on this
+  // tablet — a working owner PIN still goes through "เปลี่ยนกุญแจ" (replaceApiKey), not this screen.
+  recoveryNotAllowed: "กู้สิทธิ์เจ้าของไม่ได้ตอนนี้ — ถ้ายังมีเจ้าของที่ใช้ PIN ได้ ให้ใช้ 'เปลี่ยนกุญแจ' ที่หน้าสถานะ · กุญแจใหม่ต้องเป็นของระบบกลางเดิม",
+  keyNotNew: 'นี่คือกุญแจเดิม — ออกกุญแจใหม่บนเว็บ',
+  oldKeyStillActive: 'ยังไม่ได้เพิกถอนกุญแจเก่าบนเว็บ — เพิกถอนก่อนแล้วกดอีกครั้ง',
+
+  needsPinTitle: 'ต้องตั้ง PIN ก่อนใช้',
+  ownerRecoveryBanner: 'ไม่มีเจ้าของที่ใช้งานได้บนเครื่องนี้',
+  ownerRecoveryButton: 'เชื่อมใหม่ด้วยคีย์ใหม่',
+  ownerRecoveryTitle: 'เชื่อมใหม่ด้วยคีย์ใหม่',
+  ownerRecoveryStep1: '1) ล็อกอินเว็บ dayo ด้วย LINE ในฐานะเจ้าของ แล้วออกกุญแจใหม่ที่ /settings/api-clients',
+  ownerRecoveryStep2: '2) เพิกถอนกุญแจเก่าของเครื่องนี้บนเว็บ',
+  ownerRecoveryStep3: '3) สแกน/วางกุญแจใหม่ แล้วทดสอบกุญแจ เลือกเจ้าของ และตั้ง PIN',
+  // controller ruling R1 (security)
+  ownerRecoveryNoAddress: 'เครื่องนี้ไม่มีที่อยู่ระบบกลางที่บันทึกไว้ — ต้องตั้งเครื่องใหม่',
+
+  staffPinTitle: (name: string): string => `ตั้ง PIN ให้ ${name}`,
+  staffPinApprover: 'เจ้าของผู้อนุมัติ',
+  staffPinApproverPin: 'PIN เจ้าของผู้อนุมัติ',
+  staffPinNew: 'PIN ใหม่',
+  staffPinNew2: 'ยืนยัน PIN ใหม่',
 
   loginTitle: 'ใครกำลังใช้งาน',
   loginEnterPin: (name: string): string => `ใส่ PIN ของ ${name}`,
