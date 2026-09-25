@@ -1,8 +1,12 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
+import { readCatalog } from '../sync/catalog'
 import { isBackupDue, lastBackupAt, lastBackupZId } from './backup'
+import { isDayoLinked, ownerRecoveryAllowed } from './connect'
+import type { ApiDeps } from './deps'
 import { PosError } from './errors'
+import { staffNeedingPin } from './staff'
 import type { BootstrapState, DeviceDto, ShiftDto, UserDto } from './types'
 
 /** sync_state key holding this device's id (decision T7). */
@@ -31,9 +35,15 @@ export async function currentOpenShift(db: RemoteDb, deviceId: string): Promise<
   return row ? { id: row.id, businessDate: row.businessDate, openedAt: row.openedAt, openedBy: row.openedBy, openingFloatSatang: row.openingFloatSatang } : null
 }
 
+/** Active users with a PIN — in the order of dayo's staff list (E1) when there is one (owners first there), else by creation. */
 export async function listActiveUsers(db: RemoteDb): Promise<UserDto[]> {
   const rows = await db.select().from(s.user).where(eq(s.user.isActive, true)).orderBy(s.user.createdAt, s.user.id).all()
-  return rows.map((u) => ({ id: u.id, displayName: u.displayName, role: u.role }))
+  const users = rows.map((u) => ({ id: u.id, displayName: u.displayName, role: u.role }))
+  const catalog = await readCatalog(db)
+  if (catalog === null) return users
+  const rank = new Map(catalog.staff.map((x, i) => [x.id, i]))
+  const at = (id: string): number => rank.get(id) ?? Number.MAX_SAFE_INTEGER
+  return users.map((u, i) => ({ u, i })).sort((a, b) => at(a.u.id) - at(b.u.id) || a.i - b.i).map((x) => x.u)
 }
 
 /**
@@ -63,18 +73,25 @@ export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
   return rows[0]?.[0] ?? 0
 }
 
-export async function bootstrap(db: RemoteDb): Promise<BootstrapState> {
-  if ((await localDeviceId(db)) === null) return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false }
+export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapState> {
+  const dayoLinked = await isDayoLinked(db, deps)
+  if ((await localDeviceId(db)) === null) {
+    return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, staffNeedingPin: [], ownerRecovery: false }
+  }
   const device = await requireDevice(db)
   const lastAt = await lastBackupAt(db)
   const lastZId = await lastBackupZId(db)
   return {
-    needsSetup: false,
+    needsSetup: !dayoLinked,
     device,
     users: await listActiveUsers(db),
     openShift: await currentOpenShift(db, device.id),
     pendingSyncItems: await countPendingSyncItems(db),
     lastBackupAt: lastAt,
     backupDue: await isBackupDue(db, device.id, lastZId),
+    legacyDevice: !dayoLinked, // a device row without a dayo link = set up by plan 3/4's setupShop (ruling R7)
+    dayoLinked,
+    staffNeedingPin: dayoLinked ? await staffNeedingPin(db) : [],
+    ownerRecovery: dayoLinked && (await ownerRecoveryAllowed(db)),
   }
 }

@@ -60,9 +60,9 @@ export function vacuumInto(raw: DatabaseSync): Uint8Array {
 
 export type TestApi = { api: PosApi; db: RemoteDb; raw: DatabaseSync; clock: TestClock; deps: ApiDeps }
 
-export async function openTestApi(opts: { fetch?: typeof fetch } = {}): Promise<TestApi> {
+export async function openTestApi(opts: { fetch?: typeof fetch; now?: string } = {}): Promise<TestApi> {
   const { raw, db } = await openTestDb()
-  const clock = testClock()
+  const clock = testClock(opts.now)
   const deps: ApiDeps = {
     now: clock.now, newId: sequentialIds(), pinCost: { ...TEST_PIN_COST }, exportDbFile: async () => vacuumInto(raw),
     fetch: opts.fetch ?? (async () => { throw new TypeError('offline in tests') }),

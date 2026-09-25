@@ -25,6 +25,17 @@ export type PosErrorCode =
   | 'PRICE_JUMP' // D47 item 3 · Q4-15: a received price is > 10% off the last purchase price — detail = the item codes; retry with acceptPriceJump
   | 'STOCK_COUNT_NOT_OPEN' // the stock count was closed (or never opened) — reload the count screen
   | 'OPENING_COUNT_INCOMPLETE' // Q4-13 · D30: the opening count must cover every tracked item — detail = the missing codes
+  // block 2 Task 11 — connecting to dayo (Thai messages: Task 17, ui/errors.ts)
+  | 'DAYO_BAD_KEY' // E1 answered 401: wrong or revoked key
+  | 'DAYO_KEY_NO_SCOPE' // E1 answered 403: the key lacks catalog:read / staff:read
+  | 'DAYO_API_DISABLED' // E1 answered 404: API_V1_ENABLED is off
+  | 'DAYO_UNREACHABLE' // offline, timeout, 5xx, 429 — setup must be online
+  | 'DAYO_BAD_RESPONSE' // an answer that breaks the contract, or a catalog this tablet cannot sell with
+  | 'DAYO_RECEIPT_NO_INVALID' // client.last_receipt_no is not <A-Z{1,3}>-<6 digits> (spec §4.4 ข้อ 6 · A1)
+  | 'NO_CATALOG' // no catalog from dayo on this tablet yet
+  | 'RECOVERY_NOT_ALLOWED' // ruling N2: an owner with a PIN can still approve and the key works — use replaceApiKey
+  | 'KEY_NOT_NEW' // recoverOwner was given the key already stored
+  | 'OLD_KEY_STILL_ACTIVE' // recoverOwner: dayo does not refuse the old key yet (revoke it on the web first)
 
 /** Comlink forwards only name/message/stack, so the code travels as a "CODE: " message prefix. */
 export class PosError extends Error {
