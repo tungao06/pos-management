@@ -1,22 +1,29 @@
+import { useQuery } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
 import { cashChangeSatang, quickTenderOptions } from '@dayo/domain'
+import { useApi } from '../app/api-context'
 import { useCart } from '../app/cart-context'
+import { sellCatalogKey } from '../app/queries'
 import { useCommitSale } from '../app/use-commit-sale'
-import { cartTotals } from '../state/cart'
-import { errorMessage } from '../ui/errors'
+import { usePricedCart } from '../app/use-priced-cart'
+import { cartErrorMessage, errorMessage } from '../ui/errors'
 import { formatBaht, parseBahtInput } from '../ui/format'
 import { TH } from '../ui/th'
 
-/** spec §5: quick buttons exact / 50 / 100 / 500 / 1000 and a large change amount. */
+/** spec §5: quick buttons exact / 50 / 100 / 500 / 1000 and a large change amount. Priced with dayo's own code
+ * (`usePricedCart`) — never a hand-summed total. */
 export function CashPayScreen(): JSX.Element {
+  const api = useApi()
   const { state } = useCart()
   const navigate = useNavigate()
-  const { pay, priceChange } = useCommitSale()
+  const { pay, isPending, isSuccess, isError, error, priceChanged, confirmPriceChange } = useCommitSale()
+  const catalogQuery = useQuery({ queryKey: sellCatalogKey, queryFn: () => api.loadSellCatalog() })
+  const { priced, error: cartError } = usePricedCart(state, catalogQuery.data?.catalog)
   const [tenderText, setTenderText] = useState('')
-  if (state.lines.length === 0 && !pay.isPending && !pay.isSuccess) return <Navigate to="/sell" />
+  if (state.lines.length === 0 && !isPending && !isSuccess) return <Navigate to="/sell" />
 
-  const total = cartTotals(state).totalSatang
+  const total = priced?.totalSatang ?? 0
   const tendered = parseBahtInput(tenderText)
   const change = tendered !== null && tendered >= total ? cashChangeSatang(total, tendered) : null
 
@@ -40,29 +47,40 @@ export function CashPayScreen(): JSX.Element {
       <div>
         {TH.change} <span className="big-amount" data-testid="cash-change">{change === null ? '–' : formatBaht(change)}</span>
       </div>
-      {priceChange !== null && (
+      {priceChanged !== null && (
         <p role="alert" className="error" data-testid="price-changed">
-          {TH.priceChanged(formatBaht(priceChange.fromSatang), formatBaht(priceChange.toSatang))}
+          {TH.priceChanged(formatBaht(priceChanged.shownSatang), formatBaht(priceChanged.nowSatang))}
         </p>
       )}
-      {pay.isError && priceChange === null && (
+      {cartError !== null && (
+        <p role="alert" className="error" data-testid="cart-error">
+          {cartErrorMessage(cartError)}
+        </p>
+      )}
+      {isError && priceChanged === null && (
         <p role="alert" className="error">
-          {errorMessage(pay.error)}
+          {errorMessage(error)}
         </p>
       )}
       <div className="actions">
         <button type="button" data-testid="pay-back" onClick={() => void navigate({ to: '/sell' })}>
           {TH.back}
         </button>
-        <button
-          type="button"
-          className="primary"
-          data-testid="confirm-cash"
-          disabled={change === null || tendered === null || pay.isPending}
-          onClick={() => tendered !== null && pay.mutate({ method: 'CASH', tenderedSatang: tendered })}
-        >
-          {TH.confirmCash}
-        </button>
+        {priceChanged !== null ? (
+          <button type="button" className="primary" data-testid="price-changed-confirm" disabled={isPending} onClick={() => void confirmPriceChange()}>
+            {TH.priceChangedConfirm}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="primary"
+            data-testid="confirm-cash"
+            disabled={change === null || tendered === null || isPending || priced === null || !priced.ok}
+            onClick={() => tendered !== null && priced !== null && void pay({ method: 'CASH', tenderedSatang: tendered }, priced.totalSatang)}
+          >
+            {TH.confirmCash}
+          </button>
+        )}
       </div>
     </main>
   )

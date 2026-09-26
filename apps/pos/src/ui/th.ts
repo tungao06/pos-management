@@ -81,6 +81,7 @@ export const TH = {
   shiftOpeningFloat: 'เงินทอนในลิ้นชักตอนเปิดกะ (บาท)',
   shiftOpen: 'เปิดกะ',
 
+  tabAll: 'ทั้งหมด',
   tabBestSellers: 'ขายดี',
   cart: 'ตะกร้า',
   cartEmpty: 'ยังไม่มีรายการ',
@@ -92,10 +93,23 @@ export const TH = {
   size: 'ขนาด',
   sweetness: 'ความหวาน',
   sweetShort: 'หวาน',
+  milk: 'นม',
+  milkFresh: 'นมสด',
+  milkOat: 'นมโอ๊ต',
+  grade: 'เกรด',
   addToCart: 'เพิ่มลงตะกร้า',
   clearCart: 'ล้างตะกร้า',
   noPrice: 'ไม่มีราคา',
   orders: 'บิลวันนี้',
+
+  // Task 18 — ขายด้วยแคตตาล็อกกลาง (spec 04 §4.4, §5.1, §6.5)
+  channel: 'ช่องทางขาย',
+  promotions: 'โปรโมชัน',
+  promoSkip: 'ไม่ใช้',
+  noPromotions: 'ไม่ใช้โปรทั้งบิล',
+  promoCode: 'รหัสโปรโมชัน',
+  catalogChanged: 'เมนู/ราคาจากระบบกลางเปลี่ยน — คิดราคาใหม่แล้ว',
+  priceChangedConfirm: 'ตรวจยอดใหม่แล้วกดยืนยัน',
 
   discountTitle: 'ส่วนลดท้ายบิล',
   discountAmount: 'จำนวนเงิน (บาท)',
@@ -175,6 +189,10 @@ export const TH = {
 
   // แผน 4
   errPriceJump: 'ราคาบางรายการต่างจากราคาที่รับครั้งก่อนเกิน 10% — ตรวจราคาอีกครั้ง แล้วกด "ยืนยันราคานี้"',
+  errCartTooLarge: 'ตะกร้ามีรายการหรือจำนวนแก้วมากเกินไป — ตัดบางรายการออกก่อน',
+  errQtyOutOfRange: 'จำนวนแก้วต่อรายการไม่ถูกต้อง',
+  errSizeClosed: 'ขนาดนี้ปิดขายแล้ว — ลบหรือแก้บรรทัดนี้ก่อนชำระ',
+  errGradeRule: 'เมนูนี้ต้องเลือกเกรด (หรือไม่ต้องเลือกเกรดถ้าไม่ใช่มัตฉะ)',
   errStockCountNotOpen: 'ใบนับนี้ปิดไปแล้ว — เปิดหน้านับสต็อกใหม่',
   errOpeningCountIncomplete: 'การนับครั้งแรก (ยอดยกมา) ต้องนับให้ครบทุกรายการ — กรอกรายการที่ยังเหลือ (ของที่ไม่มีให้กรอก 0)',
 

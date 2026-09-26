@@ -66,5 +66,5 @@ export function useCommitSale() {
     await pay(lastPayment, priceChanged.nowSatang)
   }
 
-  return { pay, priceChanged, confirmPriceChange, isPending: mutation.isPending, isError: mutation.isError && priceChanged === null, error: mutation.error }
+  return { pay, priceChanged, confirmPriceChange, isPending: mutation.isPending, isSuccess: mutation.isSuccess, isError: mutation.isError && priceChanged === null, error: mutation.error }
 }

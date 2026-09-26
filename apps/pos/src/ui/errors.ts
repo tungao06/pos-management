@@ -1,3 +1,4 @@
+import type { CartErrorCode } from '@dayo/domain'
 import { posErrorCode, type PosErrorCode } from '../api/errors'
 import { TH } from './th'
 
@@ -45,10 +46,32 @@ export const MESSAGES: Record<PosErrorCode, string> = {
   RECOVERY_NOT_ALLOWED: TH.recoveryNotAllowed,
   KEY_NOT_NEW: TH.keyNotNew,
   OLD_KEY_STILL_ACTIVE: TH.oldKeyStillActive,
-  // placeholders until the sell screen's wording lands in th.ts (stream D replaces these three)
-  PRICE_NOT_OK: 'ระบบกลางคิดราคาบิลนี้ไม่ได้ — ตรวจเมนู ช่องทาง และโปรโมชันในตะกร้า',
-  NO_PAYMENT_METHOD: 'ระบบกลางไม่ได้เปิดวิธีชำระเงินนี้',
-  QUEUE_FULL: 'เลขคิววันนี้ครบ 9999 แล้ว',
+  // Task 18: dayo's pricing code refused the cart, or the queue/payment method could not be used.
+  PRICE_NOT_OK: 'ระบบกลางคิดราคาบิลนี้ไม่ได้ — ลบหรือแก้บรรทัดที่ขึ้นเตือนในตะกร้าก่อนชำระ',
+  NO_PAYMENT_METHOD: 'ระบบกลางไม่ได้เปิดใช้วิธีชำระเงินนี้ — เลือกวิธีอื่น',
+  QUEUE_FULL: 'เลขคิววันนี้ครบ 9999 แล้ว — ต้องเปิดกะใหม่จึงขายต่อได้',
+}
+
+/** dayo's `CartError` code → Thai, for `usePricedCart`'s `error` (a `CartError.message`, "CODE: detail"). */
+const CART_ERROR_MESSAGES: Record<CartErrorCode, string> = {
+  EMPTY_CART: TH.errEmptyCart,
+  CART_TOO_LARGE: TH.errCartTooLarge,
+  QTY_OUT_OF_RANGE: TH.errQtyOutOfRange,
+  // ADR-0054: a line whose size dayo has since closed for sale — the tablet must never price or send it.
+  UNKNOWN_VARIANT: TH.errSizeClosed,
+  GRADE_RULE: TH.errGradeRule,
+  BAD_DISCOUNT: TH.errBadInput,
+}
+
+/** Thai message for `usePricedCart`'s `error` string (never shown as the domain's raw English detail). */
+export function cartErrorMessage(message: string): string {
+  const m = /^([A-Z_]+): /.exec(message)
+  const code = m?.[1] as CartErrorCode | undefined
+  if (code === undefined || !(code in CART_ERROR_MESSAGES)) {
+    console.error(message)
+    return TH.errUnexpected
+  }
+  return CART_ERROR_MESSAGES[code]
 }
 
 /**
