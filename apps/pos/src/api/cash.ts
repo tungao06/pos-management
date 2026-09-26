@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { enqueueOutbox } from '../db/outbox'
+import { enqueueLocalOnly } from '../db/outbox'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
@@ -39,7 +39,7 @@ export async function insertManualCashMovement(
     createdAt: m.at,
   } satisfies typeof s.cashMovement.$inferInsert
   await tx.insert(s.cashMovement).values(row)
-  await enqueueOutbox(tx, 'cash_movement', row, m.at, deps.newId)
+  await enqueueLocalOnly(tx, 'cash_movement', row, m.at, deps.newId) // block 2: local_only (spec 04 §6.1)
   return toCashMovementDto(row)
 }
 

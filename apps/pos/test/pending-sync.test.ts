@@ -1,106 +1,107 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
-import { countPendingSyncItems } from '../src/api/bootstrap'
-import { enqueueOutbox } from '../src/db/outbox'
+import type { OrderRowData, OrderVoidRowData } from '@dayo/contracts'
+import { countPendingSyncItems, countSyncProblems } from '../src/api/bootstrap'
+import { enqueueLocalOnly, enqueuePush } from '../src/db/outbox'
 import { openTestDb, sequentialIds } from './helpers/db'
 
-const AT = '2026-09-17T03:00:00.000Z'
+const AT = '2026-09-25T03:00:00.000Z'
+const O1 = '0b6c1e2a-4f3d-4c1b-9a8e-7d6c5b4a3f21'
+const O2 = '5e4d3c2b-1a09-4f8e-8d7c-6b5a4f3e2d1c'
+const STAFF = '7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f'
+const OWNER = '0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d'
 
-describe('countPendingSyncItems (D50 Q3-26: bills, not outbox rows)', () => {
-  it('counts one per bill however many rows the bill queued, and one per non-order record', async () => {
+function orderData(id: string, receiptNo: string): OrderRowData {
+  return {
+    pos_order_id: id, receipt_no: receiptNo, queue_no: 1, sale_date: '2026-09-25', sold_at: AT, channel: 'store', payment: 'cash',
+    staff_id: STAFF, catalog_version: 42, shift_id: null,
+    lines: [{ code: 'Cocoa', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 }],
+    bill_discount: null, promo_code: null, skip_promotion_ids: [], no_promotions: false,
+    totals: { items_subtotal: 45, items_discount: 0, bill_discount: 0, total: 45 }, note: null,
+  }
+}
+function voidData(id: string): OrderVoidRowData {
+  return { pos_order_id: id, voided_at: '2026-09-25T03:05:00.000Z', staff_id: STAFF, approved_by: OWNER, reason: 'กดผิดเมนู' }
+}
+
+describe('enqueueLocalOnly (spec 04 §6.1 block 2: shift/cash/count/Z stay on the tablet)', () => {
+  it('keys rows as <table>:<id>[:suffix], status local_only, and never counts them as waiting to send', async () => {
     const { db } = await openTestDb()
     const newId = sequentialIds()
+    await enqueueLocalOnly(db, 'shift', { id: 'sh-1', status: 'open' }, AT, newId)
+    await enqueueLocalOnly(db, 'shift', { id: 'sh-1', status: 'closed' }, AT, newId, 'closed')
+    await enqueueLocalOnly(db, 'cash_movement', { id: 'c-1', kind: 'VOID_REFUND', orderId: O1 }, AT, newId)
+    await enqueueLocalOnly(db, 'cash_count', { id: 'cc-1' }, AT, newId)
+    await enqueueLocalOnly(db, 'z_report', { id: 'z-1' }, AT, newId)
+    const rows = await db.select().from(s.outbox).all()
+    expect(rows.map((r) => [r.idempotencyKey, r.status, r.parentKey])).toEqual([
+      ['shift:sh-1', 'local_only', null], ['shift:sh-1:closed', 'local_only', null], ['cash_movement:c-1', 'local_only', null],
+      ['cash_count:cc-1', 'local_only', null], ['z_report:z-1', 'local_only', null],
+    ])
+    expect(rows[1]!.rowJson).toEqual({ id: 'sh-1', status: 'closed' })
     expect(await countPendingSyncItems(db)).toBe(0)
-
-    // An open shift: one record (open and close rows of the same shift still count once).
-    await enqueueOutbox(db, 'shift', { id: 'sh-1', status: 'open' }, AT, newId)
-    await enqueueOutbox(db, 'shift', { id: 'sh-1', status: 'closed' }, AT, newId, 'closed')
-    expect(await countPendingSyncItems(db)).toBe(1)
-
-    // Bill o-1: every row that belongs to it counts as the same bill.
-    await enqueueOutbox(db, 'order', { id: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'order_line', { id: 'ol-1', orderId: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'order_line', { id: 'ol-2', orderId: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'discount', { id: 'd-1', orderId: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'payment', { id: 'p-1', orderId: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'order_event', { id: 'e-1', orderId: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'order_event', { id: 'e-2', orderId: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-1', refType: 'order', refId: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-2', refType: 'order', refId: 'o-1' }, AT, newId)
-    expect(await countPendingSyncItems(db)).toBe(2)
-
-    // Voiding o-1 queues more rows for the same bill (order re-sent, refund, return movements).
-    await enqueueOutbox(db, 'order', { id: 'o-1', status: 'voided' }, AT, newId, 'voided')
-    await enqueueOutbox(db, 'cash_movement', { id: 'c-1', kind: 'VOID_REFUND', orderId: 'o-1' }, AT, newId)
-    expect(await countPendingSyncItems(db)).toBe(2)
-
-    // A second bill and a stand-alone cash movement / stock movement are one item each.
-    await enqueueOutbox(db, 'order_event', { id: 'e-3', orderId: 'o-2' }, AT, newId)
-    await enqueueOutbox(db, 'cash_movement', { id: 'c-2', kind: 'PAID_IN', orderId: null }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-3', refType: 'test', refId: 'batch-1' }, AT, newId)
-    expect(await countPendingSyncItems(db)).toBe(5)
-  })
-
-  it('ignores rows that are no longer pending', async () => {
-    const { db } = await openTestDb()
-    const newId = sequentialIds()
-    await enqueueOutbox(db, 'order', { id: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'order_line', { id: 'ol-1', orderId: 'o-1' }, AT, newId)
-    await enqueueOutbox(db, 'shift', { id: 'sh-1' }, AT, newId)
-    await db.update(s.outbox).set({ status: 'sent', sentAt: AT }).where(eq(s.outbox.tableName, 'shift'))
-    expect(await countPendingSyncItems(db)).toBe(1)
-    await db.update(s.outbox).set({ status: 'dead', deadAt: AT, lastError: 'x' }).where(eq(s.outbox.idempotencyKey, 'order:o-1'))
-    expect(await countPendingSyncItems(db)).toBe(1) // o-1 still has a pending line
-    await db.update(s.outbox).set({ status: 'sent', sentAt: AT }).where(eq(s.outbox.tableName, 'order_line'))
-    expect(await countPendingSyncItems(db)).toBe(0)
+    expect(await countSyncProblems(db)).toBe(0)
+    await expect(enqueueLocalOnly(db, 'shift', { id: 'sh-1' }, AT, newId)).rejects.toThrow() // the same key twice
   })
 })
 
-describe('countPendingSyncItems — stock documents (plan 4 T4-8)', () => {
-  it('a purchase, a production batch, a stock count and an adjustment are one item each with their lines and movements', async () => {
+describe('enqueuePush (spec 04 §6.1: one E2 row per bill, one per void)', () => {
+  it('stores the E2 data ready to send under <kind>:<pos_order_id>; order_void waits for its order', async () => {
     const { db } = await openTestDb()
     const newId = sequentialIds()
-    await enqueueOutbox(db, 'purchase', { id: 'pu-1' }, AT, newId)
-    await enqueueOutbox(db, 'purchase_line', { id: 'pl-1', purchaseId: 'pu-1' }, AT, newId)
-    await enqueueOutbox(db, 'purchase_line', { id: 'pl-2', purchaseId: 'pu-1' }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-1', refType: 'purchase', refId: 'pu-1' }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-2', refType: 'purchase', refId: 'pu-1' }, AT, newId)
-    expect(await countPendingSyncItems(db)).toBe(1)
-
-    await enqueueOutbox(db, 'production_batch', { id: 'pb-1' }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-3', refType: 'production_batch', refId: 'pb-1' }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-4', refType: 'production_batch', refId: 'pb-1' }, AT, newId)
-    expect(await countPendingSyncItems(db)).toBe(2)
-
-    await enqueueOutbox(db, 'stock_count', { id: 'sc-1', status: 'open' }, AT, newId)
-    await enqueueOutbox(db, 'stock_count_line', { id: 'scl-1', countId: 'sc-1' }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-5', refType: 'stock_count', refId: 'sc-1' }, AT, newId)
-    await enqueueOutbox(db, 'stock_count', { id: 'sc-1', status: 'closed' }, AT, newId, 'closed')
-    expect(await countPendingSyncItems(db)).toBe(3)
-
-    await enqueueOutbox(db, 'stock_adjustment', { id: 'sa-1' }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-6', refType: 'stock_adjustment', refId: 'sa-1' }, AT, newId)
-    expect(await countPendingSyncItems(db)).toBe(4)
+    await enqueuePush(db, { kind: 'order', id: O1, data: orderData(O1, 'A-000001'), parentKey: null }, AT, newId)
+    await enqueuePush(db, { kind: 'order_void', id: O1, data: voidData(O1), parentKey: `order:${O1}` }, AT, newId)
+    const rows = await db.select().from(s.outbox).all()
+    expect(rows.map((r) => [r.tableName, r.idempotencyKey, r.status, r.parentKey, r.attempts, r.nextAttemptAt, r.resultJson])).toEqual([
+      ['order', `order:${O1}`, 'pending', null, 0, null, null],
+      ['order_void', `order_void:${O1}`, 'pending', `order:${O1}`, 0, null, null],
+    ])
+    expect(rows[0]!.rowJson).toEqual(orderData(O1, 'A-000001')) // money already baht (spec §6.1)
+    expect(rows[1]!.rowJson).toEqual(voidData(O1))
   })
 
-  it('a receipt paid from the drawer is 2 items: the purchase (with its lines and movements) and the paid-out cash record (Task 4 · m-4)', async () => {
+  it('a malformed row fails the write — never the queue — and writes nothing; a key is never reused', async () => {
     const { db } = await openTestDb()
     const newId = sequentialIds()
-    await enqueueOutbox(db, 'purchase', { id: 'pu-2' }, AT, newId)
-    await enqueueOutbox(db, 'purchase_line', { id: 'pl-3', purchaseId: 'pu-2' }, AT, newId)
-    await enqueueOutbox(db, 'stock_movement', { id: 'm-7', refType: 'purchase', refId: 'pu-2' }, AT, newId)
-    await enqueueOutbox(db, 'cash_movement', { id: 'c-3', kind: 'PAID_OUT', orderId: null }, AT, newId)
+    await expect(enqueuePush(db, { kind: 'order', id: O1, data: { ...orderData(O1, 'A-000001'), sale_date: '2026-09-26' }, parentKey: null }, AT, newId)).rejects.toThrow()
+    await expect(enqueuePush(db, { kind: 'order_void', id: O1, data: { ...voidData(O1), reason: '' }, parentKey: `order:${O1}` }, AT, newId)).rejects.toThrow()
+    expect(await db.select().from(s.outbox).all()).toEqual([])
+    await enqueuePush(db, { kind: 'order', id: O1, data: orderData(O1, 'A-000001'), parentKey: null }, AT, newId)
+    await expect(enqueuePush(db, { kind: 'order', id: O1, data: orderData(O1, 'A-000001'), parentKey: null }, AT, newId)).rejects.toThrow()
+    expect(await db.select().from(s.outbox).all()).toHaveLength(1)
+  })
+})
+
+describe('countPendingSyncItems / countSyncProblems (D50 Q3-26: bills, not outbox rows)', () => {
+  it('an order and its order_void count once; sent rows and local_only rows never count', async () => {
+    const { db } = await openTestDb()
+    const newId = sequentialIds()
+    await enqueueLocalOnly(db, 'shift', { id: 'sh-1' }, AT, newId)
+    await enqueuePush(db, { kind: 'order', id: O1, data: orderData(O1, 'A-000001'), parentKey: null }, AT, newId)
+    expect(await countPendingSyncItems(db)).toBe(1)
+    await enqueuePush(db, { kind: 'order_void', id: O1, data: voidData(O1), parentKey: `order:${O1}` }, AT, newId)
+    await enqueueLocalOnly(db, 'cash_movement', { id: 'c-1', kind: 'VOID_REFUND', orderId: O1 }, AT, newId)
+    expect(await countPendingSyncItems(db)).toBe(1) // one bill, two E2 rows
+    await enqueuePush(db, { kind: 'order', id: O2, data: orderData(O2, 'A-000002'), parentKey: null }, AT, newId)
     expect(await countPendingSyncItems(db)).toBe(2)
+
+    await db.update(s.outbox).set({ status: 'sent', sentAt: AT }).where(eq(s.outbox.idempotencyKey, `order:${O1}`))
+    expect(await countPendingSyncItems(db)).toBe(2) // O1's void is still to send
+    await db.update(s.outbox).set({ status: 'sent', sentAt: AT }).where(eq(s.outbox.idempotencyKey, `order_void:${O1}`))
+    expect(await countPendingSyncItems(db)).toBe(1)
+    expect(await countSyncProblems(db)).toBe(0)
   })
 
-  it('m-2: a row missing the field its branch reads still counts once, instead of vanishing into a NULL group key', async () => {
+  it('dead rows are problems, counted per bill, and no longer waiting', async () => {
     const { db } = await openTestDb()
     const newId = sequentialIds()
-    // a hypothetical trimmed purchase_line row without purchaseId, the field that branch reads — every real writer
-    // today sends the full row (purchaseId is NOT NULL in the schema), but the badge must never silently undercount
-    // if that ever changes.
-    await enqueueOutbox(db, 'purchase_line', { id: 'pl-9' }, AT, newId)
-    expect(await countPendingSyncItems(db)).toBe(1)
+    await enqueuePush(db, { kind: 'order', id: O1, data: orderData(O1, 'A-000001'), parentKey: null }, AT, newId)
+    await enqueuePush(db, { kind: 'order_void', id: O1, data: voidData(O1), parentKey: `order:${O1}` }, AT, newId)
+    await enqueuePush(db, { kind: 'order', id: O2, data: orderData(O2, 'A-000002'), parentKey: null }, AT, newId)
+    await db.update(s.outbox).set({ status: 'dead', deadAt: AT, lastError: 'x' }).where(eq(s.outbox.tableName, 'order'))
+    await db.update(s.outbox).set({ status: 'dead', deadAt: AT, lastError: 'x' }).where(eq(s.outbox.tableName, 'order_void'))
+    expect(await countSyncProblems(db)).toBe(2) // O1 (order + void) once, O2 once
+    expect(await countPendingSyncItems(db)).toBe(0)
   })
 })

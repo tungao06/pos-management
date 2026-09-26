@@ -45,6 +45,10 @@ export const MESSAGES: Record<PosErrorCode, string> = {
   RECOVERY_NOT_ALLOWED: TH.recoveryNotAllowed,
   KEY_NOT_NEW: TH.keyNotNew,
   OLD_KEY_STILL_ACTIVE: TH.oldKeyStillActive,
+  // placeholders until the sell screen's wording lands in th.ts (stream D replaces these three)
+  PRICE_NOT_OK: 'ระบบกลางคิดราคาบิลนี้ไม่ได้ — ตรวจเมนู ช่องทาง และโปรโมชันในตะกร้า',
+  NO_PAYMENT_METHOD: 'ระบบกลางไม่ได้เปิดวิธีชำระเงินนี้',
+  QUEUE_FULL: 'เลขคิววันนี้ครบ 9999 แล้ว',
 }
 
 /**

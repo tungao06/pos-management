@@ -81,8 +81,8 @@ describe('commitSale', () => {
     expect(verifyChain(chain)).toEqual({ ok: true })
 
     const byTable = Object.fromEntries(await t.db.values<[string, number]>(sql`select table_name, count(*) from outbox group by table_name`))
-    expect(byTable).toEqual({ shift: 1, order: 1, order_line: 1, payment: 1, stock_movement: needs.size, order_event: 4 })
-    expect((await t.api.bootstrap()).pendingSyncItems).toBe(2) // the open shift + this one bill, not 8 + needs.size outbox rows (D50 Q3-26)
+    expect(byTable).toEqual({ shift: 1 }) // block 2: a plan-3 bill queues nothing (spec 04 §6.1; commitSale goes in Task 22)
+    expect((await t.api.bootstrap()).pendingSyncItems).toBe(0)
   })
 
   it('PromptPay with a discount: next receipt and queue, discount row + event, no tender', async () => {

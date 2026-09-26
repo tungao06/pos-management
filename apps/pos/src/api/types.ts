@@ -1,5 +1,6 @@
 import type { AdjustReason, CashMovementKind, MovementKind, UseUnit, UserRole } from '@dayo/contracts'
-import type { CashCountLine, CashInputs, ExpiryState, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
+import type { Size, Sweetness } from '@dayo/dayo-pricing'
+import type { CartDraft, CashCountLine, CashInputs, ExpiryState, PosOrderCatalog, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -81,6 +82,68 @@ export type CommitSaleResult = {
   method: 'CASH' | 'PROMPTPAY'
 }
 
+/** The local payment method → dayo's payment code of the catalog (spec 04 §4.5 `payment`). */
+export const PAYMENT_CODE = { CASH: 'cash', PROMPTPAY: 'qr' } as const
+
+/** A sale priced with dayo's catalog (spec 04 §4.5, §5.1). The payment code comes from `payment.method` (PAYMENT_CODE). */
+export type RecordSaleInput = {
+  /** Created when the cart starts; resending the same id with the same lines returns the first result (plan 3 M12). */
+  orderId: string
+  actorUserId: string
+  cart: Omit<CartDraft, 'paymentCode'>
+  payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' }
+  /** The total the customer was shown — refused with PRICE_CHANGED when the price at the payment instant differs (D50 Q3-27). */
+  expectedTotalSatang: number
+}
+
+/** One menu of the sell screen: the variants of one menuCode, sizes in catalog.sizes order (ADR-0054). */
+export type SellMenuDto = {
+  code: string
+  nameTh: string
+  /** categoryLabel, or the family when dayo sends none. */
+  categoryLabel: string
+  sortOrder: number
+  isMatcha: boolean
+  sizes: Size[]
+  /** 0% → 100% per size. */
+  sweetnessBySize: Partial<Record<Size, Sweetness[]>>
+  defaultSize: Size
+  defaultSweetness: Sweetness
+}
+export type SellCatalogDto = {
+  catalogVersion: number
+  /** The whole E1 catalog — the screen prices the cart with the same code recordSale uses (priceCart). */
+  catalog: PosOrderCatalog
+  /** Active sizes of the shop in sortOrder, with their labels. */
+  sizes: { code: string; label: string }[]
+  menus: SellMenuDto[]
+  categories: string[]
+  channels: { code: string; name: string }[]
+  defaultChannelCode: string
+  payments: { cash: boolean; qr: boolean }
+  maxQtyPerLine: number
+  /** Menu codes with the most cups in the last 7 business days (D48 Q3-9), at most 8. */
+  bestSellerCodes: string[]
+}
+
+/**
+ * How the central database has this bill (spec 04 §4.3, §12). `legacy` = a plan-3 bill (never sent) · `pending` = its
+ * E2 row waits to send · `sent` = dayo answered accepted/duplicate · `problem` = the row is dead · `excluded` = an owner
+ * closed it as outside dayo (ruling R8). `voidState` 'local_only' on a voided bill whose order WAS sent means dayo still
+ * counts it as a sale (review item 23).
+ */
+export type CentralStateDto = {
+  state: 'legacy' | 'pending' | 'sent' | 'problem' | 'excluded'
+  orderNo: string | null
+  computedTotalSatang: number | null
+  /** What dayo computed minus what was charged here; null until dayo answered. */
+  diffSatang: number | null
+  duplicateOf: string[]
+  /** dayo's reason of the last failed attempt (INVALID, UNKNOWN_CODE, …), or null. */
+  reason: string | null
+  voidState: 'none' | 'pending' | 'sent' | 'problem' | 'local_only'
+}
+
 export type OrderSummaryDto = {
   id: string
   receiptNo: string
@@ -90,8 +153,23 @@ export type OrderSummaryDto = {
   method: 'CASH' | 'PROMPTPAY'
   paidAt: string
   cups: number
+  /** Who sold the bill (D61). */
+  soldById: string
+  soldByName: string
+  central: CentralStateDto
 }
-export type OrderLineDto = { lineNo: number; productName: string; sizeName: string; sweetnessName: string; qty: number; unitPriceSatang: number; lineTotalSatang: number }
+export type OrderLineDto = {
+  lineNo: number
+  productName: string
+  sizeName: string
+  sweetnessName: string
+  /** Block-2 lines only (null on a plan-3 bill). */
+  milk: string | null
+  grade: string | null
+  qty: number
+  unitPriceSatang: number
+  lineTotalSatang: number
+}
 export type OrderEventDto = { seq: number; type: string; at: string; actorId: string; payload: unknown }
 export type OrderDetailDto = OrderSummaryDto & {
   businessDate: string
@@ -102,6 +180,12 @@ export type OrderDetailDto = OrderSummaryDto & {
   tenderedSatang: number | null
   changeSatang: number | null
   voidedAt: string | null
+  /** The payment instant priced with dayo's catalog; null on a plan-3 bill (as are the next two). */
+  soldAt: string | null
+  channelCode: string | null
+  catalogVersion: number | null
+  /** Promotions dayo's pricing code applied at soldAt. */
+  promotions: { name: string; discountSatang: number }[]
   lines: OrderLineDto[]
   events: OrderEventDto[]
   voidable: boolean
@@ -118,6 +202,21 @@ export type VoidOrderInput = {
   /** "ทำเครื่องดื่มไปแล้วหรือยัง" — true = made (waste), false = return ingredients. */
   made: boolean
   /** Required when the order was paid by PromptPay (D48 Q3-15). */
+  refundReference: string | null
+}
+
+/** Cancel a bill sold with dayo's catalog (spec 04 §4.5 order_void, §4.7) — same Thai day only, owner PIN. */
+export type CancelSaleInput = {
+  orderId: string
+  /** Signed-in user who cancels; staff and managers only their own bills (Q44, ruling R11). */
+  actorUserId: string
+  /** Owner who approves with their PIN. */
+  approverUserId: string
+  approverPin: string
+  reason: string
+  /** "ทำเครื่องดื่มไปแล้วหรือยัง" — for the Z void list only; no stock row either way (ruling R6). */
+  made: boolean
+  /** Required when the bill was paid by PromptPay (D48 Q3-15). */
   refundReference: string | null
 }
 
@@ -339,10 +438,13 @@ export interface PosApi {
   openShift(input: OpenShiftInput): Promise<ShiftDto>
   loadMenu(): Promise<MenuDto>
   commitSale(input: CommitSaleInput): Promise<CommitSaleResult>
+  loadSellCatalog(): Promise<SellCatalogDto>
+  recordSale(input: RecordSaleInput): Promise<CommitSaleResult>
   listOrders(): Promise<OrderSummaryDto[]>
   getOrder(orderId: string): Promise<OrderDetailDto>
   promptPayForAmount(amountSatang: number): Promise<string>
   voidOrder(input: VoidOrderInput): Promise<OrderDetailDto>
+  cancelSale(input: CancelSaleInput): Promise<OrderDetailDto>
   quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
   recordCashMovement(input: CashMovementInput): Promise<CashMovementDto>
   shiftReport(): Promise<ShiftReportDto>
@@ -376,10 +478,13 @@ export const POS_API_METHODS = [
   'openShift',
   'loadMenu',
   'commitSale',
+  'loadSellCatalog',
+  'recordSale',
   'listOrders',
   'getOrder',
   'promptPayForAmount',
   'voidOrder',
+  'cancelSale',
   'quickOpenShift',
   'recordCashMovement',
   'shiftReport',

@@ -11,7 +11,8 @@ import { loadMenu } from './menu'
 import { getOrder, listOrders } from './orders'
 import { produceBatch } from './production'
 import { receivePurchase } from './purchase'
-import { commitSale, promptPayForAmount } from './sale'
+import { commitSale, promptPayForAmount, recordSale } from './sale'
+import { loadSellCatalog } from './sell-catalog'
 import { createSerialQueue } from './serial'
 import { setupShop } from './setup'
 import { openShift, quickOpenShift } from './shift'
@@ -20,7 +21,7 @@ import { setStaffPin } from './staff'
 import { closeStockCount, getOpenStockCount, removeCountLine, saveCountLine, startStockCount } from './stock-count'
 import { stockOverview } from './stock-overview'
 import type { PosApi } from './types'
-import { voidOrder } from './void'
+import { cancelSale, voidOrder } from './void'
 
 export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
   const serial = createSerialQueue()
@@ -31,10 +32,13 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     openShift: (input) => serial(() => openShift(db, deps, input)),
     loadMenu: () => serial(() => loadMenu(db, deps)),
     commitSale: (input) => serial(() => commitSale(db, deps, input)),
+    loadSellCatalog: () => serial(() => loadSellCatalog(db, deps)),
+    recordSale: (input) => serial(() => recordSale(db, deps, input)),
     listOrders: () => serial(() => listOrders(db)),
-    getOrder: (orderId) => serial(() => getOrder(db, orderId)),
+    getOrder: (orderId) => serial(() => getOrder(db, deps, orderId)),
     promptPayForAmount: (amountSatang) => serial(() => promptPayForAmount(db, deps, amountSatang)),
     voidOrder: (input) => serial(() => voidOrder(db, deps, input)),
+    cancelSale: (input) => serial(() => cancelSale(db, deps, input)),
     quickOpenShift: (input) => serial(() => quickOpenShift(db, deps, input)),
     recordCashMovement: (input) => serial(() => recordCashMovement(db, deps, input)),
     shiftReport: () => serial(() => shiftReport(db, deps)),

@@ -36,6 +36,10 @@ export type PosErrorCode =
   | 'RECOVERY_NOT_ALLOWED' // ruling N2: an owner with a PIN can still approve and the key works — use replaceApiKey
   | 'KEY_NOT_NEW' // recoverOwner was given the key already stored
   | 'OLD_KEY_STILL_ACTIVE' // recoverOwner: dayo does not refuse the old key yet (revoke it on the web first)
+  // block 2 selling with dayo's catalog (spec 04 §4.5, §5.1)
+  | 'PRICE_NOT_OK' // dayo's pricing code refused the cart (unknown channel/code, closed promotion…) — detail = its warnings
+  | 'NO_PAYMENT_METHOD' // the catalog from dayo does not offer this payment method (cash / qr)
+  | 'QUEUE_FULL' // queue number 9999 was reached on this business day (ruling R13)
 
 /** Comlink forwards only name/message/stack, so the code travels as a "CODE: " message prefix. */
 export class PosError extends Error {
