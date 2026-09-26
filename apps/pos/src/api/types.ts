@@ -166,6 +166,21 @@ export type VoidOrderInput = {
   refundReference: string | null
 }
 
+/** Cancel a bill sold with dayo's catalog (spec 04 §4.5 order_void, §4.7) — same Thai day only, owner PIN. */
+export type CancelSaleInput = {
+  orderId: string
+  /** Signed-in user who cancels; staff and managers only their own bills (Q44, ruling R11). */
+  actorUserId: string
+  /** Owner who approves with their PIN. */
+  approverUserId: string
+  approverPin: string
+  reason: string
+  /** "ทำเครื่องดื่มไปแล้วหรือยัง" — for the Z void list only; no stock row either way (ruling R6). */
+  made: boolean
+  /** Required when the bill was paid by PromptPay (D48 Q3-15). */
+  refundReference: string | null
+}
+
 /** A paid-in / paid-out / drop typed in by a person (spec §3.5 · Q3b-9 · D52). VOID_REFUND is written by voidOrder only. */
 export type CashMovementInput = { actorUserId: string; kind: 'PAID_IN' | 'PAID_OUT' | 'DROP'; amountSatang: number; reason: string }
 export type CashMovementDto = { id: string; kind: CashMovementKind; amountSatang: number; orderId: string | null; reason: string | null; createdBy: string; createdAt: string }
@@ -390,6 +405,7 @@ export interface PosApi {
   getOrder(orderId: string): Promise<OrderDetailDto>
   promptPayForAmount(amountSatang: number): Promise<string>
   voidOrder(input: VoidOrderInput): Promise<OrderDetailDto>
+  cancelSale(input: CancelSaleInput): Promise<OrderDetailDto>
   quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
   recordCashMovement(input: CashMovementInput): Promise<CashMovementDto>
   shiftReport(): Promise<ShiftReportDto>
@@ -429,6 +445,7 @@ export const POS_API_METHODS = [
   'getOrder',
   'promptPayForAmount',
   'voidOrder',
+  'cancelSale',
   'quickOpenShift',
   'recordCashMovement',
   'shiftReport',

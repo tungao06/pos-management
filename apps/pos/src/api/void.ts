@@ -1,16 +1,18 @@
 import { and, eq } from 'drizzle-orm'
 import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { voidReturnMovements, type MovementDraft } from '@dayo/domain'
+import { bangkokDateOf, rowKey, Text200 } from '@dayo/contracts'
+import { sumSatang, voidReturnMovements, type MovementDraft } from '@dayo/domain'
+import { can } from '../app/permissions'
 import { appendOrderEvents, type NewEvent } from '../db/events'
-import { enqueueLocalOnly } from '../db/outbox'
+import { enqueueLocalOnly, enqueuePush } from '../db/outbox'
 import { insertMovements } from '../db/stock'
 import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { getOrder } from './orders'
-import { REASON_MAX_LENGTH, type OrderDetailDto, type VoidOrderInput } from './types'
+import { REASON_MAX_LENGTH, type CancelSaleInput, type OrderDetailDto, type VoidOrderInput } from './types'
 
 /**
  * spec §4.3 + D18/D36/D39: void a paid order of the open shift with a reason and an owner's PIN.
@@ -98,5 +100,58 @@ export async function voidOrder(db: RemoteDb, deps: ApiDeps, input: VoidOrderInp
     if (!input.made) events.push({ type: 'STOCK_RETURNED', payload: { movementIds: returnedMovementIds } })
     await appendOrderEvents(tx, { orderId: order.id, deviceId: device.id, actorType: 'user', actorId: actor.id, at, newId: deps.newId }, events)
   })
+  return getOrder(db, input.orderId)
+}
+
+/**
+ * spec 04 §4.5 order_void + §4.7: same Thai day as the sale only; owner PIN (D50); staff and managers cancel their own
+ * bills only (Q44, ruling R11 — `void_any` is the owner's). Cash back = local VOID_REFUND (D36 — local_only in block 2).
+ * "made" is recorded for the Z void list only (ruling R6); no stock rows. Plan-3 bills (no sold_at) and excluded bills
+ * queue no order_void. Never calls dayo.
+ */
+export async function cancelSale(db: RemoteDb, deps: ApiDeps, input: CancelSaleInput): Promise<OrderDetailDto> {
+  const reason = input.reason.trim()
+  if (!Text200.safeParse(reason).success) throw new PosError('BAD_INPUT', `a void needs a reason of 1–${REASON_MAX_LENGTH} characters`)
+  const actor = await db.select().from(s.user).where(eq(s.user.id, input.actorUserId)).get()
+  if (!actor || !actor.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${input.actorUserId}`)
+  // argon2 is slow — check the PIN before opening the transaction (same lockout as login, D50 Q3-21)
+  const approver = await requireOwnerPin(db, deps, input.approverUserId, input.approverPin)
+  const device = await requireDevice(db)
+  await db.transaction(async (tx) => {
+    const order = await tx.select().from(s.order).where(eq(s.order.id, input.orderId)).get()
+    if (!order) throw new PosError('ORDER_NOT_FOUND', input.orderId)
+    const shift = await currentOpenShift(tx, device.id)
+    if (order.status !== 'paid' || shift === null || order.shiftId !== shift.id || order.deviceId !== device.id) {
+      throw new PosError('VOID_NOT_ALLOWED', `order ${order.receiptNo ?? order.id} is ${order.status} or not in the open shift`)
+    }
+    const at = deps.now()
+    if (order.soldAt !== null && bangkokDateOf(at) !== bangkokDateOf(order.soldAt)) throw new PosError('VOID_NOT_ALLOWED', 'SAME_DAY_ONLY: ยกเลิกได้เฉพาะวันเดียวกับวันขาย')
+    const mayVoid = can(actor.role, 'void_any') || (can(actor.role, 'void_own') && order.createdById === actor.id)
+    if (!mayVoid) throw new PosError('VOID_NOT_ALLOWED', 'OWN_BILLS_ONLY: staff และ manager ยกเลิกได้เฉพาะบิลที่ตัวเองขาย') // Q44, ruling R11
+    const payments = await tx.select().from(s.payment).where(eq(s.payment.orderId, order.id)).all()
+    const cashRefundSatang = sumSatang(payments.filter((p) => p.method === 'CASH').map((p) => p.amountSatang))
+    const qrRefundSatang = sumSatang(payments.filter((p) => p.method === 'PROMPTPAY').map((p) => p.amountSatang))
+    const refundReference = input.refundReference?.trim() ?? ''
+    if (qrRefundSatang > 0 && refundReference === '') throw new PosError('BAD_INPUT', 'a PromptPay void needs the refund transfer reference') // D48 Q3-15
+    await tx.update(s.order).set({ status: 'voided', voidedAt: at }).where(eq(s.order.id, order.id))
+    let cashMovementId: string | null = null
+    if (cashRefundSatang > 0) {
+      const row = { id: deps.newId(), shiftId: shift.id, kind: 'VOID_REFUND', amountSatang: cashRefundSatang, orderId: order.id, reason: `${order.receiptNo ?? order.id}: ${reason}`, createdBy: actor.id, createdAt: at } satisfies typeof s.cashMovement.$inferInsert
+      await tx.insert(s.cashMovement).values(row)
+      await enqueueLocalOnly(tx, 'cash_movement', row, at, deps.newId)
+      cashMovementId = row.id
+    }
+    await appendOrderEvents(tx, { orderId: order.id, deviceId: device.id, actorType: 'user', actorId: actor.id, at, newId: deps.newId }, [
+      { type: 'VOIDED', payload: { reason, made: input.made, waste: input.made, approvedBy: approver.id, cashRefundSatang, cashMovementId, qrRefundSatang, refundReference: qrRefundSatang > 0 ? refundReference : null } },
+    ])
+    if (order.soldAt !== null && order.excludedAt === null) {
+      // review item 5: dayo refuses voided_at < sold_at (INVALID). A clock set back after the D80 banner must not turn a
+      // real cancellation into a row only EXCLUDE can clear — the same Thai day is already guaranteed by the check above.
+      const voidedAt = Date.parse(at) < Date.parse(order.soldAt) ? order.soldAt : at
+      const data = { pos_order_id: order.id, voided_at: voidedAt, staff_id: actor.id, approved_by: approver.id, reason }
+      await enqueuePush(tx, { kind: 'order_void', id: order.id, data, parentKey: rowKey('order', order.id) }, at, deps.newId)
+    }
+  })
+  deps.afterWrite?.()
   return getOrder(db, input.orderId)
 }

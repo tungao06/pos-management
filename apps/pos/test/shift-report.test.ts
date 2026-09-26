@@ -32,12 +32,18 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
       { orderId: sc.cashVoided.orderId, receiptNo: 'A-000001', totalSatang: 9_000, method: 'CASH', reason: 'กดผิดเมนู', made: false, approvedBy: t.other.id, approvedByName: 'DCm', refundReference: null, voidedAt: '2026-09-17T03:01:00.000Z' },
       { orderId: sc.qrVoided.orderId, receiptNo: 'A-000002', totalSatang: 5_000, method: 'PROMPTPAY', reason: 'ทำผิดสูตร', made: true, approvedBy: t.other.id, approvedByName: 'DCm', refundReference: 'KBANK-1', voidedAt: '2026-09-17T03:01:00.000Z' },
     ])
-    // D28: tracked bases below zero only (ice and other untracked items never show)
-    expect(x.negativeBases.map((b) => [b.code, b.onHandMilli])).toEqual([
-      ['PB-SYRUP', -47_200],
+    // D28 lists tracked bases below zero — a bill sold with dayo's catalog takes no stock on the tablet (D60)
+    expect(x.negativeBases).toEqual([])
+    expect(x.pendingSyncItems).toBe(3) // 3 bills; each voided bill's order + order_void count once (D50 Q3-26)
+  })
+
+  it('D28: tracked bases a plan-3 bill drove below zero are listed (ice and other untracked items never show)', async () => {
+    const t = await openReadyApi()
+    await sellSku(t, 'Original-16oz', 2, { method: 'PROMPTPAY' })
+    expect((await t.api.shiftReport()).negativeBases.map((b) => [b.code, b.onHandMilli])).toEqual([
+      ['PB-SYRUP', -33_200],
       ['PB-TEA-THAI', -260_000],
     ])
-    expect(x.pendingSyncItems).toBe(0) // block 2: plan-3 bills, the shift and the PAID_OUT queue nothing to send
   })
 
   it('an empty shift is all zeros; expected cash = the float', async () => {

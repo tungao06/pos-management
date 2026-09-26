@@ -21,7 +21,7 @@ import { setStaffPin } from './staff'
 import { closeStockCount, getOpenStockCount, removeCountLine, saveCountLine, startStockCount } from './stock-count'
 import { stockOverview } from './stock-overview'
 import type { PosApi } from './types'
-import { voidOrder } from './void'
+import { cancelSale, voidOrder } from './void'
 
 export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
   const serial = createSerialQueue()
@@ -38,6 +38,7 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     getOrder: (orderId) => serial(() => getOrder(db, orderId)),
     promptPayForAmount: (amountSatang) => serial(() => promptPayForAmount(db, deps, amountSatang)),
     voidOrder: (input) => serial(() => voidOrder(db, deps, input)),
+    cancelSale: (input) => serial(() => cancelSale(db, deps, input)),
     quickOpenShift: (input) => serial(() => quickOpenShift(db, deps, input)),
     recordCashMovement: (input) => serial(() => recordCashMovement(db, deps, input)),
     shiftReport: () => serial(() => shiftReport(db, deps)),
