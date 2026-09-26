@@ -1,14 +1,17 @@
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
+import type { MilkCode, Size, Sweetness } from '@dayo/dayo-pricing'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { nodeSqliteCallback, type NodeSqliteLike } from '@dayo/db-schema/testing'
+import { priceCart } from '@dayo/domain'
 import type { ApiDeps } from '../../src/api/deps'
 import { createPosApi } from '../../src/api/pos-api'
-import type { CommitSaleInput, CommitSaleResult, DeviceDto, PosApi, SetupInput, ShiftDto, UserDto } from '../../src/api/types'
+import { PAYMENT_CODE, type CommitSaleInput, type CommitSaleResult, type DeviceDto, type PosApi, type RecordSaleInput, type SetupInput, type ShiftDto, type UserDto } from '../../src/api/types'
 import { initDatabase } from '../../src/db/init'
 import { createMemorySecretStore } from '../../src/sync/secret-store'
+import { openConnectedApi } from './dayo'
 
 // Node's built-ins are taken from `process.getBuiltinModule`, never named in an `import` statement: this helper is
 // also used by a jsdom test file (`test/close-shift-screen.test.tsx`, the close screen driven against the real
@@ -86,15 +89,40 @@ export const TEST_SETUP: SetupInput = {
 
 export type ReadyApi = TestApi & { owner: UserDto; other: UserDto; device: DeviceDto; shift: ShiftDto }
 
-/** Set-up device (prefix A), two owners, PromptPay id, and an open shift with a 500 baht float on 2026-09-17. */
+/**
+ * A device linked to the mock dayo (prefix A, owners TungAo 1111 and DCm 2222, PromptPay id) with an open shift and a
+ * 500 baht float on 2026-09-17 — the day every plan-3/4 expectation was written for.
+ */
 export async function openReadyApi(): Promise<ReadyApi> {
-  const t = await openTestApi()
-  await t.api.setupShop(TEST_SETUP)
-  const boot = await t.api.bootstrap()
-  const owner = boot.users.find((u) => u.displayName === 'TungAo')!
-  const other = boot.users.find((u) => u.displayName === 'DCm')!
-  const shift = await t.api.openShift({ userId: owner.id, openingFloatSatang: 50_000 })
-  return { ...t, owner, other, device: boot.device!, shift }
+  return openConnectedApi({ now: '2026-09-17T03:00:00.000Z' })
+}
+
+/**
+ * Sells lines of dayo's catalog through recordSale with the total the screen would show: priceCart at "now", the same
+ * instant recordSale uses (the test clock does not move in between). Defaults: 16 oz, 50%, fresh milk, the default
+ * grade for Matcha Latte, the shop's default channel, sold by the first owner.
+ */
+export async function sellCode(
+  t: ReadyApi,
+  lines: { code: string; size?: Size; sweetness?: Sweetness; milk?: MilkCode; grade?: string | null; qty: number }[],
+  payment: RecordSaleInput['payment'],
+  extra: { billDiscountSatang?: number; reason?: string; channelCode?: string; actorUserId?: string; orderId?: string } = {},
+): Promise<CommitSaleResult> {
+  const cat = await t.api.loadSellCatalog()
+  const cart: RecordSaleInput['cart'] = {
+    channelCode: extra.channelCode ?? cat.defaultChannelCode, promoCode: null, skipPromotionIds: [], noPromotions: false,
+    billDiscount: extra.billDiscountSatang === undefined ? null : { kind: 'satang', satang: extra.billDiscountSatang, reason: extra.reason ?? 'ทดสอบ' },
+    lines: lines.map((l) => ({ code: l.code, size: l.size ?? '16 oz', sweetness: l.sweetness ?? '50%', milk: l.milk ?? 'fresh', grade: l.grade ?? (l.code === 'Matcha Latte' ? 'Excellent' : null), qty: l.qty, free: false, discountSatang: null, discountPercent: null, discountReason: null })),
+  }
+  // the total the screen would show — a cart the screen could not even price is a mistake in the test, not a refusal to
+  // test here (call t.api.recordSale directly for that)
+  let shown: number
+  try {
+    shown = priceCart({ ...cart, paymentCode: PAYMENT_CODE[payment.method] }, cat.catalog, t.clock.now()).totalSatang
+  } catch (e) {
+    throw new Error(`sellCode: priceCart refused the cart before recordSale — ${e instanceof Error ? e.message : String(e)}`, { cause: e })
+  }
+  return t.api.recordSale({ orderId: extra.orderId ?? t.deps.newId(), actorUserId: extra.actorUserId ?? t.owner.id, cart, payment, expectedTotalSatang: shown })
 }
 
 /**

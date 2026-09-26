@@ -6,7 +6,7 @@ import { openReadyApi, openTestApi, TEST_SETUP, type ReadyApi } from './helpers/
 const input = (t: ReadyApi, patch: Partial<CashMovementInput> = {}): CashMovementInput => ({ actorUserId: t.owner.id, kind: 'PAID_OUT', amountSatang: 12_000, reason: 'ซื้อน้ำแข็ง', ...patch })
 
 describe('recordCashMovement (spec §3.5 · Q3b-9 · D52)', () => {
-  it('writes PAID_IN / PAID_OUT / DROP into the open shift with its outbox row', async () => {
+  it('writes PAID_IN / PAID_OUT / DROP into the open shift with its local_only outbox row', async () => {
     const t = await openReadyApi()
     const out = await t.api.recordCashMovement(input(t, { reason: '  ซื้อน้ำแข็ง  ' }))
     expect(out).toEqual({ id: expect.any(String), kind: 'PAID_OUT', amountSatang: 12_000, orderId: null, reason: 'ซื้อน้ำแข็ง', createdBy: t.owner.id, createdAt: '2026-09-17T03:00:00.000Z' })
@@ -18,9 +18,9 @@ describe('recordCashMovement (spec §3.5 · Q3b-9 · D52)', () => {
       ['PAID_IN', 50_000, t.shift.id],
       ['DROP', 30_000, t.shift.id],
     ])
-    const keys = (await t.db.select().from(s.outbox).all()).map((r) => r.idempotencyKey)
-    for (const r of rows) expect(keys).toContain(`cash_movement:${r.id}`)
-    expect((await t.api.bootstrap()).pendingSyncItems).toBe(4) // the shift + 3 movements, one each (D50 Q3-26)
+    const outbox = await t.db.select().from(s.outbox).all()
+    for (const r of rows) expect(outbox.find((o) => o.idempotencyKey === `cash_movement:${r.id}`)?.status).toBe('local_only')
+    expect((await t.api.bootstrap()).pendingSyncItems).toBe(0) // block 2: cash stays on the tablet (spec 04 §6.1)
   })
 
   it('refuses VOID_REFUND, bad amounts, no or too long reason, unknown user, and no open shift — writing nothing', async () => {

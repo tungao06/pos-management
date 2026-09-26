@@ -14,7 +14,7 @@ describe('listOrders / getOrder', () => {
     ])
     const detailA = await t.api.getOrder(a.orderId)
     expect(detailA).toMatchObject({ receiptNo: 'A-000001', subtotalSatang: 4500, discountSatang: 0, discountReason: null, tenderedSatang: 5000, changeSatang: 500, voidable: true, voidedAt: null, businessDate: '2026-09-17', shiftId: t.shift.id })
-    expect(detailA.lines).toEqual([{ lineNo: 1, productName: 'ชาไทยเย็น', sizeName: '16 oz', sweetnessName: '50%', qty: 1, unitPriceSatang: 4500, lineTotalSatang: 4500 }])
+    expect(detailA.lines).toEqual([{ lineNo: 1, productName: 'ชาไทยเย็น', sizeName: '16 oz', sweetnessName: '50%', milk: null, grade: null, qty: 1, unitPriceSatang: 4500, lineTotalSatang: 4500 }])
     expect(detailA.events.map((e) => e.type)).toEqual(['CREATED', 'LINE_ADDED', 'PAID', 'STOCK_DEDUCTED'])
     const detailB = await t.api.getOrder(b.orderId)
     expect(detailB).toMatchObject({ method: 'PROMPTPAY', discountSatang: 1000, discountReason: 'ลูกค้าประจำ', tenderedSatang: null, changeSatang: null })

@@ -1,7 +1,6 @@
 import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { isPriceJump, purchaseMovements, purchaseUnitCostUsat, unitsToUseMilli, type PurchaseLineDraft } from '@dayo/domain'
-import { enqueueOutbox } from '../db/outbox'
 import { insertMovements } from '../db/stock'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import { insertManualCashMovement } from './cash'
@@ -100,10 +99,8 @@ export async function receivePurchase(db: RemoteDb, deps: ApiDeps, input: Receiv
       createdAt: at,
     } satisfies typeof s.purchase.$inferInsert
     await tx.insert(s.purchase).values(purchaseRow)
-    await enqueueOutbox(tx, 'purchase', purchaseRow, at, deps.newId)
     for (const row of lineRows) {
       await tx.insert(s.purchaseLine).values(row)
-      await enqueueOutbox(tx, 'purchase_line', row, at, deps.newId)
     }
     await insertMovements(tx, deps, purchaseMovements(drafts, purchaseId), { businessDate, deviceId: device.id, createdBy: actor.id, at }, catalog)
     return { id: purchaseId, businessDate, supplier: purchaseRow.supplier, totalSatang, lines: out, cashMovementId, createdAt: at }

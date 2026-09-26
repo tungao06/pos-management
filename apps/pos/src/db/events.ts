@@ -3,7 +3,6 @@ import type { EventType } from '@dayo/contracts'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { computeEventHash, GENESIS_HASH, type ChainedEvent } from '@dayo/domain'
-import { enqueueOutbox } from './outbox'
 
 export type NewEvent = { type: EventType; payload: Record<string, unknown> }
 export type EventContext = { orderId: string; deviceId: string; actorType: 'user' | 'system'; actorId: string; at: string; newId: () => string }
@@ -11,6 +10,7 @@ export type EventContext = { orderId: string; deviceId: string; actorType: 'user
 /**
  * Appends events for one order to this device's hash chain (spec §4.9, D38): chain_id = device id,
  * chain_seq continues the device chain, seq continues the order. Must run inside the caller's transaction.
+ * The chain stays on the tablet — no outbox row (Q23 · spec 04 §6.1 block 2).
  */
 export async function appendOrderEvents(db: RemoteDb, ctx: EventContext, events: readonly NewEvent[]): Promise<string[]> {
   const lastInChain = await db
@@ -57,7 +57,6 @@ export async function appendOrderEvents(db: RemoteDb, ctx: EventContext, events:
       hash,
     } satisfies typeof s.orderEvent.$inferInsert
     await db.insert(s.orderEvent).values(row)
-    await enqueueOutbox(db, 'order_event', row, ctx.at, ctx.newId)
     ids.push(row.id)
     prevHash = hash
   }

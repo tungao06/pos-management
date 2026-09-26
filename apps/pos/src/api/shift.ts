@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { enqueueOutbox } from '../db/outbox'
+import { enqueueLocalOnly } from '../db/outbox'
 import { bangkokDate } from '../lib/clock'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
@@ -37,7 +37,7 @@ async function insertOpenShift(tx: RemoteDb, deps: ApiDeps, deviceId: string, us
     closedAt: null,
   } satisfies typeof s.shift.$inferInsert
   await tx.insert(s.shift).values(row)
-  await enqueueOutbox(tx, 'shift', row, at, deps.newId)
+  await enqueueLocalOnly(tx, 'shift', row, at, deps.newId) // block 2: the shift stays on the tablet (spec 04 §6.1)
   return { id: row.id, businessDate: row.businessDate, openedAt: at, openedBy: userId, openingFloatSatang }
 }
 

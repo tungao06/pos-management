@@ -4,7 +4,6 @@ import * as s from '@dayo/db-schema/sqlite'
 import { applyInboundGroup, applyMovement, initialCostState, requireItem, VAT_OFF, type Catalog, type CostOf, type CostState, type MovementDraft, type SaleContext, type SaleRecipe } from '@dayo/domain'
 import type { ApiDeps } from '../api/deps'
 import { requireStoreChannelId } from '../api/menu'
-import { enqueueOutbox } from './outbox'
 
 export async function loadCostStates(db: RemoteDb): Promise<Map<string, CostState>> {
   const rows = await db.select().from(s.itemCostState).all()
@@ -64,7 +63,8 @@ export async function loadSaleContext(db: RemoteDb, atIso: string, variantIds: r
 export type MovementMeta = { businessDate: string; deviceId: string; createdBy: string; at: string }
 
 /**
- * Writes movements, keeps the item_cost_state cache in step (spec §4.4), and queues each movement for sync.
+ * Writes movements and keeps the item_cost_state cache in step (spec §4.4). Stock stays on the tablet in block 2 —
+ * nothing is queued (spec 04 §6.1, §11).
  * Audit rows stay one per draft with their own unit cost, but a run of positive drafts of one item from one
  * document (same refType + refId, no other draft of that item between them) is folded into the cost state as a
  * single receipt (Q4-17 ก · D57): its average never depends on which line was typed last.
@@ -98,7 +98,6 @@ export async function insertMovements(db: RemoteDb, deps: ApiDeps, drafts: reado
       createdAt: meta.at,
     } satisfies typeof s.stockMovement.$inferInsert
     await db.insert(s.stockMovement).values(row)
-    await enqueueOutbox(db, 'stock_movement', row, meta.at, deps.newId)
     ids.push(row.id)
     const key = d.qtyMilli > 0 ? JSON.stringify([d.refType, d.refId]) : null
     const run = runs.get(d.itemId)

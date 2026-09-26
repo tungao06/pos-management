@@ -120,6 +120,8 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     expect(keys).toContain(`cash_count:${count!.id}`)
     expect(keys).toContain(`z_report:${z.id}`)
     expect(keys).toContain(`shift:${t.shift.id}:closed`)
+    const local = (await t.db.select().from(s.outbox).all()).filter((r) => ['cash_count', 'z_report', 'shift', 'cash_movement'].includes(r.tableName))
+    expect(local.every((r) => r.status === 'local_only')).toBe(true) // block 2: shift/cash/count/Z stay on the tablet (spec 04 §6.1)
 
     const boot = await t.api.bootstrap()
     expect(boot.openShift).toBeNull()

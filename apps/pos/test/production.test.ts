@@ -30,7 +30,7 @@ describe('produceBatch (spec §4.4 ทำเบส · §4.6 · D17)', () => {
     expect(await stockOf(t, 'PB-TEA-THAI')).toEqual({ onHandMilli: 3_000_000, avgCostUsat: 2_000_000 })
     const row = await t.db.select().from(s.productionBatch).get()
     expect(row).toMatchObject({ id: b.id, bomId: expect.any(String), itemId: base, deviceId: t.device.id, createdBy: t.owner.id })
-    expect(await outboxKeys(t)).toContain(`production_batch:${b.id}`)
+    expect(await outboxKeys(t)).toEqual([`shift:${t.shift.id}`]) // block 2: stock rows are never queued (spec 04 §6.1, §11)
 
     const o = await t.api.stockOverview()
     expect(o.items.find((i) => i.code === 'PB-TEA-THAI')).toMatchObject({ status: 'ok', alert: false, valueSatang: 6_000, latestBatch: { batchId: b.id, expiresAt: '2026-09-20T03:00:00.000Z', expiry: 'fresh' } })

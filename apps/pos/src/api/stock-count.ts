@@ -2,7 +2,6 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { countAdjustmentMovements, countLineResult, requireItem, type Catalog, type CountLineResult } from '@dayo/domain'
-import { enqueueOutbox } from '../db/outbox'
 import { insertMovements, loadCostStates, makeCostOf } from '../db/stock'
 import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
@@ -117,7 +116,6 @@ export async function startStockCount(db: RemoteDb, deps: ApiDeps, actorUserId: 
       closedAt: null,
     } satisfies typeof s.stockCount.$inferInsert
     await tx.insert(s.stockCount).values(row)
-    await enqueueOutbox(tx, 'stock_count', row, at, deps.newId)
     return row.id
   })
   return loadStockCount(db, id)
@@ -224,12 +222,9 @@ export async function closeStockCount(db: RemoteDb, deps: ApiDeps, input: CloseS
       results.push(r)
       const final = { ...l, countedUseMilli: r.countedUseMilli, varianceUseMilli: r.varianceUseMilli, varianceSatang: r.varianceSatang }
       await tx.update(s.stockCountLine).set({ countedUseMilli: final.countedUseMilli, varianceUseMilli: final.varianceUseMilli, varianceSatang: final.varianceSatang }).where(eq(s.stockCountLine.id, l.id))
-      await enqueueOutbox(tx, 'stock_count_line', final, at, deps.newId)
     }
     await insertMovements(tx, deps, countAdjustmentMovements(results, count.id, opening), { businessDate: count.businessDate, deviceId: device.id, createdBy: actor.id, at }, catalog)
     await tx.update(s.stockCount).set({ status: 'closed', closedBy: actor.id, closedAt: at }).where(eq(s.stockCount.id, count.id))
-    // the status change travels as its own outbox row, like shift:<id>:closed (T3b-4)
-    await enqueueOutbox(tx, 'stock_count', { ...count, status: 'closed', closedBy: actor.id, closedAt: at }, at, deps.newId, 'closed')
   })
   return loadStockCount(db, input.countId)
 }
