@@ -41,6 +41,7 @@ function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
     backupDue: false,
     legacyDevice: false,
     dayoLinked: true,
+    dayoBaseUrl: 'https://dayo.example/api/v1',
     staffNeedingPin: [],
     ownerRecovery: false,
     ...overrides,

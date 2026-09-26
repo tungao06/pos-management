@@ -361,6 +361,11 @@ describe('the same central address rule (fix round 1)', () => {
     expect(sent.length).toBe(n)
     expect(await t.deps.secrets.getApiKey()).toBe(MOCK_API_KEY)
   })
+  it('M3 (fix round 1): a stored base_url the shared rule refuses gives bootstrap().dayoBaseUrl null, never the raw value', async () => {
+    const { t } = await linked()
+    await writeKey(t.db, DAYO_KEYS.baseUrl, 'not a url at all')
+    expect((await t.api.bootstrap()).dayoBaseUrl).toBeNull()
+  })
 })
 
 describe('fix round 1: linking state, PIN reset audit, rollback after the key swap', () => {

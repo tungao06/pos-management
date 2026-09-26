@@ -3,7 +3,7 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { readCatalog } from '../sync/catalog'
 import { isBackupDue, lastBackupAt, lastBackupZId } from './backup'
-import { isDayoLinked, ownerRecoveryAllowed } from './connect'
+import { isDayoLinked, ownerRecoveryAllowed, storedBaseUrl } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { staffNeedingPin } from './staff'
@@ -75,8 +75,13 @@ export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
 
 export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapState> {
   const dayoLinked = await isDayoLinked(db, deps)
+  // Not a secret (controller ruling R1): read regardless of `dayoLinked` so a device whose key was revoked or
+  // cleared, but whose address is still stored, can still offer a locked address on the recovery screen.
+  // M3 (fix round 1 round 2, security): the normalized `storedBaseUrl` — never the raw column — so the UI shows
+  // null in exactly the cases `replaceApiKey`/`recoverOwner` themselves would refuse (e.g. a corrupt stored value).
+  const dayoBaseUrl = await storedBaseUrl(db)
   if ((await localDeviceId(db)) === null) {
-    return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, staffNeedingPin: [], ownerRecovery: false }
+    return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl, staffNeedingPin: [], ownerRecovery: false }
   }
   const device = await requireDevice(db)
   const lastAt = await lastBackupAt(db)
@@ -91,6 +96,7 @@ export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapS
     backupDue: await isBackupDue(db, device.id, lastZId),
     legacyDevice: !dayoLinked, // a device row without a dayo link = set up by plan 3/4's setupShop (ruling R7)
     dayoLinked,
+    dayoBaseUrl,
     staffNeedingPin: dayoLinked ? await staffNeedingPin(db) : [],
     ownerRecovery: dayoLinked && (await ownerRecoveryAllowed(db)),
   }
