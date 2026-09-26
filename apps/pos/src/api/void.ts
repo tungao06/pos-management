@@ -3,7 +3,7 @@ import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { voidReturnMovements, type MovementDraft } from '@dayo/domain'
 import { appendOrderEvents, type NewEvent } from '../db/events'
-import { enqueueOutbox } from '../db/outbox'
+import { enqueueLocalOnly } from '../db/outbox'
 import { insertMovements } from '../db/stock'
 import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
@@ -44,8 +44,6 @@ export async function voidOrder(db: RemoteDb, deps: ApiDeps, input: VoidOrderInp
 
     const at = deps.now()
     await tx.update(s.order).set({ status: 'voided', voidedAt: at }).where(eq(s.order.id, order.id))
-    // The status change travels as its own outbox row (decision T14/T15).
-    await enqueueOutbox(tx, 'order', { ...order, status: 'voided', voidedAt: at }, at, deps.newId, 'voided')
 
     let returnedMovementIds: string[] = []
     if (!input.made) {
@@ -78,7 +76,7 @@ export async function voidOrder(db: RemoteDb, deps: ApiDeps, input: VoidOrderInp
         createdAt: at,
       } satisfies typeof s.cashMovement.$inferInsert
       await tx.insert(s.cashMovement).values(row)
-      await enqueueOutbox(tx, 'cash_movement', row, at, deps.newId)
+      await enqueueLocalOnly(tx, 'cash_movement', row, at, deps.newId) // block 2: local_only (spec 04 §6.1)
       cashMovementId = row.id
     }
 

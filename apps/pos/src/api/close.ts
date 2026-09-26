@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { buildZReport, MAX_ZNO_LIST_LENGTH, recomputeZChainLenient, tallyCashCount, varianceNeedsReason, zReportHash, type LenientZEntry, type SalesSummary, type ZChainWarning, type ZSnapshot } from '@dayo/domain'
-import { enqueueOutbox } from '../db/outbox'
+import { enqueueLocalOnly } from '../db/outbox'
 import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
@@ -378,12 +378,12 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
       createdAt: at,
     } satisfies typeof s.cashCount.$inferInsert
     await tx.insert(s.cashCount).values(countRow)
-    await enqueueOutbox(tx, 'cash_count', countRow, at, deps.newId)
+    await enqueueLocalOnly(tx, 'cash_count', countRow, at, deps.newId) // block 2: local_only (spec 04 §6.1)
 
     // z_report is append-only (trigger) and unique per shift: a second close of the same shift cannot happen.
     const zRow = { id: deps.newId(), shiftId: shift.id, snapshotJson: z.snapshot, hash: z.hash, createdAt: at } satisfies typeof s.zReport.$inferInsert
     await tx.insert(s.zReport).values(zRow)
-    await enqueueOutbox(tx, 'z_report', zRow, at, deps.newId)
+    await enqueueLocalOnly(tx, 'z_report', zRow, at, deps.newId)
 
     if (chainWarning !== null) {
       // review NF-4: rowCount/maxStoredZNo let a later audit reader see a duplicate/missing zNo happened, even
@@ -404,7 +404,7 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     await tx.update(s.shift).set({ status: 'closed', closedBy: approver.id, closedAt: at }).where(eq(s.shift.id, shift.id))
     const shiftRow = await tx.select().from(s.shift).where(eq(s.shift.id, shift.id)).get()
     if (!shiftRow) throw new PosError('NO_OPEN_SHIFT', shift.id)
-    await enqueueOutbox(tx, 'shift', shiftRow, at, deps.newId, 'closed')
+    await enqueueLocalOnly(tx, 'shift', shiftRow, at, deps.newId, 'closed')
 
     // Built straight from `z` (just produced by `buildZReport`), not read back through `toZReportDto`: its hash is
     // correct by construction, and `snapshotText` above only exists to survive a hand-edited row from the DB.

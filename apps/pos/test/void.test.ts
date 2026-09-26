@@ -61,9 +61,8 @@ describe('voidOrder', () => {
     expect(cash[0]).toMatchObject({ shiftId: t.shift.id, kind: 'VOID_REFUND', amountSatang: 9000, orderId: sale.orderId, createdBy: t.owner.id })
     expect(cash[0]!.reason).toContain('A-000001')
 
-    const keys = (await t.db.select().from(s.outbox).all()).map((r) => r.idempotencyKey)
-    expect(keys).toContain(`order:${sale.orderId}:voided`)
-    expect(keys).toContain(`cash_movement:${cash[0]!.id}`)
+    // block 2: a plan-3 bill's void queues no order row; the refund stays on the tablet (spec 04 §6.1)
+    expect((await t.db.select().from(s.outbox).all()).map((r) => [r.idempotencyKey, r.status])).toEqual([[`shift:${t.shift.id}`, 'local_only'], [`cash_movement:${cash[0]!.id}`, 'local_only']])
     expect(verifyChain(await loadDeviceChain(t.db, t.device.id))).toEqual({ ok: true })
   })
 

@@ -37,7 +37,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
       ['PB-SYRUP', -47_200],
       ['PB-TEA-THAI', -260_000],
     ])
-    expect(x.pendingSyncItems).toBe(5) // shift + 3 bills + the PAID_OUT (D50 Q3-26)
+    expect(x.pendingSyncItems).toBe(0) // block 2: plan-3 bills, the shift and the PAID_OUT queue nothing to send
   })
 
   it('an empty shift is all zeros; expected cash = the float', async () => {

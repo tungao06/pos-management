@@ -12,8 +12,8 @@ describe('openShift', () => {
     expect(shift).toMatchObject({ businessDate: '2026-09-18', openingFloatSatang: 50_000, openedBy: users[0]!.id, openedAt: '2026-09-17T18:30:00.000Z' })
     const boot = await api.bootstrap()
     expect(boot.openShift).toEqual(shift)
-    expect(boot.pendingSyncItems).toBe(1)
-    expect((await db.select().from(s.outbox).all()).map((r) => r.idempotencyKey)).toEqual([`shift:${shift.id}`])
+    expect(boot.pendingSyncItems).toBe(0) // block 2: a shift never reaches dayo (spec 04 §6.1)
+    expect((await db.select().from(s.outbox).all()).map((r) => [r.idempotencyKey, r.status])).toEqual([[`shift:${shift.id}`, 'local_only']])
   })
 
   it('refuses a second open shift, a bad float and an unknown user', async () => {

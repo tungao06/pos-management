@@ -39,10 +39,7 @@ describe('opening count (D30 · Q4-13)', () => {
       { code: 'RM-MLK-02', kind: 'OPENING', qtyMilli: 405_000, unitCostUsat: 7_407_407, businessDate: '2026-09-17' },
     ])
     expect(await t.db.select().from(s.stockCount).where(eq(s.stockCount.id, c.id)).get()).toMatchObject({ status: 'closed', closedBy: t.other.id })
-    const keys = await outboxKeys(t)
-    expect(keys).toContain(`stock_count:${c.id}`)
-    expect(keys).toContain(`stock_count:${c.id}:closed`)
-    expect(keys.filter((k) => k.startsWith('stock_count_line:'))).toHaveLength(38)
+    expect(await outboxKeys(t)).toEqual([`shift:${t.shift.id}`]) // block 2: stock rows are never queued (spec 04 §6.1, §11)
     expect(await t.api.getOpenStockCount()).toBeNull()
     expect(await t.api.stockOverview()).toMatchObject({ lastCountAt: '2026-09-17T03:01:00.000Z', countDue: false, openCountId: null, openingCountPending: false })
   })

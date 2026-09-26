@@ -3,7 +3,6 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { cashChangeSatang, nextReceiptNo, planSale, promptPayPayload, type SaleCartLine, type SaleContext, type SalePlan } from '@dayo/domain'
 import { appendOrderEvents, type NewEvent } from '../db/events'
-import { enqueueOutbox } from '../db/outbox'
 import { insertMovements, loadSaleContext } from '../db/stock'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
@@ -70,7 +69,7 @@ function planOrThrow(lines: readonly SaleCartLine[], discountSatang: number, ctx
 
 /**
  * spec §4.1, §4.2, §4.7, §4.9, §6.1: one transaction writes order + lines + discount + payment + SALE movements
- * (average cost) + item_cost_state + hash-chained events + outbox. Any error rolls everything back, so a failed
+ * (average cost) + item_cost_state + hash-chained events. Any error rolls everything back, so a failed
  * sale never consumes a receipt or queue number.
  */
 export async function commitSale(db: RemoteDb, deps: ApiDeps, input: CommitSaleInput): Promise<CommitSaleResult> {
@@ -148,7 +147,6 @@ export async function commitSale(db: RemoteDb, deps: ApiDeps, input: CommitSaleI
       voidedAt: null,
     } satisfies typeof s.order.$inferInsert
     await tx.insert(s.order).values(orderRow)
-    await enqueueOutbox(tx, 'order', orderRow, at, deps.newId)
 
     for (const l of plan.lines) {
       const names = ctx.variantNames.get(l.variantId)
@@ -170,14 +168,12 @@ export async function commitSale(db: RemoteDb, deps: ApiDeps, input: CommitSaleI
         unitCostSatang: l.unitCostSatang,
       } satisfies typeof s.orderLine.$inferInsert
       await tx.insert(s.orderLine).values(lineRow)
-      await enqueueOutbox(tx, 'order_line', lineRow, at, deps.newId)
     }
 
     if (discount !== null) {
       // Amount only, reason required, approved_by = the signed-in user; only written when > 0 (D48 Q3-6, D47 item 7)
       const discountRow = { id: deps.newId(), orderId: input.orderId, amountSatang: discount.amountSatang, reason: discount.reason, approvedBy: actor.id } satisfies typeof s.discount.$inferInsert
       await tx.insert(s.discount).values(discountRow)
-      await enqueueOutbox(tx, 'discount', discountRow, at, deps.newId)
     }
 
     const paymentRow = {
@@ -193,7 +189,6 @@ export async function commitSale(db: RemoteDb, deps: ApiDeps, input: CommitSaleI
       createdAt: at,
     } satisfies typeof s.payment.$inferInsert
     await tx.insert(s.payment).values(paymentRow)
-    await enqueueOutbox(tx, 'payment', paymentRow, at, deps.newId)
 
     const movementIds = await insertMovements(tx, deps, plan.movements, { businessDate: shift.businessDate, deviceId: device.id, createdBy: actor.id, at }, ctx.catalog)
 

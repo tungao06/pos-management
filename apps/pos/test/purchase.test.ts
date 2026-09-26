@@ -31,11 +31,8 @@ describe('receivePurchase (spec §5 รับของเข้า · D19 · §4
       { code: 'RM-MLK-02', kind: 'PURCHASE', qtyMilli: 405_000, unitCostUsat: 7_407_407, businessDate: '2026-09-17' },
     ])
     expect(await stockOf(t, 'RM-TEA-01')).toEqual({ onHandMilli: 800_000, avgCostUsat: 19_250_000 })
-    const keys = await outboxKeys(t)
-    expect(keys).toContain(`purchase:${p.id}`)
-    expect(keys.filter((k) => k.startsWith('purchase_line:'))).toHaveLength(2)
-    expect(keys.filter((k) => k.startsWith('stock_movement:'))).toHaveLength(2)
-    expect((await t.api.bootstrap()).pendingSyncItems).toBe(2) // the shift + the purchase as one document (T4-8)
+    expect(await outboxKeys(t)).toEqual([`shift:${t.shift.id}`]) // block 2: stock rows are never queued (spec 04 §6.1, §11)
+    expect((await t.api.bootstrap()).pendingSyncItems).toBe(0) // the shift row is local_only
     // a second receipt at a price within 10% averages in (spec §4.4): 800 g at 0.1925 + 400 g at 0.2 → 0.195 ฿/g
     await t.api.receivePurchase(input(t, [await teaBags(t, 1_000, 8_000)]))
     expect(await stockOf(t, 'RM-TEA-01')).toEqual({ onHandMilli: 1_200_000, avgCostUsat: 19_500_000 })
@@ -71,7 +68,8 @@ describe('receivePurchase (spec §5 รับของเข้า · D19 · §4
     const cash = await t.db.select().from(s.cashMovement).all()
     expect(cash).toEqual([{ id: p.cashMovementId, shiftId: t.shift.id, kind: 'PAID_OUT', amountSatang: 7_700, orderId: null, reason: 'รับของ แม็คโคร', createdBy: t.owner.id, createdAt: p.createdAt }])
     expect((await t.api.shiftReport()).cash.paidOutSatang).toBe(7_700)
-    expect((await t.api.bootstrap()).pendingSyncItems).toBe(3) // the shift, the purchase, and its paid-out as a cash record (T4-8)
+    expect((await t.api.bootstrap()).pendingSyncItems).toBe(0) // block 2: the paid-out is a local_only cash record, the purchase is not queued
+    expect((await t.db.select().from(s.outbox).all()).map((r) => [r.idempotencyKey, r.status])).toEqual([[`shift:${t.shift.id}`, 'local_only'], [`cash_movement:${p.cashMovementId}`, 'local_only']])
     // the same cap as a manual paid-out (review I-3): at most ฿100,000 leaves the drawer in one go — nothing written
     const big = await teaBags(t, 1_000, 10_000_000)
     await expect(t.api.receivePurchase(input(t, [big, big], { paidFromDrawer: true, acceptPriceJump: true }))).rejects.toThrow(/^BAD_INPUT: /)

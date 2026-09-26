@@ -3,7 +3,6 @@ import { AdjustReason } from '@dayo/contracts'
 import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { adjustMovementKind, expiryState, explodeNeeds, mergeNeeds, stockOutMovements, unitsToUseMilli, type AdjustReasonCode, type Catalog } from '@dayo/domain'
-import { enqueueOutbox } from '../db/outbox'
 import { insertMovements, loadCostStates, makeCostOf } from '../db/stock'
 import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
@@ -46,7 +45,6 @@ async function writeAdjustment(
     createdAt: at,
   } satisfies typeof s.stockAdjustment.$inferInsert
   await tx.insert(s.stockAdjustment).values(row)
-  await enqueueOutbox(tx, 'stock_adjustment', row, at, deps.newId)
   await insertMovements(tx, deps, drafts, { businessDate, deviceId: a.deviceId, createdBy: a.actorId, at }, a.catalog)
   const codes = new Map((await tx.select({ id: s.item.id, code: s.item.code }).from(s.item).all()).map((i) => [i.id, i.code]))
   return {

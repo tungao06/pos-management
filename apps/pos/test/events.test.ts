@@ -4,7 +4,6 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { GENESIS_HASH, verifyChain } from '@dayo/domain'
 import { appendOrderEvents, loadDeviceChain, type EventContext } from '../src/db/events'
-import { enqueueOutbox } from '../src/db/outbox'
 import { openTestDb, sequentialIds } from './helpers/db'
 
 const AT = '2026-09-17T03:00:00.000Z'
@@ -28,7 +27,7 @@ function ctxFor(orderId: string, newId: () => string): EventContext {
 }
 
 describe('appendOrderEvents', () => {
-  it('chains per device across orders, numbers seq per order, verifies, and queues every event', async () => {
+  it('chains per device across orders, numbers seq per order, verifies, and queues nothing (the chain stays on the tablet — Q23)', async () => {
     const { db } = await openTestDb()
     await seedDeviceAndOrders(db, ['o-1', 'o-2'])
     const newId = sequentialIds()
@@ -50,9 +49,7 @@ describe('appendOrderEvents', () => {
     ])
     expect(chain[0]!.prevHash).toBe(GENESIS_HASH)
     expect(verifyChain(chain)).toEqual({ ok: true })
-    const outbox = await db.select().from(s.outbox).all()
-    expect(outbox).toHaveLength(4)
-    expect(outbox.every((r) => r.tableName === 'order_event' && r.idempotencyKey.startsWith('order_event:') && r.status === 'pending' && r.attempts === 0 && r.sentAt === null && r.deadAt === null)).toBe(true)
+    expect(await db.select().from(s.outbox).all()).toEqual([]) // spec 04 §6.1 block 2: no order_event row is queued
   })
 
   it('is append-only in the DB, and the chain still detects an edit made behind the triggers', async () => {
@@ -81,18 +78,5 @@ describe('appendOrderEvents', () => {
     ).rejects.toThrow('boom')
     expect(await db.select().from(s.orderEvent).all()).toEqual([])
     expect(await db.select().from(s.outbox).all()).toEqual([])
-  })
-})
-
-describe('enqueueOutbox', () => {
-  it('keys rows as <table>:<id>[:suffix] and refuses the same key twice', async () => {
-    const { db } = await openTestDb()
-    const newId = sequentialIds()
-    await enqueueOutbox(db, 'order', { id: 'o-9', status: 'paid' }, AT, newId)
-    await enqueueOutbox(db, 'order', { id: 'o-9', status: 'voided' }, AT, newId, 'voided')
-    const rows = await db.select().from(s.outbox).all()
-    expect(rows.map((r) => r.idempotencyKey)).toEqual(['order:o-9', 'order:o-9:voided'])
-    expect(rows[1]!.rowJson).toEqual({ id: 'o-9', status: 'voided' })
-    await expect(enqueueOutbox(db, 'order', { id: 'o-9' }, AT, newId)).rejects.toThrow()
   })
 })
