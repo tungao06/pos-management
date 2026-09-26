@@ -8,8 +8,8 @@ import { TH } from '../ui/th'
 
 const SWEETNESS_ORDER: readonly Sweetness[] = ['0%', '25%', '50%', '75%', '100%']
 
-/** Popup on every tap, `menu.defaultSize`/`defaultSweetness` preselected (spec §5, ADR-0054 — never a fixed
- * '16 oz'/50%). Options (milk, matcha grade) come from dayo's own `lineOptions` for the exact size+sweetness picked. */
+/** Popup on every tap, `menu.defaultSize`/`defaultSweetness` preselected (spec §5, ADR-0054 — never a fixed size/
+ * sweetness). Options (milk, matcha grade) come from dayo's own `lineOptions` for the exact size+sweetness picked. */
 export function ItemDialog({
   catalog,
   menu,

@@ -4,7 +4,7 @@ import type { CartDraft, CartLineDraft } from '@dayo/domain'
 /**
  * In-memory cart; written to the database only when paid (D48 Q3-7). `orderId` makes commitSale idempotent.
  * ADR-0054: `size` is a plain string that always comes from the catalog (`sizes` of `SellCatalogDto`), never a
- * hardcoded '16 oz'/'20 oz' — dayo's own `Size` type is itself just `string` (any "<n> oz", checked by the shop's
+ * fixed literal size — dayo's own `Size` type is itself just `string` (any "<n> oz", checked by the shop's
  * `catalog.sizes`, not by a fixed TS union), so no cast is needed to build the domain's `CartLineDraft`.
  */
 export type CartLine = { key: string; code: string; nameTh: string; size: string; sweetness: Sweetness; milk: MilkCode; grade: string | null; qty: number }
