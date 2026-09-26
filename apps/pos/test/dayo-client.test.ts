@@ -108,13 +108,13 @@ describe('dayo client (spec 04 §4.1, §6.3)', () => {
       expect(await failureOf(c.getCatalog(0))).toEqual({ kind: 'server', status })
     }
   })
-  it('a hung request becomes a network failure after 20 seconds', async () => {
+  it('a hung request becomes a timeout failure after 20 seconds', async () => {
     vi.useFakeTimers()
     const { mock, c } = client()
     mock.setMode('hang')
     const p = failureOf(c.getCatalog(0))
     await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS)
-    expect((await p)?.kind).toBe('network')
+    expect(await p).toEqual({ kind: 'timeout' }) // task 13 m1: a timeout is not an offline network error
   })
   it('a 200 whose body breaks the contract is bad_response, not a crash', async () => {
     const fetchBad: typeof fetch = async () => new Response(JSON.stringify({ ok: true, data: { changed: true } }), { status: 200 })
@@ -139,7 +139,7 @@ describe('dayo client (spec 04 §4.1, §6.3)', () => {
     const c = createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: f, nowMs: () => 0 })
     const p = failureOf(c.getCatalog(0))
     await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS)
-    expect((await p)?.kind).toBe('network')
+    expect(await p).toEqual({ kind: 'timeout' })
   })
 })
 

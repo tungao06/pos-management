@@ -3,6 +3,8 @@ import { normalizeBaseUrl } from './base-url'
 
 export type DayoFailure =
   | { kind: 'network'; message: string }
+  /** task 13 m1: the 20-second budget ran out (headers or body) — dayo was reached or is hanging, not an offline tablet. */
+  | { kind: 'timeout' }
   | { kind: 'unauthorized' }
   | { kind: 'forbidden' }
   | { kind: 'api_disabled' }
@@ -58,7 +60,9 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
       // pushOnce (and with it every later scheduler wake) for ever.
       text = await res.text()
     } catch (e) {
-      // offline, DNS, timeout (headers or body) — and in a browser also a response without CORS headers (spec §4.1)
+      // our own 20-second abort (headers or body) = timeout (m1) · anything else: offline, DNS, and in a browser also a
+      // response without CORS headers (spec §4.1)
+      if (controller.signal.aborted) throw new DayoError({ kind: 'timeout' })
       throw new DayoError({ kind: 'network', message: e instanceof Error ? e.message : String(e) })
     } finally {
       clearTimeout(timer)

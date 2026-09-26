@@ -42,6 +42,8 @@ export const NO_VERDICT_WARN_AFTER = 10
 export const NO_VERDICT_REPEATED = 'NO_VERDICT_REPEATED'
 /** A request that failed while it carried only this row (R4 one-row mode) — the row is charged a try (security I2). */
 export const REQUEST_FAILED = 'REQUEST_FAILED'
+/** fix round 3: K one-row requests failing in a row within one call = dayo is down (refund every provisional charge, stop). */
+export const SINGLE_FAILURES_PER_CALL = 3
 const ORDER_NO_MAX = 100          // M6: code points
 const DUPLICATE_OF_MAX = 20       // M6: entries
 const WARNINGS_MAX = 20
@@ -49,6 +51,8 @@ const WARNING_MAX = 200
 const PAGE = 200
 const rowid = sql<number>`rowid`.mapWith(Number)
 const isPushKind = inArray(s.outbox.tableName, [...PUSH_KINDS])
+/** One-row mode reads the queue by this key: a row refunded after an outage (next_attempt_at = refund time) goes to the back. */
+const effTime = sql<string>`coalesce(${s.outbox.nextAttemptAt}, ${s.outbox.createdAt})`
 /** (created_at, rowid) strictly after a mark — the keyset of the page reader. */
 const afterMark = (m: Mark): SQL => or(gt(s.outbox.createdAt, m.createdAt), and(eq(s.outbox.createdAt, m.createdAt), sql`rowid > ${m.rid}`))!
 const blockedStates = new Set(['unauthorized', 'forbidden', 'bad_base_url'])
@@ -105,25 +109,41 @@ async function batchSize(db: RemoteDb, sup: Supported): Promise<number> {
   return MAX_PUSH_ROWS
 }
 
-/** Reads the queue page by page (keyset on created_at, rowid) until a batch is full or the queue ends (review item 20). */
-async function* pendingRows(db: RemoteDb, nowIso: string): AsyncGenerator<Row> {
-  let after: Mark | null = null
+/**
+ * Reads the queue page by page until a batch is full or the queue ends (review item 20). FIFO = keyset on (created_at,
+ * rowid). `rotate` (R4 one-row mode, fix round 3) = keyset on (coalesce(next_attempt_at, created_at), created_at, rowid),
+ * so rows refunded after a run of failures are tried after the others and a run of failing rows cannot wedge the head.
+ * A child still never goes before its parent: pickBatch checks the parent whatever the order.
+ */
+async function* pendingRows(db: RemoteDb, nowIso: string, rotate: boolean): AsyncGenerator<Row> {
+  let after: (Mark & { eff: string }) | null = null
   for (;;) {
-    const page: Row[] = await db.select({ ...getTableColumns(s.outbox), rid: rowid }).from(s.outbox)
-      .where(and(eq(s.outbox.status, 'pending'), isPushKind, or(isNull(s.outbox.nextAttemptAt), lte(s.outbox.nextAttemptAt, nowIso)), after === null ? undefined : afterMark(after)))
-      .orderBy(asc(s.outbox.createdAt), asc(rowid)).limit(PAGE).all()
+    const keyset = after === null ? undefined
+      : rotate ? sql`(${effTime}, ${s.outbox.createdAt}, rowid) > (${after.eff}, ${after.createdAt}, ${after.rid})` : afterMark(after)
+    const page: (Row & { eff: string })[] = await db.select({ ...getTableColumns(s.outbox), rid: rowid, eff: effTime }).from(s.outbox)
+      .where(and(eq(s.outbox.status, 'pending'), isPushKind, or(isNull(s.outbox.nextAttemptAt), lte(s.outbox.nextAttemptAt, nowIso)), keyset))
+      .orderBy(...(rotate ? [asc(effTime), asc(s.outbox.createdAt), asc(rowid)] : [asc(s.outbox.createdAt), asc(rowid)])).limit(PAGE).all()
     for (const r of page) yield r
     if (page.length < PAGE) return
-    after = { createdAt: page.at(-1)!.createdAt, rid: page.at(-1)!.rid }
+    const last = page.at(-1)!
+    after = { eff: last.eff, createdAt: last.createdAt, rid: last.rid }
   }
 }
 
-async function pickBatch(db: RemoteDb, nowIso: string, sup: Supported, size: number, decided: Set<string>): Promise<{ batch: Row[]; held: number }> {
+/** A row that has never been part of a failed request (no REQUEST_FAILED) — the best probe after a failure. */
+const isTrusted = (r: Row): boolean => decodeLastError(r.lastError).reason !== REQUEST_FAILED
+
+/**
+ * `probe` (one-row mode, after a failure in this call): the first sendable row that has never been part of a failed
+ * request, else the first sendable row — a good row behind failing ones is reached within K requests.
+ */
+async function pickBatch(db: RemoteDb, nowIso: string, sup: Supported, size: number, decided: Set<string>, opts: { rotate: boolean; probe: boolean } = { rotate: false, probe: false }): Promise<{ batch: Row[]; held: number }> {
   const batch: Row[] = []
+  let fallback: Row | null = null
   const inBatch = new Set<string>()
   let bytes = ENVELOPE_BYTES
   let held = 0
-  for await (const r of pendingRows(db, nowIso)) {
+  for await (const r of pendingRows(db, nowIso, opts.rotate)) {
     if (decided.has(r.id)) continue
     if (isHeld(r, sup)) { held++; continue }
     // a child never goes before its parent: the parent must be sent already, or sit earlier in this same batch
@@ -136,11 +156,13 @@ async function pickBatch(db: RemoteDb, nowIso: string, sup: Supported, size: num
     const b = rowBytes(r)
     if (ENVELOPE_BYTES + b > MAX_PUSH_BODY_BYTES) { await markDead(db, r, nowIso, 'ENVELOPE', 'แถวนี้ใหญ่เกิน 256 KB'); decided.add(r.id); continue }
     if (bytes + b > MAX_PUSH_BODY_BYTES) break
+    if (opts.probe && !isTrusted(r)) { fallback ??= r; continue }
     batch.push(r)
     inBatch.add(r.idempotencyKey)
     bytes += b
     if (batch.length >= size) break
   }
+  if (batch.length === 0 && fallback !== null) batch.push(fallback)
   return { batch, held }
 }
 
@@ -163,12 +185,15 @@ async function gate(db: RemoteDb, deps: ApiDeps): Promise<{ cfg: { baseUrl: stri
 }
 
 /**
- * security I2 + fix round 2 (controller ruling): in one-row mode a request that failed with 5xx / an unreadable 200 / an
- * unknown 4xx is charged to its row PROVISIONALLY. The next request of the same call decides: dayo answering it (200, or a
- * 422 verdict on that row) confirms the charge — the first row really was the poison row; any other failure means dayo
- * itself is down, so the charge is refunded (refundCharge) and the second row is not charged. A charge still pending when
- * the call ends with no other row tried is kept (a queue whose only sendable row is the poison row).
+ * security I2 + fix rounds 2–3 (controller rulings): in one-row mode a request that failed with 5xx / an unknown 4xx /
+ * an unreadable 200 / a timeout is charged to its row PROVISIONALLY, and the call goes on to the next row (a probe).
+ * - A 200 (or a 422 verdict on a row) = dayo is up: every provisional charge of the call is confirmed.
+ * - K = SINGLE_FAILURES_PER_CALL failures in a row, or a failure that cannot be charged (offline, 401/403/404, 429) =
+ *   dayo is down: every provisional charge is refunded (refundCharges), the call stops, the whole-request backoff holds.
+ * - The queue runs out of sendable rows before K failures: the charges are kept (a queue whose only sendable rows are
+ *   poison rows — fewer than K of them).
  */
+type Provisional = { row: Row; chargedAt: string }
 async function chargeRow(db: RemoteDb, deps: ApiDeps, r: Row, f: DayoFailure, at: string): Promise<void> {
   const attempts = r.attempts + 1
   const detail = f.kind === 'server' ? `HTTP ${f.status}` : f.kind
@@ -176,10 +201,18 @@ async function chargeRow(db: RemoteDb, deps: ApiDeps, r: Row, f: DayoFailure, at
   await db.update(s.outbox).set({ attempts, lastError: encodeLastError(REQUEST_FAILED, detail), nextAttemptAt: later(at, backoffMs(attempts, deps.random)) }).where(pendingRow(r.id))
 }
 
-/** Undoes a provisional charge: the row gets back exactly what it had when it was picked (a STUCK it reached is undone too). */
-async function refundCharge(db: RemoteDb, r: Row): Promise<void> {
-  await db.update(s.outbox).set({ status: 'pending', attempts: r.attempts, nextAttemptAt: r.nextAttemptAt, lastError: r.lastError, deadAt: r.deadAt })
-    .where(and(eq(s.outbox.id, r.id), eq(s.outbox.attempts, r.attempts + 1)))
+/**
+ * Undoes provisional charges: attempts and dead_at go back to what they were when the row was picked (a STUCK the charge
+ * reached is undone too). m2: only the charge's own result is undone — pending with attempts+1, or dead with the dead_at
+ * the charge wrote. Rotation (fix round 3): next_attempt_at = the refund time, so one-row mode tries the other rows first.
+ */
+async function refundCharges(db: RemoteDb, list: Provisional[], at: string): Promise<void> {
+  for (const { row: r, chargedAt } of list) {
+    await db.update(s.outbox)
+      .set({ status: 'pending', attempts: r.attempts, deadAt: r.deadAt, nextAttemptAt: at, lastError: encodeLastError(REQUEST_FAILED, 'ส่งไม่ผ่านติดกันหลายแถว — ถือว่าระบบกลางล่ม ไม่นับครั้ง') })
+      .where(and(eq(s.outbox.id, r.id), eq(s.outbox.attempts, r.attempts + 1),
+        or(eq(s.outbox.status, 'pending'), and(eq(s.outbox.status, 'dead'), eq(s.outbox.deadAt, chargedAt)))))
+  }
 }
 
 /** Records a failed request. Returns true when the failure may be charged to the single row of a one-row request (the caller decides). */
@@ -196,12 +229,12 @@ async function onRequestFailure(db: RemoteDb, deps: ApiDeps, f: DayoFailure, bat
       if (batch.length > 1) await startSingle(db, batch)
       else { await markDead(db, batch[0]!, now, 'ENVELOPE', f.message); await forgetSingle(db, [batch[0]!.id]) } // the queue moves on (spec §6.3 row 422)
       return false
-    default: { // network, server (5xx and unknown 4xx), bad_response: whole-request retry with backoff (spec §6.3 row 1)
+    default: { // network, timeout, server (5xx and unknown 4xx), bad_response: whole-request retry with backoff (spec §6.3 row 1)
       const streak = Number(await readKey(db, DAYO_KEYS.pushFailStreak) ?? '0') + 1
       await writeKey(db, DAYO_KEYS.pushFailStreak, String(streak))
       await writeKey(db, DAYO_KEYS.pushBackoffUntil, later(now, backoffMs(streak, deps.random)))
       await writeKey(db, DAYO_KEYS.pushBackoffReason, 'failure')
-      if (f.kind === 'network') return false // not the rows' fault, and not part of the 5xx streak (m3)
+      if (f.kind === 'network') return false // offline: not the rows' fault, and not part of the 5xx streak (m3) — a timeout is (m1)
       const serverStreak = Number(await readKey(db, DAYO_KEYS.pushServerStreak) ?? '0') + 1
       await writeKey(db, DAYO_KEYS.pushServerStreak, String(serverStreak))
       if (serverStreak >= SERVER_STREAK_FOR_SINGLE && batch.length > 1) await startSingle(db, batch)
@@ -334,15 +367,21 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
     return { ...out, stopped: 'bad_base_url' }
   }
   const decided = new Set<string>() // plan 5 fix H-1: judged once per call
-  let provisional: Row | null = null // fix round 2: a charged row waiting for the next request to confirm or refund its charge
+  let provisional: Provisional[] = [] // fix round 3: charged rows of this call waiting for a 200 (confirm) or K failures (refund)
+  const refundAll = async (): Promise<void> => {
+    const list = provisional
+    provisional = []
+    if (list.length > 0) await ctx.serial(() => refundCharges(ctx.db, list, ctx.deps.now()))
+  }
   for (let round = 0; round < MAX_ROUNDS_PER_CALL; round++) {
     const nowIso = ctx.deps.now()
+    const probe = provisional.length > 0
     const { batch, held, single } = await ctx.serial(async () => {
       const size = await batchSize(ctx.db, sup)
-      return { ...(await pickBatch(ctx.db, nowIso, sup, size, decided)), single: size === 1 }
+      return { ...(await pickBatch(ctx.db, nowIso, sup, size, decided, { rotate: size === 1, probe: size === 1 && probe })), single: size === 1 }
     })
     out.held = held
-    if (batch.length === 0) return out
+    if (batch.length === 0) return out // the queue ran out before K failures: provisional charges are kept
     for (const r of batch) decided.add(r.id)
     const body = { device_time: nowIso, rows: batch.map((r) => ({ key: r.idempotencyKey, kind: r.tableName, data: r.rowJson })) } as PushRequest
     let answer: Timed<{ server_time: string; results: ReceivedRowResult[] }>
@@ -354,27 +393,24 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
       const f = e.failure
       const chargeable = await ctx.serial(() => onRequestFailure(ctx.db, ctx.deps, f, batch, single))
       out.stopped = f.kind
-      if (provisional !== null) {
-        // dayo judged this row (422 ENVELOPE) = it is up, so the first failure was that row's own; anything else = dayo is down:
-        // refund, charge nobody, stop — the whole-request backoff written above holds
-        const first = provisional
-        if (f.kind !== 'bad_envelope') await ctx.serial(() => refundCharge(ctx.db, first))
-        return out
-      }
+      if (f.kind === 'bad_envelope') { provisional = []; return out } // dayo judged the request = it is up: the charges stand
       if (chargeable) {
         const row = batch[0]!
-        await ctx.serial(() => chargeRow(ctx.db, ctx.deps, row, f, ctx.deps.now()))
-        provisional = row
-        continue // let the next row show whether this one was the cause
+        const chargedAt = ctx.deps.now()
+        await ctx.serial(() => chargeRow(ctx.db, ctx.deps, row, f, chargedAt))
+        provisional.push({ row, chargedAt })
+        if (provisional.length < SINGLE_FAILURES_PER_CALL) continue // probe the next row
       }
+      await refundAll() // K in a row, or a failure no row can be blamed for: dayo is down — the whole-request backoff holds
       return out
     }
-    provisional = null // confirmed by this 200
+    provisional = [] // confirmed by this 200
     out.stopped = null
     out.requests++
     const t = await ctx.serial(() => applyVerdicts(ctx.db, ctx.deps, batch, answer, sup))
     out.sent += t.sent; out.rejected += t.rejected; out.deferred += t.deferred; out.noAnswer += t.noAnswer
   }
+  await refundAll() // the round cap ended the call in the middle of a run: no row is blamed
   return out
 }
 
