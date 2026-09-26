@@ -174,6 +174,11 @@ describe('pushOnce (spec 04 §6.2–6.3)', () => {
     t.mock.setMode('normal')
     await pushOnce(ctx)
     expect(t.mock.requests().filter((r) => r.path === '/api/v1/pos/push').slice(-3).map((r) => r.rows)).toEqual([1, 1, 1])
+    // fix round 1 (A): once those three are decided the sender is back to full batches
+    expect(await readKey(t.db, DAYO_KEYS.pushSingleThrough)).toBeNull()
+    await cocoa(t); await cocoa(t)
+    await pushOnce(ctx)
+    expect(t.mock.requests().filter((r) => r.path === '/api/v1/pos/push').at(-1)!.rows).toBe(2)
   })
   it('422 on a batch → one by one; the row that still fails alone goes to ENVELOPE', async () => {
     const { t } = await ready()
@@ -367,5 +372,165 @@ describe('pushOnce — carried requirements (task 13)', () => {
     const dump = tables.map((x) => JSON.stringify(t.raw.prepare(`SELECT * FROM "${x.name}"`).all())).join('\n')
     expect(dump).not.toContain(MOCK_API_KEY)
     expect(dump).not.toContain(MOCK_API_KEY.slice(5, 25))
+  })
+})
+
+/** A fetch that answers 422 to the first request carrying more than one row (puts the sender in R4 one-row mode). */
+function refuseFirstBatch(t: Awaited<ReturnType<typeof ready>>['t']): typeof fetch {
+  let refused = false
+  return async (input, init) => {
+    const rows = init?.method === 'POST' ? (JSON.parse(String(init.body)) as { rows: unknown[] }).rows.length : 0
+    if (!refused && rows > 1) { refused = true; return new Response(JSON.stringify({ ok: false, error: { code: 'DY422', message: 'invalid' } }), { status: 422 }) }
+    return t.mock.fetch(input, init)
+  }
+}
+const withFetch = (t: Awaited<ReturnType<typeof ready>>['t'], f: typeof fetch) => ({ db: t.db, deps: { ...t.deps, fetch: f }, serial: <T>(fn: () => Promise<T>) => fn() })
+const lastPushRows = (t: Awaited<ReturnType<typeof ready>>['t']) => pushRequests(t).at(-1)!.rows
+const answer429 = (value: string): typeof fetch => async () => new Response(JSON.stringify({ ok: false, error: { code: 'DY429', message: 'rate_limited' } }), { status: 429, headers: { 'Retry-After': value } })
+
+describe('pushOnce — fix round 1', () => {
+  describe('A · R4 one-row mode counts only the rows of the failed batch that are still undecided', () => {
+    it('a row of that batch that got CLOCK_AHEAD does not keep one-row mode on', async () => {
+      const { t } = await ready()
+      for (let i = 0; i < 3; i++) await cocoa(t)
+      const ctx = withFetch(t, refuseFirstBatch(t))
+      t.mock.override({ match: { receiptNo: 'A-000002' }, verdict: { status: 'deferred', reason: 'CLOCK_AHEAD', detail: 'x' }, times: 5 })
+      expect((await pushOnce(ctx)).stopped).toBe('bad_envelope')
+      expect(JSON.parse((await readKey(t.db, DAYO_KEYS.pushSingleThrough))!).ids).toHaveLength(3)
+      expect(await pushOnce(ctx)).toMatchObject({ requests: 3, sent: 2, deferred: 1 })
+      expect(pushRequests(t).map((r) => r.rows)).toEqual([1, 1, 1])
+      expect(await readKey(t.db, DAYO_KEYS.pushSingleThrough)).toBeNull()
+      await cocoa(t); await cocoa(t)
+      await pushOnce(ctx) // A-000002 still waits its 60 s; the two new bills go together
+      expect(lastPushRows(t)).toBe(2)
+    })
+    it('a row of that batch that became held (dayo stopped listing a field it uses) does not keep one-row mode on', async () => {
+      const { t } = await ready()
+      const ctx = withFetch(t, refuseFirstBatch(t))
+      const { pullCatalog } = await import('../src/sync/catalog')
+      t.mock.bumpCatalog((c) => { c.supported_fields.order!.push('tip') })
+      await pullCatalog(ctx)
+      for (let i = 0; i < 3; i++) await cocoa(t)
+      const head = (await outbox(t))[0]!
+      await t.db.update(s.outbox).set({ rowJson: { ...(head.rowJson as Record<string, unknown>), tip: 5 } }).where(eq(s.outbox.id, head.id))
+      expect((await pushOnce(ctx)).stopped).toBe('bad_envelope')
+      t.mock.bumpCatalog((c) => { c.supported_fields.order = c.supported_fields.order!.filter((f) => f !== 'tip') })
+      await pullCatalog(ctx)
+      expect(await pushOnce(ctx)).toMatchObject({ sent: 2, held: 1 })
+      expect(await readKey(t.db, DAYO_KEYS.pushSingleThrough)).toBeNull()
+      await cocoa(t); await cocoa(t)
+      await pushOnce(ctx)
+      expect(lastPushRows(t)).toBe(2)
+    })
+    it('an old-format or unreadable mark is dropped', async () => {
+      const { t, ctx } = await ready()
+      await cocoa(t); await cocoa(t)
+      await writeKey(t.db, DAYO_KEYS.pushSingleThrough, JSON.stringify({ createdAt: '2026-09-25T03:00:00.000Z', rid: 99 }))
+      await pushOnce(ctx)
+      expect(pushRequests(t).map((r) => r.rows)).toEqual([2])
+      expect(await readKey(t.db, DAYO_KEYS.pushSingleThrough)).toBeNull()
+    })
+  })
+
+  describe('B · Retry-After and a stored backoff are bounded', () => {
+    it.each(['1e9', '1e20'])('Retry-After %s waits at most 15 minutes', async (value) => {
+      const { t } = await ready()
+      await cocoa(t)
+      expect((await pushOnce(withFetch(t, answer429(value)))).stopped).toBe('rate_limited')
+      const until = (await readKey(t.db, DAYO_KEYS.pushBackoffUntil))!
+      expect(Date.parse(until) - Date.parse(t.clock.now())).toBe(900_000)
+      t.clock.advanceMs(900_000)
+      expect(await pushOnce({ db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() })).toMatchObject({ sent: 1 })
+    })
+    it.each(['garbage', '9999-12-31T00:00:00.000Z', '+275760-09-13T00:00:00.000Z'])('a stored backoff %s is not trusted: the default 60 s applies', async (stored) => {
+      const { t, ctx } = await ready()
+      await cocoa(t)
+      await writeKey(t.db, DAYO_KEYS.pushBackoffUntil, stored)
+      expect((await pushOnce(ctx)).stopped).toBe('backoff')
+      expect(await readKey(t.db, DAYO_KEYS.pushBackoffUntil)).toBe('2026-09-25T03:01:00.000Z')
+      t.clock.advanceMs(60_000)
+      expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
+    })
+  })
+
+  describe('C · one row cannot stall the queue', () => {
+    it('a poison row (every request that carries it fails) lets the good rows go and ends STUCK', async () => {
+      const { t } = await ready()
+      for (let i = 0; i < 4; i++) await cocoa(t)
+      const f: typeof fetch = async (input, init) => (String(init?.body ?? '').includes('A-000001') ? new Response('boom', { status: 500 }) : t.mock.fetch(input, init))
+      const ctx = withFetch(t, f)
+      for (let i = 0; i < 3; i++) { expect((await pushOnce(ctx)).stopped).toBe('server'); t.clock.advanceMs(900_000) }
+      expect(await pushOnce(ctx)).toMatchObject({ sent: 3 })
+      expect((await outbox(t)).map((r) => [r.status, r.attempts])).toEqual([['pending', 1], ['sent', 1], ['sent', 1], ['sent', 1]])
+      for (let i = 0; i < 60 && (await outbox(t))[0]!.status === 'pending'; i++) { t.clock.advanceMs(900_000); await pushOnce(ctx) }
+      const [poison] = await outbox(t)
+      expect(poison).toMatchObject({ status: 'dead', attempts: 50 })
+      expect(JSON.parse(poison!.lastError!).reason).toBe('STUCK')
+    })
+    it('when every row fails in one-row mode the whole-request backoff still holds', async () => {
+      const { t, ctx } = await ready()
+      for (let i = 0; i < 3; i++) await cocoa(t)
+      t.mock.setMode('server_down')
+      for (let i = 0; i < 3; i++) { await pushOnce(ctx); t.clock.advanceMs(900_000) }
+      expect(await pushOnce(ctx)).toMatchObject({ requests: 2, sent: 0, stopped: 'server' })
+      expect((await outbox(t)).map((r) => r.attempts)).toEqual([1, 1, 0])
+      expect((await pushOnce(ctx)).stopped).toBe('backoff')
+    })
+    it('network failures do not count toward the 5xx streak that starts one-row mode (m3)', async () => {
+      const { t } = await ready()
+      for (let i = 0; i < 3; i++) await cocoa(t)
+      let n = 0
+      const f: typeof fetch = async (input, init) => { n++; if (n === 1 || n === 4) return new Response('boom', { status: 500 }); if (n <= 3) throw new TypeError('Failed to fetch'); return t.mock.fetch(input, init) }
+      const ctx = withFetch(t, f)
+      for (let i = 0; i < 4; i++) { await pushOnce(ctx); t.clock.advanceMs(900_000) }
+      expect(await readKey(t.db, DAYO_KEYS.pushSingleThrough)).toBeNull()
+      expect(await pushOnce(ctx)).toMatchObject({ requests: 1, sent: 3 })
+    })
+  })
+
+  describe('D · security minors', () => {
+    it('a 200 does not undo a refused key recorded meanwhile (M4)', async () => {
+      const { t } = await ready()
+      await cocoa(t)
+      const f: typeof fetch = async (input, init) => { const r = await t.mock.fetch(input, init); await writeKey(t.db, DAYO_KEYS.apiState, 'unauthorized'); return r }
+      expect(await pushOnce(withFetch(t, f))).toMatchObject({ sent: 1 })
+      expect(await readKey(t.db, DAYO_KEYS.apiState)).toBe('unauthorized')
+    })
+    it('ten answers in a row without a verdict raise an owner-visible warning; the row stays pending (M5)', async () => {
+      const { t } = await ready()
+      await cocoa(t)
+      const ctx = withFetch(t, rewriting(t, (rs) => { rs.length = 0 }))
+      for (let i = 1; i <= 10; i++) {
+        await pushOnce(ctx)
+        const row = (await outbox(t))[0]!
+        expect(row).toMatchObject({ status: 'pending', attempts: 0 })
+        expect(JSON.parse(row.lastError!)).toMatchObject({ reason: i < 10 ? 'NO_ANSWER' : 'NO_VERDICT_REPEATED', noVerdict: i })
+        t.clock.advanceMs(60_000)
+      }
+    })
+    it('a void whose bill is not on this tablet spends a try on PARENT_PENDING (M5)', async () => {
+      const { t, ctx } = await ready()
+      const ghost = 'bbbbbbbb-0000-4000-8000-000000000001'
+      await t.db.insert(s.outbox).values({ id: 'cccccccc-0000-4000-8000-000000000001', tableName: 'order_void', rowJson: { pos_order_id: ghost, voided_at: '2026-09-25T03:00:00.000Z', staff_id: STAFF.TungAo, approved_by: STAFF.DCm, reason: 'x' }, idempotencyKey: `order_void:${ghost}`, status: 'pending', createdAt: '2026-09-25T03:00:00.000Z', attempts: 0, lastError: null, sentAt: null, deadAt: null, nextAttemptAt: null, parentKey: `order:${ghost}`, resultJson: null })
+      expect(await pushOnce(ctx)).toMatchObject({ deferred: 1 })
+      const row = (await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'order_void')).get())!
+      expect(row).toMatchObject({ status: 'pending', attempts: 1, nextAttemptAt: '2026-09-25T03:00:05.000Z' })
+    })
+    it('order_no, duplicate_of and result_json are bounded and keep only known fields (M6)', async () => {
+      const { t } = await ready()
+      const r = await cocoa(t)
+      const ctx = withFetch(t, rewriting(t, (rs) => {
+        const d = (rs[0] as unknown as { data: Record<string, unknown> }).data
+        Object.assign(d, { order_no: 'ล'.repeat(300), duplicate_of: Array.from({ length: 50 }, (_, i) => `B-${i}`), warnings: Array.from({ length: 50 }, () => 'w'.repeat(500)), evil: 'x'.repeat(10_000) })
+      }))
+      expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
+      const o = (await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())!
+      expect([...o.centralOrderNo!]).toHaveLength(100)
+      expect(o.centralDuplicateOfJson).toHaveLength(20)
+      const stored = (await outbox(t))[0]!.resultJson as Record<string, unknown>
+      expect(Object.keys(stored).sort()).toEqual(['amount_mismatch', 'computed_total', 'duplicate_of', 'order_no', 'version', 'warnings'])
+      expect(stored['warnings']).toHaveLength(20)
+      expect([...(stored['warnings'] as string[])[0]!]).toHaveLength(200)
+    })
   })
 })

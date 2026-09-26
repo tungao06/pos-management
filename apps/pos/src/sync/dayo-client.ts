@@ -32,6 +32,9 @@ export type DayoClient = {
 /** plan 5 transport (fix M-4): setTimeout + AbortController, not AbortSignal.timeout, so tests can use fake timers. */
 export const FETCH_TIMEOUT_MS = 20_000
 const RATE_LIMIT_DEFAULT_MS = 60_000
+/** security review I1 (task 13): a hostile or broken Retry-After can neither stall the queue for days nor make it spin. */
+export const RETRY_AFTER_MIN_MS = 1_000
+export const RETRY_AFTER_MAX_MS = 15 * 60_000
 
 export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: typeof fetch; nowMs: () => number }): DayoClient {
   const base = normalizeBaseUrl(cfg.baseUrl) // throws BAD_BASE_URL before any fetch (security review item 1)
@@ -71,7 +74,8 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
     if (res.status === 422) throw new DayoError({ kind: 'bad_envelope', message: ApiErrorBody.safeParse(body).data?.error.message ?? 'DY422' })
     if (res.status === 429) {
       const sec = Number(res.headers.get('retry-after'))
-      throw new DayoError({ kind: 'rate_limited', retryAfterMs: Number.isFinite(sec) && sec > 0 ? sec * 1000 : RATE_LIMIT_DEFAULT_MS })
+      const ms = Number.isFinite(sec) && sec > 0 ? Math.min(RETRY_AFTER_MAX_MS, Math.max(RETRY_AFTER_MIN_MS, Math.round(sec * 1000))) : RATE_LIMIT_DEFAULT_MS
+      throw new DayoError({ kind: 'rate_limited', retryAfterMs: ms })
     }
     if (res.status !== 200) throw new DayoError({ kind: 'server', status: res.status })
     try {

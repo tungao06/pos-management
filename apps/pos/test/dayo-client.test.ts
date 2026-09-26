@@ -142,3 +142,14 @@ describe('dayo client (spec 04 §4.1, §6.3)', () => {
     expect((await p)?.kind).toBe('network')
   })
 })
+
+describe('Retry-After is clamped to 1 s … 15 min (task 13 security I1)', () => {
+  const answer429 = (value: string): typeof fetch => async () => new Response(JSON.stringify({ ok: false, error: { code: 'DY429', message: 'rate_limited' } }), { status: 429, headers: { 'Retry-After': value } })
+  const clientWith = (f: typeof fetch) => createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: f, nowMs: () => Date.parse('2026-09-25T02:00:00.000Z') })
+  it.each([
+    ['1e9', 900_000], ['1e20', 900_000], ['1000000000', 900_000], ['Infinity', 60_000], ['0.2', 1_000], ['-5', 60_000], ['0', 60_000],
+    ['Wed, 21 Oct 2099 07:28:00 GMT', 60_000], ['', 60_000], ['30', 30_000],
+  ])('Retry-After %s → %i ms', async (value, ms) => {
+    expect(await failureOf(clientWith(answer429(value)).getCatalog(0))).toEqual({ kind: 'rate_limited', retryAfterMs: ms })
+  })
+})

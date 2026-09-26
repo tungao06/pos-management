@@ -20,7 +20,8 @@ export const DAYO_KEYS = {
   pushFailStreak: 'dayo.push_fail_streak',
   pushBackoffUntil: 'dayo.push_backoff_until',
   pushBackoffReason: 'dayo.push_backoff_reason', // 'failure' (network/5xx — cleared by online/manual/open/before_close wakes) | 'rate_limited' (kept)
-  pushSingleThrough: 'dayo.push_single_through',
+  pushSingleThrough: 'dayo.push_single_through', // R4: {ids} of the rows of the batch that failed (task 13 fix round 1)
+  pushServerStreak: 'dayo.push_server_streak',   // consecutive 5xx / unreadable 200 — enters R4; network failures do not count (m3)
   lastPushAt: 'dayo.last_push_at',
 } as const
 export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled' | 'bad_base_url'
@@ -58,16 +59,17 @@ export async function recordServerTime(db: RemoteDb, serverTimeIso: string, sent
 }
 
 /** outbox.last_error is JSON (plan 5 I-12); the detail is clipped by code points so the JSON stays whole. */
-export function encodeLastError(reason: string, detail: string, extra: { supportedHash?: string; farAhead?: true } = {}): string {
+export type LastErrorExtra = { supportedHash?: string; farAhead?: true; noVerdict?: number }
+export function encodeLastError(reason: string, detail: string, extra: LastErrorExtra = {}): string {
   return JSON.stringify({ reason: clipCodePoints(reason, 60), detail: clipCodePoints(detail, 500), ...extra })
 }
-export function decodeLastError(raw: string | null): { reason: string; detail: string; supportedHash?: string; farAhead?: true } {
+export function decodeLastError(raw: string | null): { reason: string; detail: string } & LastErrorExtra {
   if (raw === null) return { reason: '', detail: '' }
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { reason: '', detail: raw }
-    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown }
-    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}) }
+    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown; noVerdict?: unknown }
+    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}), ...(typeof p.noVerdict === 'number' && Number.isSafeInteger(p.noVerdict) && p.noVerdict > 0 ? { noVerdict: p.noVerdict } : {}) }
   } catch {
     return { reason: '', detail: raw }
   }
