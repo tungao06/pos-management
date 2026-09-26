@@ -48,6 +48,24 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
     const o = (await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, `order:${r.orderId}`)).get())!
     expect(v.createdAt).toBe('2026-09-25T03:07:00.000Z')
     expect(v.createdAt >= o.createdAt).toBe(true)
+    // one void time everywhere: the bill's own voided_at is the one sent to dayo, never before sold_at
+    const bill = (await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())!
+    expect(bill.voidedAt).toBe(OrderVoidRowData.parse(v.rowJson).voided_at)
+    expect(bill.voidedAt! >= bill.soldAt!).toBe(true)
+  })
+  it(`a clock set back to yesterday cannot cancel yesterday's bill: "now" is never before the latest sale (same-day rule)`, async () => {
+    const t = await openConnectedApi({ now: '2026-09-25T16:50:00.000Z' }) // 23:50 Bangkok, 25 Sep
+    const yesterday = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.clock.set('2026-09-25T17:10:00.000Z') // 00:10, 26 Sep — same open shift
+    const today = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.clock.set('2026-09-25T16:59:00.000Z') // the clock is set back to 23:59, 25 Sep
+    const before = await t.db.select().from(s.outbox).all()
+    try { await t.api.cancelSale({ orderId: yesterday.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'x', made: false, refundReference: 'K' }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('VOID_NOT_ALLOWED') }
+    expect(await t.db.select().from(s.outbox).all()).toEqual(before)
+    // today's bill can still be cancelled, stamped at the latest sale, not at the set-back clock
+    await t.api.cancelSale({ orderId: today.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'x', made: false, refundReference: 'K' })
+    const bill = (await t.db.select().from(s.order).where(eq(s.order.id, today.orderId)).get())!
+    expect(bill.voidedAt).toBe('2026-09-25T17:10:00.000Z')
   })
   it('records "made" in the event for the Z void list and writes no stock row (ruling R6)', async () => {
     const t = await openConnectedApi()

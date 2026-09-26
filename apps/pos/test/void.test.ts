@@ -5,7 +5,8 @@ import { verifyChain } from '@dayo/domain'
 import type { VoidOrderInput } from '../src/api/types'
 import { loadDeviceChain } from '../src/db/events'
 import { hashPin } from '../src/lib/pin'
-import { openReadyApi, PINS, sellSku, TEST_PIN_COST, type ReadyApi } from './helpers/db'
+import { STAFF } from './helpers/dayo'
+import { openReadyApi, PINS, sellCode, sellSku, TEST_PIN_COST, type ReadyApi } from './helpers/db'
 
 function voidInput(t: ReadyApi, orderId: string, patch: Partial<VoidOrderInput> = {}): VoidOrderInput {
   return { orderId, actorUserId: t.owner.id, approverUserId: t.other.id, approverPin: PINS.DCm, reason: 'กดผิดเมนู', made: false, refundReference: null, ...patch }
@@ -64,6 +65,24 @@ describe('voidOrder', () => {
     // block 2: a plan-3 bill's void queues no order row; the refund stays on the tablet (spec 04 §6.1)
     expect((await t.db.select().from(s.outbox).all()).map((r) => [r.idempotencyKey, r.status])).toEqual([[`shift:${t.shift.id}`, 'local_only'], [`cash_movement:${cash[0]!.id}`, 'local_only']])
     expect(verifyChain(await loadDeviceChain(t.db, t.device.id))).toEqual({ ok: true })
+  })
+
+  it(`refuses a bill sold with dayo's catalog: it must go through cancelSale (same-day rule, order_void) — nothing written`, async () => {
+    const t = await openReadyApi()
+    const sale = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
+    const before = counts(t)
+    await expect(t.api.voidOrder(voidInput(t, sale.orderId))).rejects.toThrow(/^VOID_NOT_ALLOWED: /)
+    expect(counts(t)).toEqual(before)
+    expect((await t.db.select().from(s.order).where(eq(s.order.id, sale.orderId)).get())?.status).toBe('paid')
+  })
+
+  it('a staff user may void only their own plan-3 bill (Q44, ruling R11)', async () => {
+    const t = await openReadyApi()
+    await t.api.setStaffPin({ staffId: STAFF.Mint, pin: '4321', approverUserId: t.owner.id, approverPin: PINS.TungAo })
+    const owners = await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5_000 }) // sold by the owner
+    const before = counts(t)
+    await expect(t.api.voidOrder(voidInput(t, owners.orderId, { actorUserId: STAFF.Mint }))).rejects.toThrow(/^VOID_NOT_ALLOWED: /)
+    expect(counts(t)).toEqual(before)
   })
 
   it('already made: no stock comes back, the VOIDED event carries the waste marker (D39)', async () => {
