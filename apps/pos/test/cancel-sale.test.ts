@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { OrderVoidRowData } from '@dayo/contracts'
@@ -44,6 +44,10 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
     await t.api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'x', made: false, refundReference: 'K' })
     const v = (await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'order_void')).get())!
     expect(OrderVoidRowData.parse(v.rowJson).voided_at).toBe('2026-09-25T03:07:00.000Z')
+    // the queue row itself is not older than its bill's row either (the sender reads rows in created_at order)
+    const o = (await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, `order:${r.orderId}`)).get())!
+    expect(v.createdAt).toBe('2026-09-25T03:07:00.000Z')
+    expect(v.createdAt >= o.createdAt).toBe(true)
   })
   it('records "made" in the event for the Z void list and writes no stock row (ruling R6)', async () => {
     const t = await openConnectedApi()
@@ -84,14 +88,36 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
     expect(await t.db.select().from(s.outbox).all()).toEqual(before)
     expect((await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())?.status).toBe('paid')
   })
-  it('a plan-3 bill (no sold_at) and a bill closed as outside dayo queue no order_void', async () => {
+  it('a plan-3 bill (no sold_at) goes the stock way: not made returns every ingredient, made returns none — no order_void', async () => {
     const t = await openReadyApi()
-    const legacy = await sellSku(t, 'Original-16oz', 1, { method: 'PROMPTPAY' })
+    const notMade = await sellSku(t, 'Original-16oz', 2, { method: 'CASH', tenderedSatang: 10_000 })
+    const made = await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    const moves = async (orderId: string, kind: 'SALE' | 'VOID_RETURN') => (await t.db.select().from(s.stockMovement).where(and(eq(s.stockMovement.refType, 'order'), eq(s.stockMovement.refId, orderId), eq(s.stockMovement.kind, kind))).all())
+      .map((m) => [m.itemId, Math.abs(m.qtyMilli), m.unitCostUsat]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+    const base = { actorUserId: t.owner.id, approverUserId: t.other.id, approverPin: '2222', reason: 'กดผิดเมนู' }
+    const d1 = await t.api.cancelSale({ ...base, orderId: notMade.orderId, made: false, refundReference: null })
+    expect(d1.events.map((e) => e.type).slice(-2)).toEqual(['VOIDED', 'STOCK_RETURNED'])
+    expect(await moves(notMade.orderId, 'VOID_RETURN')).toEqual(await moves(notMade.orderId, 'SALE')) // same items, qty and cost
+    expect((await t.db.select().from(s.cashMovement).all()).map((c) => [c.kind, c.amountSatang])).toEqual([['VOID_REFUND', 9_000]])
+    const d2 = await t.api.cancelSale({ ...base, orderId: made.orderId, made: true, refundReference: 'KBANK-1' })
+    expect(d2.events.at(-1)).toMatchObject({ type: 'VOIDED', payload: { made: true, waste: true, refundReference: 'KBANK-1' } })
+    expect(await moves(made.orderId, 'VOID_RETURN')).toEqual([])
+    expect(await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'order_void')).all()).toEqual([])
+    expect(verifyChain(await loadDeviceChain(t.db, t.device.id))).toEqual({ ok: true })
+  })
+  it("a plan-3 bill keeps the same permission rule: staff cannot cancel an owner's bill, and it stays paid with its stock", async () => {
+    const t = await openReadyApi()
+    await t.api.setStaffPin({ staffId: STAFF.Mint, pin: '4321', approverUserId: t.owner.id, approverPin: '1111' })
+    const legacy = await sellSku(t, 'Original-16oz', 1, { method: 'PROMPTPAY' }) // sold by the owner
+    try { await t.api.cancelSale({ orderId: legacy.orderId, actorUserId: STAFF.Mint, approverUserId: t.other.id, approverPin: '2222', reason: 'x', made: false, refundReference: 'K' }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('VOID_NOT_ALLOWED') }
+    expect((await t.db.select().from(s.order).where(eq(s.order.id, legacy.orderId)).get())?.status).toBe('paid')
+    expect(await t.db.select().from(s.stockMovement).where(eq(s.stockMovement.kind, 'VOID_RETURN')).all()).toEqual([])
+  })
+  it('a bill closed as outside dayo queues no order_void', async () => {
+    const t = await openConnectedApi()
     const excluded = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
-    await t.db.update(s.order).set({ excludedAt: '2026-09-17T03:00:00.000Z' }).where(eq(s.order.id, excluded.orderId))
-    for (const id of [legacy.orderId, excluded.orderId]) {
-      await t.api.cancelSale({ orderId: id, actorUserId: t.owner.id, approverUserId: t.other.id, approverPin: '2222', reason: 'x', made: true, refundReference: 'K' })
-    }
+    await t.db.update(s.order).set({ excludedAt: '2026-09-25T03:00:00.000Z' }).where(eq(s.order.id, excluded.orderId))
+    await t.api.cancelSale({ orderId: excluded.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'x', made: true, refundReference: 'K' })
     expect(await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'order_void')).all()).toEqual([])
   })
 })

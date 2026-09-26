@@ -28,6 +28,13 @@ describe('order history for block-2 bills', () => {
     expect((await t.api.getOrder(r.orderId)).central.voidState).toBe('local_only')
   })
 
+  it('a bill closed as outside dayo and then voided has no central void to wait for (voidState none, not local_only)', async () => {
+    const t = await openConnectedApi()
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    await t.db.update(s.order).set({ excludedAt: '2026-09-25T03:00:00.000Z' }).where(eq(s.order.id, r.orderId))
+    await t.api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, approverUserId: STAFF.DCm, approverPin: '2222', reason: 'x', made: false, refundReference: 'K' })
+    expect((await t.api.getOrder(r.orderId)).central).toMatchObject({ state: 'excluded', voidState: 'none' })
+  })
   it('the detail shows order_item lines with milk and grade, when/where it was sold, and the promotions', async () => {
     const t = await openConnectedApi()
     const r = await sellCode(t, [{ code: 'Thai Tea', qty: 3 }, { code: 'Matcha Latte', grade: 'Premium', milk: 'oat', qty: 1 }], { method: 'CASH', tenderedSatang: 20_000 })

@@ -17,7 +17,8 @@ type OutboxRow = typeof s.outbox.$inferSelect
 type SummaryContext = { sellerName: (id: string) => string; outbox: ReadonlyMap<string, OutboxRow> }
 
 function voidStateOf(o: OrderRow, v: OutboxRow | undefined): CentralStateDto['voidState'] {
-  if (o.status !== 'voided' || o.soldAt === null) return 'none'
+  // a plan-3 bill, or one an owner closed as outside dayo (ruling R8), has no central void to wait for
+  if (o.status !== 'voided' || o.soldAt === null || o.excludedAt !== null) return 'none'
   if (v === undefined || v.status === 'local_only') return 'local_only'
   return v.status === 'sent' ? 'sent' : v.status === 'dead' ? 'problem' : 'pending'
 }

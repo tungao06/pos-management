@@ -214,20 +214,37 @@ export async function commitSale(db: RemoteDb, deps: ApiDeps, input: CommitSaleI
   })
 }
 
-type DraftLine = { code: string; size: string; sweetness: string; milk: string; grade: string | null; qty: number }
-
-function lineSignature(lines: readonly DraftLine[]): string {
-  return lines.map((l) => `${l.code}|${l.size}|${l.sweetness}|${l.milk}|${l.grade ?? ''}|${l.qty}`).sort().join(';')
+/** The cart as the caller sent it, reasons trimmed, with its payment code — what a bill is priced from and stored as. */
+function normalizeCart(input: RecordSaleInput): CartDraft {
+  const d = input.cart.billDiscount
+  return {
+    ...input.cart,
+    billDiscount: d === null ? null : { ...d, reason: d.reason === null ? null : d.reason.trim() },
+    lines: input.cart.lines.map((l) => ({ ...l, discountReason: l.discountReason === null ? null : l.discountReason.trim() })),
+    paymentCode: PAYMENT_CODE[input.payment.method],
+  }
 }
 
-/** plan 3 M12 for block 2: the same orderId must be the same cart (compared on the draft that was priced). */
-async function existingCentralResult(db: RemoteDb, input: RecordSaleInput): Promise<CommitSaleResult | null> {
-  const o = await db.select().from(s.order).where(eq(s.order.id, input.orderId)).get()
+/** Everything that decides what a bill is — lines (in any order), channel, payment code, bill discount and promotions. */
+function cartSignature(c: CartDraft): string {
+  const lines = c.lines.map((l) => JSON.stringify([l.code, l.size, l.sweetness, l.milk, l.grade, l.qty, l.free, l.discountSatang, l.discountPercent, l.discountReason])).sort()
+  const d = c.billDiscount
+  const bill = d === null ? null : d.kind === 'satang' ? ['satang', d.satang, d.reason] : ['percent', d.percent, d.reason]
+  return JSON.stringify({ channel: c.channelCode, payment: c.paymentCode, bill, promo: c.promoCode, skip: [...c.skipPromotionIds].sort(), none: c.noPromotions, lines })
+}
+
+/**
+ * plan 3 M12 for block 2: the same orderId must be the same cart — lines, channel, payment and bill discount — compared
+ * on the satang cart stored at payment (pricing_json.cart). A resend that differs is refused, never answered with the
+ * first bill.
+ */
+async function existingCentralResult(db: RemoteDb, orderId: string, cart: CartDraft): Promise<CommitSaleResult | null> {
+  const o = await db.select().from(s.order).where(eq(s.order.id, orderId)).get()
   if (!o) return null
   const pay = await db.select().from(s.payment).where(eq(s.payment.orderId, o.id)).get()
-  const stored = (o.pricingJson as { draft?: { lines?: DraftLine[] } } | null)?.draft?.lines
+  const stored = (o.pricingJson as { cart?: CartDraft } | null)?.cart
   if (o.receiptNo === null || o.queueNo === null || !pay || stored === undefined) throw new PosError('BAD_INPUT', `order ${o.id} exists but is not a block-2 bill`)
-  if (lineSignature(stored) !== lineSignature(input.cart.lines)) throw new PosError('BAD_INPUT', `order ${o.id} already paid with different lines`)
+  if (cartSignature(stored) !== cartSignature(cart)) throw new PosError('BAD_INPUT', `order ${o.id} already paid with a different cart`)
   return { orderId: o.id, receiptNo: o.receiptNo, queueNo: o.queueNo, businessDate: o.businessDate, totalSatang: o.totalSatang, changeSatang: pay.changeSatang, method: pay.method }
 }
 
@@ -254,7 +271,8 @@ function checkReason(text: string | null, what: string): void {
  * one transaction. No stock rows (D60). shift_id stays local; the E2 row sends null (block 2). Never calls dayo.
  */
 export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleInput): Promise<CommitSaleResult> {
-  const done = await existingCentralResult(db, input)
+  const cart = normalizeCart(input)
+  const done = await existingCentralResult(db, input.orderId, cart)
   if (done !== null) return done
   if (!Number.isSafeInteger(input.expectedTotalSatang)) throw new PosError('BAD_INPUT', 'expectedTotalSatang must be whole satang')
   const d = input.cart.billDiscount
@@ -266,12 +284,6 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
   if (!actor || !actor.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${input.actorUserId}`)
   const stored = await readCatalog(db)
   if (stored === null) throw new PosError('NO_CATALOG', 'no catalog from dayo yet')
-  const cart: CartDraft = {
-    ...input.cart,
-    billDiscount: d === null ? null : { ...d, reason: d.reason === null ? null : d.reason.trim() },
-    lines: input.cart.lines.map((l) => ({ ...l, discountReason: l.discountReason === null ? null : l.discountReason.trim() })),
-    paymentCode: PAYMENT_CODE[input.payment.method],
-  }
   if (!stored.catalog.paymentMethods.some((p) => p.code === cart.paymentCode)) throw new PosError('NO_PAYMENT_METHOD', cart.paymentCode)
 
   const result = await db.transaction(async (tx) => {
@@ -312,7 +324,9 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
       channelId: null, channelCode: cart.channelCode, paymentCode: cart.paymentCode, customerId: null, status: 'paid',
       subtotalSatang: priced.itemsSubtotalSatang, discountSatang, totalSatang, vatSatang: 0, costSatang: 0, note: null,
       createdByType: 'user', createdById: actor.id, createdAt: soldAt, paidAt: soldAt, readyAt: null, voidedAt: null,
-      soldAt, catalogVersion: stored.catalogVersion, pricingJson: { draft, priced: pricedRest }, excludedAt: null,
+      // pricing_json, frozen at payment: `cart` = what the caller sent (satang — the resend check reads it) · `draft` = the
+      // baht OrderDraft dayo's code priced, an audit copy only: never compute money from it (money is `priced`, in satang)
+      soldAt, catalogVersion: stored.catalogVersion, pricingJson: { cart, draft, priced: pricedRest }, excludedAt: null,
       centralOrderNo: null, centralComputedTotalSatang: null, centralAmountMismatch: null, centralDuplicateOfJson: null, centralDayoEditJson: null,
     } satisfies typeof s.order.$inferInsert
     await tx.insert(s.order).values(orderRow)

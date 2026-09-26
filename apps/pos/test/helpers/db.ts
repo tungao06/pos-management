@@ -114,12 +114,13 @@ export async function sellCode(
     billDiscount: extra.billDiscountSatang === undefined ? null : { kind: 'satang', satang: extra.billDiscountSatang, reason: extra.reason ?? 'ทดสอบ' },
     lines: lines.map((l) => ({ code: l.code, size: l.size ?? '16 oz', sweetness: l.sweetness ?? '50%', milk: l.milk ?? 'fresh', grade: l.grade ?? (l.code === 'Matcha Latte' ? 'Excellent' : null), qty: l.qty, free: false, discountSatang: null, discountPercent: null, discountReason: null })),
   }
-  // the total the screen would show; a cart the pricing code refuses is sent as is, so recordSale gives the refusal
-  let shown = 0
+  // the total the screen would show — a cart the screen could not even price is a mistake in the test, not a refusal to
+  // test here (call t.api.recordSale directly for that)
+  let shown: number
   try {
     shown = priceCart({ ...cart, paymentCode: PAYMENT_CODE[payment.method] }, cat.catalog, t.clock.now()).totalSatang
-  } catch {
-    shown = 0
+  } catch (e) {
+    throw new Error(`sellCode: priceCart refused the cart before recordSale — ${e instanceof Error ? e.message : String(e)}`, { cause: e })
   }
   return t.api.recordSale({ orderId: extra.orderId ?? t.deps.newId(), actorUserId: extra.actorUserId ?? t.owner.id, cart, payment, expectedTotalSatang: shown })
 }
