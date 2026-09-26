@@ -126,6 +126,24 @@ export type SellCatalogDto = {
   bestSellerCodes: string[]
 }
 
+/**
+ * How the central database has this bill (spec 04 §4.3, §12). `legacy` = a plan-3 bill (never sent) · `pending` = its
+ * E2 row waits to send · `sent` = dayo answered accepted/duplicate · `problem` = the row is dead · `excluded` = an owner
+ * closed it as outside dayo (ruling R8). `voidState` 'local_only' on a voided bill whose order WAS sent means dayo still
+ * counts it as a sale (review item 23).
+ */
+export type CentralStateDto = {
+  state: 'legacy' | 'pending' | 'sent' | 'problem' | 'excluded'
+  orderNo: string | null
+  computedTotalSatang: number | null
+  /** What dayo computed minus what was charged here; null until dayo answered. */
+  diffSatang: number | null
+  duplicateOf: string[]
+  /** dayo's reason of the last failed attempt (INVALID, UNKNOWN_CODE, …), or null. */
+  reason: string | null
+  voidState: 'none' | 'pending' | 'sent' | 'problem' | 'local_only'
+}
+
 export type OrderSummaryDto = {
   id: string
   receiptNo: string
@@ -135,8 +153,23 @@ export type OrderSummaryDto = {
   method: 'CASH' | 'PROMPTPAY'
   paidAt: string
   cups: number
+  /** Who sold the bill (D61). */
+  soldById: string
+  soldByName: string
+  central: CentralStateDto
 }
-export type OrderLineDto = { lineNo: number; productName: string; sizeName: string; sweetnessName: string; qty: number; unitPriceSatang: number; lineTotalSatang: number }
+export type OrderLineDto = {
+  lineNo: number
+  productName: string
+  sizeName: string
+  sweetnessName: string
+  /** Block-2 lines only (null on a plan-3 bill). */
+  milk: string | null
+  grade: string | null
+  qty: number
+  unitPriceSatang: number
+  lineTotalSatang: number
+}
 export type OrderEventDto = { seq: number; type: string; at: string; actorId: string; payload: unknown }
 export type OrderDetailDto = OrderSummaryDto & {
   businessDate: string
@@ -147,6 +180,12 @@ export type OrderDetailDto = OrderSummaryDto & {
   tenderedSatang: number | null
   changeSatang: number | null
   voidedAt: string | null
+  /** The payment instant priced with dayo's catalog; null on a plan-3 bill (as are the next two). */
+  soldAt: string | null
+  channelCode: string | null
+  catalogVersion: number | null
+  /** Promotions dayo's pricing code applied at soldAt. */
+  promotions: { name: string; discountSatang: number }[]
   lines: OrderLineDto[]
   events: OrderEventDto[]
   voidable: boolean

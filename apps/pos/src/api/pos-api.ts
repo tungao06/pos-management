@@ -35,7 +35,7 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     loadSellCatalog: () => serial(() => loadSellCatalog(db, deps)),
     recordSale: (input) => serial(() => recordSale(db, deps, input)),
     listOrders: () => serial(() => listOrders(db)),
-    getOrder: (orderId) => serial(() => getOrder(db, orderId)),
+    getOrder: (orderId) => serial(() => getOrder(db, deps, orderId)),
     promptPayForAmount: (amountSatang) => serial(() => promptPayForAmount(db, deps, amountSatang)),
     voidOrder: (input) => serial(() => voidOrder(db, deps, input)),
     cancelSale: (input) => serial(() => cancelSale(db, deps, input)),

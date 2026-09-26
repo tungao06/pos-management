@@ -100,7 +100,7 @@ export async function voidOrder(db: RemoteDb, deps: ApiDeps, input: VoidOrderInp
     if (!input.made) events.push({ type: 'STOCK_RETURNED', payload: { movementIds: returnedMovementIds } })
     await appendOrderEvents(tx, { orderId: order.id, deviceId: device.id, actorType: 'user', actorId: actor.id, at, newId: deps.newId }, events)
   })
-  return getOrder(db, input.orderId)
+  return getOrder(db, deps, input.orderId)
 }
 
 /**
@@ -153,5 +153,5 @@ export async function cancelSale(db: RemoteDb, deps: ApiDeps, input: CancelSaleI
     }
   })
   deps.afterWrite?.()
-  return getOrder(db, input.orderId)
+  return getOrder(db, deps, input.orderId)
 }
