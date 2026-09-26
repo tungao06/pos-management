@@ -473,7 +473,7 @@ describe('pushOnce — fix round 1', () => {
       t.mock.setMode('server_down')
       for (let i = 0; i < 3; i++) { await pushOnce(ctx); t.clock.advanceMs(900_000) }
       expect(await pushOnce(ctx)).toMatchObject({ requests: 2, sent: 0, stopped: 'server' })
-      expect((await outbox(t)).map((r) => r.attempts)).toEqual([1, 1, 0])
+      expect((await outbox(t)).map((r) => r.attempts)).toEqual([0, 0, 0]) // fix round 2: the first row's provisional charge is refunded when the next row fails too
       expect((await pushOnce(ctx)).stopped).toBe('backoff')
     })
     it('network failures do not count toward the 5xx streak that starts one-row mode (m3)', async () => {
@@ -532,5 +532,66 @@ describe('pushOnce — fix round 1', () => {
       expect(stored['warnings']).toHaveLength(20)
       expect([...(stored['warnings'] as string[])[0]!]).toHaveLength(200)
     })
+  })
+})
+
+describe('pushOnce — fix round 2: a failed row is charged only when the next row gets through', () => {
+  /** Waits out the whole-request backoff (and any row backoff up to 15 min) so the next call really sends. */
+  async function waitOut(t: Awaited<ReturnType<typeof ready>>['t']) {
+    const until = await readKey(t.db, DAYO_KEYS.pushBackoffUntil)
+    t.clock.advanceMs(Math.max(900_000, until === null ? 0 : Date.parse(until) - Date.parse(t.clock.now())) + 1)
+  }
+  it('a dayo outage in one-row mode never spends a good row\'s tries, and the whole-request backoff holds every time', async () => {
+    const { t, ctx } = await ready()
+    for (let i = 0; i < 5; i++) await cocoa(t)
+    t.mock.setMode('server_down')
+    for (let i = 0; i < 3; i++) { await pushOnce(ctx); await waitOut(t) } // three 5xx → one-row mode
+    expect(await readKey(t.db, DAYO_KEYS.pushSingleThrough)).not.toBeNull()
+    for (let call = 0; call < 30; call++) {
+      expect(await pushOnce(ctx)).toMatchObject({ requests: 2, sent: 0, stopped: 'server' })
+      expect((await outbox(t)).map((r) => [r.status, r.attempts, r.nextAttemptAt])).toEqual(Array.from({ length: 5 }, () => ['pending', 0, null]))
+      expect(Date.parse((await readKey(t.db, DAYO_KEYS.pushBackoffUntil))!)).toBeGreaterThan(Date.parse(t.clock.now()))
+      expect((await pushOnce(ctx)).stopped).toBe('backoff')
+      await waitOut(t)
+    }
+    t.mock.setMode('normal')
+    expect(await pushOnce(ctx)).toMatchObject({ sent: 5 })
+  })
+  it('a network failure right after a provisional charge refunds it too (nothing shows the row was the cause)', async () => {
+    const { t } = await ready()
+    for (let i = 0; i < 3; i++) await cocoa(t)
+    let n = 0
+    const f: typeof fetch = async (input, init) => { n++; if (n <= 4) return new Response('boom', { status: 500 }); if (n === 5) throw new TypeError('Failed to fetch'); return t.mock.fetch(input, init) }
+    const ctx = withFetch(t, f)
+    for (let i = 0; i < 3; i++) { await pushOnce(ctx); await waitOut(t) }
+    expect(await pushOnce(ctx)).toMatchObject({ requests: 2, stopped: 'network' })
+    expect((await outbox(t)).map((r) => r.attempts)).toEqual([0, 0, 0])
+  })
+  it('a poison row followed by good rows: the good rows are sent, the poison row reaches STUCK at 50', async () => {
+    const { t } = await ready()
+    for (let i = 0; i < 4; i++) await cocoa(t)
+    const f: typeof fetch = async (input, init) => (String(init?.body ?? '').includes('A-000001') ? new Response('boom', { status: 500 }) : t.mock.fetch(input, init))
+    const ctx = withFetch(t, f)
+    for (let i = 0; i < 3; i++) { await pushOnce(ctx); await waitOut(t) }
+    expect(await pushOnce(ctx)).toMatchObject({ requests: 4, sent: 3 }) // the poison's charge is confirmed by the next row's 200
+    expect((await outbox(t)).map((r) => [r.status, r.attempts])).toEqual([['pending', 1], ['sent', 1], ['sent', 1], ['sent', 1]])
+    for (let i = 0; i < 60 && (await outbox(t))[0]!.status === 'pending'; i++) { await waitOut(t); await pushOnce(ctx) }
+    const [poison] = await outbox(t)
+    expect(poison).toMatchObject({ status: 'dead', attempts: 50 })
+    expect(JSON.parse(poison!.lastError!).reason).toBe('STUCK')
+  })
+  it('a poison row left alone in the queue is still charged on every call', async () => {
+    const { t } = await ready()
+    await cocoa(t); await cocoa(t)
+    const f: typeof fetch = async (input, init) => (String(init?.body ?? '').includes('A-000001') ? new Response('boom', { status: 500 }) : t.mock.fetch(input, init))
+    const ctx = withFetch(t, f)
+    for (let i = 0; i < 3; i++) { await pushOnce(ctx); await waitOut(t) }
+    await pushOnce(ctx) // poison charged (1), A-000002 sent
+    expect((await outbox(t)).map((r) => [r.status, r.attempts])).toEqual([['pending', 1], ['sent', 1]])
+    for (let i = 2; i <= 4; i++) {
+      await waitOut(t)
+      expect(await pushOnce(ctx)).toMatchObject({ requests: 1, stopped: 'server' })
+      expect((await outbox(t))[0]).toMatchObject({ status: 'pending', attempts: i })
+    }
   })
 })

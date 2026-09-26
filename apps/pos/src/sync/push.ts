@@ -162,7 +162,13 @@ async function gate(db: RemoteDb, deps: ApiDeps): Promise<{ cfg: { baseUrl: stri
   return { cfg, sup, blocked: sup === null ? 'no_supported_list' : null }
 }
 
-/** security I2: in one-row mode a request that failed with 5xx / an unreadable 200 / an unknown 4xx is charged to its row. */
+/**
+ * security I2 + fix round 2 (controller ruling): in one-row mode a request that failed with 5xx / an unreadable 200 / an
+ * unknown 4xx is charged to its row PROVISIONALLY. The next request of the same call decides: dayo answering it (200, or a
+ * 422 verdict on that row) confirms the charge — the first row really was the poison row; any other failure means dayo
+ * itself is down, so the charge is refunded (refundCharge) and the second row is not charged. A charge still pending when
+ * the call ends with no other row tried is kept (a queue whose only sendable row is the poison row).
+ */
 async function chargeRow(db: RemoteDb, deps: ApiDeps, r: Row, f: DayoFailure, at: string): Promise<void> {
   const attempts = r.attempts + 1
   const detail = f.kind === 'server' ? `HTTP ${f.status}` : f.kind
@@ -170,7 +176,13 @@ async function chargeRow(db: RemoteDb, deps: ApiDeps, r: Row, f: DayoFailure, at
   await db.update(s.outbox).set({ attempts, lastError: encodeLastError(REQUEST_FAILED, detail), nextAttemptAt: later(at, backoffMs(attempts, deps.random)) }).where(pendingRow(r.id))
 }
 
-/** Returns true when the failure was charged to the single row of a one-row request (the caller may go on to the next row). */
+/** Undoes a provisional charge: the row gets back exactly what it had when it was picked (a STUCK it reached is undone too). */
+async function refundCharge(db: RemoteDb, r: Row): Promise<void> {
+  await db.update(s.outbox).set({ status: 'pending', attempts: r.attempts, nextAttemptAt: r.nextAttemptAt, lastError: r.lastError, deadAt: r.deadAt })
+    .where(and(eq(s.outbox.id, r.id), eq(s.outbox.attempts, r.attempts + 1)))
+}
+
+/** Records a failed request. Returns true when the failure may be charged to the single row of a one-row request (the caller decides). */
 async function onRequestFailure(db: RemoteDb, deps: ApiDeps, f: DayoFailure, batch: Row[], single: boolean): Promise<boolean> {
   const now = deps.now()
   switch (f.kind) {
@@ -193,9 +205,7 @@ async function onRequestFailure(db: RemoteDb, deps: ApiDeps, f: DayoFailure, bat
       const serverStreak = Number(await readKey(db, DAYO_KEYS.pushServerStreak) ?? '0') + 1
       await writeKey(db, DAYO_KEYS.pushServerStreak, String(serverStreak))
       if (serverStreak >= SERVER_STREAK_FOR_SINGLE && batch.length > 1) await startSingle(db, batch)
-      if (!single || batch.length !== 1) return false
-      await chargeRow(db, deps, batch[0]!, f, now)
-      return true
+      return single && batch.length === 1
     }
   }
 }
@@ -324,7 +334,7 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
     return { ...out, stopped: 'bad_base_url' }
   }
   const decided = new Set<string>() // plan 5 fix H-1: judged once per call
-  let chargedBefore = false // security I2: one charged one-row failure lets the next row try; a second in a row stops the call
+  let provisional: Row | null = null // fix round 2: a charged row waiting for the next request to confirm or refund its charge
   for (let round = 0; round < MAX_ROUNDS_PER_CALL; round++) {
     const nowIso = ctx.deps.now()
     const { batch, held, single } = await ctx.serial(async () => {
@@ -341,12 +351,25 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
     } catch (e) {
       if (!(e instanceof DayoError)) throw e
       out.requests++
-      const charged = await ctx.serial(() => onRequestFailure(ctx.db, ctx.deps, e.failure, batch, single))
-      out.stopped = e.failure.kind
-      if (charged && !chargedBefore) { chargedBefore = true; continue } // the whole-request backoff is set; it holds if the next row fails too
+      const f = e.failure
+      const chargeable = await ctx.serial(() => onRequestFailure(ctx.db, ctx.deps, f, batch, single))
+      out.stopped = f.kind
+      if (provisional !== null) {
+        // dayo judged this row (422 ENVELOPE) = it is up, so the first failure was that row's own; anything else = dayo is down:
+        // refund, charge nobody, stop — the whole-request backoff written above holds
+        const first = provisional
+        if (f.kind !== 'bad_envelope') await ctx.serial(() => refundCharge(ctx.db, first))
+        return out
+      }
+      if (chargeable) {
+        const row = batch[0]!
+        await ctx.serial(() => chargeRow(ctx.db, ctx.deps, row, f, ctx.deps.now()))
+        provisional = row
+        continue // let the next row show whether this one was the cause
+      }
       return out
     }
-    chargedBefore = false
+    provisional = null // confirmed by this 200
     out.stopped = null
     out.requests++
     const t = await ctx.serial(() => applyVerdicts(ctx.db, ctx.deps, batch, answer, sup))
