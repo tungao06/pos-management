@@ -11,7 +11,8 @@ import { loadMenu } from './menu'
 import { getOrder, listOrders } from './orders'
 import { produceBatch } from './production'
 import { receivePurchase } from './purchase'
-import { commitSale, promptPayForAmount } from './sale'
+import { commitSale, promptPayForAmount, recordSale } from './sale'
+import { loadSellCatalog } from './sell-catalog'
 import { createSerialQueue } from './serial'
 import { setupShop } from './setup'
 import { openShift, quickOpenShift } from './shift'
@@ -31,6 +32,8 @@ export function createPosApi(db: RemoteDb, deps: ApiDeps): PosApi {
     openShift: (input) => serial(() => openShift(db, deps, input)),
     loadMenu: () => serial(() => loadMenu(db, deps)),
     commitSale: (input) => serial(() => commitSale(db, deps, input)),
+    loadSellCatalog: () => serial(() => loadSellCatalog(db, deps)),
+    recordSale: (input) => serial(() => recordSale(db, deps, input)),
     listOrders: () => serial(() => listOrders(db)),
     getOrder: (orderId) => serial(() => getOrder(db, orderId)),
     promptPayForAmount: (amountSatang) => serial(() => promptPayForAmount(db, deps, amountSatang)),

@@ -1,5 +1,6 @@
 import type { AdjustReason, CashMovementKind, MovementKind, UseUnit, UserRole } from '@dayo/contracts'
-import type { CashCountLine, CashInputs, ExpiryState, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
+import type { Size, Sweetness } from '@dayo/dayo-pricing'
+import type { CartDraft, CashCountLine, CashInputs, ExpiryState, PosOrderCatalog, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -79,6 +80,50 @@ export type CommitSaleResult = {
   totalSatang: number
   changeSatang: number | null
   method: 'CASH' | 'PROMPTPAY'
+}
+
+/** The local payment method → dayo's payment code of the catalog (spec 04 §4.5 `payment`). */
+export const PAYMENT_CODE = { CASH: 'cash', PROMPTPAY: 'qr' } as const
+
+/** A sale priced with dayo's catalog (spec 04 §4.5, §5.1). The payment code comes from `payment.method` (PAYMENT_CODE). */
+export type RecordSaleInput = {
+  /** Created when the cart starts; resending the same id with the same lines returns the first result (plan 3 M12). */
+  orderId: string
+  actorUserId: string
+  cart: Omit<CartDraft, 'paymentCode'>
+  payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' }
+  /** The total the customer was shown — refused with PRICE_CHANGED when the price at the payment instant differs (D50 Q3-27). */
+  expectedTotalSatang: number
+}
+
+/** One menu of the sell screen: the variants of one menuCode, sizes in catalog.sizes order (ADR-0054). */
+export type SellMenuDto = {
+  code: string
+  nameTh: string
+  /** categoryLabel, or the family when dayo sends none. */
+  categoryLabel: string
+  sortOrder: number
+  isMatcha: boolean
+  sizes: Size[]
+  /** 0% → 100% per size. */
+  sweetnessBySize: Partial<Record<Size, Sweetness[]>>
+  defaultSize: Size
+  defaultSweetness: Sweetness
+}
+export type SellCatalogDto = {
+  catalogVersion: number
+  /** The whole E1 catalog — the screen prices the cart with the same code recordSale uses (priceCart). */
+  catalog: PosOrderCatalog
+  /** Active sizes of the shop in sortOrder, with their labels. */
+  sizes: { code: string; label: string }[]
+  menus: SellMenuDto[]
+  categories: string[]
+  channels: { code: string; name: string }[]
+  defaultChannelCode: string
+  payments: { cash: boolean; qr: boolean }
+  maxQtyPerLine: number
+  /** Menu codes with the most cups in the last 7 business days (D48 Q3-9), at most 8. */
+  bestSellerCodes: string[]
 }
 
 export type OrderSummaryDto = {
@@ -339,6 +384,8 @@ export interface PosApi {
   openShift(input: OpenShiftInput): Promise<ShiftDto>
   loadMenu(): Promise<MenuDto>
   commitSale(input: CommitSaleInput): Promise<CommitSaleResult>
+  loadSellCatalog(): Promise<SellCatalogDto>
+  recordSale(input: RecordSaleInput): Promise<CommitSaleResult>
   listOrders(): Promise<OrderSummaryDto[]>
   getOrder(orderId: string): Promise<OrderDetailDto>
   promptPayForAmount(amountSatang: number): Promise<string>
@@ -376,6 +423,8 @@ export const POS_API_METHODS = [
   'openShift',
   'loadMenu',
   'commitSale',
+  'loadSellCatalog',
+  'recordSale',
   'listOrders',
   'getOrder',
   'promptPayForAmount',
