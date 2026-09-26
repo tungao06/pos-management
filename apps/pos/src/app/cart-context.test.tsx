@@ -30,7 +30,8 @@ function Probe(): JSX.Element {
         onClick={() =>
           dispatch({
             type: 'add',
-            line: { variantId: 'v1', sweetnessId: 'sw50', productName: 'ชาไทยเย็น', sizeName: '16 oz', sweetnessName: '50%', unitPriceSatang: 4500 },
+            line: { code: 'Thai Tea', nameTh: 'ชาไทย', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null },
+            maxQty: 99,
           })
         }
       >

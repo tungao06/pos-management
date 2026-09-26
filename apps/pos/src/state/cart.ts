@@ -1,99 +1,100 @@
-import { computeTotals, VAT_OFF, type Totals } from '@dayo/domain'
+import type { MilkCode, Sweetness } from '@dayo/dayo-pricing'
+import type { CartDraft, CartLineDraft } from '@dayo/domain'
 
-export type CartLine = {
-  key: string
-  variantId: string
-  sweetnessId: string
-  productName: string
-  sizeName: string
-  sweetnessName: string
-  unitPriceSatang: number
-  qty: number
+/**
+ * In-memory cart; written to the database only when paid (D48 Q3-7). `orderId` makes commitSale idempotent.
+ * ADR-0054: `size` is a plain string that always comes from the catalog (`sizes` of `SellCatalogDto`), never a
+ * hardcoded '16 oz'/'20 oz' — dayo's own `Size` type is itself just `string` (any "<n> oz", checked by the shop's
+ * `catalog.sizes`, not by a fixed TS union), so no cast is needed to build the domain's `CartLineDraft`.
+ */
+export type CartLine = { key: string; code: string; nameTh: string; size: string; sweetness: Sweetness; milk: MilkCode; grade: string | null; qty: number }
+export type CartState = {
+  orderId: string
+  lines: CartLine[]
+  channelCode: string
+  billDiscount: { satang: number; reason: string } | null
+  promoCode: string | null
+  skipPromotionIds: string[]
+  noPromotions: boolean
 }
-export type NewCartLine = Omit<CartLine, 'key' | 'qty'>
-export type CartDiscount = { amountSatang: number; reason: string }
-/** In-memory cart; written to the database only when paid (D48 Q3-7). `orderId` makes commitSale idempotent. */
-export type CartState = { orderId: string; lines: CartLine[]; discount: CartDiscount | null }
 
 export type CartAction =
-  | { type: 'add'; line: NewCartLine }
-  | { type: 'inc'; key: string }
+  // same code|size|sweetness|milk|grade → one line (D48 Q3-8); qty never above maxQty (dayo's computeOrder would clamp silently).
+  | { type: 'add'; line: Omit<CartLine, 'key' | 'qty'>; maxQty: number }
+  | { type: 'inc'; key: string; maxQty: number }
   | { type: 'dec'; key: string }
   | { type: 'remove'; key: string }
-  | { type: 'setDiscount'; discount: CartDiscount }
+  | { type: 'setChannel'; channelCode: string }
+  | { type: 'setDiscount'; satang: number; reason: string }
   | { type: 'clearDiscount' }
-  /** D50 Q3-27: after PRICE_CHANGED, take the fresh menu prices (variantId → price; null/missing keeps the line as is). */
-  | { type: 'reprice'; prices: ReadonlyMap<string, number | null> }
-  | { type: 'reset'; orderId: string }
+  | { type: 'skipPromotion'; id: string }
+  | { type: 'unskipPromotion'; id: string }
+  | { type: 'setNoPromotions'; value: boolean }
+  | { type: 'setPromoCode'; code: string | null }
+  | { type: 'reset'; orderId: string; channelCode: string }
 
-export const lineKey = (variantId: string, sweetnessId: string): string => `${variantId}|${sweetnessId}`
+export const lineKey = (code: string, size: string, sweetness: string, milk: string, grade: string | null): string => `${code}|${size}|${sweetness}|${milk}|${grade ?? ''}`
 
-export function emptyCart(orderId: string): CartState {
-  return { orderId, lines: [], discount: null }
-}
-
-// M4: goes through the domain (Global Constraint "ห้ามคำนวณซ้ำในแอป") instead of hand-summing qty * unitPriceSatang.
-export function cartSubtotalSatang(state: CartState): number {
-  return computeTotals(
-    state.lines.map((l) => ({ qty: l.qty, unitPriceSatang: l.unitPriceSatang })),
-    0,
-    VAT_OFF,
-  ).subtotalSatang
-}
-
-/** Totals via the domain (spec §4.1) — the UI never adds money itself. */
-export function cartTotals(state: CartState): Totals {
-  return computeTotals(
-    state.lines.map((l) => ({ qty: l.qty, unitPriceSatang: l.unitPriceSatang })),
-    state.discount?.amountSatang ?? 0,
-    VAT_OFF,
-  )
-}
-
-export function toSaleLines(state: CartState): { variantId: string; sweetnessId: string; qty: number }[] {
-  return state.lines.map((l) => ({ variantId: l.variantId, sweetnessId: l.sweetnessId, qty: l.qty }))
-}
-
-// A discount larger than the remaining subtotal is dropped; the cashier re-enters it (D48 Q3-6).
-function dropOversizedDiscount(state: CartState): CartState {
-  return state.discount !== null && state.discount.amountSatang >= cartSubtotalSatang(state) ? { ...state, discount: null } : state
+export function emptyCart(orderId: string, channelCode: string): CartState {
+  return { orderId, lines: [], channelCode, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false }
 }
 
 export function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case 'add': {
-      const key = lineKey(action.line.variantId, action.line.sweetnessId) // same variant + sweetness → one line (D48 Q3-8)
-      if (state.lines.some((l) => l.key === key)) {
-        return { ...state, lines: state.lines.map((l) => (l.key === key ? { ...l, qty: l.qty + 1 } : l)) }
+      const key = lineKey(action.line.code, action.line.size, action.line.sweetness, action.line.milk, action.line.grade)
+      const existing = state.lines.find((l) => l.key === key)
+      if (existing !== undefined) {
+        return { ...state, lines: state.lines.map((l) => (l.key === key ? { ...l, qty: Math.min(l.qty + 1, action.maxQty) } : l)) }
       }
-      return { ...state, lines: [...state.lines, { ...action.line, key, qty: 1 }] }
+      return { ...state, lines: [...state.lines, { ...action.line, key, qty: Math.min(1, action.maxQty) }] }
     }
     case 'inc':
-      return { ...state, lines: state.lines.map((l) => (l.key === action.key ? { ...l, qty: l.qty + 1 } : l)) }
+      return { ...state, lines: state.lines.map((l) => (l.key === action.key ? { ...l, qty: Math.min(l.qty + 1, action.maxQty) } : l)) }
     case 'dec':
-      return dropOversizedDiscount({
-        ...state,
-        lines: state.lines.flatMap((l) => (l.key !== action.key ? [l] : l.qty > 1 ? [{ ...l, qty: l.qty - 1 }] : [])),
-      })
+      return { ...state, lines: state.lines.flatMap((l) => (l.key !== action.key ? [l] : l.qty > 1 ? [{ ...l, qty: l.qty - 1 }] : [])) }
     case 'remove':
-      return dropOversizedDiscount({ ...state, lines: state.lines.filter((l) => l.key !== action.key) })
-    case 'setDiscount': {
-      const amountSatang = action.discount.amountSatang
-      const reason = action.discount.reason.trim()
-      if (!Number.isSafeInteger(amountSatang) || amountSatang <= 0 || amountSatang >= cartSubtotalSatang(state) || reason === '') return state // total stays > 0 (D50 Q3-20)
-      return { ...state, discount: { amountSatang, reason } }
-    }
+      return { ...state, lines: state.lines.filter((l) => l.key !== action.key) }
+    case 'setChannel':
+      return { ...state, channelCode: action.channelCode }
+    case 'setDiscount':
+      return { ...state, billDiscount: { satang: action.satang, reason: action.reason.trim() } }
     case 'clearDiscount':
-      return { ...state, discount: null }
-    case 'reprice':
-      return dropOversizedDiscount({
-        ...state,
-        lines: state.lines.map((l) => {
-          const price = action.prices.get(l.variantId)
-          return price === undefined || price === null ? l : { ...l, unitPriceSatang: price }
-        }),
-      })
+      return { ...state, billDiscount: null }
+    case 'skipPromotion':
+      return state.skipPromotionIds.includes(action.id) ? state : { ...state, skipPromotionIds: [...state.skipPromotionIds, action.id] }
+    case 'unskipPromotion':
+      return { ...state, skipPromotionIds: state.skipPromotionIds.filter((id) => id !== action.id) }
+    case 'setNoPromotions':
+      return { ...state, noPromotions: action.value }
+    case 'setPromoCode':
+      return { ...state, promoCode: action.code }
     case 'reset':
-      return emptyCart(action.orderId)
+      return emptyCart(action.orderId, action.channelCode)
+  }
+}
+
+/** The exact draft `priceCart`/`recordSale` price. */
+export function toCartDraft(state: CartState): Omit<CartDraft, 'paymentCode'> {
+  return {
+    channelCode: state.channelCode,
+    lines: state.lines.map(
+      (l): CartLineDraft => ({
+        code: l.code,
+        size: l.size,
+        sweetness: l.sweetness,
+        milk: l.milk,
+        grade: l.grade,
+        qty: l.qty,
+        free: false,
+        discountSatang: null,
+        discountPercent: null,
+        discountReason: null,
+      }),
+    ),
+    billDiscount: state.billDiscount === null ? null : { kind: 'satang', satang: state.billDiscount.satang, reason: state.billDiscount.reason },
+    promoCode: state.promoCode,
+    skipPromotionIds: [...state.skipPromotionIds],
+    noPromotions: state.noPromotions,
   }
 }
