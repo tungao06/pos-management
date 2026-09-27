@@ -67,16 +67,16 @@ export function StockScreen(): JSX.Element {
         <button type="button" data-testid="nav-sell" onClick={() => void navigate({ to: '/sell' })}>
           {TH.back}
         </button>
-        <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' })}>
+        <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' as never })}>
           {TH.navReceive}
         </button>
-        <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' })}>
+        <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' as never })}>
           {TH.navProduce}
         </button>
-        <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' })}>
+        <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' as never })}>
           {o.openCountId === null ? TH.navCount : TH.navCountResume}
         </button>
-        <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' })}>
+        <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' as never })}>
           {TH.navAdjust}
         </button>
       </div>

@@ -120,7 +120,7 @@ export function AdjustScreen(): JSX.Element {
   return (
     <main className="page">
       <div className="actions">
-        <button type="button" data-testid="nav-stock" onClick={() => void navigate({ to: '/stock' })}>
+        <button type="button" data-testid="nav-stock" onClick={() => void navigate({ to: '/stock' as never })}>
           {TH.back}
         </button>
       </div>
