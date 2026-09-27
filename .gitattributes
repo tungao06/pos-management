@@ -1,0 +1,2 @@
+# spec 04 §5.1 · D72: keep the vendored dayo pricing files byte-identical to dayo's commit (the sha256 rule normalises CRLF anyway)
+packages/dayo-pricing/src/vendor/** -text
