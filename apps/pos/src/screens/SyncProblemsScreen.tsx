@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState, type JSX } from 'react'
 import type { Size, Sweetness } from '@dayo/dayo-pricing'
-import type { Remedy, SellCatalogDto, SyncProblemDto } from '../api/types'
+import type { RemapScope, Remedy, SellCatalogDto, SyncProblemDto } from '../api/types'
 import { useApi } from '../app/api-context'
 import { can } from '../app/permissions'
 import { bootstrapKey, sellCatalogKey, syncProblemsKey, useBootstrap } from '../app/queries'
@@ -28,62 +28,110 @@ function dialogTitle(remedy: Remedy): string {
 /**
  * "เลือกรหัสแทน" (UNKNOWN_CODE): a menu/size/sweetness, a channel, or a payment method — never more than one field
  * per remedy (`remapCode`, Task 15 fix round 1 item 2). Sizes come from `catalog.sizes` active right now (ADR-0054,
- * "ปรับตาม dayo"), never a fixed list. This never knows which field of the bill dayo actually rejected (the row
- * carries no line data — spec §6.4 keeps `SyncProblemDto` to the reason/detail only); a choice `remapCode` itself
- * refuses (a field whose CURRENT value is already valid, or a payment that would flip cash-like↔qr-like) comes back
- * as `BAD_INPUT` with dayo's own Thai reason, shown as-is by `errorMessage` — never a raw error.
+ * "ปรับตาม dayo"), never a fixed list. Fix round code Low 3: `scope` (SyncProblemDto.remap — what dayo's own detail
+ * named) opens the picker on that field and locks the other two; for a line, only the lines dayo named can be picked,
+ * and when dayo named only their grade, menu/size/sweetness stay the line's own (remapCode then changes the grade). A
+ * choice `remapCode` itself refuses (the value dayo refused, a payment that would flip cash↔non-cash) comes back as
+ * `BAD_INPUT` with a Thai reason, shown as-is by `errorMessage` — never a raw error.
  */
-function RemapCodeFields({ dto, value, onChange }: { dto: SellCatalogDto; value: Target | null; onChange: (t: Target | null) => void }): JSX.Element {
-  const field = value?.field ?? 'line'
+function RemapCodeFields({ dto, scope, value, onChange }: { dto: SellCatalogDto; scope: RemapScope | null; value: Target | null; onChange: (t: Target | null) => void }): JSX.Element {
+  const lockedField = scope?.field ?? null
+  const namedLines = scope?.field === 'line' ? scope.lines : null
+  const gradeOnly = scope?.field === 'line' && scope.gradeOnly
+  const field = value?.field ?? lockedField ?? 'line'
   const menu = (value?.field === 'line' ? dto.menus.find((m) => m.code === value.code) : undefined) ?? dto.menus[0]
-  const lineIndex = value?.field === 'line' ? value.lineIndex : 0
+  const lineIndex = value?.field === 'line' ? value.lineIndex : (namedLines?.[0]?.index ?? 0)
   const size = (value?.field === 'line' ? value.size : undefined) ?? menu?.defaultSize
   const sweetness = (value?.field === 'line' ? value.sweetness : undefined) ?? menu?.defaultSweetness
 
+  /** The choice a field opens with: a named line as it is (grade only), else the first menu's own defaults / first option. */
+  const opening = (f: Target['field'], index = namedLines?.[0]?.index ?? 0): Target | null => {
+    if (f === 'line') {
+      const named = namedLines?.find((l) => l.index === index)
+      if (gradeOnly && named !== undefined) return { field: 'line', lineIndex: named.index, code: named.code, size: named.size, sweetness: named.sweetness }
+      return menu === undefined ? null : { field: 'line', lineIndex: index, code: menu.code, size: menu.defaultSize, sweetness: menu.defaultSweetness }
+    }
+    if (f === 'channel') {
+      const c = dto.channels[0]
+      return c === undefined ? null : { field: 'channel', code: c.code }
+    }
+    const p = dto.catalog.paymentMethods[0]
+    return p === undefined ? null : { field: 'payment', code: p.code }
+  }
+
   // A choice is required before "ยืนยัน" unlocks (`submitDisabled`, SyncProblemsScreen) — so the dialog opens with
-  // one already made (the first menu's own default size/sweetness) instead of forcing an otherwise pointless tap.
+  // one already made (on the field dayo named, else the first menu's own default size/sweetness) instead of forcing an
+  // otherwise pointless tap.
   useEffect(() => {
-    if (value === null && menu !== undefined) onChange({ field: 'line', lineIndex: 0, code: menu.code, size: menu.defaultSize, sweetness: menu.defaultSweetness })
+    if (value === null) onChange(opening(lockedField ?? 'line'))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per mount of this dialog (a fresh `target` each time `remedy-remap-code` opens)
   }, [])
 
-  const setField = (f: Target['field']): void => {
-    if (f === 'line') {
-      if (menu === undefined) return onChange(null)
-      onChange({ field: 'line', lineIndex: 0, code: menu.code, size: menu.defaultSize, sweetness: menu.defaultSweetness })
-    } else if (f === 'channel') {
-      const c = dto.channels[0]
-      onChange(c === undefined ? null : { field: 'channel', code: c.code })
-    } else {
-      const p = dto.catalog.paymentMethods[0]
-      onChange(p === undefined ? null : { field: 'payment', code: p.code })
-    }
-  }
+  const fieldButton = (f: Target['field'], testId: string, label: string): JSX.Element => (
+    <button type="button" data-testid={testId} aria-pressed={field === f} disabled={lockedField !== null && lockedField !== f} onClick={() => onChange(opening(f))}>
+      {label}
+    </button>
+  )
+  const lineValue = value?.field === 'line' ? value : null
+  const lineOptions = (namedLines ?? []).map((l) => (
+    <option key={l.index} value={l.index}>
+      {TH.remapCodeLineOption(l.index, l.code, l.size, l.sweetness)}
+    </option>
+  ))
 
   return (
     <div className="list">
       <div className="choices">
-        <button type="button" data-testid="remap-code-field-line" aria-pressed={field === 'line'} onClick={() => setField('line')}>
-          {TH.remapCodeFieldLine}
-        </button>
-        <button type="button" data-testid="remap-code-field-channel" aria-pressed={field === 'channel'} onClick={() => setField('channel')}>
-          {TH.remapCodeFieldChannel}
-        </button>
-        <button type="button" data-testid="remap-code-field-payment" aria-pressed={field === 'payment'} onClick={() => setField('payment')}>
-          {TH.remapCodeFieldPayment}
-        </button>
+        {fieldButton('line', 'remap-code-field-line', TH.remapCodeFieldLine)}
+        {fieldButton('channel', 'remap-code-field-channel', TH.remapCodeFieldChannel)}
+        {fieldButton('payment', 'remap-code-field-payment', TH.remapCodeFieldPayment)}
       </div>
-      {field === 'line' && menu !== undefined && size !== undefined && sweetness !== undefined && (
+      {field === 'line' && gradeOnly && lineValue !== null && (
+        <>
+          <p>{TH.remapCodeGradeOnly}</p>
+          <label>
+            {TH.remapCodeLineIndex}
+            <select data-testid="remap-code-line-index" value={lineValue.lineIndex} onChange={(e) => onChange(opening('line', Number(e.target.value)))}>
+              {lineOptions}
+            </select>
+          </label>
+          <label>
+            {TH.remapCodeMenu}
+            <select data-testid="remap-code-menu" value={lineValue.code} disabled>
+              <option value={lineValue.code}>{dto.menus.find((m) => m.code === lineValue.code)?.nameTh ?? lineValue.code}</option>
+            </select>
+          </label>
+          <label>
+            {TH.remapCodeSize}
+            <select data-testid="remap-code-size" value={lineValue.size} disabled>
+              <option value={lineValue.size}>{dto.sizes.find((x) => x.code === lineValue.size)?.label ?? lineValue.size}</option>
+            </select>
+          </label>
+          <label>
+            {TH.remapCodeSweetness}
+            <select data-testid="remap-code-sweetness" value={lineValue.sweetness} disabled>
+              <option value={lineValue.sweetness}>{lineValue.sweetness}</option>
+            </select>
+          </label>
+        </>
+      )}
+      {field === 'line' && !gradeOnly && menu !== undefined && size !== undefined && sweetness !== undefined && (
         <>
           <label>
             {TH.remapCodeLineIndex}
-            <input
-              data-testid="remap-code-line-index"
-              type="number"
-              min={0}
-              value={lineIndex}
-              onChange={(e) => onChange({ field: 'line', lineIndex: Math.max(0, Math.trunc(Number(e.target.value))), code: menu.code, size, sweetness })}
-            />
+            {namedLines !== null ? (
+              <select data-testid="remap-code-line-index" value={lineIndex} onChange={(e) => onChange({ field: 'line', lineIndex: Number(e.target.value), code: menu.code, size, sweetness })}>
+                {lineOptions}
+              </select>
+            ) : (
+              <input
+                data-testid="remap-code-line-index"
+                type="number"
+                min={0}
+                value={lineIndex}
+                onChange={(e) => onChange({ field: 'line', lineIndex: Math.max(0, Math.trunc(Number(e.target.value))), code: menu.code, size, sweetness })}
+              />
+            )}
           </label>
           <label>
             {TH.remapCodeMenu}
@@ -205,6 +253,7 @@ function ProblemRow({
             <p>{TH.syncProblemClockAheadHint}</p>
           </>
         )}
+        {row.remapHint !== null && <p data-testid="problem-remap-hint">{row.remapHint}</p>}
         <div className="actions">
           {row.remedies.includes('RETRY') && (
             <button type="button" data-testid="remedy-retry" onClick={() => onRemedy(row, 'RETRY')}>
@@ -364,7 +413,7 @@ export function SyncProblemsScreen(): JSX.Element {
           extra={
             dialog.remedy === 'REMAP_CODE' ? (
               sellCatalog.data !== undefined ? (
-                <RemapCodeFields dto={sellCatalog.data} value={target} onChange={setTarget} />
+                <RemapCodeFields dto={sellCatalog.data} scope={dialog.row.remap} value={target} onChange={setTarget} />
               ) : (
                 <p>{TH.loading}</p>
               )

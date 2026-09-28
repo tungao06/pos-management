@@ -87,7 +87,7 @@ function buildRouteTree() {
 
 const ROW = (over: Partial<SyncProblemDto> = {}): SyncProblemDto => ({
   outboxId: 'x1', key: 'order:o1', kind: 'order', orderId: 'o1', receiptNo: 'A-000001', at: '2026-09-25T03:00:00.000Z',
-  reason: 'CONFLICT', detail: 'เลขใบเสร็จ A-000001 ถูกใช้กับบิลอื่นของเครื่องนี้แล้ว', remedies: ['RETRY', 'RENUMBER'], children: [],
+  reason: 'CONFLICT', detail: 'เลขใบเสร็จ A-000001 ถูกใช้กับบิลอื่นของเครื่องนี้แล้ว', remedies: ['RETRY', 'RENUMBER'], remap: null, remapHint: null, children: [],
   ...over,
 })
 
@@ -205,5 +205,55 @@ describe('SyncProblemsScreen (spec §6.4 — owner only, ruling R11/R8/N5)', () 
   it('shows nothing to do when there are no problems', async () => {
     renderProblems(fakeProblemsApi([]), 'owner')
     expect(await screen.findByText(TH.syncProblemsEmpty)).toBeInTheDocument()
+  })
+})
+
+describe('SyncProblemsScreen — "เลือกรหัสแทน" follows the field dayo named (fix round: code Low 3)', () => {
+  const approve = async (api: PosApi) => {
+    fireEvent.change(screen.getByTestId('approval-pin'), { target: { value: '1111' } })
+    fireEvent.change(screen.getByTestId('approval-reason'), { target: { value: 'แก้ตามระบบกลาง' } })
+    fireEvent.click(screen.getByTestId('approval-ok'))
+    await waitFor(() => expect(api.remapCode).toHaveBeenCalled())
+    return (api.remapCode as ReturnType<typeof vi.fn>).mock.calls[0]![0].target
+  }
+  const UNKNOWN_CODE = { reason: 'UNKNOWN_CODE', remedies: ['RETRY', 'REMAP_CODE'] as SyncProblemDto['remedies'] }
+
+  it('dayo named the channel: the picker opens on it and the other two fields are locked', async () => {
+    const api = fakeProblemsApi([ROW({ ...UNKNOWN_CODE, detail: 'ไม่พบช่องทางขาย "old"', remap: { field: 'channel' } })])
+    renderProblems(api, 'owner')
+    fireEvent.click(await screen.findByTestId('remedy-remap-code'))
+    expect(screen.getByTestId('remap-code-field-channel')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('remap-code-field-line')).toBeDisabled()
+    expect(screen.getByTestId('remap-code-field-payment')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('remap-code-channel'), { target: { value: 'grab' } })
+    expect(await approve(api)).toEqual({ field: 'channel', code: 'grab' })
+  })
+  it('dayo named a line: only the lines it named can be picked, the first one preselected', async () => {
+    const remap = { field: 'line' as const, lines: [{ index: 1, code: 'Old Menu', size: '16 oz' as const, sweetness: '50%' as const }, { index: 3, code: 'Old Menu', size: '20 oz' as const, sweetness: '50%' as const }], gradeOnly: false }
+    const api = fakeProblemsApi([ROW({ ...UNKNOWN_CODE, detail: 'ไม่พบเมนู "Old Menu"', remap })])
+    renderProblems(api, 'owner')
+    fireEvent.click(await screen.findByTestId('remedy-remap-code'))
+    expect(screen.getByTestId('remap-code-field-line')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('remap-code-field-channel')).toBeDisabled()
+    const index = screen.getByTestId('remap-code-line-index')
+    expect(index).toHaveValue('1')
+    expect(within(index).getAllByRole('option').map((o) => (o as HTMLOptionElement).value)).toEqual(['1', '3'])
+    fireEvent.change(index, { target: { value: '3' } })
+    expect(await approve(api)).toMatchObject({ field: 'line', lineIndex: 3 })
+  })
+  it('dayo named only a grade: menu, size and sweetness are locked to the line\'s own — only the grade changes', async () => {
+    const remap = { field: 'line' as const, lines: [{ index: 0, code: 'Matcha Latte', size: '16 oz' as const, sweetness: '50%' as const }], gradeOnly: true }
+    const api = fakeProblemsApi([ROW({ ...UNKNOWN_CODE, detail: 'ไม่พบเกรด "Premium"', remap })])
+    renderProblems(api, 'owner')
+    fireEvent.click(await screen.findByTestId('remedy-remap-code'))
+    for (const id of ['remap-code-menu', 'remap-code-size', 'remap-code-sweetness']) expect(screen.getByTestId(id)).toBeDisabled()
+    expect(screen.getByText(TH.remapCodeGradeOnly)).toBeInTheDocument()
+    expect(await approve(api)).toEqual({ field: 'line', lineIndex: 0, code: 'Matcha Latte', size: '16 oz', sweetness: '50%' })
+  })
+  it('a row dayo refused for a value no remap can fix shows its hint (e.g. the cash method gone from dayo)', async () => {
+    const api = fakeProblemsApi([ROW({ reason: 'UNKNOWN_CODE', detail: 'ไม่พบวิธีชำระ "cash"', remedies: ['RETRY'], remapHint: 'ให้เพิ่มวิธีชำระเงินสดกลับ แล้วกด "ลองใหม่"' })])
+    renderProblems(api, 'owner')
+    expect(await screen.findByTestId('problem-remap-hint')).toHaveTextContent('ให้เพิ่มวิธีชำระเงินสดกลับ')
+    expect(screen.queryByTestId('remedy-remap-code')).toBeNull()
   })
 })

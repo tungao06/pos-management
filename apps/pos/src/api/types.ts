@@ -219,8 +219,23 @@ export type OrderDetailDto = OrderSummaryDto & {
 
 /** spec 04 §6.4: the owner's fixes of a row dayo refused (or of a far-ahead row, ruling N5 — EXCLUDE only). */
 export type Remedy = 'RETRY' | 'RENUMBER' | 'REMAP_CODE' | 'REMAP_STAFF' | 'EXCLUDE'
-/** One row of the "ส่งไม่ผ่าน" page. `children` = rows waiting on it (PARENT_REJECTED) — they come back with it. */
-export type SyncProblemDto = { outboxId: string; key: string; kind: 'order' | 'order_void'; orderId: string; receiptNo: string | null; at: string; reason: string; detail: string; remedies: Remedy[]; children: SyncProblemDto[] }
+/**
+ * What dayo's UNKNOWN_CODE detail named (sync-problems.ts namedUnknown) — the one field "เลือกรหัสแทน" may change. For a
+ * line: the lines of the bill dayo described, as they are now; `gradeOnly` = dayo named only their grade, so menu, size
+ * and sweetness must stay as they are.
+ */
+export type RemapScope =
+  | { field: 'channel' | 'payment' }
+  | { field: 'line'; lines: { index: number; code: string; size: Size; sweetness: Sweetness }[]; gradeOnly: boolean }
+/**
+ * One row of the "ส่งไม่ผ่าน" page. `children` = rows waiting on it (PARENT_REJECTED) — they come back with it.
+ * `remap` = set exactly when REMAP_CODE is offered. `remapHint` = why dayo's UNKNOWN_CODE has no remap here and what
+ * to do instead (Thai), or null.
+ */
+export type SyncProblemDto = {
+  outboxId: string; key: string; kind: 'order' | 'order_void'; orderId: string; receiptNo: string | null; at: string; reason: string; detail: string; remedies: Remedy[]
+  remap: RemapScope | null; remapHint: string | null; children: SyncProblemDto[]
+}
 /** Every remedy = an owner's PIN + a reason (spec §6.4). */
 export type OwnerApproval = { approverUserId: string; approverPin: string; reason: string }
 export type RemapCodeInput = OwnerApproval & { outboxId: string; target: { field: 'line'; lineIndex: number; code: string; size: Size; sweetness: Sweetness } | { field: 'channel'; code: string } | { field: 'payment'; code: string } }

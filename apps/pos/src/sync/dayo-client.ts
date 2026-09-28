@@ -42,6 +42,10 @@ export const RETRY_AFTER_MAX_MS = 15 * 60_000
 export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: typeof fetch; nowMs: () => number }): DayoClient {
   const base = normalizeBaseUrl(cfg.baseUrl) // throws BAD_BASE_URL before any fetch (security review item 1)
   const keyOk = API_KEY_RE.test(cfg.apiKey)
+  // Follow-up item 5: taken out of cfg and called as a plain function, never as `cfg.fetch(...)` — a browser's native
+  // fetch called with cfg as its receiver throws "TypeError: Illegal invocation" (same bug class as the scheduler's
+  // timers hotfix); Node does not check the receiver, so only a real browser would show it.
+  const send = cfg.fetch
   async function call<T>(path: string, init: RequestInit, parse: (body: unknown) => T): Promise<Timed<T>> {
     // a malformed key would only earn a 401 (or break the header) — never send it (security review item 3)
     if (!keyOk) throw new DayoError({ kind: 'unauthorized' })
@@ -51,7 +55,7 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
     let res: Response
     let text: string
     try {
-      res = await cfg.fetch(`${base}${path}`, {
+      res = await send(`${base}${path}`, {
         ...init,
         headers: { authorization: `Bearer ${cfg.apiKey}`, ...(init.body === undefined ? {} : { 'content-type': 'application/json' }) },
         signal: controller.signal,

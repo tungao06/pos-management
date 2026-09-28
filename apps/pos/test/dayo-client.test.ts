@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMockDayo, MOCK_API_KEY } from '@dayo/dayo-mock'
 import { createDayoClient, DayoError, FETCH_TIMEOUT_MS } from '../src/sync/dayo-client'
+import { openTestApi } from './helpers/db'
 
 const BASE = 'https://mock/api/v1/' // http is only allowed for localhost / 127.0.0.1 (security review item 1)
 const client = (mock = createMockDayo({ now: '2026-09-25T02:00:00.120Z' }), apiKey = MOCK_API_KEY) =>
@@ -158,5 +159,36 @@ describe('Retry-After is clamped to 1 s … 15 min (task 13 security I1)', () =>
     ['Wed, 21 Oct 2099 07:28:00 GMT', 60_000], ['', 60_000], ['30', 30_000],
   ])('Retry-After %s → %i ms', async (value, ms) => {
     expect(await failureOf(clientWith(answer429(value)).getCatalog(0))).toEqual({ kind: 'rate_limited', retryAfterMs: ms })
+  })
+})
+
+describe('the fetch it is given is never called as a method of the config (follow-up item 5: "Illegal invocation")', () => {
+  /**
+   * A browser's fetch is a WebIDL operation of Window / WorkerGlobalScope: called with any receiver other than the
+   * global object (or undefined) it throws "TypeError: Illegal invocation". Node does not check it — this stub does,
+   * the same way the scheduler's timer test does. A caller may hand the native fetch over unwrapped.
+   */
+  function brandedFetch(real: typeof fetch): typeof fetch {
+    return function (this: unknown, input: RequestInfo | URL, init?: RequestInit) {
+      if (this !== undefined && this !== null && this !== globalThis) throw new TypeError('Illegal invocation')
+      return real(input, init)
+    } as typeof fetch
+  }
+  it('a receiver-checking fetch passed as it is: E1 and E3 go through (every route shares the one call site)', async () => {
+    const mock = createMockDayo({ now: '2026-09-25T02:00:00.120Z' })
+    const c = createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: brandedFetch(mock.fetch), nowMs: () => Date.parse('2026-09-25T02:00:00.000Z') })
+    expect((await c.getCatalog(0)).value.changed).toBe(true)
+    expect((await c.listOrders({ from: '2026-09-25', to: '2026-09-25' })).value).toEqual([])
+    expect(mock.requests().map((r) => [r.path, r.status])).toEqual([['/api/v1/pos/catalog', 200], ['/api/v1/orders', 200]])
+  })
+  it('the PosApi passes ApiDeps.fetch on the same way (never as a method of the deps object)', async () => {
+    const mock = createMockDayo({ now: '2026-09-25T03:00:00.000Z' })
+    const t = await openTestApi({ fetch: brandedFetch(mock.fetch), now: '2026-09-25T03:00:00.000Z' })
+    await t.api.probeDayo({ baseUrl: 'http://localhost:8787/api/v1', apiKey: MOCK_API_KEY })
+    expect(mock.requests().map((r) => [r.path, r.status])).toEqual([['/api/v1/pos/catalog', 200]])
+  })
+  it('the stub really catches the bug: called as a method of an object, it throws', () => {
+    const held = { fetch: brandedFetch(async () => new Response('')) }
+    expect(() => held.fetch('https://x')).toThrow(new TypeError('Illegal invocation'))
   })
 })
