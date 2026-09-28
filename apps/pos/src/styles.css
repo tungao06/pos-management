@@ -42,6 +42,8 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
 .brandbar .bar { display: flex; align-items: center; gap: 12px; padding: 0 12px; }
 .brandbar .logo { height: 48px; width: auto; display: block; }
 .brandbar .name { font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
+/* fu app-version: pushed to the far right, muted, and truncates — never wraps the bar to a second line on a 360px phone */
+.brandbar .version { margin-left: auto; font-size: 13px; font-weight: 400; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
 .brandbar .wave { background: url('/brand/wave.svg') repeat-x left center / auto 12px; }
 /* minmax(0,1fr): the one column may shrink below its widest child (a figures table, a long heading) on a phone */
 .page { padding: 16px; width: 100%; max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-content: start; }
@@ -129,6 +131,7 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
   .brandbar { grid-template-rows: 36px 8px; }
   .brandbar .logo { height: 28px; }
   .brandbar .name { font-size: 16px; }
+  .brandbar .version { font-size: 11px; }
   /* everything on the top bar in ONE sideways-scrolling row */
   .topbar { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; padding: 4px 6px; gap: 6px; scrollbar-width: thin; }
   .topbar .tabs, .topbar .nav { flex: none; overflow: visible; flex-wrap: nowrap; padding: 2px; }

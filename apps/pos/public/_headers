@@ -13,3 +13,7 @@
   Cache-Control: no-cache
 /manifest.webmanifest
   Cache-Control: no-cache
+# fu app-version: /version.json is generated fresh every build (vite.config.ts) — a support check must always
+# see the deploy that is actually live, never a cached one from before it.
+/version.json
+  Cache-Control: no-cache

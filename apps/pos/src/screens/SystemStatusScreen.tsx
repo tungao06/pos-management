@@ -7,6 +7,7 @@ import { PIN_RE } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
+import { APP_VERSION } from '../lib/app-version'
 import { errorMessage } from '../ui/errors'
 import { TH } from '../ui/th'
 import { ConnectFields, type ConnectFieldsValue } from './ConnectFields'
@@ -99,6 +100,8 @@ export function SystemStatusScreen(): JSX.Element {
       </div>
       <h1>{TH.statusTitle}</h1>
       <div className="list">
+        {/* fu app-version: build time shown in the same Bangkok format every other sync timestamp on this screen uses */}
+        <p data-testid="status-app-version">{TH.statusVersionLine(APP_VERSION.version, APP_VERSION.commit, fmt(APP_VERSION.builtAt) ?? APP_VERSION.builtAt)}</p>
         <p data-testid="status-key">
           {TH.statusKeyLabel}: {sync.maskedKey ?? TH.statusNotLinked}
         </p>

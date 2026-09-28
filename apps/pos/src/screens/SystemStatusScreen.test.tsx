@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BootstrapState, PosApi, SyncStatusDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { SessionProvider, useSession } from '../app/session'
+import { APP_VERSION } from '../lib/app-version'
 import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { TH } from '../ui/th'
 import { SystemStatusScreen } from './SystemStatusScreen'
@@ -58,6 +59,14 @@ function renderStatus(api: Partial<PosApi>, role: UserDto['role']): void {
 }
 
 describe('SystemStatusScreen (spec §4.3, §6.7, §10.5, §7 ข้อ 1 · D80 — every role reads it)', () => {
+  it('shows the running version, commit and build time (fu app-version)', async () => {
+    const api = { bootstrap: vi.fn(async () => bootWithSync({})) }
+    renderStatus(api, 'staff')
+    const line = await screen.findByTestId('status-app-version')
+    expect(line).toHaveTextContent(APP_VERSION.version)
+    expect(line).toHaveTextContent(APP_VERSION.commit)
+  })
+
   it('shows the clock line, the masked key and sends now on demand', async () => {
     const api = {
       bootstrap: vi.fn(async () => bootWithSync({ clockSkewMs: 7 * 60_000, clockWarning: true, maskedKey: 'dayo_…cdef' })),
