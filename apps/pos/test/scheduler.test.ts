@@ -458,6 +458,28 @@ describe('sync scheduler — onCycleDone, the "a cycle ran" signal to the screen
 })
 
 describe('sync scheduler — the Web Locks it uses without ctx.locks (follow-up item 4: tests never lean on the host\'s)', () => {
+  /**
+   * A browser's LockManager.request is a WebIDL operation: called with any receiver other than the LockManager itself
+   * (a destructured `request`, a copy on another object) it throws "TypeError: Illegal invocation". Node does not check
+   * it — this stand-in does, like brandedFetch / the branded timers.
+   */
+  function brandedLockManager(inner: ReturnType<typeof createTestLocks>, asked: string[] = []) {
+    const manager = {
+      request(this: unknown, name: string, o: { ifAvailable: true }, cb: (lock: unknown) => Promise<void>): Promise<void> {
+        if (this !== manager) throw new TypeError('Illegal invocation')
+        asked.push(name)
+        return inner.request(name, o, cb)
+      },
+    }
+    return manager
+  }
+  it('the LockManager stand-in checks its receiver like the browser: a request detached from it throws', () => {
+    const manager = brandedLockManager(createTestLocks())
+    const { request } = manager
+    expect(() => request('dayo-push', { ifAvailable: true }, async () => undefined)).toThrow(new TypeError('Illegal invocation'))
+    const copy = { request: manager.request }
+    expect(() => copy.request('dayo-push', { ifAvailable: true }, async () => undefined)).toThrow(new TypeError('Illegal invocation'))
+  })
   it('takes navigator.locks when the host has it (a browser; Node 24): the cycle runs inside the \'dayo-push\' lock', async () => {
     const t = await openConnectedApi()
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
@@ -465,7 +487,7 @@ describe('sync scheduler — the Web Locks it uses without ctx.locks (follow-up 
     const asked: string[] = []
     let heldDuringPush: string[] = []
     const fetchSeen: typeof fetch = async (input, init) => { if (String(input).endsWith('/pos/push')) heldDuringPush = locks.held(); return t.mock.fetch(input, init) }
-    vi.stubGlobal('navigator', { locks: { request: (name: string, o: { ifAvailable: true }, cb: (lock: unknown) => Promise<void>) => { asked.push(name); return locks.request(name, o, cb) } } })
+    vi.stubGlobal('navigator', { locks: brandedLockManager(locks, asked) })
     try {
       const sch = createSyncScheduler({ db: t.db, deps: { ...t.deps, fetch: fetchSeen }, serial: (fn) => fn() }) // no ctx.locks
       await sch.runNow()
