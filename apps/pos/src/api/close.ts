@@ -2,7 +2,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { buildZReport, MAX_ZNO_LIST_LENGTH, recomputeZChainLenient, tallyCashCount, varianceNeedsReason, zReportHash, type LenientZEntry, type SalesSummary, type ZChainWarning, type ZSnapshot } from '@dayo/domain'
-import { enqueueOutbox } from '../db/outbox'
+import { enqueueLocalOnly } from '../db/outbox'
 import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
@@ -198,7 +198,10 @@ function orderForLenientRecompute(rows: readonly ZRawRow[]): ZRawRow[] {
  * from a lenient recompute that never throws (`recomputeZChainLenient`); either way it carries `chainWarning` for
  * good (naming what it can), and an audit row records the acknowledgement.
  */
-export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftInput): Promise<ZReportDto> {
+/** task 14 fix round 1 item 4: `validated` runs once the input and the owner PIN passed, just before the transaction. */
+export type CloseShiftHooks = { validated?: () => void }
+
+export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftInput, hooks: CloseShiftHooks = {}): Promise<ZReportDto> {
   let tally: ReturnType<typeof tallyCashCount>
   try {
     tally = tallyCashCount(input.countLines)
@@ -213,9 +216,10 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
   if (reason.length > REASON_MAX_LENGTH) throw new PosError('BAD_INPUT', `a reason is at most ${REASON_MAX_LENGTH} characters`)
   const actor = await db.select().from(s.user).where(eq(s.user.id, input.actorUserId)).get()
   if (!actor || !actor.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${input.actorUserId}`)
-  // argon2 is slow — check the PIN before opening the transaction (same as voidOrder).
+  // argon2 is slow — check the PIN before opening the transaction (same as cancelSale).
   const approver = await requireOwnerPin(db, deps, input.approverUserId, input.approverPin)
   const device = await requireDevice(db)
+  hooks.validated?.()
 
   return db.transaction(async (tx) => {
     const shift = await currentOpenShift(tx, device.id)
@@ -378,12 +382,12 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
       createdAt: at,
     } satisfies typeof s.cashCount.$inferInsert
     await tx.insert(s.cashCount).values(countRow)
-    await enqueueOutbox(tx, 'cash_count', countRow, at, deps.newId)
+    await enqueueLocalOnly(tx, 'cash_count', countRow, at, deps.newId) // block 2: local_only (spec 04 §6.1)
 
     // z_report is append-only (trigger) and unique per shift: a second close of the same shift cannot happen.
     const zRow = { id: deps.newId(), shiftId: shift.id, snapshotJson: z.snapshot, hash: z.hash, createdAt: at } satisfies typeof s.zReport.$inferInsert
     await tx.insert(s.zReport).values(zRow)
-    await enqueueOutbox(tx, 'z_report', zRow, at, deps.newId)
+    await enqueueLocalOnly(tx, 'z_report', zRow, at, deps.newId)
 
     if (chainWarning !== null) {
       // review NF-4: rowCount/maxStoredZNo let a later audit reader see a duplicate/missing zNo happened, even
@@ -404,7 +408,7 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
     await tx.update(s.shift).set({ status: 'closed', closedBy: approver.id, closedAt: at }).where(eq(s.shift.id, shift.id))
     const shiftRow = await tx.select().from(s.shift).where(eq(s.shift.id, shift.id)).get()
     if (!shiftRow) throw new PosError('NO_OPEN_SHIFT', shift.id)
-    await enqueueOutbox(tx, 'shift', shiftRow, at, deps.newId, 'closed')
+    await enqueueLocalOnly(tx, 'shift', shiftRow, at, deps.newId, 'closed')
 
     // Built straight from `z` (just produced by `buildZReport`), not read back through `toZReportDto`: its hash is
     // correct by construction, and `snapshotText` above only exists to survive a hand-edited row from the DB.

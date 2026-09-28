@@ -14,3 +14,8 @@ export function downloadBytes(fileName: string, bytes: Uint8Array, mime = 'appli
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
+
+/** Task 20: `remedy-export`'s "ส่งออก JSON" — the same download, from a text string (`exportSyncRow`'s pretty JSON). */
+export function saveFile(fileName: string, text: string, mime = 'application/json'): void {
+  downloadBytes(fileName, new TextEncoder().encode(text), mime)
+}

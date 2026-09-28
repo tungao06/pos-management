@@ -1,0 +1,92 @@
+{ "ok": true, "data": {
+    "changed": true, "catalog_version": 42, "server_time": "2026-09-25T02:00:00.120+00:00",
+    "client": { "name": "แท็บเล็ตขาย 1", "last_receipt_no": null },
+    "pricing": { "commit": "135679ceefc0016ade2d94508fe3de615be0da3e", "files_sha256": {
+        "packages/shared/src/cost.ts": "83df8f024306ad4e4575d84e3b2b32b0ff1579d765138d76c4eacfb7160202a8",
+        "packages/shared/src/fmt.ts": "df31505296c9c99d2e1cc984d02a7fc86706b7ce668b7680554008fbc74334ac",
+        "packages/shared/src/money.ts": "96abf33a850979298e3d3f3996acc03cdbbd6a17b33630b22a3cfcdb1407699e",
+        "packages/shared/src/promotions.ts": "4850b98d5084e703bb1deb84ea4629253f510f37d6e0ab80161e2e5dab15ea11",
+        "packages/shared/src/shopSettings.ts": "7b1fdd25231fece6527bd82b938217ec94f0cb403e14071d4a4edb6edd5ec34d",
+        "packages/shared/src/time.ts": "c634692b8b9c5dd30876cca15e94b3b642da7c685966db5017a34682c3cc1de1",
+        "packages/shared/src/types.ts": "0c6e790ea3e16a8dcdbf93b36c32c224f422c3fefe6ee34e791a2dc8e42edaa0" }  },
+    "supported_kinds": ["order", "order_void"],
+    "supported_fields": {
+      "order": ["pos_order_id", "receipt_no", "queue_no", "sale_date", "sold_at", "channel", "payment", "staff_id", "catalog_version", "shift_id", "lines", "lines.code", "lines.size", "lines.sweetness", "lines.milk", "lines.grade", "lines.qty", "lines.free", "lines.discount_baht", "lines.discount_percent", "lines.discount_reason", "bill_discount", "promo_code", "skip_promotion_ids", "no_promotions", "totals", "note"],
+      "order_void": ["pos_order_id", "voided_at", "staff_id", "approved_by", "reason"]
+    },
+    "staff": [
+      { "id": "7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f", "display_name": "TungAo", "role": "owner", "active": true },
+      { "id": "0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d", "display_name": "DCm", "role": "owner", "active": true },
+      { "id": "2c3d4e5f-6071-4283-94a5-b6c7d8e9f0a1", "display_name": "Beam", "role": "manager", "active": true },
+      { "id": "1b2c3d4e-5f60-4172-8394-a5b6c7d8e9f0", "display_name": "Mint", "role": "staff", "active": true },
+      { "id": "4e5f6071-8293-44a5-b6c7-d8e9f0a1b2c3", "display_name": "", "role": "staff", "active": true },
+      { "id": "3d4e5f60-7182-4394-a5b6-c7d8e9f0a1b2", "display_name": "Old", "role": "staff", "active": false }
+    ],
+    "catalog": {
+      "settings": { "shopName": "DA-YO", "defaultSize": "16 oz", "defaultSweetness": "100%", "defaultChannelCode": "store", "defaultMilk": "fresh", "maxQtyPerLine": 99, "backdateDays": 7, "recentOrdersCount": 5 },
+      "sizes": [
+        { "code": "16 oz", "label": "16 oz", "sortOrder": 0, "isActive": true },
+        { "code": "20 oz", "label": "20 oz", "sortOrder": 1, "isActive": true },
+        { "code": "22 oz", "label": "22 oz", "sortOrder": 2, "isActive": false }
+      ],
+      "variants": [
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "16 oz", "sweetness": "0%", "price": 35, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 120, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 60, "unit": "ml" } ] },
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "16 oz", "sweetness": "25%", "price": 35, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 120, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 60, "unit": "ml" } ] },
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "16 oz", "sweetness": "50%", "price": 35, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 120, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 60, "unit": "ml" } ] },
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "16 oz", "sweetness": "75%", "price": 35, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 120, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 60, "unit": "ml" } ] },
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "16 oz", "sweetness": "100%", "price": 35, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 120, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 60, "unit": "ml" } ] },
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "20 oz", "sweetness": "0%", "price": 45, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 150, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 80, "unit": "ml" } ] },
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "20 oz", "sweetness": "25%", "price": 45, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 150, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 80, "unit": "ml" } ] },
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "20 oz", "sweetness": "50%", "price": 45, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 150, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 80, "unit": "ml" } ] },
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "20 oz", "sweetness": "75%", "price": 45, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 150, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 80, "unit": "ml" } ] },
+        { "menuCode": "Thai Tea", "menuNameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชา", "menuSortOrder": 1, "size": "20 oz", "sweetness": "100%", "price": 45, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": null, "baseId": "5e1f0000-0000-4000-8000-000000000001", "qty": 150, "unit": "ml" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 80, "unit": "ml" } ] },
+        { "menuCode": "Matcha Latte", "menuNameTh": "มัตฉะลาเต้", "family": "มัตฉะ", "categoryLabel": "มัตฉะ", "menuSortOrder": 2, "size": "16 oz", "sweetness": "25%", "price": 85, "allowOatMilk": true, "isMatcha": true, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000003", "baseId": null, "qty": 4, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 150, "unit": "ml" } ] },
+        { "menuCode": "Matcha Latte", "menuNameTh": "มัตฉะลาเต้", "family": "มัตฉะ", "categoryLabel": "มัตฉะ", "menuSortOrder": 2, "size": "16 oz", "sweetness": "50%", "price": 85, "allowOatMilk": true, "isMatcha": true, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000003", "baseId": null, "qty": 4, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 150, "unit": "ml" } ] },
+        { "menuCode": "Matcha Latte", "menuNameTh": "มัตฉะลาเต้", "family": "มัตฉะ", "categoryLabel": "มัตฉะ", "menuSortOrder": 2, "size": "16 oz", "sweetness": "100%", "price": 85, "allowOatMilk": true, "isMatcha": true, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000003", "baseId": null, "qty": 4, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 150, "unit": "ml" } ] },
+        { "menuCode": "Matcha Latte", "menuNameTh": "มัตฉะลาเต้", "family": "มัตฉะ", "categoryLabel": "มัตฉะ", "menuSortOrder": 2, "size": "20 oz", "sweetness": "25%", "price": 95, "allowOatMilk": true, "isMatcha": true, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000003", "baseId": null, "qty": 5, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 190, "unit": "ml" } ] },
+        { "menuCode": "Matcha Latte", "menuNameTh": "มัตฉะลาเต้", "family": "มัตฉะ", "categoryLabel": "มัตฉะ", "menuSortOrder": 2, "size": "20 oz", "sweetness": "50%", "price": 95, "allowOatMilk": true, "isMatcha": true, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000003", "baseId": null, "qty": 5, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 190, "unit": "ml" } ] },
+        { "menuCode": "Matcha Latte", "menuNameTh": "มัตฉะลาเต้", "family": "มัตฉะ", "categoryLabel": "มัตฉะ", "menuSortOrder": 2, "size": "20 oz", "sweetness": "100%", "price": 95, "allowOatMilk": true, "isMatcha": true, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000003", "baseId": null, "qty": 5, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 190, "unit": "ml" } ] },
+        { "menuCode": "Cocoa", "menuNameTh": "โกโก้", "family": "โกโก้", "categoryLabel": "โกโก้", "menuSortOrder": 3, "size": "16 oz", "sweetness": "50%", "price": 45, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000006", "baseId": null, "qty": 20, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000007", "baseId": null, "qty": 150, "unit": "ml" } ] },
+        { "menuCode": "Cocoa", "menuNameTh": "โกโก้", "family": "โกโก้", "categoryLabel": "โกโก้", "menuSortOrder": 3, "size": "16 oz", "sweetness": "100%", "price": 45, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000006", "baseId": null, "qty": 20, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000007", "baseId": null, "qty": 150, "unit": "ml" } ] },
+        { "menuCode": "Cocoa", "menuNameTh": "โกโก้", "family": "โกโก้", "categoryLabel": "โกโก้", "menuSortOrder": 3, "size": "20 oz", "sweetness": "50%", "price": 55, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000006", "baseId": null, "qty": 25, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000007", "baseId": null, "qty": 190, "unit": "ml" } ] },
+        { "menuCode": "Cocoa", "menuNameTh": "โกโก้", "family": "โกโก้", "categoryLabel": "โกโก้", "menuSortOrder": 3, "size": "20 oz", "sweetness": "100%", "price": 55, "allowOatMilk": true, "isMatcha": false, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000006", "baseId": null, "qty": 25, "unit": "g" }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000007", "baseId": null, "qty": 190, "unit": "ml" } ] },
+        { "menuCode": "Pink Milk", "menuNameTh": "นมชมพู", "family": "นม", "categoryLabel": "นม", "menuSortOrder": 4, "size": "16 oz", "sweetness": "100%", "price": 65, "allowOatMilk": false, "isMatcha": false, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 200, "unit": "ml" } ] },
+        { "menuCode": "Pink Milk", "menuNameTh": "นมชมพู", "family": "นม", "categoryLabel": "นม", "menuSortOrder": 4, "size": "20 oz", "sweetness": "100%", "price": 75, "allowOatMilk": false, "isMatcha": false, "recipeLines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "baseId": null, "qty": 250, "unit": "ml" } ] }
+      ],
+      "ingredients": {
+        "c3d4e5f6-0000-4000-8000-000000000001": { "id": "c3d4e5f6-0000-4000-8000-000000000001", "code": "RM-012", "name": "นมสด", "useUnit": "ml" },
+        "c3d4e5f6-0000-4000-8000-000000000002": { "id": "c3d4e5f6-0000-4000-8000-000000000002", "code": "RM-013", "name": "นมโอ๊ต", "useUnit": "ml" },
+        "c3d4e5f6-0000-4000-8000-000000000003": { "id": "c3d4e5f6-0000-4000-8000-000000000003", "code": "RM-020", "name": "ผงมัตฉะ Excellent", "useUnit": "g" },
+        "c3d4e5f6-0000-4000-8000-000000000004": { "id": "c3d4e5f6-0000-4000-8000-000000000004", "code": "RM-021", "name": "ผงมัตฉะ Premium", "useUnit": "g" },
+        "c3d4e5f6-0000-4000-8000-000000000005": { "id": "c3d4e5f6-0000-4000-8000-000000000005", "code": "RM-001", "name": "ใบชาไทย", "useUnit": "g" },
+        "c3d4e5f6-0000-4000-8000-000000000006": { "id": "c3d4e5f6-0000-4000-8000-000000000006", "code": "RM-030", "name": "ผงโกโก้", "useUnit": "g" },
+        "c3d4e5f6-0000-4000-8000-000000000007": { "id": "c3d4e5f6-0000-4000-8000-000000000007", "code": "RM-099", "name": "น้ำ", "useUnit": "ml" }
+      },
+      "bases": {
+        "5e1f0000-0000-4000-8000-000000000001": { "id": "5e1f0000-0000-4000-8000-000000000001", "code": "BASE-THAI", "name": "ชาไทยเบส", "yieldQty": 1000, "yieldUnit": "ml",
+          "lines": [ { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000005", "qty": 40 }, { "ingredientId": "c3d4e5f6-0000-4000-8000-000000000007", "qty": 1000 } ] }
+      },
+      "milkOptions": [
+        { "code": "fresh", "ingredientId": "c3d4e5f6-0000-4000-8000-000000000001", "priceAdd": 0, "aliases": ["นมสด"] },
+        { "code": "oat", "ingredientId": "c3d4e5f6-0000-4000-8000-000000000002", "priceAdd": 15, "aliases": ["โอ๊ต"] }
+      ],
+      "gradeOptions": [
+        { "code": "Excellent", "ingredientId": "c3d4e5f6-0000-4000-8000-000000000003", "multiplier": 1, "priceAdd": 0, "isDefault": true, "aliases": [] },
+        { "code": "Premium", "ingredientId": "c3d4e5f6-0000-4000-8000-000000000004", "multiplier": 1, "priceAdd": 20, "isDefault": false, "aliases": ["พรีเมียม"] }
+      ],
+      "channels": [
+        { "code": "store", "name": "หน้าร้าน", "aliases": [], "priceMarkupPct": 0, "priceAddBaht": 0, "rounding": "none", "feePct": 0, "defaultPaymentMethodCode": "cash" },
+        { "code": "grab", "name": "Grab", "aliases": ["แกร็บ"], "priceMarkupPct": 0.30, "priceAddBaht": 0, "rounding": "ceil_baht", "feePct": 0.30, "defaultPaymentMethodCode": "qr" },
+        { "code": "lineman", "name": "LINE MAN", "aliases": ["ไลน์แมน"], "priceMarkupPct": 0.07, "priceAddBaht": 5, "rounding": "ceil_baht", "feePct": 0.25, "defaultPaymentMethodCode": "qr" }
+      ],
+      "paymentMethods": [ { "code": "cash", "name": "เงินสด", "aliases": ["เงินสด", "สด"] }, { "code": "qr", "name": "QR", "aliases": ["qr"] } ],
+      "promotions": [
+        { "id": "9f8e0000-0000-4000-8000-000000000001", "code": null, "name": "ชาไทย ซื้อ 2 แถม 1", "kind": "buy_n_get_m", "startsOn": null, "endsOn": null, "daysOfWeek": null, "timeFrom": null, "timeTo": null, "channelCodes": [], "requiresCode": false, "autoApply": true, "priority": 10, "stackable": false, "isActive": true, "params": { "buy_qty": 2, "get_qty": 1, "menu_codes": ["Thai Tea"] } },
+        { "id": "9f8e0000-0000-4000-8000-000000000002", "code": null, "name": "มัตฉะบ่าย ลด 15%", "kind": "item_discount", "startsOn": null, "endsOn": null, "daysOfWeek": [1, 2, 3, 4, 5], "timeFrom": "14:00:00", "timeTo": "16:00:00", "channelCodes": [], "requiresCode": false, "autoApply": true, "priority": 20, "stackable": true, "isActive": true, "params": { "menu_codes": ["Matcha Latte"], "percent": 15 } },
+        { "id": "9f8e0000-0000-4000-8000-000000000003", "code": "DAYO10", "name": "DAYO10 ลด 10% ทั้งบิล", "kind": "bill_discount", "startsOn": null, "endsOn": null, "daysOfWeek": null, "timeFrom": null, "timeTo": null, "channelCodes": [], "requiresCode": true, "autoApply": false, "priority": 30, "stackable": true, "isActive": true, "params": { "min_subtotal": 200, "percent": 10, "max_amount": 30 } },
+        { "id": "9f8e0000-0000-4000-8000-000000000004", "code": null, "name": "โกโก้ + ชาไทย ฿70", "kind": "bundle", "startsOn": null, "endsOn": null, "daysOfWeek": null, "timeFrom": null, "timeTo": null, "channelCodes": [], "requiresCode": false, "autoApply": true, "priority": 5, "stackable": false, "isActive": true, "params": { "items": [ { "menu_codes": ["Cocoa"], "qty": 1 }, { "menu_codes": ["Thai Tea"], "qty": 1 } ], "bundle_price": 70 } },
+        { "id": "9f8e0000-0000-4000-8000-000000000005", "code": null, "name": "Grab โกโก้ลด 5 บาท", "kind": "item_discount", "startsOn": null, "endsOn": null, "daysOfWeek": null, "timeFrom": null, "timeTo": null, "channelCodes": ["grab"], "requiresCode": false, "autoApply": true, "priority": 15, "stackable": true, "isActive": true, "params": { "menu_codes": ["Cocoa"], "amount_baht": 5 } }
+      ]
+    }
+  }
+}

@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test'
 import { addItem, firstRun, login } from './helpers'
 
-test('after one online load the app reopens and sells with no network; data survives', async ({ page, context }) => {
-  await firstRun(page)
+test('after one online load the app reopens and sells with no network; data survives', async ({ page, context, request }) => {
+  await firstRun(page, request)
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready
   })
@@ -19,7 +19,7 @@ test('after one online load the app reopens and sells with no network; data surv
   await page.reload() // served by the service worker precache
   await login(page)
   await expect(page).toHaveURL(/\/sell$/)
-  await addItem(page, 'Original')
+  await addItem(page, 'Pink Milk')
   await page.getByTestId('pay-cash').click()
   await page.getByTestId('tender-exact').click()
   await page.getByTestId('confirm-cash').click()

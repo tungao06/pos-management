@@ -114,6 +114,7 @@ export function ProduceScreen(): JSX.Element {
   return (
     <main className="page">
       <div className="actions">
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
         <button type="button" data-testid="nav-stock" onClick={() => void navigate({ to: '/stock' })}>
           {TH.back}
         </button>

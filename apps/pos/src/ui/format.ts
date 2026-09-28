@@ -7,6 +7,22 @@ export function formatBaht(satang: number): string {
   return `${sign}฿${baht}${rest === 0 ? '' : `.${String(rest).padStart(2, '0')}`}`
 }
 
+/** Like `formatBaht`, always with 2 decimals — the exact amount of a bill (cart/cash/QR totals, discounts, change):
+ * 7000 → "฿70.00" · 10500 → "฿105.00". Integer arithmetic only. */
+export function formatBahtFull(satang: number): string {
+  const sign = satang < 0 ? '-' : ''
+  const abs = Math.abs(satang)
+  const baht = Math.floor(abs / 100).toLocaleString('en-US')
+  const rest = String(abs % 100).padStart(2, '0')
+  return `${sign}฿${baht}.${rest}`
+}
+
+/** Like `formatBahtFull`, with a leading '+' on a positive amount (negatives already show their own '-') — display
+ * only, no arithmetic: for a difference already computed in `@dayo/domain` (e.g. `centralDiffSatang`), spec §4.3. */
+export function formatBahtDiff(satang: number): string {
+  return satang > 0 ? `+${formatBahtFull(satang)}` : formatBahtFull(satang)
+}
+
 /** "45" → 4500 · "45.5" → 4550 · invalid → null. The only way UI text becomes money. */
 export function parseBahtInput(text: string): number | null {
   const m = /^(\d{1,7})(?:\.(\d{1,2}))?$/.exec(text.trim())

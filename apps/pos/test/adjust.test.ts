@@ -29,7 +29,7 @@ describe('adjustStock (spec §5 ปรับสต็อก · D50 Q3-20 · Q4-8
       createdBy: t.owner.id,
       createdAt: '2026-09-17T03:00:00.000Z',
     })
-    expect(await outboxKeys(t)).toContain(`stock_adjustment:${a.id}`)
+    expect(await outboxKeys(t)).toEqual([`shift:${t.shift.id}`]) // block 2: stock rows are never queued (spec 04 §6.1, §11)
     expect(await stockOf(t, 'RM-MLK-01')).toEqual({ onHandMilli: -1_000_000, avgCostUsat: 4_800_000 })
   })
 

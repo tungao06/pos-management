@@ -1,12 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
-import { useState, type JSX } from 'react'
-import type { MenuProduct } from '../api/types'
+import { useEffect, useRef, useState, type JSX } from 'react'
+import { menuUnitPriceSatang } from '@dayo/domain'
+import type { SellMenuDto } from '../api/types'
 import { useApi } from '../app/api-context'
-import { menuKey, stockKey, useBootstrap } from '../app/queries'
+import { useCart } from '../app/cart-context'
+import { sellCatalogKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import { isShiftStale } from '../lib/clock'
 import { errorMessage } from '../ui/errors'
+import { formatBaht } from '../ui/format'
 import { TH } from '../ui/th'
 import { CartPanel } from './CartPanel'
 import { CashMoveDialog } from './CashMoveDialog'
@@ -14,51 +17,82 @@ import { DiscountDialog } from './DiscountDialog'
 import { ItemDialog } from './ItemDialog'
 
 const BEST_TAB = '__best__'
+/** Every menu, across categories — the tab shown (and selected) until the cashier picks a category or "ขายดี". */
+const ALL_TAB = '__all__'
+/** spec §6.5: dayo's menu/price/promotion changes reach the tablet without restarting it — refetched on this timer. */
+const CATALOG_REFETCH_MS = 60_000
 
 export function SellScreen(): JSX.Element {
   const api = useApi()
   const boot = useBootstrap()
   const session = useSession()
   const navigate = useNavigate()
-  const menuQuery = useQuery({ queryKey: menuKey, queryFn: () => api.loadMenu() })
+  const { state: cart, dispatch } = useCart()
+  const catalogQuery = useQuery({ queryKey: sellCatalogKey, queryFn: () => api.loadSellCatalog(), refetchInterval: CATALOG_REFETCH_MS })
   // I-5: warn when the browser has not granted persistent storage (spec §8/§12) — OPFS is the only copy until sync.
   const persisted = useQuery({ queryKey: ['storage-persisted'], queryFn: () => navigator.storage?.persisted?.() ?? Promise.resolve(false) })
-  // Plan 4 (Q4-10): the stock badge and the expired-base banner — shown only, never blocking a sale (spec §4.2)
-  // M-2: refetched every minute so a base that expires while nobody sells still raises the banner before the next sale
-  const stock = useQuery({ queryKey: stockKey, queryFn: () => api.stockOverview(), refetchInterval: 60_000 })
-  const [tab, setTab] = useState<string>(BEST_TAB)
-  const [picking, setPicking] = useState<MenuProduct | null>(null)
+  const [tab, setTab] = useState<string>(ALL_TAB)
+  const [picking, setPicking] = useState<SellMenuDto | null>(null)
   const [discountOpen, setDiscountOpen] = useState(false)
   const [cashMoveOpen, setCashMoveOpen] = useState(false)
 
+  // spec §6.5: catalogVersion changed while the cart was open — the cart is already priced with the new catalog
+  // (usePricedCart, inside CartPanel), this only tells the cashier so.
+  const seenVersion = useRef<number | null>(null)
+  const [catalogChanged, setCatalogChanged] = useState(false)
+  useEffect(() => {
+    const version = catalogQuery.data?.catalogVersion
+    if (version === undefined) return
+    if (seenVersion.current !== null && seenVersion.current !== version) setCatalogChanged(true)
+    seenVersion.current = version
+  }, [catalogQuery.data?.catalogVersion])
+
+  // Starts the cart on dayo's own default channel (never a hardcoded one) — only while the cart is still empty, so
+  // switching channel mid-sale is always the cashier's own choice.
+  useEffect(() => {
+    const dto = catalogQuery.data
+    if (dto !== undefined && cart.lines.length === 0 && cart.channelCode !== dto.defaultChannelCode) {
+      dispatch({ type: 'setChannel', channelCode: dto.defaultChannelCode })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogQuery.data?.defaultChannelCode])
+
   if (boot.data !== undefined && boot.data.openShift === null) return <Navigate to="/shift/open" />
-  if (menuQuery.isPending) return <main className="page">{TH.loading}</main>
-  if (menuQuery.isError) {
+  if (catalogQuery.isPending) return <main className="page">{TH.loading}</main>
+  if (catalogQuery.isError) {
     return (
       <main className="page">
         <p role="alert" className="error">
-          {errorMessage(menuQuery.error)}
+          {errorMessage(catalogQuery.error)}
         </p>
       </main>
     )
   }
 
-  const menu = menuQuery.data
-  const showBest = menu.bestSellerProductIds.length > 0 // hide the tab until something has sold (D48 Q3-9)
-  const activeTab = tab === BEST_TAB && !showBest ? (menu.categories[0]?.id ?? '') : tab
-  const products = activeTab === BEST_TAB ? menu.bestSellerProductIds.flatMap((id) => menu.products.filter((p) => p.id === id)) : menu.products.filter((p) => p.categoryId === activeTab)
+  const dto = catalogQuery.data
+  const showBest = dto.bestSellerCodes.length > 0 // hide the tab until something has sold (D48 Q3-9)
+  const activeTab = tab === BEST_TAB && !showBest ? ALL_TAB : tab
+  const menus =
+    activeTab === ALL_TAB
+      ? dto.menus
+      : activeTab === BEST_TAB
+        ? dto.bestSellerCodes.flatMap((code) => dto.menus.filter((m) => m.code === code))
+        : dto.menus.filter((m) => m.categoryLabel === activeTab)
 
   return (
     <div className="sell">
       <header className="topbar">
+        <button type="button" data-testid="tab-all" aria-pressed={activeTab === ALL_TAB} onClick={() => setTab(ALL_TAB)}>
+          {TH.tabAll}
+        </button>
         {showBest && (
           <button type="button" data-testid="tab-best" aria-pressed={activeTab === BEST_TAB} onClick={() => setTab(BEST_TAB)}>
             {TH.tabBestSellers}
           </button>
         )}
-        {menu.categories.map((c) => (
-          <button key={c.id} type="button" data-testid={`tab-${c.code}`} aria-pressed={activeTab === c.id} onClick={() => setTab(c.id)}>
-            {c.name}
+        {dto.categories.map((c) => (
+          <button key={c} type="button" data-testid={`tab-${c}`} aria-pressed={activeTab === c} onClick={() => setTab(c)}>
+            {c}
           </button>
         ))}
         <span className="spacer" />
@@ -67,17 +101,11 @@ export function SellScreen(): JSX.Element {
             {TH.storageNotPersistent}
           </span>
         )}
-        <span className="badge" data-testid="pending-sync">
-          {TH.pendingSync(boot.data?.pendingSyncItems ?? 0)}
-        </span>
         <button type="button" data-testid="nav-orders" onClick={() => void navigate({ to: '/orders' })}>
           {TH.orders}
         </button>
         <button type="button" data-testid="cash-move-open" onClick={() => setCashMoveOpen(true)}>
           {TH.cashMove}
-        </button>
-        <button type="button" data-testid="nav-stock" className={(stock.data?.alertCount ?? 0) > 0 ? 'error' : undefined} onClick={() => void navigate({ to: '/stock' })}>
-          {(stock.data?.alertCount ?? 0) > 0 ? TH.stockMenuAlerts(stock.data?.alertCount ?? 0) : TH.stockMenu}
         </button>
         <button type="button" data-testid="nav-shift" onClick={() => void navigate({ to: '/shift' })}>
           {TH.shiftMenu}
@@ -100,28 +128,35 @@ export function SellScreen(): JSX.Element {
           {TH.backupDue}
         </button>
       )}
-      {stock.data !== undefined && stock.data.expiredBaseCodes.length > 0 && (
-        <button type="button" role="alert" className="error" data-testid="base-expired" onClick={() => void navigate({ to: '/stock' })}>
-          {TH.baseExpiredBanner(
-            stock.data.items
-              .filter((i) => stock.data.expiredBaseCodes.includes(i.code))
-              .map((i) => i.name)
-              .join(', '),
-          )}
+      {catalogChanged && (
+        <button type="button" role="alert" className="error" data-testid="catalog-changed" onClick={() => setCatalogChanged(false)}>
+          {TH.catalogChanged}
         </button>
       )}
       <main className="grid">
-        {products.map((p) => (
-          <button key={p.id} type="button" className="product" data-testid={`product-${p.code}`} onClick={() => setPicking(p)}>
-            {/* Thai name large, English small (D48 Q3-11) */}
-            <span className="th">{p.nameTh}</span>
-            <span className="en">{p.nameEn}</span>
-          </button>
-        ))}
+        {menus.map((m) => {
+          const variant = dto.catalog.variants.find((v) => v.menuCode === m.code && v.size === m.defaultSize && v.sweetness === m.defaultSweetness)
+          const price = variant === undefined ? null : menuUnitPriceSatang(dto.catalog, variant, cart.channelCode)
+          return (
+            <button key={m.code} type="button" className="product" data-testid={`menu-${m.code}`} onClick={() => setPicking(m)}>
+              <span className="th">{m.nameTh}</span>
+              <span className="price">{price === null ? TH.noPrice : formatBaht(price)}</span>
+            </button>
+          )
+        })}
       </main>
-      <CartPanel onOpenDiscount={() => setDiscountOpen(true)} onPay={(method) => void navigate({ to: method === 'CASH' ? '/pay/cash' : '/pay/qr' })} />
-      {picking !== null && <ItemDialog menu={menu} product={picking} onClose={() => setPicking(null)} />}
-      {discountOpen && <DiscountDialog onClose={() => setDiscountOpen(false)} />}
+      <CartPanel
+        catalog={dto.catalog}
+        channels={dto.channels}
+        payments={dto.payments}
+        maxQtyPerLine={dto.maxQtyPerLine}
+        onOpenDiscount={() => setDiscountOpen(true)}
+        onPay={(method) => void navigate({ to: method === 'CASH' ? '/pay/cash' : '/pay/qr' })}
+      />
+      {picking !== null && (
+        <ItemDialog catalog={dto.catalog} menu={picking} channelCode={cart.channelCode} maxQtyPerLine={dto.maxQtyPerLine} onClose={() => setPicking(null)} />
+      )}
+      {discountOpen && <DiscountDialog catalog={dto.catalog} onClose={() => setDiscountOpen(false)} />}
       {cashMoveOpen && <CashMoveDialog onClose={() => setCashMoveOpen(false)} />}
     </div>
   )

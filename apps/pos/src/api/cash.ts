@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { enqueueOutbox } from '../db/outbox'
+import { enqueueLocalOnly } from '../db/outbox'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
@@ -39,13 +39,13 @@ export async function insertManualCashMovement(
     createdAt: m.at,
   } satisfies typeof s.cashMovement.$inferInsert
   await tx.insert(s.cashMovement).values(row)
-  await enqueueOutbox(tx, 'cash_movement', row, m.at, deps.newId)
+  await enqueueLocalOnly(tx, 'cash_movement', row, m.at, deps.newId) // block 2: local_only (spec 04 §6.1)
   return toCashMovementDto(row)
 }
 
 /**
  * spec §3.5: PAID_IN / PAID_OUT / DROP are typed in by a person, with a reason, into the open shift (Q3b-9 · D52).
- * VOID_REFUND is never accepted here — voidOrder writes it (D36). One transaction: cash_movement + outbox.
+ * VOID_REFUND is never accepted here — cancelSale writes it (D36). One transaction: cash_movement + outbox.
  */
 export async function recordCashMovement(db: RemoteDb, deps: ApiDeps, input: CashMovementInput): Promise<CashMovementDto> {
   if (!MANUAL_KINDS.includes(input.kind)) throw new PosError('BAD_INPUT', `kind must be PAID_IN, PAID_OUT or DROP, got ${input.kind}`)

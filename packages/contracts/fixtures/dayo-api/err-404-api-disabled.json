@@ -1,0 +1,12 @@
+{
+  "name": "err-404-api-disabled",
+  "spec": "04 §4.1 API_V1_ENABLED ไม่ใช่ 1 = 404 มีหัว CORS",
+  "env": { "API_V1_ENABLED": "0", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {},
+  "request": { "method": "POST", "path": "/api/v1/pos/push", "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" }, "body": { "device_time": "2026-09-25T08:00:00.000Z", "rows": [] } },
+  "response": {
+    "status": 404,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": { "ok": false, "error": { "code": "DY404", "message": "not_found" } }
+  }
+}

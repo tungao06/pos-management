@@ -2,7 +2,6 @@ import { and, eq } from 'drizzle-orm'
 import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { batchExpiresAt, productionMovements, requireBom, scaleQtyMilli } from '@dayo/domain'
-import { enqueueOutbox } from '../db/outbox'
 import { insertMovements, loadCostStates, makeCostOf } from '../db/stock'
 import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
@@ -68,7 +67,6 @@ export async function produceBatch(db: RemoteDb, deps: ApiDeps, input: ProduceBa
       createdAt: at,
     } satisfies typeof s.productionBatch.$inferInsert
     await tx.insert(s.productionBatch).values(row)
-    await enqueueOutbox(tx, 'production_batch', row, at, deps.newId)
     await insertMovements(tx, deps, [...plan.outs, plan.inn], { businessDate, deviceId: device.id, createdBy: actor.id, at }, catalog)
     const codes = new Map((await tx.select({ id: s.item.id, code: s.item.code }).from(s.item).all()).map((i) => [i.id, i.code]))
     return {

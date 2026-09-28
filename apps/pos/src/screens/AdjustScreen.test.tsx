@@ -3,11 +3,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BootstrapState, MenuDto, PosApi, StockAdjustmentDto, StockItemDto, StockOverviewDto, UserDto } from '../api/types'
+import type { BootstrapState, DrinkCatalogDto, PosApi, StockAdjustmentDto, StockItemDto, StockOverviewDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { SessionProvider, useSession } from '../app/session'
 import { TH } from '../ui/th'
 import { AdjustScreen } from './AdjustScreen'
+import { HEALTHY_SYNC } from '../test-utils/sync-status'
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
@@ -58,16 +59,13 @@ const STOCK: StockOverviewDto = {
   openingCountPending: false,
 }
 
-const MENU: MenuDto = {
-  storeChannelId: 'shop',
-  categories: [{ id: 'c1', code: 'TEA', name: 'ชา' }],
-  products: [{ id: 'p1', code: 'ORIGINAL', nameTh: 'ชาไทย', nameEn: 'Original', categoryId: 'c1' }],
-  sizes: [{ id: 'sz16', code: '16', name: '16 oz' }],
-  sweetness: [{ id: 'sw50', code: '50', name: '50%', isDefault: true }],
-  variants: [{ id: 'v1', productId: 'p1', sizeId: 'sz16', priceSatang: 4_500 }],
+const MENU: DrinkCatalogDto = {
+  products: [{ id: 'p1', code: 'ORIGINAL', nameTh: 'ชาไทย' }],
+  sizes: [{ id: 'sz16', name: '16 oz' }],
+  sweetness: [{ id: 'sw50', name: '50%' }],
+  variants: [{ id: 'v1', productId: 'p1', sizeId: 'sz16' }],
   defaultSizeId: 'sz16',
   defaultSweetnessId: 'sw50',
-  bestSellerProductIds: [],
 }
 
 const DONE: StockAdjustmentDto = {
@@ -80,7 +78,7 @@ const DONE: StockAdjustmentDto = {
 }
 
 function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
-  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, ...overrides }
+  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, dayoBaseUrl: 'https://dayo.example/api/v1', staffNeedingPin: [], ownerRecovery: false, sync: HEALTHY_SYNC, ...overrides }
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {
@@ -92,7 +90,7 @@ function SignedIn({ children }: { children: JSX.Element }): JSX.Element {
 function mount(overrides: Partial<PosApi> = {}): { api: PosApi } {
   const api = {
     stockOverview: vi.fn(async () => STOCK),
-    loadMenu: vi.fn(async () => MENU),
+    loadDrinkCatalog: vi.fn(async () => MENU),
     bootstrap: vi.fn(async () => bootstrap()),
     ...overrides,
   } as unknown as PosApi

@@ -1,0 +1,25 @@
+{
+  "name": "e2-void-too-old",
+  "spec": "04 §4.5 order_void ที่ voided_at เก่ากว่า 60 วัน = rejected INVALID ก่อนหาบิล (ไม่ค้าง PARENT_PENDING) (dayo 0052_pos_push.sql:491-495)",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": { "ok": true, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "name": "แท็บเล็ตขาย 1", "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write"] },
+    "api_pos_push": "@data"
+  },
+  "request": {
+    "method": "POST", "path": "/api/v1/pos/push",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" },
+    "body": { "device_time": "2026-09-25T03:15:03.500Z", "rows": [
+      { "key": "order_void:9f0a1b2c-3d4e-4f5a-9b6c-7d8e9f0a1b2c", "kind": "order_void", "data": {
+        "pos_order_id": "9f0a1b2c-3d4e-4f5a-9b6c-7d8e9f0a1b2c", "voided_at": "2026-07-26T03:00:00.000Z",
+        "staff_id": "0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d", "approved_by": null, "reason": "ลูกค้ายกเลิก" } }
+    ] }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": { "ok": true, "data": { "server_time": "2026-09-25T03:15:04.010+00:00", "results": [
+      { "key": "order_void:9f0a1b2c-3d4e-4f5a-9b6c-7d8e9f0a1b2c", "status": "rejected", "reason": "INVALID", "detail": "voided_at 2026-07-26T03:00:00Z ย้อนหลังเกิน 60 วัน" }
+    ] } }
+  }
+}

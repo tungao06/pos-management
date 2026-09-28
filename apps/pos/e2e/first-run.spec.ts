@@ -13,10 +13,10 @@ test('brand (D44): Deep Forest bar with cream text, header logo, theme colour an
   }
 })
 
-test('first run: setup → login → open shift lands on the sell screen; a reload asks for the PIN again', async ({ page }) => {
+test('first run: setup → dayo probe → login → open shift lands on the sell screen; a reload asks for the PIN again', async ({ page, request }) => {
   await page.goto('/')
   await expect(page).toHaveTitle('DA-YO POS')
-  await firstRun(page)
+  await firstRun(page, request)
   await page.reload()
   await expect(page).toHaveURL(/\/login$/)
   await page.getByTestId(`user-${OWNER.name}`).click()

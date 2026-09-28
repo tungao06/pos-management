@@ -1,10 +1,7 @@
-import { and, eq, inArray } from 'drizzle-orm'
-import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
+import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { applyInboundGroup, applyMovement, initialCostState, requireItem, VAT_OFF, type Catalog, type CostOf, type CostState, type MovementDraft, type SaleContext, type SaleRecipe } from '@dayo/domain'
+import { applyInboundGroup, applyMovement, initialCostState, requireItem, type Catalog, type CostOf, type CostState, type MovementDraft } from '@dayo/domain'
 import type { ApiDeps } from '../api/deps'
-import { requireStoreChannelId } from '../api/menu'
-import { enqueueOutbox } from './outbox'
 
 export async function loadCostStates(db: RemoteDb): Promise<Map<string, CostState>> {
   const rows = await db.select().from(s.itemCostState).all()
@@ -23,48 +20,11 @@ export function makeCostOf(catalog: Catalog, states: ReadonlyMap<string, CostSta
   }
 }
 
-export type LoadedSaleContext = {
-  sale: SaleContext
-  catalog: Catalog
-  variantNames: Map<string, { productName: string; sizeName: string }>
-  sweetnessNames: Map<string, string>
-}
-
-/** Everything planSale needs for the given variants, read inside the sale transaction. */
-export async function loadSaleContext(db: RemoteDb, atIso: string, variantIds: readonly string[]): Promise<LoadedSaleContext> {
-  const channelId = await requireStoreChannelId(db)
-  const ids = [...new Set(variantIds)]
-  const prices = (await db.select().from(s.price).where(inArray(s.price.variantId, ids)).all()).map((p) => ({ variantId: p.variantId, channelId: p.channelId, priceSatang: p.priceSatang, effectiveFrom: p.effectiveFrom }))
-  const recipeRows = await db.select().from(s.recipe).where(and(inArray(s.recipe.variantId, ids), eq(s.recipe.isCurrent, true))).all()
-  const lineRows = recipeRows.length === 0 ? [] : await db.select().from(s.recipeLine).where(inArray(s.recipeLine.recipeId, recipeRows.map((r) => r.id))).all()
-  const recipes: SaleRecipe[] = recipeRows.map((r) => ({
-    recipeId: r.id,
-    variantId: r.variantId,
-    sweetnessId: r.sweetnessId,
-    lines: lineRows.filter((l) => l.recipeId === r.id).map((l) => ({ itemId: l.itemId, qtyMilli: l.qtyMilli })),
-  }))
-  const catalog = await loadCatalogSqlite(db)
-  const states = await loadCostStates(db)
-  const nameRows = await db
-    .select({ variantId: s.productVariant.id, productName: s.product.nameTh, sizeName: s.size.name })
-    .from(s.productVariant)
-    .innerJoin(s.product, eq(s.productVariant.productId, s.product.id))
-    .innerJoin(s.size, eq(s.productVariant.sizeId, s.size.id))
-    .where(inArray(s.productVariant.id, ids))
-    .all()
-  const sweetRows = await db.select().from(s.sweetnessLevel).all()
-  return {
-    sale: { channelId, atIso, prices, recipes, catalog, costOf: makeCostOf(catalog, states), vat: VAT_OFF },
-    catalog,
-    variantNames: new Map(nameRows.map((r) => [r.variantId, { productName: r.productName, sizeName: r.sizeName }])),
-    sweetnessNames: new Map(sweetRows.map((r) => [r.id, r.name])),
-  }
-}
-
 export type MovementMeta = { businessDate: string; deviceId: string; createdBy: string; at: string }
 
 /**
- * Writes movements, keeps the item_cost_state cache in step (spec §4.4), and queues each movement for sync.
+ * Writes movements and keeps the item_cost_state cache in step (spec §4.4). Stock stays on the tablet in block 2 —
+ * nothing is queued (spec 04 §6.1, §11).
  * Audit rows stay one per draft with their own unit cost, but a run of positive drafts of one item from one
  * document (same refType + refId, no other draft of that item between them) is folded into the cost state as a
  * single receipt (Q4-17 ก · D57): its average never depends on which line was typed last.
@@ -98,7 +58,6 @@ export async function insertMovements(db: RemoteDb, deps: ApiDeps, drafts: reado
       createdAt: meta.at,
     } satisfies typeof s.stockMovement.$inferInsert
     await db.insert(s.stockMovement).values(row)
-    await enqueueOutbox(db, 'stock_movement', row, meta.at, deps.newId)
     ids.push(row.id)
     const key = d.qtyMilli > 0 ? JSON.stringify([d.refType, d.refId]) : null
     const run = runs.get(d.itemId)

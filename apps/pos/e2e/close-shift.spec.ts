@@ -20,11 +20,11 @@ async function sellQr(page: Page, productCode: string): Promise<void> {
   await expect(page).toHaveURL(/\/sell$/)
 }
 
-test('blind count from the sell screen → variance reason → owner PIN → Z with QR vs bank → backup confirmed → next shift (spec §4.8, §11)', async ({ page }) => {
-  await firstRun(page) // float ฿500
-  await sellCash(page, 'Original') // ฿45
-  await sellCash(page, 'Original') // ฿45
-  await sellQr(page, 'Latte') // ฿50 PromptPay
+test('blind count from the sell screen → variance reason → owner PIN → Z with QR vs bank → backup confirmed → next shift (spec §4.8, §11)', async ({ page, request }) => {
+  await firstRun(page, request) // float ฿500
+  await sellCash(page, 'Cocoa') // 16 oz / 100% preselected — ฿45
+  await sellCash(page, 'Cocoa') // ฿45
+  await sellQr(page, 'Pink Milk') // ฿65 PromptPay
   await page.getByTestId('cash-move-open').click() // paid-out ฿20 (Q3b-9)
   await page.getByTestId('cash-kind-PAID_OUT').click()
   await page.getByTestId('cash-amount').fill('20')
@@ -46,9 +46,8 @@ test('blind count from the sell screen → variance reason → owner PIN → Z w
   await page.getByTestId('count-done').click()
   await expect(page.getByTestId('close-expected')).toHaveText('฿570') // 500 + 90 − 20
   await expect(page.getByTestId('close-variance')).toHaveText('-฿30')
-  await expect(page.getByTestId('close-qr-net')).toHaveText('฿50') // Q3b-12
-  await page.getByTestId('close-bank-qr').fill('50')
-  await expect(page.getByTestId('neg-base-PB-TEA-THAI')).toBeVisible() // D28
+  await expect(page.getByTestId('close-qr-net')).toHaveText('฿65') // Q3b-12
+  await page.getByTestId('close-bank-qr').fill('65')
 
   await enterPin(page, OWNER.pin) // no reason yet → refused on screen, nothing sent
   await expect(page.getByRole('alert')).toBeVisible()
@@ -58,9 +57,9 @@ test('blind count from the sell screen → variance reason → owner PIN → Z w
   await expect(page).toHaveURL(/\/z\//)
   await expect(page.getByTestId('z-hash')).toHaveAttribute('data-ok', 'true')
   await expect(page.getByTestId('z-chain-warning')).toHaveCount(0)
-  await expect(page.getByTestId('z-net')).toHaveText('฿140')
-  await expect(page.getByTestId('z-qr-net')).toHaveText('฿50')
-  await expect(page.getByTestId('z-bank-qr')).toHaveText('฿50')
+  await expect(page.getByTestId('z-net')).toHaveText('฿155') // 90 (cash) + 65 (QR) — sales net, before the paid-out
+  await expect(page.getByTestId('z-qr-net')).toHaveText('฿65')
+  await expect(page.getByTestId('z-bank-qr')).toHaveText('฿65')
   await expect(page.getByTestId('z-qr-diff')).toHaveText('฿0')
   await expect(page.getByTestId('z-expected')).toHaveText('฿570')
   await expect(page.getByTestId('z-counted')).toHaveText('฿540')
@@ -90,8 +89,8 @@ test('blind count from the sell screen → variance reason → owner PIN → Z w
   await expect(page.getByTestId('z-warn-0')).toHaveCount(0)
 })
 
-test('quick open (spec §4.8 · Q3b-10): an owner opens with a 0 float and the X report marks it', async ({ page }) => {
-  await firstRun(page)
+test('quick open (spec §4.8 · Q3b-10): an owner opens with a 0 float and the X report marks it', async ({ page, request }) => {
+  await firstRun(page, request)
   // the close screen can always be left again, without closing anything
   await page.getByTestId('close-shift-open').click()
   await expect(page.getByTestId('count-50000')).toBeVisible()

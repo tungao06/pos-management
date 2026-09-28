@@ -67,15 +67,19 @@ export function StockScreen(): JSX.Element {
         <button type="button" data-testid="nav-sell" onClick={() => void navigate({ to: '/sell' })}>
           {TH.back}
         </button>
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
         <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' })}>
           {TH.navReceive}
         </button>
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
         <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' })}>
           {TH.navProduce}
         </button>
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
         <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' })}>
           {o.openCountId === null ? TH.navCount : TH.navCountResume}
         </button>
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
         <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' })}>
           {TH.navAdjust}
         </button>

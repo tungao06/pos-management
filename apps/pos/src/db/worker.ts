@@ -4,9 +4,11 @@ import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { oo1Callback, type Oo1Database } from '@dayo/db-schema/browser'
 import { PROD_PIN_COST } from '../api/deps'
 import { PosError } from '../api/errors'
-import { createPosApi } from '../api/pos-api'
+import { createPosRuntime } from '../api/pos-api'
 import { POS_API_METHODS, type PosApi } from '../api/types'
 import { newId } from '../lib/ids'
+import { notifySyncCycleDone } from '../sync/cycle-signal'
+import { createIdbSecretStore } from '../sync/secret-store'
 import { initDatabase } from './init'
 
 const DB_FILE = '/dayo-pos.sqlite3'
@@ -38,7 +40,14 @@ async function start(): Promise<PosApi> {
     const db = drizzle(oo1Callback(raw as unknown as Oo1Database))
     await initDatabase(db)
     // spike I3: the pool copies the database file; PosApi calls it inside its serial queue (no open transaction).
-    return createPosApi(db, { now: () => new Date().toISOString(), newId, pinCost: PROD_PIN_COST, exportDbFile: () => pool.exportFile(DB_FILE) })
+    // Task 14: autoSync starts the one sender of this PosApi — same serial queue (item 4), same request pacer (item 1).
+    const { api, scheduler } = createPosRuntime(db, {
+      now: () => new Date().toISOString(), newId, pinCost: PROD_PIN_COST, exportDbFile: () => pool.exportFile(DB_FILE),
+      fetch: (input, init) => fetch(input, init), secrets: createIdbSecretStore(), random: Math.random,
+    }, { autoSync: true, onCycleDone: notifySyncCycleDone }) // Task 21 hotfix 2: the screens refetch after every cycle
+    // WorkerGlobalScope fires `online`: send at once, forgetting the network backoff (a wake, not a manual press — no N4 limit)
+    self.addEventListener('online', () => scheduler.kick('online'))
+    return api
   } catch (e) {
     throw new PosError('DB_OPEN_FAILED', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
   }

@@ -1,41 +1,51 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
+import type { JSX } from 'react'
 import { RequireSession } from './app/guards'
-import { AdjustScreen } from './screens/AdjustScreen'
+import { useSyncCycleSignal } from './app/useSyncCycleSignal'
 import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
+import { CentralOrdersScreen } from './screens/CentralOrdersScreen'
 import { CloseShiftScreen } from './screens/CloseShiftScreen'
-import { CountScreen } from './screens/CountScreen'
 import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
 import { LoginScreen } from './screens/LoginScreen'
 import { OpenShiftScreen } from './screens/OpenShiftScreen'
 import { OrderDetailScreen } from './screens/OrderDetailScreen'
 import { OrdersScreen } from './screens/OrdersScreen'
-import { ProduceScreen } from './screens/ProduceScreen'
+import { OwnerRecoveryScreen } from './screens/OwnerRecoveryScreen'
+import { PriceDiffScreen } from './screens/PriceDiffScreen'
 import { QrPayScreen } from './screens/QrPayScreen'
-import { ReceiveScreen } from './screens/ReceiveScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
 import { ShiftScreen } from './screens/ShiftScreen'
-import { StockScreen } from './screens/StockScreen'
+import { StatusBanners } from './screens/StatusBanners'
+import { SyncProblemsScreen } from './screens/SyncProblemsScreen'
+import { SystemStatusScreen } from './screens/SystemStatusScreen'
 import { ZListScreen } from './screens/ZListScreen'
 import { ZReportScreen } from './screens/ZReportScreen'
 import { BrandBar } from './ui/BrandBar'
 
-// Root layout: the brand bar (D44) above every screen.
-const rootRoute = createRootRoute({
-  component: () => (
+// Root layout: the brand bar (D44), then every warning of spec §4.4 ข้อ 9 / §6.3 / §6.4 / §6.7 / §10.5 (Task 20,
+// D80) on every screen after login, above whatever the route itself renders. Task 21 hotfix 2: the root also listens,
+// once for the whole app, for the worker's "a sync cycle ran" signal and refetches the badge/banner data at once.
+function RootLayout(): JSX.Element {
+  useSyncCycleSignal()
+  return (
     <>
       <BrandBar />
+      <StatusBanners />
       <Outlet />
     </>
-  ),
-})
+  )
+}
+const rootRoute = createRootRoute({ component: RootLayout })
 
 // Every path of plan 3 is declared here; each screen task adds `component` to its route.
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: IndexRedirect })
 const setupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/setup', component: SetupScreen })
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginScreen })
+// ruling N2: reached from the login screen's banner with nobody signed in yet — outside `<RequireSession>`.
+const ownerRecoveryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/owner-recovery', component: OwnerRecoveryScreen })
 const openShiftRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/shift/open',
@@ -100,6 +110,46 @@ const orderDetailRoute = createRoute({
     </RequireSession>
   ),
 })
+// spec §4.6: today's bot/web bills, online only.
+const centralOrdersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/central-orders',
+  component: () => (
+    <RequireSession>
+      <CentralOrdersScreen />
+    </RequireSession>
+  ),
+})
+// spec §4.3, review item 23: owner-only "ยอดไม่ตรงระบบกลาง" (R11 — PriceDiffScreen checks `can(role,'price_diffs')` itself).
+const priceDiffsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/price-diffs',
+  component: () => (
+    <RequireSession>
+      <PriceDiffScreen />
+    </RequireSession>
+  ),
+})
+
+// Task 20: /status (every role) and /sync-problems (owner only — the screen itself redirects to /sell otherwise).
+const statusRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/status',
+  component: () => (
+    <RequireSession>
+      <SystemStatusScreen />
+    </RequireSession>
+  ),
+})
+const syncProblemsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sync-problems',
+  component: () => (
+    <RequireSession>
+      <SyncProblemsScreen />
+    </RequireSession>
+  ),
+})
 
 // แผน 3b: X report / close shift / Z / backup
 const backupRoute = createRoute({
@@ -148,57 +198,12 @@ const closeShiftRoute = createRoute({
   ),
 })
 
-// แผน 4: สต็อก
-const stockRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock',
-  component: () => (
-    <RequireSession>
-      <StockScreen />
-    </RequireSession>
-  ),
-})
-const receiveRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock/receive',
-  component: () => (
-    <RequireSession>
-      <ReceiveScreen />
-    </RequireSession>
-  ),
-})
-const produceRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock/produce',
-  component: () => (
-    <RequireSession>
-      <ProduceScreen />
-    </RequireSession>
-  ),
-})
-const adjustRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock/adjust',
-  component: () => (
-    <RequireSession>
-      <AdjustScreen />
-    </RequireSession>
-  ),
-})
-const countRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/stock/count',
-  component: () => (
-    <RequireSession>
-      <CountScreen />
-    </RequireSession>
-  ),
-})
-
+// Task 16: the stock screens (แผน 4) are hidden from the routeTree — component files stay for a later task.
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   setupRoute,
   loginRoute,
+  ownerRecoveryRoute,
   openShiftRoute,
   sellRoute,
   payCashRoute,
@@ -206,16 +211,15 @@ export const routeTree = rootRoute.addChildren([
   doneRoute,
   ordersRoute,
   orderDetailRoute,
+  centralOrdersRoute,
+  priceDiffsRoute,
+  statusRoute,
+  syncProblemsRoute,
   backupRoute,
   zListRoute,
   zReportRoute,
   shiftRoute,
   closeShiftRoute,
-  stockRoute,
-  receiveRoute,
-  produceRoute,
-  adjustRoute,
-  countRoute,
 ])
 
 export const router = createRouter({ routeTree })

@@ -1,5 +1,8 @@
 import type { AdjustReason, CashMovementKind, MovementKind, UseUnit, UserRole } from '@dayo/contracts'
-import type { CashCountLine, CashInputs, ExpiryState, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
+import type { Size, Sweetness } from '@dayo/dayo-pricing'
+import type { SyncCycleResult } from '../sync/scheduler'
+import type { ApiState } from '../sync/state'
+import type { CartDraft, CashCountLine, CashInputs, ExpiryState, PosOrderCatalog, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -19,39 +22,72 @@ export type BootstrapState = {
   lastBackupAt: string | null
   /** A Z report was closed after the last one a confirmed backup covered — compared by Z id, not time (Q3b-7 · D52). */
   backupDue: boolean
+  /** A device set up before block 2's dayo connect flow existed and is not linked to dayo yet — it links with an old owner PIN (ruling R7). */
+  legacyDevice: boolean
+  /** dayo.base_url is stored and the API key is in the secret store. */
+  dayoLinked: boolean
+  /** The stored `dayo.base_url`, or null when nothing is stored — not a secret. Controller ruling R1 (security):
+   * the recovery and key-swap screens read this to lock their address field to the tablet's own central address. */
+  dayoBaseUrl: string | null
+  /** Active dayo staff with a known role who have no PIN on this tablet yet (spec 04 §6.5). */
+  staffNeedingPin: StaffOptionDto[]
+  /** ruling N2: "เชื่อมใหม่ด้วยคีย์ใหม่" is offered (no active owner with a PIN here, or the key was revoked). */
+  ownerRecovery: boolean
+  /** Task 14: the health of the link to dayo (spec 04 §4.3, §6.7, §10.5 · D80). */
+  sync: SyncStatusDto
 }
-export type SetupInput = { deviceName: string; receiptPrefix: string; owners: { displayName: string; pin: string }[]; promptPayId: string }
+/** Task 14 (spec 04 §4.3, §4.4 rule 9, §6.7, §10.5 · D80). Never carries the API key — only its masked form. */
+export type SyncStatusDto = {
+  linked: boolean
+  apiState: ApiState | null
+  maskedKey: string | null
+  baseUrl: string | null
+  /** Server clock minus tablet clock at the last E1/E2 answer (the last one measured — offline keeps it, spec §6.7). */
+  clockSkewMs: number | null
+  /** |skew| > 5 min, or CLOCK_AHEAD seen within the last hour (D80). */
+  clockWarning: boolean
+  pricingMismatch: boolean
+  /** pricing.commit from E1; null = unknown, not a problem (spec §4.4 rule 9 — only the file hashes decide). */
+  pricingCommit: string | null
+  catalogVersion: number | null
+  catalogCheckedAt: string | null
+  catalogError: string | null
+  lastPushAt: string | null
+  pendingBills: number
+  problemBills: number
+  oldestPendingAt: string | null
+  pendingOver24h: boolean
+  /** Bills whose dayo computed_total differs from ours by any amount (spec §4.3). */
+  priceDiffBills: number
+  /** ruling N5: pending bills flagged CLOCK_AHEAD more than 24 h ahead of the server (owner-only banner). */
+  clockFarAheadBills: number
+}
+export type StaffOptionDto = { id: string; displayName: string; role: UserRole }
+export type DayoProbeInput = { baseUrl: string; apiKey: string }
+export type DayoProbe = { clientName: string; lastReceiptNo: string | null; requiredPrefix: string | null; catalogVersion: number; owners: { id: string; displayName: string }[]; pricingMatches: boolean }
+export type ConnectShopInput = { baseUrl: string; apiKey: string; receiptPrefix: string; ownerStaffId: string; ownerPin: string; promptPayId: string; legacyApproval: { userId: string; pin: string } | null }
+export type SetStaffPinInput = { staffId: string; pin: string; approverUserId: string; approverPin: string }
+export type ReplaceApiKeyInput = { baseUrl: string; apiKey: string; approverUserId: string; approverPin: string }
+/** ruling N2 — no approver: the new key (issued on the dayo web after a LINE login) is the proof. */
+export type RecoverOwnerInput = { baseUrl: string; apiKey: string; ownerStaffId: string; ownerPin: string }
 export type OpenShiftInput = { userId: string; openingFloatSatang: number }
 /** "เปิดกะด่วน" (spec §4.8): owner only, float 0 (Q3b-10 · D52). */
 export type QuickOpenShiftInput = { userId: string }
 
-export type MenuCategory = { id: string; code: string; name: string }
-export type MenuProduct = { id: string; code: string; nameTh: string; nameEn: string; categoryId: string }
-export type MenuSize = { id: string; code: string; name: string }
-export type MenuSweetness = { id: string; code: string; name: string; isDefault: boolean }
-export type MenuVariant = { id: string; productId: string; sizeId: string; priceSatang: number | null }
-export type MenuDto = {
-  storeChannelId: string
-  categories: MenuCategory[]
-  products: MenuProduct[]
-  sizes: MenuSize[]
-  sweetness: MenuSweetness[]
-  variants: MenuVariant[]
+/**
+ * Products/sizes/sweetness/variants for AdjustScreen's "เป็นแก้ว (ตามสูตร)" picker (spec §5 · Q4-8) — active only
+ * (M-11: a drink line can never name a product/variant `adjustStock` would refuse). No price or channel here: block 2
+ * prices bills from dayo, but stock-out by drink still explodes the LOCAL recipe (recipe/BOM never moved to dayo).
+ */
+export type DrinkCatalogDto = {
+  products: { id: string; code: string; nameTh: string }[]
+  sizes: { id: string; name: string }[]
+  sweetness: { id: string; name: string }[]
+  variants: { id: string; productId: string; sizeId: string }[]
   defaultSizeId: string
   defaultSweetnessId: string
-  bestSellerProductIds: string[]
 }
 
-export type CommitSaleInput = {
-  /** Created when the cart starts; resending the same id returns the first result (decision T17). */
-  orderId: string
-  actorUserId: string
-  lines: { variantId: string; sweetnessId: string; qty: number }[]
-  discount: { amountSatang: number; reason: string } | null
-  payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' }
-  /** The total the customer was shown (cart / QR). commitSale refuses with PRICE_CHANGED if the DB re-price differs (I-7, D50 Q3-27). */
-  expectedTotalSatang: number
-}
 export type CommitSaleResult = {
   orderId: string
   receiptNo: string
@@ -60,6 +96,68 @@ export type CommitSaleResult = {
   totalSatang: number
   changeSatang: number | null
   method: 'CASH' | 'PROMPTPAY'
+}
+
+/** The local payment method → dayo's payment code of the catalog (spec 04 §4.5 `payment`). */
+export const PAYMENT_CODE = { CASH: 'cash', PROMPTPAY: 'qr' } as const
+
+/** A sale priced with dayo's catalog (spec 04 §4.5, §5.1). The payment code comes from `payment.method` (PAYMENT_CODE). */
+export type RecordSaleInput = {
+  /** Created when the cart starts; resending the same id with the same lines returns the first result (plan 3 M12). */
+  orderId: string
+  actorUserId: string
+  cart: Omit<CartDraft, 'paymentCode'>
+  payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' }
+  /** The total the customer was shown — refused with PRICE_CHANGED when the price at the payment instant differs (D50 Q3-27). */
+  expectedTotalSatang: number
+}
+
+/** One menu of the sell screen: the variants of one menuCode, sizes in catalog.sizes order (ADR-0054). */
+export type SellMenuDto = {
+  code: string
+  nameTh: string
+  /** categoryLabel, or the family when dayo sends none. */
+  categoryLabel: string
+  sortOrder: number
+  isMatcha: boolean
+  sizes: Size[]
+  /** 0% → 100% per size. */
+  sweetnessBySize: Partial<Record<Size, Sweetness[]>>
+  defaultSize: Size
+  defaultSweetness: Sweetness
+}
+export type SellCatalogDto = {
+  catalogVersion: number
+  /** The whole E1 catalog — the screen prices the cart with the same code recordSale uses (priceCart). */
+  catalog: PosOrderCatalog
+  /** Active sizes of the shop in sortOrder, with their labels. */
+  sizes: { code: string; label: string }[]
+  menus: SellMenuDto[]
+  categories: string[]
+  channels: { code: string; name: string }[]
+  defaultChannelCode: string
+  payments: { cash: boolean; qr: boolean }
+  maxQtyPerLine: number
+  /** Menu codes with the most cups in the last 7 business days (D48 Q3-9), at most 8. */
+  bestSellerCodes: string[]
+}
+
+/**
+ * How the central database has this bill (spec 04 §4.3, §12). `legacy` = a plan-3 bill (never sent) · `pending` = its
+ * E2 row waits to send · `sent` = dayo answered accepted/duplicate · `problem` = the row is dead · `excluded` = an owner
+ * closed it as outside dayo (ruling R8). `voidState` 'local_only' on a voided bill whose order WAS sent means dayo still
+ * counts it as a sale (review item 23).
+ */
+export type CentralStateDto = {
+  state: 'legacy' | 'pending' | 'sent' | 'problem' | 'excluded'
+  orderNo: string | null
+  computedTotalSatang: number | null
+  /** What dayo computed minus what was charged here; null until dayo answered. */
+  diffSatang: number | null
+  duplicateOf: string[]
+  /** dayo's reason of the last failed attempt (INVALID, UNKNOWN_CODE, …), or null. */
+  reason: string | null
+  voidState: 'none' | 'pending' | 'sent' | 'problem' | 'local_only'
 }
 
 export type OrderSummaryDto = {
@@ -71,8 +169,30 @@ export type OrderSummaryDto = {
   method: 'CASH' | 'PROMPTPAY'
   paidAt: string
   cups: number
+  /** Who sold the bill (D61). */
+  soldById: string
+  soldByName: string
+  central: CentralStateDto
+  /** The owner's latest edit/cancel of this bill on the dayo web (E3 dayo_edit), display only (spec 04 §4.6 · O1 pending). */
+  dayoEdit: DayoEditDto | null
 }
-export type OrderLineDto = { lineNo: number; productName: string; sizeName: string; sweetnessName: string; qty: number; unitPriceSatang: number; lineTotalSatang: number }
+/**
+ * What dayo reported in E3 `dayo_edit`. Display only: the bill's total, payment and status here stay what was collected
+ * (spec 04 §4.6). `editedByName` and `reason` are null for a key without staff:read; `version` may be null (contract).
+ */
+export type DayoEditDto = { kind: 'edit' | 'cancel' | string; editedAt: string; editedByName: string | null; reason: string | null; version: number | null }
+export type OrderLineDto = {
+  lineNo: number
+  productName: string
+  sizeName: string
+  sweetnessName: string
+  /** Block-2 lines only (null on a plan-3 bill). */
+  milk: string | null
+  grade: string | null
+  qty: number
+  unitPriceSatang: number
+  lineTotalSatang: number
+}
 export type OrderEventDto = { seq: number; type: string; at: string; actorId: string; payload: unknown }
 export type OrderDetailDto = OrderSummaryDto & {
   businessDate: string
@@ -83,26 +203,52 @@ export type OrderDetailDto = OrderSummaryDto & {
   tenderedSatang: number | null
   changeSatang: number | null
   voidedAt: string | null
+  /** The payment instant priced with dayo's catalog; null on a plan-3 bill (as are the next two). */
+  soldAt: string | null
+  channelCode: string | null
+  catalogVersion: number | null
+  /** Promotions dayo's pricing code applied at soldAt. */
+  promotions: { name: string; discountSatang: number }[]
   lines: OrderLineDto[]
   events: OrderEventDto[]
+  /** false also when dayo reports the bill cancelled on its web (dayoEdit.kind 'cancel' — it cannot be cancelled twice). */
   voidable: boolean
 }
 
-export type VoidOrderInput = {
+// ---- ก้อน 2 Task 15: ทางแก้ของ owner (หน้า "ส่งไม่ผ่าน") · บิลบอท/เว็บวันนี้ (E3) · ยอดไม่ตรงระบบกลาง ----
+
+/** spec 04 §6.4: the owner's fixes of a row dayo refused (or of a far-ahead row, ruling N5 — EXCLUDE only). */
+export type Remedy = 'RETRY' | 'RENUMBER' | 'REMAP_CODE' | 'REMAP_STAFF' | 'EXCLUDE'
+/** One row of the "ส่งไม่ผ่าน" page. `children` = rows waiting on it (PARENT_REJECTED) — they come back with it. */
+export type SyncProblemDto = { outboxId: string; key: string; kind: 'order' | 'order_void'; orderId: string; receiptNo: string | null; at: string; reason: string; detail: string; remedies: Remedy[]; children: SyncProblemDto[] }
+/** Every remedy = an owner's PIN + a reason (spec §6.4). */
+export type OwnerApproval = { approverUserId: string; approverPin: string; reason: string }
+export type RemapCodeInput = OwnerApproval & { outboxId: string; target: { field: 'line'; lineIndex: number; code: string; size: Size; sweetness: Sweetness } | { field: 'channel'; code: string } | { field: 'payment'; code: string } }
+/** A bot / web bill of today from E3 (spec §4.6 — shown against double entry, Q44). */
+export type CentralOrderDto = { orderNo: string; source: 'line' | 'web' | string; sourceLabel: string; createdByName: string | null; soldAt: string | null; totalSatang: number; payment: string | null; status: string; duplicateSuspect: boolean }
+/**
+ * spec §4.3 "ยอดไม่ตรงระบบกลาง" (owner, R11). 'amount' = dayo's computed_total differs by any satang. 'void_local_only'
+ * (review item 23) = the bill reached dayo but its cancellation never will (EXCLUDE on the void row) — dayo still counts
+ * it as a sale; block 3 handles the money.
+ */
+export type PriceDiffDto = { kind: 'amount' | 'void_local_only'; orderId: string; receiptNo: string; soldAt: string; totalSatang: number; computedTotalSatang: number | null; diffSatang: number | null; catalogVersion: number | null; amountMismatch: boolean }
+
+/** Cancel a bill sold with dayo's catalog (spec 04 §4.5 order_void, §4.7) — same Thai day only, owner PIN. */
+export type CancelSaleInput = {
   orderId: string
-  /** Signed-in user who performs the void. */
+  /** Signed-in user who cancels; staff and managers only their own bills (Q44, ruling R11). */
   actorUserId: string
-  /** Owner who approves with their PIN (spec §4.3). */
+  /** Owner who approves with their PIN. */
   approverUserId: string
   approverPin: string
   reason: string
-  /** "ทำเครื่องดื่มไปแล้วหรือยัง" — true = made (waste), false = return ingredients. */
+  /** "ทำเครื่องดื่มไปแล้วหรือยัง" — for the Z void list only; no stock row either way (ruling R6). */
   made: boolean
-  /** Required when the order was paid by PromptPay (D48 Q3-15). */
+  /** Required when the bill was paid by PromptPay (D48 Q3-15). */
   refundReference: string | null
 }
 
-/** A paid-in / paid-out / drop typed in by a person (spec §3.5 · Q3b-9 · D52). VOID_REFUND is written by voidOrder only. */
+/** A paid-in / paid-out / drop typed in by a person (spec §3.5 · Q3b-9 · D52). VOID_REFUND is written by cancelSale only. */
 export type CashMovementInput = { actorUserId: string; kind: 'PAID_IN' | 'PAID_OUT' | 'DROP'; amountSatang: number; reason: string }
 export type CashMovementDto = { id: string; kind: CashMovementKind; amountSatang: number; orderId: string | null; reason: string | null; createdBy: string; createdAt: string }
 
@@ -315,15 +461,15 @@ export type CloseStockCountInput = { actorUserId: string; countId: string }
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
-  setupShop(input: SetupInput): Promise<void>
   login(userId: string, pin: string): Promise<UserDto>
   openShift(input: OpenShiftInput): Promise<ShiftDto>
-  loadMenu(): Promise<MenuDto>
-  commitSale(input: CommitSaleInput): Promise<CommitSaleResult>
+  loadDrinkCatalog(): Promise<DrinkCatalogDto>
+  loadSellCatalog(): Promise<SellCatalogDto>
+  recordSale(input: RecordSaleInput): Promise<CommitSaleResult>
   listOrders(): Promise<OrderSummaryDto[]>
   getOrder(orderId: string): Promise<OrderDetailDto>
   promptPayForAmount(amountSatang: number): Promise<string>
-  voidOrder(input: VoidOrderInput): Promise<OrderDetailDto>
+  cancelSale(input: CancelSaleInput): Promise<OrderDetailDto>
   quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
   recordCashMovement(input: CashMovementInput): Promise<CashMovementDto>
   shiftReport(): Promise<ShiftReportDto>
@@ -342,20 +488,44 @@ export interface PosApi {
   saveCountLine(input: SaveCountLineInput): Promise<StockCountDto>
   removeCountLine(input: RemoveCountLineInput): Promise<StockCountDto>
   closeStockCount(input: CloseStockCountInput): Promise<StockCountDto>
+  probeDayo(input: DayoProbeInput): Promise<DayoProbe>
+  connectShop(input: ConnectShopInput): Promise<void>
+  setStaffPin(input: SetStaffPinInput): Promise<UserDto>
+  replaceApiKey(input: ReplaceApiKeyInput): Promise<void>
+  recoverOwner(input: RecoverOwnerInput): Promise<void>
+  /** "ส่งตอนนี้": one sync cycle now (E1 pull, then the push queue). Not in the serial queue — sales keep going. */
+  syncNow(): Promise<SyncCycleResult>
+  syncStatus(): Promise<SyncStatusDto>
+  // Task 15 (spec 04 §4.3, §4.6, §6.4). Owner-only reads check the role here too, not only in the UI (review item 22).
+  /** dead rows + far-ahead pending rows (N5), children under their parent · owner. */
+  listSyncProblems(actorUserId: string): Promise<SyncProblemDto[]>
+  retrySyncRow(input: OwnerApproval & { outboxId: string }): Promise<void>
+  renumberReceipt(input: OwnerApproval & { outboxId: string }): Promise<{ oldReceiptNo: string; newReceiptNo: string }>
+  remapCode(input: RemapCodeInput): Promise<void>
+  remapStaff(input: OwnerApproval & { outboxId: string; newStaffId: string }): Promise<void>
+  excludeFromSync(input: OwnerApproval & { outboxId: string }): Promise<void>
+  /** owner · pretty JSON of {key, kind, data, lastError, createdAt} — no API key, no PIN, no sync_state. */
+  exportSyncRow(input: { actorUserId: string; outboxId: string }): Promise<string>
+  /** every role (Q44) · online only (E3) — OFFLINE otherwise · the network wait is outside the serial queue. */
+  listCentralOrdersToday(): Promise<CentralOrderDto[]>
+  /** every role · E3 with updated_since: records dayo_edit of this tablet's bills (display only) · OFFLINE when it cannot. */
+  refreshDayoEdits(): Promise<{ updated: number }>
+  /** owner (R11). */
+  listPriceDiffs(actorUserId: string): Promise<PriceDiffDto[]>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
 export const POS_API_METHODS = [
   'bootstrap',
-  'setupShop',
   'login',
   'openShift',
-  'loadMenu',
-  'commitSale',
+  'loadDrinkCatalog',
+  'loadSellCatalog',
+  'recordSale',
   'listOrders',
   'getOrder',
   'promptPayForAmount',
-  'voidOrder',
+  'cancelSale',
   'quickOpenShift',
   'recordCashMovement',
   'shiftReport',
@@ -374,6 +544,23 @@ export const POS_API_METHODS = [
   'saveCountLine',
   'removeCountLine',
   'closeStockCount',
+  'probeDayo',
+  'connectShop',
+  'setStaffPin',
+  'replaceApiKey',
+  'recoverOwner',
+  'syncNow',
+  'syncStatus',
+  'listSyncProblems',
+  'retrySyncRow',
+  'renumberReceipt',
+  'remapCode',
+  'remapStaff',
+  'excludeFromSync',
+  'exportSyncRow',
+  'listCentralOrdersToday',
+  'refreshDayoEdits',
+  'listPriceDiffs',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>

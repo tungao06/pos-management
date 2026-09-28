@@ -12,16 +12,61 @@ export const TH = {
   storageNotPersistent: 'ข้อมูลในเครื่องยังไม่ถูกล็อกไว้ (อาจถูกล้าง) — ติดตั้งแอปลงหน้าจอหลัก',
   errUnexpected: 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง',
 
-  setupTitle: 'ตั้งค่าเครื่องครั้งแรก',
-  setupDeviceName: 'ชื่อเครื่อง',
-  setupDeviceNameDefault: 'แท็บเล็ตหน้าร้าน',
+  // Task 17 — ตั้งเครื่องด้วยกุญแจ dayo (spec 04 §7 ข้อ 1, §6.5, §6.6, §6.9)
+  setupTitle: 'ตั้งเครื่องขาย',
+  setupLinkTitle: 'เชื่อมเครื่องนี้กับระบบกลาง',
   setupReceiptPrefix: 'อักษรนำหน้าเลขที่บิล (A–Z)',
-  setupOwner: (n: number): string => `เจ้าของคนที่ ${n}`,
-  setupDisplayName: 'ชื่อที่แสดง',
   setupPin: 'PIN ตัวเลข 4–6 หลัก',
   setupPinConfirm: 'ยืนยัน PIN อีกครั้ง',
   setupPromptPayId: 'หมายเลขพร้อมเพย์ (เบอร์มือถือ 10 หลัก / เลขบัตร 13 หลัก / e-Wallet 15 หลัก)',
   setupSave: 'บันทึกและเริ่มใช้งาน',
+  setupBaseUrl: 'ที่อยู่ระบบกลาง (dayo)',
+  setupApiKey: 'กุญแจเครื่อง (API key)',
+  setupScan: 'สแกน QR',
+  setupProbe: 'ทดสอบกุญแจ',
+  setupConnectedTo: (name: string): string => `เชื่อมกับ: ${name}`,
+  pricingMismatchSetup: 'ตัวคิดราคาในเครื่องไม่ตรงกับระบบกลาง — ขายได้ แต่แจ้งทีม POS',
+  setupChooseOwner: 'เลือกเจ้าของร้าน (จากระบบกลาง)',
+  setupLegacyUser: 'เจ้าของเดิมของเครื่องนี้',
+  setupLegacyPin: 'PIN เจ้าของเดิม (อนุมัติการเชื่อมเครื่อง)',
+  persistOk: 'เก็บข้อมูลถาวร: ได้',
+  persistNo: 'เก็บข้อมูลถาวร: ไม่ได้ — อย่าล้างข้อมูลเบราว์เซอร์',
+  setupContinue: 'ไปหน้าขาย',
+  errChooseOwner: 'เลือกเจ้าของก่อน',
+  // spec §7 ข้อ 1 "สแกนหรือวาง" — quality review (fix round 1): the browser's own text (permission wording, "no
+  // barcode" wording) never reaches the screen; every scan failure gets its own Thai message instead.
+  scanCameraDenied: 'เปิดกล้องไม่ได้ — อนุญาตให้แอปใช้กล้องแล้วลองใหม่ หรือวางกุญแจด้วยตัวเอง',
+  scanNoCode: 'ไม่พบ QR โค้ดในกล้อง — ลองใหม่ หรือวางกุญแจด้วยตัวเอง',
+  dayoBadKey: 'กุญแจไม่ถูกต้องหรือถูกยกเลิก',
+  dayoNoScope: 'กุญแจนี้ไม่มีสิทธิ์อ่านเมนู/พนักงาน',
+  dayoApiOff: 'ระบบกลางปิด API อยู่',
+  dayoUnreachable: 'ติดต่อระบบกลางไม่ได้ — ต้องออนไลน์ตอนตั้งเครื่อง',
+  dayoBadResponse: 'ระบบกลางตอบรูปแบบที่เครื่องนี้อ่านไม่ได้ — แจ้งทีม POS',
+  // "ปรับตาม dayo" (สเปก §4.4 ข้อ 6 · §6.6): the value dayo actually sent, so the owner can check the tablet's key
+  // against the right device on the dayo web instead of guessing from a shape description.
+  dayoReceiptNoInvalid: (value: string): string => `เลขใบเสร็จล่าสุดที่ระบบกลางจำไว้ (${value}) ไม่ใช่รูปแบบของแท็บเล็ต — ให้เจ้าของตรวจกุญแจเครื่องบนเว็บ dayo`,
+  noCatalog: 'ยังไม่มีเมนูจากระบบกลาง — ต่อเน็ตแล้วกด "ส่งตอนนี้"',
+  // ruling N2 + controller ruling R1 (security): recovery only ever targets the address already stored on this
+  // tablet — a working owner PIN still goes through "เปลี่ยนกุญแจ" (replaceApiKey), not this screen.
+  recoveryNotAllowed: "กู้สิทธิ์เจ้าของไม่ได้ตอนนี้ — ถ้ายังมีเจ้าของที่ใช้ PIN ได้ ให้ใช้ 'เปลี่ยนกุญแจ' ที่หน้าสถานะ · กุญแจใหม่ต้องเป็นของระบบกลางเดิม",
+  keyNotNew: 'นี่คือกุญแจเดิม — ออกกุญแจใหม่บนเว็บ',
+  oldKeyStillActive: 'ยังไม่ได้เพิกถอนกุญแจเก่าบนเว็บ — เพิกถอนก่อนแล้วกดอีกครั้ง',
+
+  needsPinTitle: 'ต้องตั้ง PIN ก่อนใช้',
+  ownerRecoveryBanner: 'ไม่มีเจ้าของที่ใช้งานได้บนเครื่องนี้',
+  ownerRecoveryButton: 'เชื่อมใหม่ด้วยคีย์ใหม่',
+  ownerRecoveryTitle: 'เชื่อมใหม่ด้วยคีย์ใหม่',
+  ownerRecoveryStep1: '1) ล็อกอินเว็บ dayo ด้วย LINE ในฐานะเจ้าของ แล้วออกกุญแจใหม่ที่ /settings/api-clients',
+  ownerRecoveryStep2: '2) เพิกถอนกุญแจเก่าของเครื่องนี้บนเว็บ',
+  ownerRecoveryStep3: '3) สแกน/วางกุญแจใหม่ แล้วทดสอบกุญแจ เลือกเจ้าของ และตั้ง PIN',
+  // controller ruling R1 (security)
+  ownerRecoveryNoAddress: 'เครื่องนี้ไม่มีที่อยู่ระบบกลางที่บันทึกไว้ — ต้องตั้งเครื่องใหม่',
+
+  staffPinTitle: (name: string): string => `ตั้ง PIN ให้ ${name}`,
+  staffPinApprover: 'เจ้าของผู้อนุมัติ',
+  staffPinApproverPin: 'PIN เจ้าของผู้อนุมัติ',
+  staffPinNew: 'PIN ใหม่',
+  staffPinNew2: 'ยืนยัน PIN ใหม่',
 
   loginTitle: 'ใครกำลังใช้งาน',
   loginEnterPin: (name: string): string => `ใส่ PIN ของ ${name}`,
@@ -30,6 +75,7 @@ export const TH = {
   shiftOpeningFloat: 'เงินทอนในลิ้นชักตอนเปิดกะ (บาท)',
   shiftOpen: 'เปิดกะ',
 
+  tabAll: 'ทั้งหมด',
   tabBestSellers: 'ขายดี',
   cart: 'ตะกร้า',
   cartEmpty: 'ยังไม่มีรายการ',
@@ -41,10 +87,27 @@ export const TH = {
   size: 'ขนาด',
   sweetness: 'ความหวาน',
   sweetShort: 'หวาน',
+  milk: 'นม',
+  milkFresh: 'นมสด',
+  milkOat: 'นมโอ๊ต',
+  grade: 'เกรด',
   addToCart: 'เพิ่มลงตะกร้า',
   clearCart: 'ล้างตะกร้า',
   noPrice: 'ไม่มีราคา',
   orders: 'บิลวันนี้',
+  // review I2: the menu, or every size/sweetness of it, disappeared from the catalog (e.g. a 60 s refetch closed the
+  // last size while this popup was open) — never a crash, just refuse to add it.
+  itemUnavailable: 'เมนูนี้หรือขนาดนี้ไม่มีขายแล้ว — ปิดหน้านี้แล้วเลือกใหม่',
+
+  // Task 18 — ขายด้วยแคตตาล็อกกลาง (spec 04 §4.4, §5.1, §6.5)
+  channel: 'ช่องทางขาย',
+  promotions: 'โปรโมชัน',
+  promoSkip: 'ไม่ใช้',
+  promoUnskip: 'ใช้โปรนี้',
+  noPromotions: 'ไม่ใช้โปรทั้งบิล',
+  promoCode: 'รหัสโปรโมชัน',
+  catalogChanged: 'เมนู/ราคาจากระบบกลางเปลี่ยน — คิดราคาใหม่แล้ว',
+  priceChangedConfirm: 'ตรวจยอดใหม่แล้วกดยืนยัน',
 
   discountTitle: 'ส่วนลดท้ายบิล',
   discountAmount: 'จำนวนเงิน (บาท)',
@@ -76,7 +139,7 @@ export const TH = {
   lines: 'รายการ',
   payment: 'การชำระ',
   events: 'ประวัติเหตุการณ์',
-  voidOrder: 'ยกเลิกบิล',
+  voidButton: 'ยกเลิกบิล',
 
   voidTitle: (receiptNo: string): string => `ยกเลิกบิล ${receiptNo}`,
   voidReason: 'เหตุผล',
@@ -106,6 +169,9 @@ export const TH = {
   errNoRecipe: 'เมนูนี้ยังไม่มีสูตร ขายไม่ได้',
   errTenderTooLow: 'รับเงินน้อยกว่ายอด',
   errDiscountTooBig: 'ส่วนลดต้องน้อยกว่ายอดรวม',
+  // minor (review round 1): DiscountDialog's own message when the cart cannot be priced yet at all (no catalog, or a
+  // CartError) — distinct from errDiscountTooBig, which means the cart CAN be priced but this amount is too big.
+  errCartNotPriced: 'ยังคิดราคาตะกร้าไม่ได้ตอนนี้ — ลองใหม่อีกครั้ง',
   errPriceChanged: 'ราคาเปลี่ยนแล้ว — กำลังปรับราคาในตะกร้า',
   errReasonRequired: 'ต้องใส่เหตุผล',
   errNoPromptPayId: 'ยังไม่ได้ตั้งหมายเลขพร้อมเพย์',
@@ -124,6 +190,18 @@ export const TH = {
 
   // แผน 4
   errPriceJump: 'ราคาบางรายการต่างจากราคาที่รับครั้งก่อนเกิน 10% — ตรวจราคาอีกครั้ง แล้วกด "ยืนยันราคานี้"',
+  errCartTooLarge: 'ตะกร้ามีรายการหรือจำนวนแก้วมากเกินไป — ตัดบางรายการออกก่อน',
+  errQtyOutOfRange: 'จำนวนแก้วต่อรายการไม่ถูกต้อง',
+  errSizeClosed: 'ขนาดนี้ปิดขายแล้ว — ลบหรือแก้บรรทัดนี้ก่อนชำระ',
+  errGradeRule: 'เมนูนี้ต้องเลือกเกรด (หรือไม่ต้องเลือกเกรดถ้าไม่ใช่มัตฉะ)',
+  // review I5: dayo removed this menu entirely — differs from errSizeClosed (the menu exists, only this size closed).
+  errMenuGone: 'เมนูนี้ไม่มีขายแล้ว — ลบบรรทัดนี้ก่อนชำระ',
+  // review I4: a bill discount left with a reason still clamps to ฿0 (dayo never goes negative) — the tablet must
+  // still refuse to pay a ฿0 bill (D50 Q3-20) and say why, instead of a silent disabled button.
+  errBillDiscountTooBig: 'ส่วนลดท้ายบิลมากกว่าหรือเท่ากับยอดรวม — บิลเหลือ 0 บาท ขายไม่ได้ ลดส่วนลดหรือลบบรรทัด',
+  errZeroTotal: 'ยอดสุทธิเป็น 0 บาท ขายไม่ได้ — บิลต้องมากกว่า 0 บาท',
+  // minor: a line dayo priced some units at ฿0 from a promotion (buy-2-get-1) — shown next to that cart line.
+  freeUnits: (n: number): string => `แถม ${n} แก้ว`,
   errStockCountNotOpen: 'ใบนับนี้ปิดไปแล้ว — เปิดหน้านับสต็อกใหม่',
   errOpeningCountIncomplete: 'การนับครั้งแรก (ยอดยกมา) ต้องนับให้ครบทุกรายการ — กรอกรายการที่ยังเหลือ (ของที่ไม่มีให้กรอก 0)',
 
@@ -327,4 +405,119 @@ export const TH = {
   countClose: 'ปิดใบนับ',
   countCloseConfirm: 'ยืนยันปิดใบนับ (ปรับยอดตามที่นับ)',
   countClosed: (n: number, baht: string): string => `ปิดใบนับแล้ว ปรับ ${n} รายการ · ส่วนต่างรวม ${baht}`,
+
+  // Task 19 — ใบเสร็จ · ประวัติบิล · รายละเอียดบิล · บิลบอท/เว็บวันนี้ · ยอดไม่ตรงระบบกลาง (spec §4.3, §4.6, §4.7, §4.8, §6.4 · D61)
+  doneSoldBy: (name: string): string => `ขายโดย ${name} · แท็บเล็ต`,
+  navCentralOrders: 'บิลบอท/เว็บวันนี้',
+
+  // §6.4: dayo's state of this bill (CentralStateChip)
+  centralPending: 'ยังไม่ถึงระบบกลาง',
+  centralSent: (orderNo: string): string => `ระบบกลาง ${orderNo}`,
+  centralProblem: (reason: string): string => `ส่งไม่ผ่าน: ${reason}`,
+  centralExcluded: 'นอกระบบกลาง',
+  centralLegacy: 'บิลก่อนเชื่อมระบบกลาง',
+  // review item 23: a voided bill whose order row WAS sent — dayo still counts it as a sale.
+  centralVoidLocalOnly: 'ยกเลิกในเครื่องเท่านั้น — ระบบกลางยังนับเป็นยอดขาย',
+
+  // §4.3: dayo's computed total vs. what was charged, shown down to 1 satang · §4.8 duplicate-of-bot label
+  orderDiff: (computed: string, diff: string): string => `ระบบกลางคิด ${computed} (ต่าง ${diff})`,
+  orderDup: (orderNos: string): string => `อาจซ้ำกับบิลบอท ${orderNos}`,
+
+  // §4.6 · O1 pending: dayo_edit shown read-only — no button anywhere edits a bill from the tablet (ADR-0050)
+  dayoEditKindEdit: 'เจ้าของแก้บิลนี้บนเว็บ',
+  dayoEditKindCancel: 'เจ้าของยกเลิกบิลนี้บนเว็บ',
+  dayoEditKindOther: 'ระบบกลางเปลี่ยนบิลนี้',
+  dayoEditReason: (reason: string): string => `เหตุผล: ${reason}`,
+  dayoEditMoneyNote: 'ยอดในเครื่องคือเงินที่เก็บจริง',
+  orderDayoEditChipEdit: 'แก้บนเว็บ',
+  orderDayoEditChipCancel: 'ยกเลิกบนเว็บ',
+
+  // §4.6: today's bot/web bills, online only
+  centralOrdersTitle: 'บิลบอท/เว็บวันนี้',
+  centralOrdersOffline: 'ต้องออนไลน์เพื่อดูบิลจากบอท/เว็บ',
+  centralOrdersRefresh: 'รีเฟรช',
+  centralOrdersDuplicate: 'อาจซ้ำ',
+  centralOrdersEmpty: 'ยังไม่มีบิลจากบอท/เว็บวันนี้',
+  centralOrdersUnknownBy: 'ไม่ทราบผู้บันทึก',
+
+  // §4.3, review item 23: owner's "ยอดไม่ตรงระบบกลาง" (R11)
+  priceDiffTitle: 'ยอดไม่ตรงระบบกลาง',
+  priceDiffAmountMismatch: 'ต่างเกิน ฿1',
+  priceDiffVoidLocalOnly: 'ยกเลิกในเครื่องเท่านั้น — ระบบกลางยังนับเป็นยอดขาย (ก้อน 3 จะจัดการเงิน)',
+  priceDiffEmpty: 'ไม่มียอดไม่ตรงระบบกลาง',
+  priceDiffCatalog: (version: string): string => `ฉบับแคตตาล็อก ${version}`,
+
+  // VOID_NOT_ALLOWED with a structured detail prefix (ruling R11 · same-day-only) — the code already writes this
+  // exact Thai text after the prefix (void.ts); matched by the prefix (never by parsing the rest as free text).
+  errVoidSameDayOnly: 'ยกเลิกได้เฉพาะวันเดียวกับวันขาย',
+  errVoidOwnBillsOnly: 'staff และ manager ยกเลิกได้เฉพาะบิลที่ตัวเองขาย',
+
+  // Task 20 — แถบเตือน · หน้าสถานะระบบ · หน้า "ส่งไม่ผ่าน" (spec §4.4 ข้อ 9, §6.3, §6.4, §6.7, §10.5 · D80 · ruling R8)
+  bannerKeyRevoked: 'กุญแจเครื่องถูกยกเลิก — ให้เจ้าของตั้งค่าใหม่',
+  bannerKeyForbidden: 'กุญแจเครื่องไม่มีสิทธิ์ส่งข้อมูล',
+  bannerApiOff: 'ระบบกลางปิด API อยู่ — บิลเก็บในเครื่อง จะส่งเมื่อเปิด',
+  bannerClock: (n: number): string => `นาฬิกาเครื่องต่างจากระบบกลาง ${n} นาที — ตั้งเวลาเครื่องให้ตรง (ขายต่อได้)`,
+  bannerPricing: 'ตัวคิดราคาในเครื่องไม่ตรงกับระบบกลาง — ขายได้ แจ้งทีม POS',
+  bannerCatalog: 'แคตตาล็อกจากระบบกลางอ่านไม่ได้ — ใช้ฉบับเดิมอยู่',
+  bannerStaleQueue: 'มีบิลค้างส่งเกิน 24 ชม.',
+  bannerClockFarAhead: (n: number): string => `เวลาในบิล ${n} รายการล้ำระบบกลางเกิน 24 ชม. — ตั้งนาฬิกาแท็บเล็ตให้ตรง แล้วกด "ส่งตอนนี้"`,
+  bannerProblems: (n: number): string => `ส่งไม่ผ่าน ${n} บิล`,
+  bannerGoStatus: 'ไปหน้าสถานะระบบ',
+
+  // /status (ทุกบทบาทดูได้ · ปุ่มตั้งค่าเฉพาะ owner)
+  statusTitle: 'สถานะระบบ',
+  statusKeyLabel: 'กุญแจเครื่อง',
+  statusBaseUrlLabel: 'ที่อยู่ระบบกลาง',
+  statusNotLinked: 'ยังไม่เชื่อมกับระบบกลาง',
+  statusApiStateLabel: 'สถานะ API',
+  statusApiStates: { ok: 'ปกติ', unauthorized: 'ถูกยกเลิก', forbidden: 'ไม่มีสิทธิ์ส่งข้อมูล', disabled: 'ปิดอยู่', bad_base_url: 'ที่อยู่ไม่ถูกต้อง' },
+  statusApiStateUnknown: 'ไม่ทราบ',
+  statusClockNever: 'ยังไม่วัด',
+  statusClockOk: (n: number): string => `ตรงกับระบบกลาง (ต่าง ${n} นาที)`,
+  statusClockWarn: (n: number): string => `ต่างจากระบบกลาง ${n} นาที`,
+  statusCatalogLine: (version: string, at: string): string => `ฉบับ ${version} · เช็กล่าสุด ${at}`,
+  statusCatalogNever: 'ยังไม่เคยเช็กแคตตาล็อก',
+  statusPricingOk: 'ตัวคิดราคาตรงกับระบบกลาง',
+  statusPricingMismatch: 'ตัวคิดราคาไม่ตรงกับระบบกลาง — แจ้งทีม POS',
+  statusPricingCommitUnknown: 'ไม่ทราบ (ระบบกลางไม่ได้ระบุรุ่น)',
+  statusPricingCommitLabel: (commit: string): string => `รุ่นตัวคิดราคา ${commit}`,
+  statusLastPush: (at: string): string => `ส่งล่าสุด ${at}`,
+  statusLastPushNever: 'ยังไม่เคยส่ง',
+  statusPendingLine: (n: number): string => `ค้างส่ง ${n} รายการ`,
+  statusProblemsLine: (n: number): string => `ส่งไม่ผ่าน ${n} รายการ`,
+  statusPriceDiffLine: (n: number): string => `ยอดไม่ตรงระบบกลาง ${n} บิล`,
+  statusSyncNow: 'ส่งตอนนี้',
+  statusReplaceKeyTitle: 'ตั้งกุญแจใหม่',
+  statusReplaceKeyApprover: 'เจ้าของผู้อนุมัติ',
+  statusReplaceKeyPin: 'PIN เจ้าของผู้อนุมัติ',
+  statusReplaceKeySave: 'บันทึกกุญแจใหม่',
+  statusReplaceKeyDone: 'เปลี่ยนกุญแจแล้ว',
+
+  // /sync-problems (owner เท่านั้น — spec §6.4)
+  syncProblemsTitle: 'ส่งไม่ผ่าน',
+  syncProblemsEmpty: 'ไม่มีรายการส่งไม่ผ่าน',
+  syncProblemKind: { order: 'บิล', order_void: 'ยกเลิกบิล' },
+  syncProblemDetail: (detail: string): string => `เหตุผล: ${detail}`,
+  syncProblemClockAheadTag: 'รอเวลา — ยังส่งอยู่ทุก 1 นาที',
+  syncProblemClockAheadHint: 'ตั้งนาฬิกาแท็บเล็ตให้ตรง แล้วกด "ส่งตอนนี้"',
+  remedyRetry: 'ลองใหม่',
+  remedyRenumber: 'ออกเลขใบเสร็จใหม่',
+  remedyRemapCode: 'เลือกรหัสแทน',
+  remedyRemapStaff: 'เลือกผู้ขายแทน',
+  remedyExclude: 'ปิดเป็นรายการนอกระบบกลาง',
+  remedyExport: 'ส่งออก JSON',
+  syncExcludeWarning: 'บิลนี้ยังอยู่ในรายงานเครื่อง แต่จะไม่ถึงระบบกลาง',
+  syncExcludeClockAheadWarning: 'บิลนี้จะไม่ถึงระบบกลาง — ยอดขายจริงจะหายจากฐานกลางจนก้อน 3',
+  syncExcludeConfirm: 'ยืนยันปิดเป็นรายการนอกระบบกลาง',
+  approvalPinLabel: 'PIN เจ้าของ',
+  approvalReasonLabel: 'เหตุผล',
+  approvalOk: 'ยืนยัน',
+  remapCodeFieldLine: 'บรรทัดสินค้า',
+  remapCodeFieldChannel: 'ช่องทางขาย',
+  remapCodeFieldPayment: 'วิธีชำระ',
+  remapCodeLineIndex: 'บรรทัดที่ (เริ่มที่ 0)',
+  remapCodeMenu: 'เมนูแทน',
+  remapCodeSize: 'ขนาดแทน',
+  remapCodeSweetness: 'ความหวานแทน',
+  remapStaffLabel: 'พนักงานแทน',
 } as const

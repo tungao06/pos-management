@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { wasQuickOpened } from '../src/api/shift'
 import { hashPin } from '../src/lib/pin'
-import { openTestApi, TEST_PIN_COST, TEST_SETUP } from './helpers/db'
+import { insertLegacyShop, openTestApi, TEST_PIN_COST, TEST_SETUP_INPUT } from './helpers/db'
 
 describe('quickOpenShift (spec §4.8 "เปิดกะด่วน" · plan 3 M18 · Q3b-10 · D52)', () => {
   it('an owner opens with a 0 float; a quick_open audit row is written in the same transaction; the shift syncs like any other', async () => {
     const t = await openTestApi()
-    await t.api.setupShop(TEST_SETUP)
+    await insertLegacyShop(t, TEST_SETUP_INPUT)
     const { users } = await t.api.bootstrap()
     const owner = users[0]!
     const shift = await t.api.quickOpenShift({ userId: owner.id })
@@ -23,7 +23,7 @@ describe('quickOpenShift (spec §4.8 "เปิดกะด่วน" · plan 3 
 
   it('a staff user gets NOT_OWNER and nothing is written; a second open shift is refused', async () => {
     const t = await openTestApi()
-    await t.api.setupShop(TEST_SETUP)
+    await insertLegacyShop(t, TEST_SETUP_INPUT)
     t.raw
       .prepare('insert into "user" (id, display_name, role, pin_hash, is_active, created_at, updated_at, version) values (?, ?, ?, ?, 1, ?, ?, 1)')
       .run('staff-1', 'พนักงาน', 'staff', await hashPin('3333', TEST_PIN_COST), t.clock.now(), t.clock.now())

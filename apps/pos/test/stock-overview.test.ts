@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { EXPIRY_SOON_MINUTES } from '@dayo/domain'
-import { openReadyApi, openTestApi, sellSku, TEST_SETUP } from './helpers/db'
+import { insertLegacyShop, legacySale, openReadyApi, openTestApi, TEST_SETUP_INPUT } from './helpers/db'
 import { itemId, stockOf } from './helpers/stock'
 
 describe('stockOverview (spec §5 หน้าสต็อก)', () => {
@@ -33,7 +33,7 @@ describe('stockOverview (spec §5 หน้าสต็อก)', () => {
 
   it('a sale before any base was made turns the base negative — an alert (D28); untracked ice stays off the page (plan 3 I-2b M-4)', async () => {
     const t = await openReadyApi()
-    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 })
+    await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 })
     expect((await stockOf(t, 'RM-WTR-01')).onHandMilli).toBe(-240_000) // the cache row exists …
     const o = await t.api.stockOverview()
     expect(o.items.map((i) => i.code)).not.toContain('RM-WTR-01') // … but the page ignores it
@@ -44,7 +44,7 @@ describe('stockOverview (spec §5 หน้าสต็อก)', () => {
 
   it('an item taken off the list stays on the page while it still has stock (review M-11), marked isActive: false (I-2 · Task 9 fix round 1)', async () => {
     const t = await openReadyApi()
-    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // RM-MLK-03 −16 ml; RM-POW-01 untouched
+    await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // RM-MLK-03 −16 ml; RM-POW-01 untouched
     t.raw.prepare("update item set is_active = 0 where code in ('RM-MLK-03', 'RM-POW-01')").run()
     const o = await t.api.stockOverview()
     const codes = o.items.map((i) => i.code)
@@ -56,7 +56,7 @@ describe('stockOverview (spec §5 หน้าสต็อก)', () => {
 
   it('business date (Q4-1): the open shift\'s date, else today in Thailand', async () => {
     const t = await openTestApi()
-    await t.api.setupShop(TEST_SETUP)
+    await insertLegacyShop(t, TEST_SETUP_INPUT)
     t.clock.set('2026-09-17T18:30:00.000Z') // 01:30 on the 18th in Bangkok, no shift open
     expect((await t.api.stockOverview()).businessDate).toBe('2026-09-18')
 

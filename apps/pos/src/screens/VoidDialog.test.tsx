@@ -7,6 +7,7 @@ import type { BootstrapState, OrderDetailDto, PosApi, UserDto } from '../api/typ
 import { ApiProvider } from '../app/api-context'
 import { shiftReportKey, stockKey } from '../app/queries'
 import { SessionProvider, useSession } from '../app/session'
+import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { VoidDialog } from './VoidDialog'
 
 afterEach(() => cleanup())
@@ -22,6 +23,10 @@ const ORDER: OrderDetailDto = {
   method: 'CASH',
   paidAt: '2026-09-17T10:00:00Z',
   cups: 1,
+  soldById: 'u1',
+  soldByName: 'TungAo',
+  central: { state: 'legacy', orderNo: null, computedTotalSatang: null, diffSatang: null, duplicateOf: [], reason: null, voidState: 'none' },
+  dayoEdit: null,
   businessDate: '2026-09-17',
   shiftId: 's1',
   subtotalSatang: 4_500,
@@ -30,6 +35,10 @@ const ORDER: OrderDetailDto = {
   tenderedSatang: 5_000,
   changeSatang: 500,
   voidedAt: null,
+  soldAt: null,
+  channelCode: null,
+  catalogVersion: null,
+  promotions: [],
   lines: [],
   events: [],
   voidable: true,
@@ -43,6 +52,12 @@ const BOOT: BootstrapState = {
   pendingSyncItems: 0,
   lastBackupAt: null,
   backupDue: false,
+  legacyDevice: false,
+  dayoLinked: true,
+  dayoBaseUrl: 'https://dayo.example/api/v1',
+  staffNeedingPin: [],
+  ownerRecovery: false,
+  sync: HEALTHY_SYNC,
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {
@@ -56,7 +71,7 @@ function mount(overrides: Partial<PosApi> = {}): { api: PosApi; onClose: ReturnT
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const api = {
     bootstrap: vi.fn(async () => BOOT),
-    voidOrder: vi.fn(async (): Promise<OrderDetailDto> => ({ ...ORDER, status: 'voided', voidedAt: '2026-09-17T10:05:00Z', voidable: false })),
+    cancelSale: vi.fn(async (): Promise<OrderDetailDto> => ({ ...ORDER, status: 'voided', voidedAt: '2026-09-17T10:05:00Z', voidable: false })),
     ...overrides,
   } as unknown as PosApi
   render(
@@ -92,11 +107,29 @@ describe('VoidDialog — review m-2: the shift-report cache must be invalidated 
     await submitVoid()
 
     await waitFor(() => expect(onClose).toHaveBeenCalled())
-    expect(api.voidOrder).toHaveBeenCalled()
+    expect(api.cancelSale).toHaveBeenCalled()
     // The only assertion review m-2 needs: without `queryClient.invalidateQueries({ queryKey: shiftReportKey })` in
     // VoidDialog's onSuccess, this call is never made and this test fails — a cash void changes expectedCashSatang,
     // and a stale X report can miss the Q3b-14 over-drawer warning for up to staleTime (5s, main.tsx) afterwards.
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: shiftReportKey })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: stockKey }) // plan 4: VOID_RETURN moves stock back
+  })
+})
+
+// Task 19: cancelSale's VOID_NOT_ALLOWED carries a structured reason (void.ts) — the two cases Q44/ruling R11
+// distinguishes get their own Thai text (ui/errors.ts), not the generic "ยกเลิกได้เฉพาะบิลที่ชำระแล้วในกะที่เปิดอยู่".
+describe('VoidDialog — VOID_NOT_ALLOWED with a structured reason (Q44, ruling R11)', () => {
+  it('shows the same-day-only message', async () => {
+    const { onClose } = mount({ cancelSale: vi.fn(async () => { throw new Error('VOID_NOT_ALLOWED: SAME_DAY_ONLY: ยกเลิกได้เฉพาะวันเดียวกับวันขาย') }) })
+    await submitVoid()
+    expect(await screen.findByText('ยกเลิกได้เฉพาะวันเดียวกับวันขาย')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('shows the own-bills-only message', async () => {
+    const { onClose } = mount({ cancelSale: vi.fn(async () => { throw new Error('VOID_NOT_ALLOWED: OWN_BILLS_ONLY: staff และ manager ยกเลิกได้เฉพาะบิลที่ตัวเองขาย') }) })
+    await submitVoid()
+    expect(await screen.findByText('staff และ manager ยกเลิกได้เฉพาะบิลที่ตัวเองขาย')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
   })
 })

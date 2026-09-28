@@ -5,6 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { BootstrapState, PosApi, ZReportDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
+import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { TH } from '../ui/th'
 import { ZReportScreen } from './ZReportScreen'
 
@@ -18,6 +19,12 @@ const bootstrap: BootstrapState = {
   pendingSyncItems: 0,
   lastBackupAt: null,
   backupDue: false,
+  legacyDevice: false,
+  dayoLinked: true,
+  dayoBaseUrl: 'https://dayo.example/api/v1',
+  staffNeedingPin: [],
+  ownerRecovery: false,
+  sync: HEALTHY_SYNC,
 }
 
 function renderZReport(shiftId: string, api: Partial<PosApi>): void {

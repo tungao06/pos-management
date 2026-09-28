@@ -1,0 +1,34 @@
+{
+  "name": "e2-order-and-void-same-batch",
+  "spec": "04 §4.5 แถวถัดไปเห็นแถวก่อนหน้าในคำขอเดียวกัน · order_void",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": { "ok": true, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "name": "แท็บเล็ตขาย 1", "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write"] },
+    "api_pos_push": "@data"
+  },
+  "request": {
+    "method": "POST", "path": "/api/v1/pos/push",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" },
+    "body": { "device_time": "2026-09-25T06:10:00.000Z", "rows": [
+      { "key": "order:4f5a6b7c-8d9e-4f0a-9b1c-3d4e5f6a7b8c", "kind": "order", "data": {
+        "pos_order_id": "4f5a6b7c-8d9e-4f0a-9b1c-3d4e5f6a7b8c", "receipt_no": "A-000330", "queue_no": 30,
+        "sale_date": "2026-09-25", "sold_at": "2026-09-25T06:00:00.000Z", "channel": "store", "payment": "cash",
+        "staff_id": "0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d", "catalog_version": 42, "shift_id": null,
+        "lines": [ { "code": "Thai Tea", "size": "16 oz", "sweetness": "50%", "milk": "fresh", "grade": null, "qty": 1 } ],
+        "bill_discount": null, "promo_code": null, "skip_promotion_ids": [], "no_promotions": false,
+        "totals": { "items_subtotal": 35, "items_discount": 0, "bill_discount": 0, "total": 35 }, "note": null } },
+      { "key": "order_void:4f5a6b7c-8d9e-4f0a-9b1c-3d4e5f6a7b8c", "kind": "order_void", "data": {
+        "pos_order_id": "4f5a6b7c-8d9e-4f0a-9b1c-3d4e5f6a7b8c", "voided_at": "2026-09-25T06:05:00.000Z",
+        "staff_id": "0a9b8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d", "approved_by": "7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f", "reason": "ลูกค้าเปลี่ยนใจ" } }
+    ] }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": { "ok": true, "data": { "server_time": "2026-09-25T06:10:00.250+00:00", "results": [
+      { "key": "order:4f5a6b7c-8d9e-4f0a-9b1c-3d4e5f6a7b8c", "status": "accepted",
+        "data": { "order_no": "L260925-030", "version": 1, "computed_total": 35, "amount_mismatch": false, "duplicate_of": [], "warnings": [] } },
+      { "key": "order_void:4f5a6b7c-8d9e-4f0a-9b1c-3d4e5f6a7b8c", "status": "accepted", "data": { "order_no": "L260925-030", "version": 2 } }
+    ] } }
+  }
+}

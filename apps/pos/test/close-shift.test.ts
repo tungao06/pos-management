@@ -2,9 +2,10 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { MAX_ZNO_LIST_LENGTH, zReportHash } from '@dayo/domain'
+import { closeShift } from '../src/api/close'
 import type { CloseShiftInput } from '../src/api/types'
 import { hashPin } from '../src/lib/pin'
-import { openReadyApi, PINS, sellSku, TEST_PIN_COST, type ReadyApi } from './helpers/db'
+import { openReadyApi, PINS, legacySale, TEST_PIN_COST, type ReadyApi } from './helpers/db'
 import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
 /** Fetches the X report the screen would show right now and builds the close input from it — `shownExpectedCashSatang`
@@ -43,11 +44,11 @@ async function closeThreeZs(t: ReadyApi) {
   const z1 = await t.api.closeShift(await closeInput(t))
   t.clock.set('2026-09-18T02:00:00.000Z')
   await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-  await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+  await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
   const z2 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
   t.clock.set('2026-09-19T02:00:00.000Z')
   await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-  await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+  await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
   const z3 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
   return { z1, z2, z3 }
 }
@@ -56,7 +57,7 @@ async function closeThreeZs(t: ReadyApi) {
 async function nextShift(t: ReadyApi, date: string): Promise<CloseShiftInput> {
   t.clock.set(`${date}T02:00:00.000Z`)
   await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-  await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+  await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
   return closeInput(t, { countLines: [] })
 }
 
@@ -120,14 +121,16 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     expect(keys).toContain(`cash_count:${count!.id}`)
     expect(keys).toContain(`z_report:${z.id}`)
     expect(keys).toContain(`shift:${t.shift.id}:closed`)
+    const local = (await t.db.select().from(s.outbox).all()).filter((r) => ['cash_count', 'z_report', 'shift', 'cash_movement'].includes(r.tableName))
+    expect(local.every((r) => r.status === 'local_only')).toBe(true) // block 2: shift/cash/count/Z stay on the tablet (spec 04 §6.1)
 
     const boot = await t.api.bootstrap()
     expect(boot.openShift).toBeNull()
     expect(await t.api.getZReport(t.shift.id)).toEqual(z)
     expect(await t.api.listZReports()).toEqual([{ shiftId: t.shift.id, businessDate: '2026-09-17', zNo: 1, closedAt: '2026-09-17T13:05:00.000Z', netSalesSatang: 4_000, cashVarianceSatang: 0, openedQuick: false, hashOk: true, chainWarning: false }])
     // after the close: no selling, no void, no second close (spec §4.8, D47 ข้อ 2)
-    await expect(sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })).rejects.toThrow(/^NO_OPEN_SHIFT: /)
-    await expect(t.api.voidOrder({ orderId: sc.cashKept.orderId, actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, reason: 'x', made: false, refundReference: null })).rejects.toThrow(/^VOID_NOT_ALLOWED: /)
+    await expect(legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })).rejects.toThrow(/^NO_OPEN_SHIFT: /)
+    await expect(t.api.cancelSale({ orderId: sc.cashKept.orderId, actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, reason: 'x', made: false, refundReference: null })).rejects.toThrow(/^VOID_NOT_ALLOWED: /)
     // no open shift left to build a fresh X report from — a bare input is enough, since closeShift fails before ever reading it
     await expect(
       t.api.closeShift({ actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, countLines: COUNT_520, shownExpectedCashSatang: 0, shownReportFingerprint: 'x', varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: false }),
@@ -169,12 +172,22 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     await expect(t.api.closeShift(await closeInput(t, { approverUserId: 'staff-1', approverPin: '3333' }))).rejects.toThrow(/^NOT_OWNER: /)
     expect(counts(t)).toEqual(before)
   })
+  it('wakes the sender (before_close) only after the input and the PIN passed (task 14 fix round 1 item 4)', async () => {
+    const t = await openReadyApi()
+    const woken: string[] = []
+    const hooks = { validated: () => { woken.push('before_close') } }
+    await expect(closeShift(t.db, t.deps, await closeInput(t, { approverPin: '9999' }), hooks)).rejects.toThrow(/^PIN_WRONG: /)
+    await expect(closeShift(t.db, t.deps, await closeInput(t, { countLines: [{ denominationSatang: 100, count: -1 }] }), hooks)).rejects.toThrow(/^BAD_INPUT: /)
+    expect(woken).toEqual([])
+    await closeShift(t.db, t.deps, await closeInput(t), hooks)
+    expect(woken).toEqual(['before_close'])
+  })
 
   it('a PromptPay sale made after the screen showed the report still triggers SHIFT_CHANGED, even though cash is untouched (m-1 · Q3b-17 · D54)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
     const stale = await closeInput(t) // the close screen just showed this X report
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // a QR sale while the screen is open — expectedCashSatang does not move
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // a QR sale while the screen is open — expectedCashSatang does not move
     const fresh = await t.api.shiftReport()
     expect(fresh.expectedCashSatang).toBe(stale.shownExpectedCashSatang) // the old, cash-only check would have missed this
     const before = counts(t)
@@ -191,7 +204,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     const z1 = await t.api.closeShift(await closeInput(t))
     t.clock.set('2026-09-18T02:00:00.000Z')
     await t.api.quickOpenShift({ userId: t.owner.id })
-    await sellSku(t, 'Latte-16oz', 2, { method: 'CASH', tenderedSatang: 10_000 })
+    await legacySale(t, 'Latte-16oz', 2, { method: 'CASH', tenderedSatang: 10_000 })
     const x = await t.api.shiftReport()
     expect(x.expectedCashSatang).toBe(10_000) // float 0 + ฿100
     const z2 = await t.api.closeShift(await closeInput(t, { countLines: [{ denominationSatang: 10_000, count: 1 }] }))
@@ -207,7 +220,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     t.clock.set('2026-09-17T14:00:00.000Z') // corrected
     for (const n of [2, 3]) {
       await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-      await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+      await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
       const z = await t.api.closeShift(await closeInput(t, { countLines: [] }))
       expect(z.snapshot).toMatchObject({ zNo: n, grandTotalSatang: z1.snapshot!.grandTotalSatang + 5_000 * (n - 1) })
       t.clock.advanceMs(3_600_000)
@@ -218,7 +231,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
   it('freezes the bank-app PromptPay total and the QR difference — optional, never blocks (Q3b-12 · D53)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t) // QR ฿50 received and ฿50 transferred back
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // + ฿50 → received ฿100 · refunded ฿50 · net ฿50
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // + ฿50 → received ฿100 · refunded ฿50 · net ฿50
     await expect(t.api.closeShift(await closeInput(t, { bankQrTotalSatang: -1 }))).rejects.toThrow(/^BAD_INPUT: /)
     await expect(t.api.closeShift(await closeInput(t, { bankQrTotalSatang: 10.5 }))).rejects.toThrow(/^BAD_INPUT: /)
     // acknowledging when nothing is broken changes nothing
@@ -249,7 +262,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-18T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // net ฿50
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // net ฿50
     const next = await closeInput(t, { countLines: [] })
     const before = counts(t)
     await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z1.shiftId}$`))
@@ -298,7 +311,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-18T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // net ฿50
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // net ฿50
     const next = await closeInput(t, { countLines: [] })
     const before = counts(t)
     await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z1.shiftId}$`))
@@ -319,7 +332,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-18T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // net ฿50
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // net ฿50
     const next = await closeInput(t, { countLines: [] })
     await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z1.shiftId}$`))
 
@@ -343,7 +356,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-18T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // net ฿50
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // net ฿50
     const next = await closeInput(t, { countLines: [] })
     const before = counts(t)
     await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z1.shiftId}$`))
@@ -376,7 +389,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
       t.clock.set('2026-09-20T02:00:00.000Z')
       await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-      await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // + ฿50
+      await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // + ฿50
       const next = await closeInput(t, { countLines: [] })
       const before = counts(t)
       await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
@@ -403,7 +416,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
       t.clock.set('2026-09-20T02:00:00.000Z')
       await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-      await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // + ฿50
+      await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }) // + ฿50
       const next = await closeInput(t, { countLines: [] })
       await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
 
@@ -428,7 +441,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
       t.clock.set('2026-09-20T02:00:00.000Z')
       await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-      await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+      await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
       // the true last Z (z3, found by insertion order, not by any zNo) is untouched, so this closes cleanly —
       // no Z_CHAIN_BROKEN, no chainWarning, no owner PIN re-entry, unlike the old zNo-sorted bug (review NF-3)
       const z4 = await t.api.closeShift(await closeInput(t, { countLines: [] }))
@@ -452,7 +465,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-20T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
     const next = await closeInput(t, { countLines: [] })
     await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
 
@@ -479,7 +492,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-20T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
     const next = await closeInput(t, { countLines: [] })
     await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
 
@@ -505,7 +518,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-20T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
     const next = await closeInput(t, { countLines: [] })
     await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
 
@@ -533,7 +546,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
       t.clock.set('2026-09-20T02:00:00.000Z')
       await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-      await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+      await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
       const next = await closeInput(t, { countLines: [] })
       await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
 
@@ -563,7 +576,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-20T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
     const next = await closeInput(t, { countLines: [] })
     await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
 
@@ -586,7 +599,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-20T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
     const next = await closeInput(t, { countLines: [] })
     const before = counts(t)
     await expect(t.api.closeShift(next)).rejects.toThrow(new RegExp(`^Z_CHAIN_BROKEN: ${z3.shiftId}$`))
@@ -616,7 +629,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
 
     t.clock.set('2026-09-20T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
     const next = await closeInput(t, { countLines: [] })
     const before = counts(t)
     // z3's own hash and grand total are fine, but its stored zNo (3) no longer equals the surviving row count (2) —
@@ -886,11 +899,11 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     await t.api.closeShift(await closeInput(t)) // Z1, net ฿40
     t.clock.set('2026-09-18T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
     const z2 = await t.api.closeShift(await closeInput(t, { countLines: [] })) // Z2, net ฿50
     t.clock.set('2026-09-19T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
     await t.api.closeShift(await closeInput(t, { countLines: [] })) // Z3, net ฿50, chains fine
 
     t.raw.exec('DROP TRIGGER z_report_no_update')

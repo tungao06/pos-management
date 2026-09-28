@@ -20,14 +20,16 @@ export function VoidDialog({ order, onClose }: { order: OrderDetailDto; onClose:
   const [made, setMade] = useState<boolean | null>(null)
   const [refundRef, setRefundRef] = useState('')
   // D50 Q3-22: the signed-in owner is preselected and may approve their own void, but the PinPad below still asks for
-  // their PIN every time (voidOrder always runs requireOwnerPin) and a reason is required; the VOIDED event keeps approvedBy.
+  // their PIN every time (cancelSale always runs requireOwnerPin) and a reason is required; the VOIDED event keeps approvedBy.
   const [approverId, setApproverId] = useState<string | null>(user?.role === 'owner' ? user.id : null)
   const [error, setError] = useState<string | null>(null)
   const isQr = order.method === 'PROMPTPAY'
 
   const mutation = useMutation({
+    // spec 04 §4.5 order_void, §4.7: `cancelSale` handles both a bill sold with dayo's catalog and an old plan-3
+    // bill (stock return) — the UI must call only `cancelSale`.
     mutationFn: (pin: string) =>
-      api.voidOrder({
+      api.cancelSale({
         orderId: order.id,
         actorUserId: user?.id ?? '',
         approverUserId: approverId ?? '',

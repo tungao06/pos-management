@@ -113,9 +113,55 @@ export const SQLITE_MIGRATIONS: readonly BundledMigration[] = [
     "bps": true,
     "folderMillis": 1789977341065,
     "hash": "d325bdc7737e454a58830037b9999d0e3b6225da9eb3bcbf0c7ed642e5993b49"
+  },
+  {
+    "tag": "0003_block2_central_catalog",
+    "sql": [
+      "CREATE TABLE `order_item` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`order_id` text NOT NULL,\n\t`line_no` integer NOT NULL,\n\t`menu_code` text NOT NULL,\n\t`menu_name_th` text NOT NULL,\n\t`size` text NOT NULL,\n\t`sweetness` text NOT NULL,\n\t`milk` text NOT NULL,\n\t`grade` text,\n\t`qty` integer NOT NULL,\n\t`unit_price_satang` integer NOT NULL,\n\t`discount_per_cup_satang` integer NOT NULL,\n\t`discount_reason` text,\n\t`promotion_id` text,\n\t`line_total_satang` integer NOT NULL,\n\tFOREIGN KEY (`order_id`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE no action,\n\tCONSTRAINT \"order_item_qty_positive_ck\" CHECK(\"order_item\".\"qty\" > 0),\n\tCONSTRAINT \"order_item_money_nonneg_ck\" CHECK(\"order_item\".\"unit_price_satang\" >= 0 and \"order_item\".\"discount_per_cup_satang\" >= 0 and \"order_item\".\"line_total_satang\" >= 0)\n);\n",
+      "\nCREATE UNIQUE INDEX `order_item_order_id_line_no_unique` ON `order_item` (`order_id`,`line_no`);",
+      "\nCREATE TABLE `dayo_catalog` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`catalog_version` integer NOT NULL,\n\t`catalog_json` text NOT NULL,\n\t`staff_json` text NOT NULL,\n\t`client_json` text,\n\t`fetched_at` text NOT NULL,\n\tCONSTRAINT \"dayo_catalog_single_row_ck\" CHECK(\"dayo_catalog\".\"id\" = 'current')\n);\n",
+      "\nPRAGMA foreign_keys=OFF;",
+      "\nCREATE TABLE `__new_order` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`origin` text NOT NULL,\n\t`device_id` text,\n\t`receipt_no` text,\n\t`queue_no` integer,\n\t`business_date` text NOT NULL,\n\t`shift_id` text,\n\t`channel_id` text,\n\t`customer_id` text,\n\t`status` text NOT NULL,\n\t`subtotal_satang` integer NOT NULL,\n\t`discount_satang` integer NOT NULL,\n\t`total_satang` integer NOT NULL,\n\t`vat_satang` integer NOT NULL,\n\t`cost_satang` integer NOT NULL,\n\t`note` text,\n\t`created_by_type` text NOT NULL,\n\t`created_by_id` text NOT NULL,\n\t`created_at` text NOT NULL,\n\t`paid_at` text,\n\t`ready_at` text,\n\t`voided_at` text,\n\t`sold_at` text,\n\t`catalog_version` integer,\n\t`channel_code` text,\n\t`payment_code` text,\n\t`pricing_json` text,\n\t`excluded_at` text,\n\t`central_order_no` text,\n\t`central_computed_total_satang` integer,\n\t`central_amount_mismatch` integer,\n\t`central_duplicate_of_json` text,\n\tFOREIGN KEY (`device_id`) REFERENCES `device`(`id`) ON UPDATE no action ON DELETE no action,\n\tFOREIGN KEY (`shift_id`) REFERENCES `shift`(`id`) ON UPDATE no action ON DELETE no action,\n\tFOREIGN KEY (`channel_id`) REFERENCES `channel`(`id`) ON UPDATE no action ON DELETE no action,\n\tFOREIGN KEY (`customer_id`) REFERENCES `customer`(`id`) ON UPDATE no action ON DELETE no action,\n\tCONSTRAINT \"order_subtotal_nonneg_ck\" CHECK(\"__new_order\".\"subtotal_satang\" >= 0),\n\tCONSTRAINT \"order_discount_nonneg_ck\" CHECK(\"__new_order\".\"discount_satang\" >= 0),\n\tCONSTRAINT \"order_total_nonneg_ck\" CHECK(\"__new_order\".\"total_satang\" >= 0),\n\tCONSTRAINT \"order_discount_le_subtotal_ck\" CHECK(\"__new_order\".\"discount_satang\" <= \"__new_order\".\"subtotal_satang\"),\n\tCONSTRAINT \"order_channel_ck\" CHECK(\"__new_order\".\"channel_id\" is not null or \"__new_order\".\"channel_code\" is not null)\n);\n",
+      "\n-- drizzle-kit listed the 10 block-2 columns in the SELECT too, but the old `order` does not have them: copy the 22\n-- existing columns only; the new ones start NULL.\nINSERT INTO `__new_order`(\"id\", \"origin\", \"device_id\", \"receipt_no\", \"queue_no\", \"business_date\", \"shift_id\", \"channel_id\", \"customer_id\", \"status\", \"subtotal_satang\", \"discount_satang\", \"total_satang\", \"vat_satang\", \"cost_satang\", \"note\", \"created_by_type\", \"created_by_id\", \"created_at\", \"paid_at\", \"ready_at\", \"voided_at\") SELECT \"id\", \"origin\", \"device_id\", \"receipt_no\", \"queue_no\", \"business_date\", \"shift_id\", \"channel_id\", \"customer_id\", \"status\", \"subtotal_satang\", \"discount_satang\", \"total_satang\", \"vat_satang\", \"cost_satang\", \"note\", \"created_by_type\", \"created_by_id\", \"created_at\", \"paid_at\", \"ready_at\", \"voided_at\" FROM `order`;",
+      "\nDROP TABLE `order`;",
+      "\nALTER TABLE `__new_order` RENAME TO `order`;",
+      "\nPRAGMA foreign_keys=ON;",
+      "\nCREATE INDEX `order_business_date_status_idx` ON `order` (`business_date`,`status`);",
+      "\nCREATE INDEX `order_status_idx` ON `order` (`status`);",
+      "\nCREATE INDEX `order_shift_idx` ON `order` (`shift_id`);",
+      "\nCREATE UNIQUE INDEX `order_device_id_receipt_no_unique` ON `order` (`device_id`,`receipt_no`);",
+      "\nCREATE UNIQUE INDEX `order_device_id_business_date_queue_no_unique` ON `order` (`device_id`,`business_date`,`queue_no`);",
+      "\nALTER TABLE `outbox` ADD `next_attempt_at` text;",
+      "\nALTER TABLE `outbox` ADD `parent_key` text;",
+      "\nALTER TABLE `outbox` ADD `result_json` text;",
+      "\nCREATE INDEX `outbox_parent_idx` ON `outbox` (`parent_key`);"
+    ],
+    "bps": true,
+    "folderMillis": 1790354703240,
+    "hash": "8539f1a2c6204a28f952422d90deb606e1a55be16c0ef49ddbe278beb75cd79f"
+  },
+  {
+    "tag": "0004_block2_outbox_local_only",
+    "sql": [
+      "-- block 2 (spec 04 §6.1, ruling R7): every row queued before block 2 used the plan-3/4 row format, which dayo's\n-- /v1/pos/push does not accept. They stay on the tablet as local records only and are never sent.\nUPDATE `outbox` SET `status` = 'local_only' WHERE `status` IN ('pending', 'dead');\n",
+      "\nCREATE TRIGGER `order_item_no_update` BEFORE UPDATE ON `order_item` BEGIN SELECT RAISE(ABORT, 'order_item is append-only: UPDATE rejected'); END;\n",
+      "\nCREATE TRIGGER `order_item_no_delete` BEFORE DELETE ON `order_item` BEGIN SELECT RAISE(ABORT, 'order_item is append-only: DELETE rejected'); END;\n"
+    ],
+    "bps": true,
+    "folderMillis": 1790354704892,
+    "hash": "e54f944203567ff6aed14323822c5ca830c7e27ff0e3362da36510d5d7fad302"
+  },
+  {
+    "tag": "0005_order_central_dayo_edit",
+    "sql": [
+      "-- block 2 (ADR-0050): dayo's E3 dayo_edit for this bill — the owner's latest edit/cancel on the dayo web, null = none.\n-- Display only on the tablet: total_satang, payment and status stay what was collected (spec 04 §4.6 · O1 pending).\nALTER TABLE `order` ADD `central_dayo_edit_json` text;\n"
+    ],
+    "bps": true,
+    "folderMillis": 1790357711385,
+    "hash": "34c7b939d3682f17660d8bb8ae16bfe803df4de9396883d3e82c620c44f3ac78"
   }
 ]
 
 /** Tables and triggers that migrateSqlite leaves in a fresh database. */
-export const SQLITE_TABLES: readonly string[] = ["audit_log","bom","bom_line","cash_count","cash_movement","category","channel","customer","device","discount","equipment","item","item_cost_state","order","order_event","order_line","order_payment_intent","outbox","payment","price","product","product_variant","production_batch","purchase","purchase_line","purchase_unit","recipe","recipe_line","setting","shift","size","stock_adjustment","stock_count","stock_count_line","stock_movement","sweetness_level","sync_state","user","z_report"]
-export const SQLITE_TRIGGERS: readonly string[] = ["cash_movement_no_delete","cash_movement_no_update","order_event_no_delete","order_event_no_update","stock_movement_no_delete","stock_movement_no_update","z_report_no_delete","z_report_no_update"]
+export const SQLITE_TABLES: readonly string[] = ["audit_log","bom","bom_line","cash_count","cash_movement","category","channel","customer","dayo_catalog","device","discount","equipment","item","item_cost_state","order","order_event","order_item","order_line","order_payment_intent","outbox","payment","price","product","product_variant","production_batch","purchase","purchase_line","purchase_unit","recipe","recipe_line","setting","shift","size","stock_adjustment","stock_count","stock_count_line","stock_movement","sweetness_level","sync_state","user","z_report"]
+export const SQLITE_TRIGGERS: readonly string[] = ["cash_movement_no_delete","cash_movement_no_update","order_event_no_delete","order_event_no_update","order_item_no_delete","order_item_no_update","stock_movement_no_delete","stock_movement_no_update","z_report_no_delete","z_report_no_update"]
