@@ -30,12 +30,16 @@ import { BrandBar } from './ui/BrandBar'
 // once for the whole app, for the worker's "a sync cycle ran" signal and refetches the badge/banner data at once.
 function RootLayout(): JSX.Element {
   useSyncCycleSignal()
+  // One full-height column: the bar and banners take what they need, the route gets the rest and scrolls inside it,
+  // so a banner appearing never pushes the sell screen's pay buttons below the fold.
   return (
-    <>
+    <div className="app-shell">
       <BrandBar />
       <StatusBanners />
-      <Outlet />
-    </>
+      <div className="route">
+        <Outlet />
+      </div>
+    </div>
   )
 }
 const rootRoute = createRootRoute({ component: RootLayout })

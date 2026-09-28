@@ -82,57 +82,62 @@ export function SellScreen(): JSX.Element {
   return (
     <div className="sell">
       <header className="topbar">
-        <button type="button" data-testid="tab-all" aria-pressed={activeTab === ALL_TAB} onClick={() => setTab(ALL_TAB)}>
-          {TH.tabAll}
-        </button>
-        {showBest && (
-          <button type="button" data-testid="tab-best" aria-pressed={activeTab === BEST_TAB} onClick={() => setTab(BEST_TAB)}>
-            {TH.tabBestSellers}
+        <div className="tabs">
+          <button type="button" data-testid="tab-all" aria-pressed={activeTab === ALL_TAB} onClick={() => setTab(ALL_TAB)}>
+            {TH.tabAll}
           </button>
-        )}
-        {dto.categories.map((c) => (
-          <button key={c} type="button" data-testid={`tab-${c}`} aria-pressed={activeTab === c} onClick={() => setTab(c)}>
-            {c}
+          {showBest && (
+            <button type="button" data-testid="tab-best" aria-pressed={activeTab === BEST_TAB} onClick={() => setTab(BEST_TAB)}>
+              {TH.tabBestSellers}
+            </button>
+          )}
+          {dto.categories.map((c) => (
+            <button key={c} type="button" data-testid={`tab-${c}`} aria-pressed={activeTab === c} onClick={() => setTab(c)}>
+              {c}
+            </button>
+          ))}
+        </div>
+        <div className="nav">
+          <button type="button" data-testid="nav-orders" onClick={() => void navigate({ to: '/orders' })}>
+            {TH.orders}
           </button>
-        ))}
-        <span className="spacer" />
-        {persisted.data === false && (
-          <span className="error" data-testid="storage-not-persistent">
-            {TH.storageNotPersistent}
-          </span>
-        )}
-        <button type="button" data-testid="nav-orders" onClick={() => void navigate({ to: '/orders' })}>
-          {TH.orders}
-        </button>
-        <button type="button" data-testid="cash-move-open" onClick={() => setCashMoveOpen(true)}>
-          {TH.cashMove}
-        </button>
-        <button type="button" data-testid="nav-shift" onClick={() => void navigate({ to: '/shift' })}>
-          {TH.shiftMenu}
-        </button>
-        {/* Q3b-3 · D52 (review I-2): closing starts here, not from the X report, so the drawer is counted blind */}
-        <button type="button" data-testid="close-shift-open" onClick={() => void navigate({ to: '/shift/close' })}>
-          {TH.closeShift}
-        </button>
-        <button type="button" data-testid="lock" onClick={session.lock}>
-          {TH.lock}
-        </button>
+          <button type="button" data-testid="cash-move-open" onClick={() => setCashMoveOpen(true)}>
+            {TH.cashMove}
+          </button>
+          <button type="button" data-testid="nav-shift" onClick={() => void navigate({ to: '/shift' })}>
+            {TH.shiftMenu}
+          </button>
+          {/* Q3b-3 · D52 (review I-2): closing starts here, not from the X report, so the drawer is counted blind */}
+          <button type="button" data-testid="close-shift-open" onClick={() => void navigate({ to: '/shift/close' })}>
+            {TH.closeShift}
+          </button>
+          <button type="button" data-testid="lock" onClick={session.lock}>
+            {TH.lock}
+          </button>
+        </div>
       </header>
-      {boot.data?.openShift != null && isShiftStale(boot.data.openShift.businessDate, new Date().toISOString()) && (
-        <p role="alert" className="error" data-testid="shift-stale">
-          {TH.shiftStale(boot.data.openShift.businessDate)}
-        </p>
-      )}
-      {boot.data?.backupDue === true && (
-        <button type="button" role="alert" className="error" data-testid="backup-due" onClick={() => void navigate({ to: '/backup' })}>
-          {TH.backupDue}
-        </button>
-      )}
-      {catalogChanged && (
-        <button type="button" role="alert" className="error" data-testid="catalog-changed" onClick={() => setCatalogChanged(false)}>
-          {TH.catalogChanged}
-        </button>
-      )}
+      <div className="sell-alerts">
+        {persisted.data === false && (
+          <p className="error" data-testid="storage-not-persistent">
+            {TH.storageNotPersistent}
+          </p>
+        )}
+        {boot.data?.openShift != null && isShiftStale(boot.data.openShift.businessDate, new Date().toISOString()) && (
+          <p role="alert" className="error" data-testid="shift-stale">
+            {TH.shiftStale(boot.data.openShift.businessDate)}
+          </p>
+        )}
+        {boot.data?.backupDue === true && (
+          <button type="button" role="alert" className="error" data-testid="backup-due" onClick={() => void navigate({ to: '/backup' })}>
+            {TH.backupDue}
+          </button>
+        )}
+        {catalogChanged && (
+          <button type="button" role="alert" className="error" data-testid="catalog-changed" onClick={() => setCatalogChanged(false)}>
+            {TH.catalogChanged}
+          </button>
+        )}
+      </div>
       <main className="grid">
         {menus.map((m) => {
           const variant = dto.catalog.variants.find((v) => v.menuCode === m.code && v.size === m.defaultSize && v.sweetness === m.defaultSweetness)
