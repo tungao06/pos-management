@@ -88,7 +88,7 @@ export type DrinkCatalogDto = {
   defaultSweetnessId: string
 }
 
-export type CommitSaleResult = {
+export type RecordSaleResult = {
   orderId: string
   receiptNo: string
   queueNo: number
@@ -465,7 +465,7 @@ export interface PosApi {
   openShift(input: OpenShiftInput): Promise<ShiftDto>
   loadDrinkCatalog(): Promise<DrinkCatalogDto>
   loadSellCatalog(): Promise<SellCatalogDto>
-  recordSale(input: RecordSaleInput): Promise<CommitSaleResult>
+  recordSale(input: RecordSaleInput): Promise<RecordSaleResult>
   listOrders(): Promise<OrderSummaryDto[]>
   getOrder(orderId: string): Promise<OrderDetailDto>
   promptPayForAmount(amountSatang: number): Promise<string>
