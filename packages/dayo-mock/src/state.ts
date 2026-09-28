@@ -4,6 +4,8 @@ import rich from '@dayo/contracts/fixtures/pos-test/e1-catalog-rich.json' with {
 
 export type PosCatalogChangedData = Extract<PosCatalogData, { changed: true }>
 export type CatalogPromotion = PosCatalogChangedData['catalog']['promotions'][number]
+/** One priced menu × size × sweetness row of E1 (contracts `Variant`) — what a size needs before anything can be sold in it. */
+export type CatalogVariant = PosCatalogChangedData['catalog']['variants'][number]
 export type MockMode = 'normal' | 'api_disabled' | 'rate_limited' | 'force_row_error' | 'server_down' | 'unauthorized' | 'forbidden' | 'hang'
 export type MockOverride = { match: { receiptNo?: string; key?: string }; verdict: { status: string; reason?: string; detail?: string; data?: unknown }; times: number }
 /** Every scope a tablet key can hold (spec §4.4); the default mock key has all four. */
@@ -95,6 +97,21 @@ export function learnCatalog(k: KnownCodes, c: PosCatalogChangedData): void {
   for (const x of cat?.paymentMethods ?? []) k.payments.add(x.code)
   for (const x of cat?.milkOptions ?? []) k.milk.add(x.code)
   for (const x of cat?.gradeOptions ?? []) k.grades.add(x.code)
+}
+
+/**
+ * Task 21 hotfix 2: adds or replaces variants the way dayo's web does — one row per (menuCode, size, sweetness). A row
+ * that matches an existing one replaces it in place; a new one is appended; every other variant stays as it was (a
+ * whole-array replace would drop every other menu's prices).
+ */
+export function mergeVariants(c: PosCatalogChangedData, variants: readonly CatalogVariant[]): void {
+  const list = c.catalog.variants
+  for (const v of variants) {
+    const key = variantKey(v.menuCode, v.size, v.sweetness)
+    const at = list.findIndex((x) => variantKey(x.menuCode, x.size, x.sweetness) === key)
+    if (at === -1) list.push(structuredClone(v))
+    else list[at] = structuredClone(v)
+  }
 }
 
 export function freshCatalog(): PosCatalogChangedData {

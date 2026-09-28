@@ -236,4 +236,42 @@ describe('HTTP control routes for e2e (server.ts)', () => {
     expect((await m.fetch('http://mock/api/v1/orders', { headers: auth })).status).toBe(403)
     expect(await mockControl(m, '/__mock/nope', null)).toEqual({ status: 404, body: { ok: false } })
   })
+  it('bump-catalog merges priced variants by (menuCode, size, sweetness): adds new, replaces a match, keeps every other — and the new size then sells (Task 21 hotfix 2)', async () => {
+    const m = createMockDayo({ now: NOW })
+    const e1 = async () => {
+      const d = PosCatalogResponse.parse(await (await m.fetch('http://mock/api/v1/pos/catalog', { headers: auth })).json()).data
+      if (!d.changed) throw new Error('E1 must be changed:true')
+      return d.catalog
+    }
+    const before = (await e1()).variants
+    const tt16 = before.find((v) => v.menuCode === 'Thai Tea' && v.size === '16 oz' && v.sweetness === '100%')!
+    const tt22 = { ...tt16, size: '22 oz', price: 55 }
+    const sizes = [
+      { code: '22 oz', label: '22 oz', sortOrder: 2, isActive: true },
+      { code: '16 oz', label: '16 oz', sortOrder: 0, isActive: true },
+      { code: '20 oz', label: '20 oz', sortOrder: 1, isActive: true },
+    ]
+    // a bill in the not-yet-priced size is refused first (proves the accept below comes from the merge)
+    const bill22 = order({ lines: [line({ size: '22 oz', sweetness: '100%' })], totals: { items_subtotal: 55, items_discount: 0, bill_discount: 0, total: 55 } })
+    expect(await one(m, bill22)).toMatchObject({ status: 'rejected', reason: 'UNKNOWN_CODE' })
+
+    const r = await mockControl(m, '/__mock/bump-catalog', { sizes, variants: [tt22, { ...tt16, price: 36 }] })
+    expect(r).toEqual({ status: 200, body: { catalog_version: 43 } })
+    const after = await e1()
+    expect(after.sizes).toEqual(sizes)
+    expect(after.variants).toHaveLength(before.length + 1) // one added, one replaced in place, none dropped
+    const key = (v: { menuCode: string; size: string; sweetness: string }) => `${v.menuCode}|${v.size}|${v.sweetness}`
+    expect(after.variants.find((v) => key(v) === key(tt22))).toEqual(tt22)
+    expect(after.variants.find((v) => key(v) === key(tt16))!.price).toBe(36)
+    expect(after.variants.filter((v) => key(v) !== key(tt22) && key(v) !== key(tt16))).toEqual(before.filter((v) => key(v) !== key(tt16)))
+
+    expect((await one(m, bill22)).status).toBe('accepted') // dayo now knows the 22 oz variant (ADR-0054)
+
+    // variants only: sizes stay as they are; the version still bumps
+    expect(await mockControl(m, '/__mock/bump-catalog', { variants: [{ ...tt22, price: 56 }] })).toEqual({ status: 200, body: { catalog_version: 44 } })
+    const again = await e1()
+    expect(again.sizes).toEqual(sizes)
+    expect(again.variants).toHaveLength(before.length + 1)
+    expect(again.variants.find((v) => key(v) === key(tt22))!.price).toBe(56)
+  })
 })

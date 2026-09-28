@@ -1,6 +1,6 @@
 // packages/dayo-mock/src/control.ts — the /__mock/* test-control routes of server.ts (e2e). No node:* imports, never shipped.
 import type { CentralOrder, CupSize } from '@dayo/contracts'
-import type { MockDayo, MockMode, MockOverride, PosOrderEdit } from './state.js'
+import { mergeVariants, type CatalogVariant, type MockDayo, type MockMode, type MockOverride, type PosOrderEdit } from './state.js'
 
 type EditBody = { pos_order_id?: string; kind: PosOrderEdit['kind']; reason: string; edited_at?: string; edited_by_name?: string | null; totals?: PosOrderEdit['totals'] }
 
@@ -12,9 +12,19 @@ export async function mockControl(mock: MockDayo, path: string, body: unknown): 
     case '/__mock/now': mock.setNow((body as { iso: string | null }).iso); return ok
     case '/__mock/scopes': mock.setScopes((body as { scopes: string[] }).scopes); return ok
     case '/__mock/override': mock.override(body as MockOverride); return ok
-    case '/__mock/bump-catalog': {
-      const sizes = (body as { sizes?: CupSize[] } | null)?.sizes
-      return { status: 200, body: { catalog_version: mock.bumpCatalog(sizes === undefined ? undefined : (c) => { c.catalog.sizes = structuredClone(sizes) }) } }
+    case '/__mock/bump-catalog': { // sizes: replaces the whole list · variants: merged by (menuCode, size, sweetness)
+      const b = body as { sizes?: CupSize[]; variants?: CatalogVariant[] } | null
+      const sizes = b?.sizes
+      const variants = b?.variants
+      return {
+        status: 200,
+        body: {
+          catalog_version: mock.bumpCatalog((c) => {
+            if (sizes !== undefined) c.catalog.sizes = structuredClone(sizes)
+            if (variants !== undefined) mergeVariants(c, variants)
+          }),
+        },
+      }
     }
     case '/__mock/close-promotion': {
       const b = body as { id: string; at: string }
