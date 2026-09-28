@@ -48,6 +48,11 @@ describe('PriceDiffScreen (spec §4.3, review item 23 · R11 owner-only)', () =>
     expect(await screen.findByTestId('price-diff-A-000001')).toHaveTextContent('-฿0.50')
     expect(screen.getByTestId('price-diff-A-000002')).toHaveTextContent('ยกเลิกในเครื่องเท่านั้น')
     expect(api.listPriceDiffs).toHaveBeenCalledWith('owner-1')
+    // mobile audit row 19: each figure says what it is — POS total, dayo's total, the difference
+    const row = screen.getByTestId('price-diff-A-000001')
+    expect(row).toHaveTextContent('POS ฿45.50')
+    expect(row).toHaveTextContent('ระบบกลาง ฿45.00')
+    expect(row).toHaveTextContent('ต่าง -฿0.50')
   })
 
   it('shows the amount_mismatch badge only when it is set on the row', async () => {

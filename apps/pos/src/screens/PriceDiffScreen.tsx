@@ -47,11 +47,13 @@ export function PriceDiffScreen(): JSX.Element {
       {diffs.data?.length === 0 && <p>{TH.priceDiffEmpty}</p>}
       <div className="list">
         {diffs.data?.map((d) => (
-          <div key={`${d.orderId}-${d.kind}`} className="row" data-testid={`price-diff-${d.receiptNo}`}>
-            <span>{TIME.format(new Date(d.soldAt))}</span>
-            <span>{formatBahtFull(d.totalSatang)}</span>
-            <span>{d.computedTotalSatang !== null ? formatBahtFull(d.computedTotalSatang) : '—'}</span>
-            {d.diffSatang !== null && <span>{formatBahtDiff(d.diffSatang)}</span>}
+          <div key={`${d.orderId}-${d.kind}`} className="kv-row" data-testid={`price-diff-${d.receiptNo}`}>
+            <strong>
+              {d.receiptNo} · {TIME.format(new Date(d.soldAt))}
+            </strong>
+            <span>{TH.priceDiffPos(formatBahtFull(d.totalSatang))}</span>
+            <span>{TH.priceDiffCentral(d.computedTotalSatang !== null ? formatBahtFull(d.computedTotalSatang) : '—')}</span>
+            {d.diffSatang !== null && <span>{TH.priceDiffDiff(formatBahtDiff(d.diffSatang))}</span>}
             {d.catalogVersion !== null && <span>{TH.priceDiffCatalog(String(d.catalogVersion))}</span>}
             {d.amountMismatch && (
               <span className="badge error" data-testid={`price-diff-mismatch-${d.receiptNo}`}>

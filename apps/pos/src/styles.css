@@ -54,11 +54,16 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
 .banner.error { background: var(--surface); color: var(--danger); border: 1px solid var(--danger); border-left-width: 6px; }
 .banner button { min-height: 44px; }
 .error { color: var(--danger); font-weight: 600; }
-.list { display: grid; gap: 8px; }
+/* minmax(0,1fr): WebKit otherwise widens the implicit auto column to a long unbreakable token (a hash, a URL) */
+.list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.page p { overflow-wrap: break-word; }
 .choices { display: flex; flex-wrap: wrap; gap: 8px; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 /* Sell screen: menu grid + cart side by side, each scrolling on its own inside the height the root layout leaves. */
-.sell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 32vw, 400px); grid-template-rows: auto auto minmax(0, 1fr); }
+.sell { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 32vw, 400px); grid-template-rows: auto auto minmax(0, 1fr); }
+/* min-width 0 all the way down: WebKit (iPhone) otherwise widens the top bar to its nowrap buttons' full length
+   (492 px on a 390 px phone) and the whole screen scrolls sideways instead of just the tabs/buttons row */
+.sell > *, .topbar > * { min-width: 0; max-width: 100%; }
 .topbar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--line); background: var(--cream); }
 .topbar button { white-space: nowrap; flex: none; }
 /* category tabs: one line that scrolls sideways — however many categories dayo has */
@@ -71,11 +76,23 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
 .sell-alerts > * { margin: 0; }
 .sell-alerts > button { min-height: 48px; justify-self: start; text-align: left; }
 .badge { color: var(--muted); font-size: 14px; white-space: nowrap; }
+/* a badge that is a whole sentence (or sits in a narrow list row) wraps instead of cutting off or widening the page */
+p.badge, .row .badge { white-space: normal; }
+/* status chips (CentralStateChip, the dayo-edit chip) — orange stays a decoration edge, never text (D44) */
+.chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-block; padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--forest); background: var(--surface); white-space: nowrap; }
+.chip-green { background: var(--selected); }
+.chip-red { color: var(--danger); border-color: var(--danger); }
+.chip-orange { border-left: 5px solid var(--orange); }
+.chip-gray { color: var(--muted); }
 .grid { min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 10px; align-content: start; overflow-y: auto; }
 .product { display: flex; flex-direction: column; justify-content: center; min-height: 96px; }
 .product .th { font-size: 18px; font-weight: 700; }
 .product .en { font-size: 13px; color: var(--muted); }
+.product .price { font-variant-numeric: tabular-nums; }
 .cart { min-height: 0; border-left: 1px solid var(--line); display: flex; flex-direction: column; background: var(--surface); }
+/* the bottom-sheet handle exists only on phones (see the max-width: 639px block) */
+.cart-toggle { display: none; }
 .cart-head { flex: none; display: grid; gap: 8px; padding: 10px 10px 8px; }
 .cart-head h2 { margin: 0; font-size: 20px; }
 .cart-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; padding: 0 10px 8px; }
@@ -91,15 +108,17 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
 .totals { display: grid; gap: 4px; font-size: 18px; }
 .totals .total { font-size: 28px; font-weight: 800; }
 .pay { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.dialog-backdrop { position: fixed; inset: 0; background: var(--backdrop); display: grid; place-items: center; padding: 16px; }
+/* z-index: above the phone cart sheet (z 5), which the discount dialog opens from */
+.dialog-backdrop { position: fixed; inset: 0; z-index: 20; background: var(--backdrop); display: grid; place-items: center; padding: 16px; }
 .dialog { background: var(--surface); border-radius: 16px; padding: 16px; width: min(680px, 100%); display: grid; gap: 10px; max-height: 100%; overflow-y: auto; border-top: 6px solid var(--orange); }
 .big-amount { font-size: 48px; font-weight: 800; }
 .done { flex: 1 0 auto; display: grid; place-items: center; align-content: center; gap: 8px; padding: 16px; text-align: center; }
-.queue-no { font-size: clamp(96px, 28vw, 160px); font-weight: 900; line-height: 1; color: var(--forest); }
-.qr img { width: min(80vw, 560px); height: auto; image-rendering: pixelated; background: var(--qr-bg); }
+.queue-no { font-size: clamp(64px, min(28vw, 22dvh), 160px); font-weight: 900; line-height: 1; color: var(--forest); }
+.qr img { width: min(80vw, 560px, calc(100dvh - var(--brandbar-h) - 280px)); height: auto; image-rendering: pixelated; background: var(--qr-bg); }
 .pinpad { display: grid; gap: 10px; justify-items: center; }
 .pin-dots { font-size: 32px; letter-spacing: 8px; min-height: 40px; }
-.pin-grid { display: grid; grid-template-columns: repeat(3, 96px); gap: 10px; }
+/* never wider than its box: a 296 px dialog on a 360 px phone must not scroll sideways */
+.pin-grid { display: grid; grid-template-columns: repeat(3, minmax(64px, 96px)); gap: 10px; width: min(100%, 308px); justify-content: center; }
 .row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; text-align: left; width: 100%; }
 /* Phones held upright: the cart moves under the menu, its lines scroll and the total + pay buttons stay visible. */
 @media (max-width: 639px) {
@@ -108,8 +127,23 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
   .brandbar .logo { height: 36px; }
   .brandbar .name { font-size: 18px; }
   .sell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
-  .sell > .cart { grid-row: 4; border-left: 0; border-top: 1px solid var(--line); max-height: 46dvh; }
-  .cart-head { grid-template-columns: auto 1fr; align-items: center; padding-top: 8px; }
+  /* the cart is a bottom sheet: collapsed = handle + total + pay buttons under the menu; expanded = slides up over
+     the menu with every line, promotions and the discount/clear buttons */
+  .sell > .cart { grid-row: 4; border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -4px 16px rgb(30 59 34 / 0.12); }
+  .sell > .cart[data-expanded='true'] { grid-area: 1 / 1 / -1 / -1; position: absolute; left: 0; right: 0; bottom: 0; top: 8px; z-index: 5; box-shadow: 0 -8px 28px rgb(30 59 34 / 0.28); }
+  .cart[data-expanded='false'] .cart-head,
+  .cart[data-expanded='false'] .cart-body,
+  .cart[data-expanded='false'] .cart-foot .choices,
+  .cart[data-expanded='false'] .cart-foot .totals > :not(.total) { display: none; }
+  .cart-toggle { position: relative; flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 8px; width: 100%; min-height: 56px; padding: 16px 12px 6px; border: 0; border-radius: 16px 16px 0 0; background: transparent; text-align: left; font-size: 16px; touch-action: none; }
+  .cart-toggle .grip { position: absolute; top: 6px; left: 50%; width: 44px; height: 5px; margin-left: -22px; border-radius: 3px; background: var(--line); }
+  .cart-toggle .summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cart-toggle .cue { font-size: 14px; color: var(--muted); white-space: nowrap; }
+  .cart-toggle .error { grid-column: 1 / -1; font-size: 14px; }
+  .cart-head h2 { display: none; }
+  .cart-foot { padding: 8px 10px 10px; }
+  .cart[data-expanded='false'] .cart-foot { border-top: 0; padding-top: 0; }
+  .cart-head { grid-template-columns: minmax(0, 1fr); padding-top: 4px; }
   .cart-head label { grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
   .cart-head select { min-height: 48px; }
   /* tabs on one sideways-scrolling row, the shift/bill buttons on another — never three rows */
@@ -122,6 +156,25 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
   .product { min-height: 72px; }
   .totals .total { font-size: 24px; }
   .page { padding: 12px; }
+  /* list rows: the 4-column tablet row squeezes the details to ~30 px on a phone — stack them instead */
+  .order-row { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 4px; }
+  .order-row > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; font-size: 14px; color: var(--muted); }
+  .order-row > :nth-child(3) { grid-column: 3; grid-row: 1; font-weight: 700; }
+  .order-row > :nth-child(4) { grid-column: 2; grid-row: 1; justify-self: start; }
+  .order-row > :nth-child(n + 5) { grid-column: 1 / -1; }
+  .z-row, .kv-row { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
+  /* the drawer count: two denominations per line instead of twelve tall rows */
+  .figures.count thead { display: none; }
+  .figures.count { display: block; }
+  .figures.count tbody { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; }
+  .figures.count tr { display: flex; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px solid var(--line); }
+  .figures.count tr:last-child { grid-column: 1 / -1; }
+  .figures.count th, .figures.count td { padding: 4px 2px; }
+  .figures.count td { min-width: 0; }
+  .figures.count input { width: 4.5em; max-width: 100%; }
+  .figures input { width: 5em; min-height: 48px; padding: 4px 8px; }
+  .big-amount { font-size: 36px; }
+  .choices > button { flex: 1 1 auto; }
 }
 /* Short screens (a phone turned sideways): a thinner bar and smaller touch rows so the menu still fits. */
 @media (max-height: 520px) {
@@ -138,17 +191,48 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
   .cart-head { padding: 6px 8px; }
   .cart-head h2 { display: none; }
   .cart-head label { grid-template-columns: auto 1fr; align-items: center; gap: 6px; font-size: 14px; }
-  .cart-head select { min-height: 40px; padding: 4px 8px; }
+  .cart-head select { min-height: 44px; padding: 4px 8px; }
   .cart-foot { padding: 6px 8px; gap: 6px; grid-template-columns: 1fr 1fr; }
   .cart-foot .totals { grid-column: 1 / -1; font-size: 14px; gap: 0; }
   .cart-foot .choices, .cart-foot .pay { display: contents; }
   .product { min-height: 64px; }
   .totals .total { font-size: 20px; }
+  /* the tabs scroll with the shift/bill/lock buttons in one row — a divider so a scroll never ends on "lock" by surprise */
+  .topbar .nav { border-left: 2px solid var(--line); padding-left: 8px; }
+  .status-banners { padding: 2px 6px; }
+  .banner { font-size: 14px; }
+  input, textarea, select { min-height: 44px; padding: 4px 10px; }
+  .dialog button, .page button, .pin-grid button { min-height: 44px; }
+  .pinpad { gap: 6px; }
+  .pin-dots { font-size: 24px; min-height: 28px; }
+  .pin-grid { gap: 6px; }
+  .big-amount { font-size: 32px; }
+  /* done: the queue number on the left, receipt / change / lines / "next sale" on the right */
+  .done { grid-template-columns: auto minmax(0, 1fr); justify-items: start; column-gap: 32px; row-gap: 4px; padding: 8px 16px; text-align: left; }
+  .done > .queue-no { grid-row: 1 / span 6; align-self: center; }
+  .done > * { grid-column: 2; }
+  .done > .queue-no { grid-column: 1; }
+  .done > ol { margin: 0; }
+  /* PromptPay: the QR on the left at full height, amount and buttons on the right — nothing below the fold */
+  .page.qr { max-width: none; grid-template-columns: auto minmax(0, 1fr); column-gap: 20px; }
+  .page.qr > * { grid-column: 2; }
+  .page.qr { align-content: center; }
+  .page.qr .sticky-foot { position: static; margin: 0; padding: 0; border: 0; box-shadow: none; background: none; justify-content: flex-start; }
+  .page.qr img { grid-column: 1; grid-row: 1 / span 8; width: auto; height: min(560px, calc(100dvh - var(--brandbar-h) - 100px)); }
+  /* void: the reason on the left, the approving owner's PIN pad on the right — both in view at once */
+  .dialog.void { width: min(860px, 100%); grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; align-content: start; }
+  .dialog.void > * { grid-column: 1; }
+  .dialog.void > .pinpad { grid-column: 2; grid-row: 1 / span 12; align-self: start; }
+  /* login: the PIN pad beside the people, not under them */
+  .page.login { max-width: none; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; }
+  .page.login > * { grid-column: 1; }
+  .page.login > .pinpad { grid-column: 2; grid-row: 1 / span 8; align-self: start; }
 }
 
 /* แผน 3b: ตารางตัวเลขของรายงาน X/Z และตารางนับเงิน */
 .figures { width: 100%; border-collapse: collapse; font-size: 18px; }
 .figures th { text-align: left; font-weight: 500; padding: 6px 4px; }
+.figures thead th:last-child { text-align: right; }
 .figures td { text-align: right; font-variant-numeric: tabular-nums; padding: 6px 4px; white-space: nowrap; }
 .figures tr + tr { border-top: 1px solid var(--line); }
 .figures input { width: 7em; font-size: 20px; text-align: right; }
@@ -158,3 +242,40 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
 .check { display: flex; gap: 12px; align-items: center; min-height: 48px; cursor: pointer; }
 .check input { width: 28px; min-height: 28px; }
 .figures small { font-size: 14px; }
+
+/* Phones (upright or sideways): tighter headings and a sticky action bar, so the one thing to press next is always
+   under the thumb instead of at the end of a long scroll. Tablets and desktop keep the roomy layout above. */
+@media (max-width: 639px), (max-height: 520px) {
+  .page > h1, .page > h2, .page > h3, .page > p, .page > ol, .page > ul, .page > table, .page > form, .page > div { margin-block: 0; }
+  .page h1 { font-size: clamp(22px, 6vw, 28px); }
+  .page h2 { font-size: 20px; margin-block: 8px 0; }
+  .page h3 { font-size: 17px; margin-block: 4px 0; }
+  .page ol, .page ul { padding-left: 24px; }
+  .sticky-foot { position: sticky; bottom: 0; z-index: 2; margin-inline: -12px; padding: 8px 12px; background: var(--cream); border-top: 1px solid var(--line); box-shadow: 0 -4px 12px rgb(30 59 34 / 0.08); }
+  .dialog-backdrop { padding: 8px; }
+  .dialog { padding: 12px; gap: 8px; }
+  .dialog > h2, .dialog > h3, .dialog > p, .dialog form > h2, .dialog form > p { margin: 0; }
+  .dialog h2 { font-size: 20px; }
+  .dialog h3 { font-size: 16px; margin-top: 4px; }
+  .dialog .big-amount { font-size: 32px; }
+  /* the void dialog's refund line is a sentence, not a lone figure */
+  .dialog p.big-amount { font-size: 24px; }
+  .dialog-foot { position: sticky; bottom: -12px; z-index: 2; margin: 0 -12px -12px; padding: 8px 12px; background: var(--surface); border-top: 1px solid var(--line); }
+  .problem .actions { justify-content: flex-start; }
+}
+@media (max-width: 639px) {
+  .dialog .choices button { min-height: 52px; }
+  .pin-grid button { min-height: 56px; }
+}
+
+/* spec §6.4: one card per sync problem, its remedies right under it */
+.problem { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.problem > div > p { margin: 4px 0 0; }
+.problem .actions { justify-content: flex-start; margin-top: 8px; }
+/* a labelled row (price diffs): each figure says what it is */
+.kv-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.kv-row > span { font-variant-numeric: tabular-nums; }
+.kv-row > strong { grid-column: 1 / -1; }
+/* the item dialog's price sits in the footer, left of the buttons, so it stays in view with them */
+.item-foot { align-items: center; }
+.item-foot .big-amount { margin-right: auto; }

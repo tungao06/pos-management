@@ -62,7 +62,7 @@ export function CashPayScreen(): JSX.Element {
           {errorMessage(error)}
         </p>
       )}
-      <div className="actions">
+      <div className="actions sticky-foot">
         <button type="button" data-testid="pay-back" onClick={() => void navigate({ to: '/sell' })}>
           {TH.back}
         </button>

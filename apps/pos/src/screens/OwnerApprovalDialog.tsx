@@ -91,7 +91,7 @@ export function OwnerApprovalDialog({
             {localError ?? error}
           </p>
         )}
-        <div className="actions">
+        <div className="actions dialog-foot">
           <button type="button" onClick={onClose}>
             {TH.cancel}
           </button>

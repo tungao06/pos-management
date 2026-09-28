@@ -65,7 +65,7 @@ export function VoidDialog({ order, onClose }: { order: OrderDetailDto; onClose:
 
   return (
     <div className="dialog-backdrop" role="dialog" aria-label={TH.voidTitle(order.receiptNo)}>
-      <div className="dialog">
+      <div className="dialog void">
         <h2>{TH.voidTitle(order.receiptNo)}</h2>
         <label>
           {TH.voidReason}

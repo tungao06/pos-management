@@ -35,7 +35,7 @@ export function ZReportScreen(): JSX.Element {
     </p>
   )
   const actions: ReactNode = (
-    <div className="actions">
+    <div className="actions sticky-foot">
       <button type="button" data-testid="nav-z-list" onClick={() => void navigate({ to: '/z' })}>
         {TH.zList}
       </button>

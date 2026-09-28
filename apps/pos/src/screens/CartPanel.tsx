@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import { useEffect, useRef, useState, type JSX, type PointerEvent } from 'react'
 import { CartError, checkLine, maxQtyPerLineOf, sumSatang, type CartLineDraft, type PosOrderCatalog, type PricedLine } from '@dayo/domain'
 import { usePricedCart } from '../app/use-priced-cart'
 import { useCart } from '../app/cart-context'
@@ -48,9 +48,56 @@ export function CartPanel({
   const canPay = priced !== null && priced.ok && priced.totalSatang > 0
   const zeroTotal = priced !== null && priced.ok && priced.totalSatang === 0 && !empty
   const billDiscountTooBig = zeroTotal && state.billDiscount !== null
+  const lineErrors = state.lines.map((l, i) => (catalog === undefined ? null : lineError(catalog, l, i, maxQtyPerLineOf(catalog))))
+  const hasProblem = error !== null || (priced !== null && !priced.ok) || zeroTotal || lineErrors.some((e) => e !== null)
+  const cups = state.lines.reduce((n, l) => n + l.qty, 0)
+  const channelName = channels.find((c) => c.code === state.channelCode)?.name ?? state.channelCode
+
+  // Phones only (styles.css hides the handle elsewhere): the cart is a bottom sheet — collapsed it shows just the
+  // total and pay buttons under the menu, expanded it slides up over the menu to show every line. Tap or swipe the
+  // handle; an emptied cart folds itself back down.
+  const [expanded, setExpanded] = useState(false)
+  useEffect(() => {
+    if (empty) setExpanded(false)
+  }, [empty])
+  const swipeStart = useRef<number | null>(null)
+  const swiped = useRef(false)
+  const onHandleUp = (e: PointerEvent<HTMLButtonElement>): void => {
+    const start = swipeStart.current
+    swipeStart.current = null
+    if (start === null) return
+    const dy = e.clientY - start
+    if (Math.abs(dy) < 24) return
+    swiped.current = true
+    setExpanded(dy < 0 && !empty)
+  }
 
   return (
-    <aside className="cart" data-testid="cart">
+    <aside className="cart" data-testid="cart" data-expanded={expanded}>
+      <button
+        type="button"
+        className="cart-toggle"
+        data-testid="cart-toggle"
+        aria-expanded={expanded}
+        onPointerDown={(e) => {
+          swipeStart.current = e.clientY
+        }}
+        onPointerUp={onHandleUp}
+        onClick={() => {
+          if (swiped.current) {
+            swiped.current = false
+            return
+          }
+          if (!empty || expanded) setExpanded((v) => !v)
+        }}
+      >
+        <span className="grip" aria-hidden="true" />
+        <span className="summary">
+          <strong>{TH.cart}</strong> · {TH.cartCups(cups)} · {channelName}
+        </span>
+        <span className="cue">{expanded ? TH.cartCollapse : TH.cartExpand}</span>
+        {hasProblem && <span className="error">{TH.cartCheck}</span>}
+      </button>
       <div className="cart-head">
         <h2>{TH.cart}</h2>
         <label>
@@ -74,7 +121,7 @@ export function CartPanel({
           const matched = priced?.lines.filter((p) => sameCombo(p, l)) ?? []
           const lineTotal = sumSatang(matched.map((p) => p.lineTotalSatang))
           const freeQty = sumSatang(matched.filter((p) => p.promotionId !== null && p.lineTotalSatang === 0).map((p) => p.qty))
-          const badLine = catalog === undefined ? null : lineError(catalog, l, i, maxQtyPerLineOf(catalog))
+          const badLine = lineErrors[i] ?? null
           return (
             <div key={l.key} className="cart-line" data-testid={`cart-line-${i}`}>
               <div>
