@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { buildZReport } from '@dayo/domain'
-import { openReadyApi, openTestApi, PINS, sellSku, TEST_SETUP } from './helpers/db'
+import { insertLegacyShop, openReadyApi, openTestApi, PINS, legacySale, TEST_SETUP_INPUT } from './helpers/db'
 import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
 describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)', () => {
@@ -39,7 +39,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
 
   it('D28: tracked bases a plan-3 bill drove below zero are listed (ice and other untracked items never show)', async () => {
     const t = await openReadyApi()
-    await sellSku(t, 'Original-16oz', 2, { method: 'PROMPTPAY' })
+    await legacySale(t, 'Original-16oz', 2, { method: 'PROMPTPAY' })
     expect((await t.api.shiftReport()).negativeBases.map((b) => [b.code, b.onHandMilli])).toEqual([
       ['PB-SYRUP', -33_200],
       ['PB-TEA-THAI', -260_000],
@@ -76,7 +76,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
     const shift2 = await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 10_000 }) // ฿100 float, a fresh shift
 
     // (a) one plain cash sale first: if the shift filter were gone, shift 1's ฿520 would show up here too
-    const firstSale = await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5_000 }) // ฿45, no discount
+    const firstSale = await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5_000 }) // ฿45, no discount
     let x = await t.api.shiftReport()
     expect(x.shift.id).toBe(shift2.id)
     expect(x.sales).toEqual({ orderCount: 1, voidCount: 0, grossSalesSatang: 4_500, discountSatang: 0, voidedSatang: 0, netSalesSatang: 4_500, cashSalesSatang: 4_500, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 })
@@ -84,12 +84,12 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
     expect(x.expectedCashSatang).toBe(14_500) // ฿100 float + ฿45 cash — not ฿520 + ฿45
 
     // (b) a discounted cash bill and a discounted QR bill, both voided, plus a paid-in and a drop
-    const cashVoided = await sellSku(t, 'Original-16oz', 2, { method: 'CASH', tenderedSatang: 10_000 }, { amountSatang: 1_000, reason: 'ราคาพิเศษ' }) // ฿90 − ฿10 = ฿80
-    const qrVoided = await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }, { amountSatang: 700, reason: 'ราคาพิเศษ' }) // ฿50 − ฿7 = ฿43
+    const cashVoided = await legacySale(t, 'Original-16oz', 2, { method: 'CASH', tenderedSatang: 10_000 }, { amountSatang: 1_000, reason: 'ราคาพิเศษ' }) // ฿90 − ฿10 = ฿80
+    const qrVoided = await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' }, { amountSatang: 700, reason: 'ราคาพิเศษ' }) // ฿50 − ฿7 = ฿43
     t.clock.advanceMs(60_000)
     const base = { actorUserId: t.owner.id, approverUserId: t.other.id, approverPin: PINS.DCm }
-    await t.api.voidOrder({ ...base, orderId: cashVoided.orderId, reason: 'ยกเลิกเบิกผิด', made: false, refundReference: null })
-    await t.api.voidOrder({ ...base, orderId: qrVoided.orderId, reason: 'ทำผิดสูตร', made: true, refundReference: 'KBANK-2' })
+    await t.api.cancelSale({ ...base, orderId: cashVoided.orderId, reason: 'ยกเลิกเบิกผิด', made: false, refundReference: null })
+    await t.api.cancelSale({ ...base, orderId: qrVoided.orderId, reason: 'ทำผิดสูตร', made: true, refundReference: 'KBANK-2' })
     await t.api.recordCashMovement({ actorUserId: t.owner.id, kind: 'PAID_IN', amountSatang: 1_000, reason: 'เติมเงินทอน' })
     await t.api.recordCashMovement({ actorUserId: t.owner.id, kind: 'DROP', amountSatang: 3_000, reason: 'ฝากธนาคาร' })
 
@@ -157,7 +157,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
 
   it('shows a quick-opened shift (Q3b-10 · D52) and needs an open shift', async () => {
     const t = await openTestApi()
-    await t.api.setupShop(TEST_SETUP)
+    await insertLegacyShop(t, TEST_SETUP_INPUT)
     const { users } = await t.api.bootstrap()
     await expect(t.api.shiftReport()).rejects.toThrow(/^NO_OPEN_SHIFT: /)
     await t.api.quickOpenShift({ userId: users[0]!.id })

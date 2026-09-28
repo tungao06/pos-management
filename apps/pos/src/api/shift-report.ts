@@ -18,7 +18,7 @@ export async function varianceAlertSatang(db: RemoteDb, atIso: string): Promise<
   return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : DEFAULT_VARIANCE_ALERT_SATANG
 }
 
-/** The VOIDED event payload written by voidOrder (plan 3 Task 13) — the only place the QR refund reference lives (plan 3 notes §5). */
+/** The VOIDED event payload written when a bill is voided (plan 3 Task 13) — the only place the QR refund reference lives (plan 3 notes §5). */
 function voidFromEvent(order: typeof s.order.$inferSelect, method: 'CASH' | 'PROMPTPAY', payload: unknown, names: ReadonlyMap<string, string>): ZVoid {
   const p = (typeof payload === 'object' && payload !== null ? payload : {}) as Record<string, unknown>
   if (typeof p['reason'] !== 'string' || typeof p['made'] !== 'boolean' || typeof p['approvedBy'] !== 'string' || order.receiptNo === null || order.voidedAt === null) {

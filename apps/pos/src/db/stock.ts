@@ -1,9 +1,7 @@
-import { and, eq, inArray } from 'drizzle-orm'
-import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
+import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { applyInboundGroup, applyMovement, initialCostState, requireItem, VAT_OFF, type Catalog, type CostOf, type CostState, type MovementDraft, type SaleContext, type SaleRecipe } from '@dayo/domain'
+import { applyInboundGroup, applyMovement, initialCostState, requireItem, type Catalog, type CostOf, type CostState, type MovementDraft } from '@dayo/domain'
 import type { ApiDeps } from '../api/deps'
-import { requireStoreChannelId } from '../api/menu'
 
 export async function loadCostStates(db: RemoteDb): Promise<Map<string, CostState>> {
   const rows = await db.select().from(s.itemCostState).all()
@@ -19,44 +17,6 @@ export function makeCostOf(catalog: Catalog, states: ReadonlyMap<string, CostSta
     const item = requireItem(catalog, itemId)
     if (!item.isTracked) return item.standardCostUsat
     return states.get(itemId)?.avgCostUsat ?? item.standardCostUsat
-  }
-}
-
-export type LoadedSaleContext = {
-  sale: SaleContext
-  catalog: Catalog
-  variantNames: Map<string, { productName: string; sizeName: string }>
-  sweetnessNames: Map<string, string>
-}
-
-/** Everything planSale needs for the given variants, read inside the sale transaction. */
-export async function loadSaleContext(db: RemoteDb, atIso: string, variantIds: readonly string[]): Promise<LoadedSaleContext> {
-  const channelId = await requireStoreChannelId(db)
-  const ids = [...new Set(variantIds)]
-  const prices = (await db.select().from(s.price).where(inArray(s.price.variantId, ids)).all()).map((p) => ({ variantId: p.variantId, channelId: p.channelId, priceSatang: p.priceSatang, effectiveFrom: p.effectiveFrom }))
-  const recipeRows = await db.select().from(s.recipe).where(and(inArray(s.recipe.variantId, ids), eq(s.recipe.isCurrent, true))).all()
-  const lineRows = recipeRows.length === 0 ? [] : await db.select().from(s.recipeLine).where(inArray(s.recipeLine.recipeId, recipeRows.map((r) => r.id))).all()
-  const recipes: SaleRecipe[] = recipeRows.map((r) => ({
-    recipeId: r.id,
-    variantId: r.variantId,
-    sweetnessId: r.sweetnessId,
-    lines: lineRows.filter((l) => l.recipeId === r.id).map((l) => ({ itemId: l.itemId, qtyMilli: l.qtyMilli })),
-  }))
-  const catalog = await loadCatalogSqlite(db)
-  const states = await loadCostStates(db)
-  const nameRows = await db
-    .select({ variantId: s.productVariant.id, productName: s.product.nameTh, sizeName: s.size.name })
-    .from(s.productVariant)
-    .innerJoin(s.product, eq(s.productVariant.productId, s.product.id))
-    .innerJoin(s.size, eq(s.productVariant.sizeId, s.size.id))
-    .where(inArray(s.productVariant.id, ids))
-    .all()
-  const sweetRows = await db.select().from(s.sweetnessLevel).all()
-  return {
-    sale: { channelId, atIso, prices, recipes, catalog, costOf: makeCostOf(catalog, states), vat: VAT_OFF },
-    catalog,
-    variantNames: new Map(nameRows.map((r) => [r.variantId, { productName: r.productName, sizeName: r.sizeName }])),
-    sweetnessNames: new Map(sweetRows.map((r) => [r.id, r.name])),
   }
 }
 

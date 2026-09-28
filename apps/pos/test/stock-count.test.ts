@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
-import { openReadyApi, sellSku } from './helpers/db'
+import { openReadyApi, legacySale } from './helpers/db'
 import { defaultUnitId, itemId, movementsOf, openingCount, outboxKeys, stockOf } from './helpers/stock'
 
 describe('opening count (D30 · Q4-13)', () => {
@@ -69,7 +69,7 @@ describe('stock count after the opening (spec §4.5)', () => {
     const t = await openReadyApi()
     await openingCount(t, { 'RM-MLK-02': 405_000 })
     const c = await t.api.startStockCount(t.owner.id)
-    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // evaporated milk −46 ml, after the count opened
+    await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // evaporated milk −46 ml, after the count opened
     const saved = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: await itemId(t, 'RM-MLK-02'), purchaseUnitId: await defaultUnitId(t, 'RM-MLK-02'), countedUnitsMilli: 1_000 })
     expect(saved.lines[0]).toMatchObject({ expectedUseMilli: 359_000, varianceUseMilli: 46_000, opening: false })
     await t.api.closeStockCount({ actorUserId: t.owner.id, countId: c.id })
@@ -83,7 +83,7 @@ describe('stock count after the opening (spec §4.5)', () => {
     await openingCount(t, { 'RM-MLK-02': 405_000 })
     const c = await t.api.startStockCount(t.owner.id)
     await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: await itemId(t, 'RM-MLK-02'), purchaseUnitId: null, countedUnitsMilli: 405_000 })
-    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 })
+    await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 })
     await t.api.closeStockCount({ actorUserId: t.owner.id, countId: c.id })
     expect((await stockOf(t, 'RM-MLK-02')).onHandMilli).toBe(359_000)
   })
@@ -96,7 +96,7 @@ describe('stock count after the opening (spec §4.5)', () => {
     const c = await t.api.startStockCount(t.owner.id)
     const typo = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk, purchaseUnitId: can, countedUnitsMilli: 4_000 }) // 4 typed for 1
     expect(typo.lines[0]).toMatchObject({ expectedUseMilli: 405_000, varianceUseMilli: 1_215_000 })
-    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // sold before the typo is noticed
+    await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // sold before the typo is noticed
     const fixed = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk, purchaseUnitId: can, countedUnitsMilli: 1_000 })
     expect(fixed.lines[0]).toMatchObject({ countedUseMilli: 405_000, expectedUseMilli: 405_000, varianceUseMilli: 0 })
     await t.api.closeStockCount({ actorUserId: t.owner.id, countId: c.id })
@@ -145,7 +145,7 @@ describe('stock count after the opening (spec §4.5)', () => {
     const can = await defaultUnitId(t, 'RM-MLK-02')
     const c = await t.api.startStockCount(t.owner.id)
     await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk, purchaseUnitId: can, countedUnitsMilli: 1_000 }) // first pass: 1 can, before the sale
-    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // −46 ml, after the item was already counted
+    await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // −46 ml, after the item was already counted
     await t.api.removeCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk }) // "ไม่นับรายการนี้" — a real recount, not แก้ตัวเลข
     const recounted = await t.api.saveCountLine({ actorUserId: t.owner.id, countId: c.id, itemId: milk, purchaseUnitId: can, countedUnitsMilli: 1_000 }) // still 1 can on the shelf
     expect(recounted.lines[0]).toMatchObject({ countedUseMilli: 405_000, expectedUseMilli: 359_000, varianceUseMilli: 46_000 })

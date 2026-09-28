@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { promptPayPayload } from '@dayo/domain'
-import { openReadyApi, sellSku } from './helpers/db'
+import { openReadyApi, legacySale } from './helpers/db'
 
 describe('listOrders / getOrder', () => {
   it('lists the open shift newest first and shows a full detail with the event timeline', async () => {
     const t = await openReadyApi()
-    const a = await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5000 })
-    const b = await sellSku(t, 'Latte-16oz', 2, { method: 'PROMPTPAY' }, { amountSatang: 1000, reason: 'ลูกค้าประจำ' })
+    const a = await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5000 })
+    const b = await legacySale(t, 'Latte-16oz', 2, { method: 'PROMPTPAY' }, { amountSatang: 1000, reason: 'ลูกค้าประจำ' })
     const list = await t.api.listOrders()
     expect(list.map((o) => [o.receiptNo, o.queueNo, o.status, o.method, o.totalSatang, o.cups])).toEqual([
       ['A-000002', 2, 'paid', 'PROMPTPAY', 9000, 2],
@@ -27,7 +27,7 @@ describe('listOrders / getOrder', () => {
 
   it('orders of a closed shift are not listed and not voidable (D47 ข้อ 2 · Q3-13)', async () => {
     const t = await openReadyApi()
-    const a = await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })
+    const a = await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })
     t.raw.prepare("update shift set status = 'closed', closed_at = ?, closed_by = ? where id = ?").run(t.clock.now(), t.owner.id, t.shift.id)
     expect(await t.api.listOrders()).toEqual([])
     t.clock.set('2026-09-18T03:00:00.000Z')

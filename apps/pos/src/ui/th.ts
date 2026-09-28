@@ -12,12 +12,6 @@ export const TH = {
   storageNotPersistent: 'ข้อมูลในเครื่องยังไม่ถูกล็อกไว้ (อาจถูกล้าง) — ติดตั้งแอปลงหน้าจอหลัก',
   errUnexpected: 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง',
 
-  // เดิม (setupShop) — เก็บไว้จนสาย C ลบ setupShop
-  setupDeviceName: 'ชื่อเครื่อง',
-  setupDeviceNameDefault: 'แท็บเล็ตหน้าร้าน',
-  setupOwner: (n: number): string => `เจ้าของคนที่ ${n}`,
-  setupDisplayName: 'ชื่อที่แสดง',
-
   // Task 17 — ตั้งเครื่องด้วยกุญแจ dayo (spec 04 §7 ข้อ 1, §6.5, §6.6, §6.9)
   setupTitle: 'ตั้งเครื่องขาย',
   setupLinkTitle: 'เชื่อมเครื่องนี้กับระบบกลาง',
@@ -145,7 +139,7 @@ export const TH = {
   lines: 'รายการ',
   payment: 'การชำระ',
   events: 'ประวัติเหตุการณ์',
-  voidOrder: 'ยกเลิกบิล',
+  voidButton: 'ยกเลิกบิล',
 
   voidTitle: (receiptNo: string): string => `ยกเลิกบิล ${receiptNo}`,
   voidReason: 'เหตุผล',

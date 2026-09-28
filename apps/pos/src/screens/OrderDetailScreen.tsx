@@ -130,7 +130,7 @@ export function OrderDetailScreen(): JSX.Element {
       </ol>
       {mayVoid && (
         <button type="button" data-testid="order-void" onClick={() => setVoiding(true)}>
-          {TH.voidOrder}
+          {TH.voidButton}
         </button>
       )}
       {voiding && <VoidDialog order={o} onClose={() => setVoiding(false)} />}

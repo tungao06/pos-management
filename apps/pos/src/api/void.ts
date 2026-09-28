@@ -12,15 +12,15 @@ import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { getOrder, voidInstant } from './orders'
-import { REASON_MAX_LENGTH, type CancelSaleInput, type OrderDetailDto, type ShiftDto, type VoidOrderInput } from './types'
+import { REASON_MAX_LENGTH, type CancelSaleInput, type OrderDetailDto, type ShiftDto } from './types'
 
 type LegacyVoid = { order: typeof s.order.$inferSelect; shift: ShiftDto; deviceId: string; actorId: string; approverId: string; reason: string; made: boolean; refundReference: string | null }
 
 /**
  * The stock way of voiding a paid order (spec §4.3 + D18/D36/D39), inside the caller's transaction after its checks:
  * not made yet → VOID_RETURN of the exact SALE movements (same cost) · made → no movement, waste marker only · cash →
- * VOID_REFUND (local_only) · PromptPay → the refund transfer reference is recorded. Used by voidOrder and by cancelSale
- * for a plan-3 bill (no sold_at), so an old bill's ingredients come back whichever the screen calls.
+ * VOID_REFUND (local_only) · PromptPay → the refund transfer reference is recorded. `cancelSale` is the only caller —
+ * for a plan-3 bill (no sold_at) it goes this way too, so an old bill's ingredients come back either way.
  */
 async function voidWithStock(tx: RemoteDb, deps: ApiDeps, v: LegacyVoid): Promise<void> {
   const { order, shift, reason } = v
@@ -92,38 +92,6 @@ async function voidWithStock(tx: RemoteDb, deps: ApiDeps, v: LegacyVoid): Promis
 function assertMayVoid(role: UserRole, order: typeof s.order.$inferSelect, actorId: string): void {
   const mayVoid = can(role, 'void_any') || (can(role, 'void_own') && order.createdById === actorId)
   if (!mayVoid) throw new PosError('VOID_NOT_ALLOWED', 'OWN_BILLS_ONLY: staff และ manager ยกเลิกได้เฉพาะบิลที่ตัวเองขาย')
-}
-
-/**
- * spec §4.3 + D18/D36/D39: void a paid PLAN-3 order of the open shift with a reason and an owner's PIN.
- * Not made yet → VOID_RETURN of the exact SALE movements (same cost) · made → no movement, waste marker only.
- * Cash → automatic cash_movement VOID_REFUND · PromptPay → the refund transfer reference is recorded.
- * A bill sold with dayo's catalog (sold_at set) is refused: only cancelSale applies the same-day rule and queues its
- * order_void. Same permission rule as cancelSale.
- */
-export async function voidOrder(db: RemoteDb, deps: ApiDeps, input: VoidOrderInput): Promise<OrderDetailDto> {
-  const reason = input.reason.trim()
-  if (reason === '') throw new PosError('BAD_INPUT', 'a void needs a reason')
-  if (reason.length > REASON_MAX_LENGTH) throw new PosError('BAD_INPUT', `a reason is at most ${REASON_MAX_LENGTH} characters`)
-  const actor = await db.select().from(s.user).where(eq(s.user.id, input.actorUserId)).get()
-  if (!actor || !actor.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${input.actorUserId}`)
-  // argon2 is slow — check the PIN before opening the transaction.
-  const approver = await requireOwnerPin(db, deps, input.approverUserId, input.approverPin) // PIN lockout shared with login (D50 Q3-21)
-  const device = await requireDevice(db)
-
-  await db.transaction(async (tx) => {
-    const order = await tx.select().from(s.order).where(eq(s.order.id, input.orderId)).get()
-    if (!order) throw new PosError('ORDER_NOT_FOUND', input.orderId)
-    const shift = await currentOpenShift(tx, device.id)
-    // Only paid orders of this device's open shift (D47 ข้อ 2 · Q3-13)
-    if (order.status !== 'paid' || shift === null || order.shiftId !== shift.id || order.deviceId !== device.id) {
-      throw new PosError('VOID_NOT_ALLOWED', `order ${order.receiptNo ?? order.id} is ${order.status} or not in the open shift`)
-    }
-    if (order.soldAt !== null) throw new PosError('VOID_NOT_ALLOWED', `DAYO_BILL: order ${order.receiptNo ?? order.id} was sold with dayo's catalog — cancel it with cancelSale`)
-    assertMayVoid(actor.role, order, actor.id)
-    await voidWithStock(tx, deps, { order, shift, deviceId: device.id, actorId: actor.id, approverId: approver.id, reason, made: input.made, refundReference: input.refundReference })
-  })
-  return getOrder(db, deps, input.orderId)
 }
 
 /**

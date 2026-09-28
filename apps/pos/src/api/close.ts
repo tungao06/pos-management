@@ -216,7 +216,7 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
   if (reason.length > REASON_MAX_LENGTH) throw new PosError('BAD_INPUT', `a reason is at most ${REASON_MAX_LENGTH} characters`)
   const actor = await db.select().from(s.user).where(eq(s.user.id, input.actorUserId)).get()
   if (!actor || !actor.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${input.actorUserId}`)
-  // argon2 is slow — check the PIN before opening the transaction (same as voidOrder).
+  // argon2 is slow — check the PIN before opening the transaction (same as cancelSale).
   const approver = await requireOwnerPin(db, deps, input.approverUserId, input.approverPin)
   const device = await requireDevice(db)
   hooks.validated?.()

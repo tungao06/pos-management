@@ -22,7 +22,7 @@ export type BootstrapState = {
   lastBackupAt: string | null
   /** A Z report was closed after the last one a confirmed backup covered — compared by Z id, not time (Q3b-7 · D52). */
   backupDue: boolean
-  /** A device set up before block 2 (setupShop) that is not linked to dayo yet — it links with an old owner PIN (ruling R7). */
+  /** A device set up before block 2's dayo connect flow existed and is not linked to dayo yet — it links with an old owner PIN (ruling R7). */
   legacyDevice: boolean
   /** dayo.base_url is stored and the API key is in the secret store. */
   dayoLinked: boolean
@@ -70,38 +70,24 @@ export type SetStaffPinInput = { staffId: string; pin: string; approverUserId: s
 export type ReplaceApiKeyInput = { baseUrl: string; apiKey: string; approverUserId: string; approverPin: string }
 /** ruling N2 — no approver: the new key (issued on the dayo web after a LINE login) is the proof. */
 export type RecoverOwnerInput = { baseUrl: string; apiKey: string; ownerStaffId: string; ownerPin: string }
-export type SetupInput = { deviceName: string; receiptPrefix: string; owners: { displayName: string; pin: string }[]; promptPayId: string }
 export type OpenShiftInput = { userId: string; openingFloatSatang: number }
 /** "เปิดกะด่วน" (spec §4.8): owner only, float 0 (Q3b-10 · D52). */
 export type QuickOpenShiftInput = { userId: string }
 
-export type MenuCategory = { id: string; code: string; name: string }
-export type MenuProduct = { id: string; code: string; nameTh: string; nameEn: string; categoryId: string }
-export type MenuSize = { id: string; code: string; name: string }
-export type MenuSweetness = { id: string; code: string; name: string; isDefault: boolean }
-export type MenuVariant = { id: string; productId: string; sizeId: string; priceSatang: number | null }
-export type MenuDto = {
-  storeChannelId: string
-  categories: MenuCategory[]
-  products: MenuProduct[]
-  sizes: MenuSize[]
-  sweetness: MenuSweetness[]
-  variants: MenuVariant[]
+/**
+ * Products/sizes/sweetness/variants for AdjustScreen's "เป็นแก้ว (ตามสูตร)" picker (spec §5 · Q4-8) — active only
+ * (M-11: a drink line can never name a product/variant `adjustStock` would refuse). No price or channel here: block 2
+ * prices bills from dayo, but stock-out by drink still explodes the LOCAL recipe (recipe/BOM never moved to dayo).
+ */
+export type DrinkCatalogDto = {
+  products: { id: string; code: string; nameTh: string }[]
+  sizes: { id: string; name: string }[]
+  sweetness: { id: string; name: string }[]
+  variants: { id: string; productId: string; sizeId: string }[]
   defaultSizeId: string
   defaultSweetnessId: string
-  bestSellerProductIds: string[]
 }
 
-export type CommitSaleInput = {
-  /** Created when the cart starts; resending the same id returns the first result (decision T17). */
-  orderId: string
-  actorUserId: string
-  lines: { variantId: string; sweetnessId: string; qty: number }[]
-  discount: { amountSatang: number; reason: string } | null
-  payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' }
-  /** The total the customer was shown (cart / QR). commitSale refuses with PRICE_CHANGED if the DB re-price differs (I-7, D50 Q3-27). */
-  expectedTotalSatang: number
-}
 export type CommitSaleResult = {
   orderId: string
   receiptNo: string
@@ -247,20 +233,6 @@ export type CentralOrderDto = { orderNo: string; source: 'line' | 'web' | string
  */
 export type PriceDiffDto = { kind: 'amount' | 'void_local_only'; orderId: string; receiptNo: string; soldAt: string; totalSatang: number; computedTotalSatang: number | null; diffSatang: number | null; catalogVersion: number | null; amountMismatch: boolean }
 
-export type VoidOrderInput = {
-  orderId: string
-  /** Signed-in user who performs the void. */
-  actorUserId: string
-  /** Owner who approves with their PIN (spec §4.3). */
-  approverUserId: string
-  approverPin: string
-  reason: string
-  /** "ทำเครื่องดื่มไปแล้วหรือยัง" — true = made (waste), false = return ingredients. */
-  made: boolean
-  /** Required when the order was paid by PromptPay (D48 Q3-15). */
-  refundReference: string | null
-}
-
 /** Cancel a bill sold with dayo's catalog (spec 04 §4.5 order_void, §4.7) — same Thai day only, owner PIN. */
 export type CancelSaleInput = {
   orderId: string
@@ -276,7 +248,7 @@ export type CancelSaleInput = {
   refundReference: string | null
 }
 
-/** A paid-in / paid-out / drop typed in by a person (spec §3.5 · Q3b-9 · D52). VOID_REFUND is written by voidOrder only. */
+/** A paid-in / paid-out / drop typed in by a person (spec §3.5 · Q3b-9 · D52). VOID_REFUND is written by cancelSale only. */
 export type CashMovementInput = { actorUserId: string; kind: 'PAID_IN' | 'PAID_OUT' | 'DROP'; amountSatang: number; reason: string }
 export type CashMovementDto = { id: string; kind: CashMovementKind; amountSatang: number; orderId: string | null; reason: string | null; createdBy: string; createdAt: string }
 
@@ -489,17 +461,14 @@ export type CloseStockCountInput = { actorUserId: string; countId: string }
 /** Everything the UI may ask of the on-device database. Implemented in the Worker (and in Node tests). */
 export interface PosApi {
   bootstrap(): Promise<BootstrapState>
-  setupShop(input: SetupInput): Promise<void>
   login(userId: string, pin: string): Promise<UserDto>
   openShift(input: OpenShiftInput): Promise<ShiftDto>
-  loadMenu(): Promise<MenuDto>
-  commitSale(input: CommitSaleInput): Promise<CommitSaleResult>
+  loadDrinkCatalog(): Promise<DrinkCatalogDto>
   loadSellCatalog(): Promise<SellCatalogDto>
   recordSale(input: RecordSaleInput): Promise<CommitSaleResult>
   listOrders(): Promise<OrderSummaryDto[]>
   getOrder(orderId: string): Promise<OrderDetailDto>
   promptPayForAmount(amountSatang: number): Promise<string>
-  voidOrder(input: VoidOrderInput): Promise<OrderDetailDto>
   cancelSale(input: CancelSaleInput): Promise<OrderDetailDto>
   quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
   recordCashMovement(input: CashMovementInput): Promise<CashMovementDto>
@@ -548,17 +517,14 @@ export interface PosApi {
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
 export const POS_API_METHODS = [
   'bootstrap',
-  'setupShop',
   'login',
   'openShift',
-  'loadMenu',
-  'commitSale',
+  'loadDrinkCatalog',
   'loadSellCatalog',
   'recordSale',
   'listOrders',
   'getOrder',
   'promptPayForAmount',
-  'voidOrder',
   'cancelSale',
   'quickOpenShift',
   'recordCashMovement',

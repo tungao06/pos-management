@@ -10,7 +10,7 @@ import { shiftReportKey } from '../src/app/queries'
 import { SessionProvider, useSession } from '../src/app/session'
 import { CloseShiftScreen } from '../src/screens/CloseShiftScreen'
 import { TH } from '../src/ui/th'
-import { openReadyApi, PINS, sellSku, type ReadyApi } from './helpers/db'
+import { openReadyApi, PINS, legacySale, type ReadyApi } from './helpers/db'
 import { sellVoidScenario } from './helpers/shift'
 
 /**
@@ -118,7 +118,7 @@ describe('CloseShiftScreen against the real API', () => {
     await countDone()
     expect(screen.getByTestId('close-expected').textContent).toBe('฿520')
 
-    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5_000 }) // ฿45 into the drawer, behind the screen
+    await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5_000 }) // ฿45 into the drawer, behind the screen
     // …and the report reloads on top of it (a window-focus refetch). Waiting for the *newer* report to be in the
     // cache is what gives the next line its meaning: the owner is still looking at the ฿520 they were shown, and
     // that is the pair the PIN submits — the real API is then the one that refuses it.
@@ -167,7 +167,7 @@ describe('CloseShiftScreen against the real API', () => {
 
     t.clock.set('2026-09-18T02:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
-    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5_000 }) // ฿45 cash
+    await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 5_000 }) // ฿45 cash
     mount(t)
     await startCount()
     count(2_000, '2')

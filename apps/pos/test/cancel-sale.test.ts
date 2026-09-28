@@ -6,7 +6,7 @@ import { verifyChain } from '@dayo/domain'
 import { posErrorCode } from '../src/api/errors'
 import { loadDeviceChain } from '../src/db/events'
 import { openConnectedApi, STAFF } from './helpers/dayo'
-import { openReadyApi, sellCode, sellSku } from './helpers/db'
+import { openReadyApi, sellCode, legacySale } from './helpers/db'
 
 const approve = { approverUserId: STAFF.DCm, approverPin: '2222' }
 
@@ -170,8 +170,8 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
   })
   it('a plan-3 bill (no sold_at) goes the stock way: not made returns every ingredient, made returns none — no order_void', async () => {
     const t = await openReadyApi()
-    const notMade = await sellSku(t, 'Original-16oz', 2, { method: 'CASH', tenderedSatang: 10_000 })
-    const made = await sellSku(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
+    const notMade = await legacySale(t, 'Original-16oz', 2, { method: 'CASH', tenderedSatang: 10_000 })
+    const made = await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
     const moves = async (orderId: string, kind: 'SALE' | 'VOID_RETURN') => (await t.db.select().from(s.stockMovement).where(and(eq(s.stockMovement.refType, 'order'), eq(s.stockMovement.refId, orderId), eq(s.stockMovement.kind, kind))).all())
       .map((m) => [m.itemId, Math.abs(m.qtyMilli), m.unitCostUsat]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))
     const base = { actorUserId: t.owner.id, approverUserId: t.other.id, approverPin: '2222', reason: 'กดผิดเมนู' }
@@ -188,7 +188,7 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
   it("a plan-3 bill keeps the same permission rule: staff cannot cancel an owner's bill, and it stays paid with its stock", async () => {
     const t = await openReadyApi()
     await t.api.setStaffPin({ staffId: STAFF.Mint, pin: '4321', approverUserId: t.owner.id, approverPin: '1111' })
-    const legacy = await sellSku(t, 'Original-16oz', 1, { method: 'PROMPTPAY' }) // sold by the owner
+    const legacy = await legacySale(t, 'Original-16oz', 1, { method: 'PROMPTPAY' }) // sold by the owner
     try { await t.api.cancelSale({ orderId: legacy.orderId, actorUserId: STAFF.Mint, approverUserId: t.other.id, approverPin: '2222', reason: 'x', made: false, refundReference: 'K' }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('VOID_NOT_ALLOWED') }
     expect((await t.db.select().from(s.order).where(eq(s.order.id, legacy.orderId)).get())?.status).toBe('paid')
     expect(await t.db.select().from(s.stockMovement).where(eq(s.stockMovement.kind, 'VOID_RETURN')).all()).toEqual([])

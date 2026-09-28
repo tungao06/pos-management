@@ -144,7 +144,7 @@ export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapS
     pendingSyncItems: await countPendingSyncItems(db),
     lastBackupAt: lastAt,
     backupDue: await isBackupDue(db, device.id, lastZId),
-    legacyDevice: !dayoLinked, // a device row without a dayo link = set up by plan 3/4's setupShop (ruling R7)
+    legacyDevice: !dayoLinked, // a device row without a dayo link = set up before block 2's dayo connect flow (ruling R7)
     dayoLinked,
     dayoBaseUrl,
     staffNeedingPin: dayoLinked ? await staffNeedingPin(db) : [],

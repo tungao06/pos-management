@@ -10,14 +10,13 @@ import { closeShift, getZReport, listZReports } from './close'
 import { connectShop, probeDayo, recoverOwner, replaceApiKey } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { loadMenu } from './menu'
+import { loadDrinkCatalog } from './drink-catalog'
 import { getOrder, listOrders } from './orders'
 import { produceBatch } from './production'
 import { receivePurchase } from './purchase'
-import { commitSale, promptPayForAmount, recordSale } from './sale'
+import { promptPayForAmount, recordSale } from './sale'
 import { loadSellCatalog } from './sell-catalog'
 import { createSerialQueue } from './serial'
-import { setupShop } from './setup'
 import { openShift, quickOpenShift } from './shift'
 import { shiftReport } from './shift-report'
 import { setStaffPin } from './staff'
@@ -25,7 +24,7 @@ import { closeStockCount, getOpenStockCount, removeCountLine, saveCountLine, sta
 import { stockOverview } from './stock-overview'
 import { excludeFromSync, exportSyncRow, listPriceDiffs, listSyncProblems, remapCode, remapStaff, renumberReceipt, retrySyncRow } from './sync-problems'
 import type { PosApi } from './types'
-import { cancelSale, voidOrder } from './void'
+import { cancelSale } from './void'
 
 export type PosApiOptions = {
   /** The Worker: start the sender (open wake + 60 s tick) and wake it on saves and shifts. Tests: off (default). */
@@ -90,17 +89,14 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
   const wake = (reason: 'before_shift' | 'before_close'): void => { if (auto) sch.kick(reason) }
   const api: PosApi = {
     bootstrap: () => serial(() => bootstrap(db, deps)),
-    setupShop: (input) => serial(() => setupShop(db, deps, input)),
     login: (userId, pin) => serial(() => login(db, deps, userId, pin)),
     openShift: async (input) => { const r = await serial(() => openShift(db, deps, input)); wake('before_shift'); return r },
-    loadMenu: () => serial(() => loadMenu(db, deps)),
-    commitSale: (input) => serial(() => commitSale(db, deps, input)),
+    loadDrinkCatalog: () => serial(() => loadDrinkCatalog(db)),
     loadSellCatalog: () => serial(() => loadSellCatalog(db, deps)),
     recordSale: (input) => serial(() => recordSale(db, deps, input)),
     listOrders: () => serial(() => listOrders(db)),
     getOrder: (orderId) => serial(() => getOrder(db, deps, orderId)),
     promptPayForAmount: (amountSatang) => serial(() => promptPayForAmount(db, deps, amountSatang)),
-    voidOrder: (input) => serial(() => voidOrder(db, deps, input)),
     cancelSale: (input) => serial(() => cancelSale(db, deps, input)),
     quickOpenShift: async (input) => { const r = await serial(() => quickOpenShift(db, deps, input)); wake('before_shift'); return r },
     recordCashMovement: (input) => serial(() => recordCashMovement(db, deps, input)),

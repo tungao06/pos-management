@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import type { CashMovementInput } from '../src/api/types'
-import { openReadyApi, openTestApi, TEST_SETUP, type ReadyApi } from './helpers/db'
+import { insertLegacyShop, openReadyApi, openTestApi, TEST_SETUP_INPUT, type ReadyApi } from './helpers/db'
 
 const input = (t: ReadyApi, patch: Partial<CashMovementInput> = {}): CashMovementInput => ({ actorUserId: t.owner.id, kind: 'PAID_OUT', amountSatang: 12_000, reason: 'ซื้อน้ำแข็ง', ...patch })
 
@@ -39,7 +39,7 @@ describe('recordCashMovement (spec §3.5 · Q3b-9 · D52)', () => {
     expect(await t.db.select().from(s.cashMovement).all()).toEqual([])
 
     const u = await openTestApi()
-    await u.api.setupShop(TEST_SETUP)
+    await insertLegacyShop(u, TEST_SETUP_INPUT)
     const { users } = await u.api.bootstrap()
     await expect(u.api.recordCashMovement({ actorUserId: users[0]!.id, kind: 'PAID_IN', amountSatang: 100, reason: 'x' })).rejects.toThrow(/^NO_OPEN_SHIFT: /)
   })

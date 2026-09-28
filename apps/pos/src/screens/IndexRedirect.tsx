@@ -9,7 +9,7 @@ import { DbErrorScreen } from './DbErrorScreen'
 export function IndexRedirect(): JSX.Element {
   const boot = useBootstrap()
   const { user } = useSession()
-  // isFetching too (not just isPending): setupShop invalidates the bootstrap query from a route where it has no
+  // isFetching too (not just isPending): connectShop invalidates the bootstrap query from a route where it has no
   // mounted observer, so the invalidation only marks it stale rather than refetching it inline — without this,
   // the redirect below would run once against the stale (pre-setup) snapshot and bounce back to /setup.
   if (boot.isPending || boot.isFetching) return <main className="page">{TH.loading}</main>

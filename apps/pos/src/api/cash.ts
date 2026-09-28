@@ -45,7 +45,7 @@ export async function insertManualCashMovement(
 
 /**
  * spec §3.5: PAID_IN / PAID_OUT / DROP are typed in by a person, with a reason, into the open shift (Q3b-9 · D52).
- * VOID_REFUND is never accepted here — voidOrder writes it (D36). One transaction: cash_movement + outbox.
+ * VOID_REFUND is never accepted here — cancelSale writes it (D36). One transaction: cash_movement + outbox.
  */
 export async function recordCashMovement(db: RemoteDb, deps: ApiDeps, input: CashMovementInput): Promise<CashMovementDto> {
   if (!MANUAL_KINDS.includes(input.kind)) throw new PosError('BAD_INPUT', `kind must be PAID_IN, PAID_OUT or DROP, got ${input.kind}`)

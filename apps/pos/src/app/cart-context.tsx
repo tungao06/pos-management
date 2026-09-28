@@ -12,7 +12,7 @@ const CartContext = createContext<CartContextValue | null>(null)
 export function CartProvider({ children, initial }: { children: ReactNode; initial?: CartState }): JSX.Element {
   const [state, dispatch] = useReducer(cartReducer, initial ?? null, (init: CartState | null) => init ?? emptyCart(newId(), INITIAL_CHANNEL_CODE))
   // Keeps the channel the cashier had selected — only the lines/discount/promo state of a bill start fresh (T17: a
-  // new orderId makes the next commitSale independent of the one just paid or cleared).
+  // new orderId makes the next sale independent of the one just paid or cleared).
   const clear = useCallback(() => dispatch({ type: 'reset', orderId: newId(), channelCode: state.channelCode }), [state.channelCode])
   const value = useMemo(() => ({ state, dispatch, clear }), [state, clear])
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>

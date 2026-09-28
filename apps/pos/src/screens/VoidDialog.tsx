@@ -27,7 +27,7 @@ export function VoidDialog({ order, onClose }: { order: OrderDetailDto; onClose:
 
   const mutation = useMutation({
     // spec 04 §4.5 order_void, §4.7: `cancelSale` handles both a bill sold with dayo's catalog and an old plan-3
-    // bill (stock return) — the UI must call only `cancelSale`, never `voidOrder` (which now refuses every dayo bill).
+    // bill (stock return) — the UI must call only `cancelSale`.
     mutationFn: (pin: string) =>
       api.cancelSale({
         orderId: order.id,

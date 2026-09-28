@@ -1,15 +1,21 @@
 import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite'
-import { eq } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, max } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import type { MilkCode, Size, Sweetness } from '@dayo/dayo-pricing'
-import type { RemoteDb } from '@dayo/db-schema/browser'
+import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { nodeSqliteCallback, type NodeSqliteLike } from '@dayo/db-schema/testing'
-import { priceCart } from '@dayo/domain'
+import { cashChangeSatang, explodeNeeds, lineUnitCostSatang, nextReceiptNo, priceCart, saleMovements } from '@dayo/domain'
+import { currentOpenShift, LOCAL_DEVICE_KEY } from '../../src/api/bootstrap'
 import type { ApiDeps } from '../../src/api/deps'
+import { PosError } from '../../src/api/errors'
 import { createPosApi } from '../../src/api/pos-api'
-import { PAYMENT_CODE, type CommitSaleInput, type CommitSaleResult, type DeviceDto, type PosApi, type RecordSaleInput, type SetupInput, type ShiftDto, type UserDto } from '../../src/api/types'
+import { PROMPTPAY_SETTING_KEY } from '../../src/api/setup'
+import { PAYMENT_CODE, REASON_MAX_LENGTH, type CommitSaleResult, type DeviceDto, type PosApi, type RecordSaleInput, type ShiftDto, type UserDto } from '../../src/api/types'
+import { appendOrderEvents, type NewEvent } from '../../src/db/events'
 import { initDatabase } from '../../src/db/init'
+import { insertMovements, loadCostStates, makeCostOf } from '../../src/db/stock'
+import { hashPin } from '../../src/lib/pin'
 import { createMemorySecretStore } from '../../src/sync/secret-store'
 import { openConnectedApi } from './dayo'
 
@@ -77,7 +83,31 @@ export async function openTestApi(opts: { fetch?: typeof fetch; now?: string } =
 
 export const PINS = { TungAo: '1111', DCm: '2222' } as const
 
-export const TEST_SETUP: SetupInput = {
+export type DeviceSetupInput = { deviceName: string; receiptPrefix: string; owners: { displayName: string; pin: string }[]; promptPayId: string }
+
+/**
+ * The old first-run setup API's writes, direct — that API was deleted in Task 22, replaced everywhere selling means
+ * by `connectShop`. A device, one setting row and one user row per owner, all version 1 at `t.clock.now()`. Only for
+ * tests whose real subject is something else (opening a shift, receiving stock, a cash movement, …) and just needs a
+ * device on record first; never validates input the way the API it replaces did.
+ */
+export async function insertLegacyShop(t: TestApi, input: DeviceSetupInput): Promise<{ deviceId: string; ownerIds: string[] }> {
+  const at = t.clock.now()
+  const deviceId = t.deps.newId()
+  await t.db.insert(s.device).values({ id: deviceId, name: input.deviceName, receiptPrefix: input.receiptPrefix, isSellingDevice: true, registeredAt: at, version: 1, updatedAt: at })
+  await t.db.insert(s.syncState).values({ key: LOCAL_DEVICE_KEY, value: deviceId })
+  const ownerIds: string[] = []
+  for (const o of input.owners) {
+    const id = t.deps.newId()
+    ownerIds.push(id)
+    await t.db.insert(s.user).values({ id, displayName: o.displayName, role: 'owner', pinHash: await hashPin(o.pin, TEST_PIN_COST), isActive: true, createdAt: at, updatedAt: at, version: 1 })
+  }
+  await t.db.insert(s.setting).values({ key: PROMPTPAY_SETTING_KEY, valueJson: input.promptPayId, effectiveFrom: at, updatedAt: at, version: 1 })
+  return { deviceId, ownerIds }
+}
+
+/** The shape `insertLegacyShop` used to get from the API caller — same device name/prefix/owners/PromptPay id as before. */
+export const TEST_SETUP_INPUT: DeviceSetupInput = {
   deviceName: 'แท็บเล็ตทดสอบ',
   receiptPrefix: 'A',
   owners: [
@@ -126,26 +156,89 @@ export async function sellCode(
 }
 
 /**
- * D50 Q3-27: the total the cart would show for these lines right now (menu price × qty − discount) — what a test
- * passes as commitSale's expectedTotalSatang. Plain arithmetic on purpose: it must not share code with commitSale.
+ * A plan-3 style paid order (spec 04 §6.1's "legacy" bill: `sold_at` null) — one SKU at 50% sweetness, sold by the
+ * first owner, written directly against the local catalog's price and recipe: order + order_line + payment
+ * (+ discount) + SALE movements + hash-chained events, one transaction, exactly as the old in-store sale API used to
+ * write it before it was deleted in Task 22 along with the rest of the plan-3 pricing path. A device that sold
+ * before block 2 can still have rows shaped like this, so this stays as a fixture for the screens that must keep
+ * reading them correctly. `NO_OPEN_SHIFT` / `BAD_INPUT` are thrown with the same wording that old API used, for
+ * tests that check for them.
  */
-export async function shownTotalSatang(t: TestApi, lines: CommitSaleInput['lines'], discount: CommitSaleInput['discount']): Promise<number> {
-  const menu = await t.api.loadMenu()
-  const price = (variantId: string): number => menu.variants.find((v) => v.id === variantId)?.priceSatang ?? 0
-  return lines.reduce((sum, l) => sum + price(l.variantId) * l.qty, 0) - (discount?.amountSatang ?? 0)
-}
-
-/** One-line sale at 50% sweetness by the first owner (test shortcut). */
-export async function sellSku(
+export async function legacySale(
   t: ReadyApi,
   sku: string,
   qty: number,
-  payment: CommitSaleInput['payment'],
-  discount: CommitSaleInput['discount'] = null,
+  payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' },
+  discount: { amountSatang: number; reason: string } | null = null,
 ): Promise<CommitSaleResult> {
+  const cleanDiscount = discount === null ? null : { amountSatang: discount.amountSatang, reason: discount.reason.trim() }
+  if (cleanDiscount !== null && cleanDiscount.reason.length > REASON_MAX_LENGTH) throw new PosError('BAD_INPUT', `a reason is at most ${REASON_MAX_LENGTH} characters`)
+
   const variant = await t.db.select().from(s.productVariant).where(eq(s.productVariant.sku, sku)).get()
   const sweet = await t.db.select().from(s.sweetnessLevel).where(eq(s.sweetnessLevel.code, 'S050')).get()
   if (!variant || !sweet) throw new Error(`no variant ${sku} or sweetness S050`)
-  const lines = [{ variantId: variant.id, sweetnessId: sweet.id, qty }]
-  return t.api.commitSale({ orderId: t.deps.newId(), actorUserId: t.owner.id, lines, discount, payment, expectedTotalSatang: await shownTotalSatang(t, lines, discount) })
+  const product = await t.db.select().from(s.product).where(eq(s.product.id, variant.productId)).get()
+  const size = await t.db.select().from(s.size).where(eq(s.size.id, variant.sizeId)).get()
+  const channel = await t.db.select().from(s.channel).where(eq(s.channel.code, 'STORE')).get()
+  if (!product || !size || !channel) throw new Error(`missing product/size/channel for ${sku}`)
+  const price = await t.db.select().from(s.price).where(and(eq(s.price.variantId, variant.id), eq(s.price.channelId, channel.id))).get()
+  if (!price) throw new Error(`no price for ${sku}`)
+  const recipe = await t.db.select().from(s.recipe).where(and(eq(s.recipe.variantId, variant.id), eq(s.recipe.sweetnessId, sweet.id), eq(s.recipe.isCurrent, true))).get()
+  if (!recipe) throw new Error(`no current recipe for ${sku}/S050`)
+  const recipeLines = await t.db.select().from(s.recipeLine).where(eq(s.recipeLine.recipeId, recipe.id)).all()
+
+  return t.db.transaction(async (tx) => {
+    const shift = await currentOpenShift(tx, t.device.id)
+    if (shift === null) throw new PosError('NO_OPEN_SHIFT', 'open a shift before selling')
+    const catalog = await loadCatalogSqlite(tx)
+    const costOf = makeCostOf(catalog, await loadCostStates(tx))
+    const needs = explodeNeeds(recipeLines.map((l) => ({ itemId: l.itemId, qtyMilli: l.qtyMilli })), qty, catalog)
+    const unitCostSatang = lineUnitCostSatang(needs, costOf, qty)
+
+    const subtotalSatang = price.priceSatang * qty
+    const discountSatang = cleanDiscount?.amountSatang ?? 0
+    if (discountSatang > subtotalSatang) throw new PosError('DISCOUNT_TOO_BIG', 'discount exceeds subtotal')
+    const totalSatang = subtotalSatang - discountSatang
+
+    const at = t.clock.now()
+    const orderId = t.deps.newId()
+    let tenderedSatang: number | null = null
+    let changeSatang: number | null = null
+    if (payment.method === 'CASH') {
+      tenderedSatang = payment.tenderedSatang
+      changeSatang = cashChangeSatang(totalSatang, tenderedSatang)
+    }
+    const lastReceipt = await tx.select({ r: s.order.receiptNo }).from(s.order).where(and(eq(s.order.deviceId, t.device.id), isNotNull(s.order.receiptNo))).orderBy(desc(s.order.receiptNo)).limit(1).get()
+    const receiptNo = nextReceiptNo(t.device.receiptPrefix, lastReceipt?.r ?? null)
+    const lastQueue = await tx.select({ q: max(s.order.queueNo) }).from(s.order).where(and(eq(s.order.deviceId, t.device.id), eq(s.order.businessDate, shift.businessDate))).get()
+    const queueNo = (lastQueue?.q ?? 0) + 1
+
+    await tx.insert(s.order).values({
+      id: orderId, origin: 'device', deviceId: t.device.id, receiptNo, queueNo, businessDate: shift.businessDate, shiftId: shift.id,
+      channelId: channel.id, customerId: null, status: 'paid', subtotalSatang, discountSatang, totalSatang, vatSatang: 0,
+      costSatang: unitCostSatang * qty, note: null, createdByType: 'user', createdById: t.owner.id, createdAt: at, paidAt: at, readyAt: null, voidedAt: null,
+    })
+    await tx.insert(s.orderLine).values({
+      id: t.deps.newId(), orderId, lineNo: 1, variantId: variant.id, sweetnessId: sweet.id, recipeId: recipe.id,
+      productName: product.nameTh, sizeName: size.name, sweetnessName: sweet.name, unitPriceSatang: price.priceSatang, qty, lineTotalSatang: subtotalSatang, unitCostSatang,
+    })
+    if (cleanDiscount !== null) {
+      await tx.insert(s.discount).values({ id: t.deps.newId(), orderId, amountSatang: cleanDiscount.amountSatang, reason: cleanDiscount.reason, approvedBy: t.owner.id })
+    }
+    await tx.insert(s.payment).values({
+      id: t.deps.newId(), orderId, method: payment.method, amountSatang: totalSatang, tenderedSatang, changeSatang, reference: null, verifyStatus: 'manual', createdBy: t.owner.id, createdAt: at,
+    })
+    const movementIds = await insertMovements(tx, t.deps, saleMovements(needs, costOf, orderId), { businessDate: shift.businessDate, deviceId: t.device.id, createdBy: t.owner.id, at }, catalog)
+
+    const events: NewEvent[] = [
+      { type: 'CREATED', payload: { origin: 'device', channelId: channel.id, shiftId: shift.id, businessDate: shift.businessDate } },
+      { type: 'LINE_ADDED', payload: { lineNo: 1, variantId: variant.id, sweetnessId: sweet.id, recipeId: recipe.id, qty, unitPriceSatang: price.priceSatang, lineTotalSatang: subtotalSatang } },
+    ]
+    if (cleanDiscount !== null) events.push({ type: 'DISCOUNT_APPLIED', payload: { amountSatang: cleanDiscount.amountSatang, reason: cleanDiscount.reason, approvedBy: t.owner.id } })
+    events.push({ type: 'PAID', payload: { receiptNo, queueNo, method: payment.method, subtotalSatang, discountSatang, totalSatang, tenderedSatang, changeSatang } })
+    events.push({ type: 'STOCK_DEDUCTED', payload: { movementIds, costSatang: unitCostSatang * qty } })
+    await appendOrderEvents(tx, { orderId, deviceId: t.device.id, actorType: 'user', actorId: t.owner.id, at, newId: t.deps.newId }, events)
+
+    return { orderId, receiptNo, queueNo, businessDate: shift.businessDate, totalSatang, changeSatang, method: payment.method }
+  })
 }

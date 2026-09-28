@@ -67,7 +67,7 @@ async function writeAdjustment(
  * off while it still holds stock (on-hand ≠ 0) can still be stocked out down to zero, the same escape hatch stock
  * counting already uses (Task 3 controller ruling I-2). A drink line still requires the variant and its product to
  * be active on the menu (M-11); its recipe's ingredients are never gated on `is_active` at all — exactly like a
- * sale (`sale.ts` / `planSale`) and like producing a base — so a drink whose recipe still names a now-inactive
+ * sale and like producing a base — so a drink whose recipe still names a now-inactive
  * ingredient can be given away or written off the same as it can be sold (fix round 1, review I-1).
  */
 export async function adjustStock(db: RemoteDb, deps: ApiDeps, input: AdjustStockInput): Promise<StockAdjustmentDto> {

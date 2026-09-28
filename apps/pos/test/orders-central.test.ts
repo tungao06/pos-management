@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { encodeLastError } from '../src/sync/state'
 import { openConnectedApi, STAFF } from './helpers/dayo'
-import { openReadyApi, sellCode, sellSku } from './helpers/db'
+import { openReadyApi, sellCode, legacySale } from './helpers/db'
 
 describe('order history for block-2 bills', () => {
   it('counts cups from order_item and names the seller (review item 19, D61)', async () => {
@@ -67,7 +67,7 @@ describe('order history for block-2 bills', () => {
   })
   it('a plan-3 bill is legacy, keeps its order_line names and has no milk/grade', async () => {
     const t = await openReadyApi()
-    const r = await sellSku(t, 'Original-16oz', 2, { method: 'CASH', tenderedSatang: 10_000 })
+    const r = await legacySale(t, 'Original-16oz', 2, { method: 'CASH', tenderedSatang: 10_000 })
     const d = await t.api.getOrder(r.orderId)
     expect(d).toMatchObject({ cups: 2, soldAt: null, channelCode: null, catalogVersion: null, promotions: [], soldById: t.owner.id, soldByName: 'TungAo', central: { state: 'legacy', voidState: 'none', orderNo: null } })
     expect(d.lines.map((l) => [l.productName, l.sizeName, l.milk, l.grade])).toEqual([['ชาไทยเย็น', '16 oz', null, null]])

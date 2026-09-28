@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
-import { openReadyApi, sellSku, type ReadyApi } from './helpers/db'
+import { openReadyApi, legacySale, type ReadyApi } from './helpers/db'
 import { defaultUnitId, itemId, movementsOf, outboxKeys, stockOf } from './helpers/stock'
 
 /** Receives 1 bag (400 g) of RM-TEA-01 at ฿90 (standard ฿77, a +16.9% price jump) — pushes its avg to 22,500,000 usat. */
@@ -38,7 +38,7 @@ describe('produceBatch (spec §4.4 ทำเบส · §4.6 · D17)', () => {
 
   it('half a batch with a lower actual yield raises the unit cost; a base sold before it was made resets its average (spec §4.4)', async () => {
     const t = await openReadyApi()
-    await sellSku(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // base −130 ml at standard cost
+    await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 }) // base −130 ml at standard cost
     const b = await t.api.produceBatch({ actorUserId: t.owner.id, itemId: await itemId(t, 'PB-TEA-THAI'), scaleBp: 5_000, yieldActualMilli: 1_250_000 })
     expect(b.components.map((c) => c.qtyMilli)).toEqual([90_000, 60_000, 1_650_000])
     expect(b.unitCostUsat).toBe(2_400_000) // ฿30 of components / 1,250 ml (instead of 1,500 ml)

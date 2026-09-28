@@ -4,7 +4,7 @@ import { useState, type JSX } from 'react'
 import type { AdjustReason } from '@dayo/contracts'
 import { REASON_MAX_LENGTH, type AdjustDrinkInput, type AdjustItemInput, type StockAdjustmentDto } from '../api/types'
 import { useApi } from '../app/api-context'
-import { bootstrapKey, menuKey, stockKey } from '../app/queries'
+import { bootstrapKey, drinkCatalogKey, stockKey } from '../app/queries'
 import { useSession } from '../app/session'
 import { errorMessage } from '../ui/errors'
 import { formatQty, parseQtyInput } from '../ui/format'
@@ -22,8 +22,8 @@ type DrinkLine = AdjustDrinkInput & { label: string }
  * item whose on-hand is not exactly 0 (controller ruling, `requireStockItem`'s `allowInactiveWithStock`, mirrored by
  * `stockCountableItems`). Adding any extra `isActive` filter here would silently hide an inactive item that still
  * holds stock, which the API accepts. Likewise the drink picker uses `menu.data.products`/`variants` exactly as
- * `loadMenu` returns them — that call already filters to active products and variants (M-11), so a drink line can
- * never name one the API would refuse.
+ * `loadDrinkCatalog` returns them — that call already filters to active products and variants (M-11), so a drink
+ * line can never name one the API would refuse.
  */
 export function AdjustScreen(): JSX.Element {
   const api = useApi()
@@ -31,7 +31,7 @@ export function AdjustScreen(): JSX.Element {
   const queryClient = useQueryClient()
   const { user } = useSession()
   const stock = useQuery({ queryKey: stockKey, queryFn: () => api.stockOverview() })
-  const menu = useQuery({ queryKey: menuKey, queryFn: () => api.loadMenu() })
+  const menu = useQuery({ queryKey: drinkCatalogKey, queryFn: () => api.loadDrinkCatalog() })
   const [code, setCode] = useState<AdjustReason | null>(null)
   const [mode, setMode] = useState<'items' | 'drinks'>('items')
   const [itemLines, setItemLines] = useState<ItemLine[]>([])

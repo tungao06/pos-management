@@ -4,10 +4,13 @@ import { createMockDayo, MOCK_API_KEY } from '@dayo/dayo-mock'
 import { posErrorCode } from '../src/api/errors'
 import { pullCatalog } from '../src/sync/catalog'
 import { DAYO_KEYS, deleteKey, readKey, writeKey } from '../src/sync/state'
-import { openTestApi, vacuumInto } from './helpers/db'
+import { insertLegacyShop, openTestApi, vacuumInto } from './helpers/db'
 import { STAFF } from './helpers/dayo'
 
 const INPUT = { baseUrl: 'http://localhost:8787/api/v1/', apiKey: MOCK_API_KEY, receiptPrefix: 'A', ownerStaffId: STAFF.TungAo, ownerPin: '1111', promptPayId: '0812345678', legacyApproval: null }
+/** A device set up before block 2's dayo connect flow existed (ruling R7) — one owner, no dayo link yet. Written
+ * directly: the old first-run setup API that used to do this was deleted in Task 22. */
+const LEGACY_DEVICE = { deviceName: 'เครื่องเดิม', receiptPrefix: 'A', owners: [{ displayName: 'TungAo', pin: '9999' }], promptPayId: '0812345678' }
 async function fresh() { const mock = createMockDayo({ now: '2026-09-25T02:00:00.120Z' }); return { mock, t: await openTestApi({ fetch: mock.fetch }) } }
 async function codeOf(p: Promise<unknown>) { try { await p; return null } catch (e) { return posErrorCode(e) } }
 
@@ -77,7 +80,7 @@ describe('connectShop', () => {
   })
   it('a plan-3/4 device links with an old owner PIN and keeps its prefix (ruling R7)', async () => {
     const { t } = await fresh()
-    await t.api.setupShop({ deviceName: 'เครื่องเดิม', receiptPrefix: 'A', owners: [{ displayName: 'TungAo', pin: '9999' }], promptPayId: '0812345678' }) // the old API still exists until Task 22
+    await insertLegacyShop(t, LEGACY_DEVICE)
     const old = (await t.api.bootstrap()).users[0]!
     expect((await t.api.bootstrap())).toMatchObject({ needsSetup: true, legacyDevice: true })
     expect(await codeOf(t.api.connectShop(INPUT))).toBe('ALREADY_SET_UP')
@@ -386,7 +389,7 @@ describe('fix round 1: linking state, PIN reset audit, rollback after the key sw
   })
   it('a legacy device keeps its prefix: another prefix fails before any key is stored', async () => {
     const { t, mock } = await fresh()
-    await t.api.setupShop({ deviceName: 'เครื่องเดิม', receiptPrefix: 'A', owners: [{ displayName: 'TungAo', pin: '9999' }], promptPayId: '0812345678' })
+    await insertLegacyShop(t, LEGACY_DEVICE)
     const old = (await t.api.bootstrap()).users[0]!
     const calls = mock.requests().length
     expect(await codeOf(t.api.connectShop({ ...INPUT, receiptPrefix: 'B', legacyApproval: { userId: old.id, pin: '9999' } }))).toBe('BAD_INPUT')
@@ -395,7 +398,7 @@ describe('fix round 1: linking state, PIN reset audit, rollback after the key sw
   })
   it('connectShop: a save that fails after the key was stored leaves no key behind', async () => {
     const { t } = await fresh()
-    await t.api.setupShop({ deviceName: 'เครื่องเดิม', receiptPrefix: 'A', owners: [{ displayName: 'TungAo', pin: '9999' }], promptPayId: '0812345678' })
+    await insertLegacyShop(t, LEGACY_DEVICE)
     const old = (await t.api.bootstrap()).users[0]!
     const newId = t.deps.newId
     t.deps.newId = () => { throw new Error('injected fault') }

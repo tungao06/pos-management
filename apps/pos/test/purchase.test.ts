@@ -5,7 +5,7 @@ import { loadCatalogSqlite } from '@dayo/db-schema/browser'
 import { applyMovement, rebuildCostState, type MovementDraft } from '@dayo/domain'
 import type { ReceivePurchaseInput } from '../src/api/types'
 import { insertMovements } from '../src/db/stock'
-import { openReadyApi, openTestApi, TEST_SETUP, type ReadyApi } from './helpers/db'
+import { insertLegacyShop, openReadyApi, openTestApi, TEST_SETUP_INPUT, type ReadyApi } from './helpers/db'
 import { defaultUnitId, itemId, movementsOf, outboxKeys, stockOf } from './helpers/stock'
 
 async function teaBags(t: ReadyApi, bagsMilli: number, totalSatang: number): Promise<ReceivePurchaseInput['lines'][number]> {
@@ -76,7 +76,7 @@ describe('receivePurchase (spec §5 รับของเข้า · D19 · §4
     expect(await t.db.select().from(s.purchase).all()).toHaveLength(1)
 
     const u = await openTestApi()
-    await u.api.setupShop(TEST_SETUP)
+    await insertLegacyShop(u, TEST_SETUP_INPUT)
     const owner = (await u.api.bootstrap()).users[0]!
     const tea = { itemId: await itemId(u, 'RM-TEA-01'), purchaseUnitId: null, qtyUnitsMilli: 400_000, lineTotalSatang: 7_700 } // 400 g typed in the use unit
     await expect(u.api.receivePurchase({ actorUserId: owner.id, supplier: '', note: '', lines: [tea], paidFromDrawer: true, acceptPriceJump: false })).rejects.toThrow(/^NO_OPEN_SHIFT: /)
@@ -129,7 +129,7 @@ describe('receivePurchase (spec §5 รับของเข้า · D19 · §4
 
   it('a wholly free receipt paid from the drawer is a no-op: no PAID_OUT, no shift required (review m-1)', async () => {
     const u = await openTestApi()
-    await u.api.setupShop(TEST_SETUP)
+    await insertLegacyShop(u, TEST_SETUP_INPUT)
     const owner = (await u.api.bootstrap()).users[0]!
     const tea = { itemId: await itemId(u, 'RM-TEA-01'), purchaseUnitId: null, qtyUnitsMilli: 400_000, lineTotalSatang: 0 }
     // no shift is open, yet paidFromDrawer + a wholly free line succeeds — nothing to pay out
@@ -141,7 +141,7 @@ describe('receivePurchase (spec §5 รับของเข้า · D19 · §4
 
   it('needs an open shift before a price jump is even considered, when paying from the drawer (review m-2)', async () => {
     const u = await openTestApi()
-    await u.api.setupShop(TEST_SETUP)
+    await insertLegacyShop(u, TEST_SETUP_INPUT)
     const owner = (await u.api.bootstrap()).users[0]!
     const tea = { itemId: await itemId(u, 'RM-TEA-01'), purchaseUnitId: null, qtyUnitsMilli: 400_000, lineTotalSatang: 8_500 } // +10.4% vs standard: a price jump
     // if PRICE_JUMP ran first, this would fail with PRICE_JUMP instead
