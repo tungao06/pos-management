@@ -79,6 +79,11 @@ export const TH = {
   tabBestSellers: 'ขายดี',
   cart: 'ตะกร้า',
   cartEmpty: 'ยังไม่มีรายการ',
+  // phone bottom-sheet cart handle (CartPanel)
+  cartCups: (n: number): string => (n === 0 ? 'ว่าง' : `${n} แก้ว`),
+  cartExpand: 'ดูรายการ ▲',
+  cartCollapse: 'ย่อ ▼',
+  cartCheck: 'ตะกร้ามีปัญหา — แตะเพื่อดู',
   subtotal: 'รวม',
   discount: 'ส่วนลด',
   total: 'ยอดสุทธิ',

@@ -58,7 +58,10 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
 .choices { display: flex; flex-wrap: wrap; gap: 8px; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 /* Sell screen: menu grid + cart side by side, each scrolling on its own inside the height the root layout leaves. */
-.sell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 32vw, 400px); grid-template-rows: auto auto minmax(0, 1fr); }
+.sell { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 32vw, 400px); grid-template-rows: auto auto minmax(0, 1fr); }
+/* min-width 0 all the way down: WebKit (iPhone) otherwise widens the top bar to its nowrap buttons' full length
+   (492 px on a 390 px phone) and the whole screen scrolls sideways instead of just the tabs/buttons row */
+.sell > *, .topbar > * { min-width: 0; max-width: 100%; }
 .topbar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--line); background: var(--cream); }
 .topbar button { white-space: nowrap; flex: none; }
 /* category tabs: one line that scrolls sideways — however many categories dayo has */
@@ -76,6 +79,8 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
 .product .th { font-size: 18px; font-weight: 700; }
 .product .en { font-size: 13px; color: var(--muted); }
 .cart { min-height: 0; border-left: 1px solid var(--line); display: flex; flex-direction: column; background: var(--surface); }
+/* the bottom-sheet handle exists only on phones (see the max-width: 639px block) */
+.cart-toggle { display: none; }
 .cart-head { flex: none; display: grid; gap: 8px; padding: 10px 10px 8px; }
 .cart-head h2 { margin: 0; font-size: 20px; }
 .cart-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; padding: 0 10px 8px; }
@@ -108,8 +113,23 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
   .brandbar .logo { height: 36px; }
   .brandbar .name { font-size: 18px; }
   .sell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
-  .sell > .cart { grid-row: 4; border-left: 0; border-top: 1px solid var(--line); max-height: 46dvh; }
-  .cart-head { grid-template-columns: auto 1fr; align-items: center; padding-top: 8px; }
+  /* the cart is a bottom sheet: collapsed = handle + total + pay buttons under the menu; expanded = slides up over
+     the menu with every line, promotions and the discount/clear buttons */
+  .sell > .cart { grid-row: 4; border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -4px 16px rgb(30 59 34 / 0.12); }
+  .sell > .cart[data-expanded='true'] { position: absolute; left: 0; right: 0; bottom: 0; top: 8px; z-index: 5; box-shadow: 0 -8px 28px rgb(30 59 34 / 0.28); }
+  .cart[data-expanded='false'] .cart-head,
+  .cart[data-expanded='false'] .cart-body,
+  .cart[data-expanded='false'] .cart-foot .choices,
+  .cart[data-expanded='false'] .cart-foot .totals > :not(.total) { display: none; }
+  .cart-toggle { position: relative; flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 8px; width: 100%; min-height: 56px; padding: 16px 12px 6px; border: 0; border-radius: 16px 16px 0 0; background: transparent; text-align: left; font-size: 16px; touch-action: none; }
+  .cart-toggle .grip { position: absolute; top: 6px; left: 50%; width: 44px; height: 5px; margin-left: -22px; border-radius: 3px; background: var(--line); }
+  .cart-toggle .summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cart-toggle .cue { font-size: 14px; color: var(--muted); white-space: nowrap; }
+  .cart-toggle .error { grid-column: 1 / -1; font-size: 14px; }
+  .cart-head h2 { display: none; }
+  .cart-foot { padding: 8px 10px 10px; }
+  .cart[data-expanded='false'] .cart-foot { border-top: 0; padding-top: 0; }
+  .cart-head { grid-template-columns: minmax(0, 1fr); padding-top: 4px; }
   .cart-head label { grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
   .cart-head select { min-height: 48px; }
   /* tabs on one sideways-scrolling row, the shift/bill buttons on another — never three rows */
