@@ -1,0 +1,15 @@
+# Cloudflare Workers static assets (D107) — not served as a file.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  # camera stays allowed for this origin: the setup screen scans the API key QR (ui/qr-scan.ts)
+  Permissions-Policy: camera=(self), microphone=(), geolocation=()
+
+# A new build must reach the tablet: never let a cache hold the service worker or the page shell.
+/sw.js
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache

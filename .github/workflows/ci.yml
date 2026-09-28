@@ -1,5 +1,13 @@
 name: ci
-on: [push, pull_request]
+# Same triggers as dayo's ci.yml: a branch with an open PR runs once (not once for the push and again for the PR).
+# Deploy itself is Workers Builds on Cloudflare (D107), not a workflow here.
+on:
+  pull_request:
+  push:
+    branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
