@@ -54,6 +54,11 @@ export function ConnectFields({
   const unmountedRef = useRef(false)
 
   useEffect(() => {
+    // security review (fix round 2, item 1): reset on every mount, not just the initial one — under
+    // <StrictMode> (main.tsx) React mounts, cleans up, then mounts again in dev; without this reset the first
+    // cleanup would leave `unmountedRef.current` true forever, so `startScan` would stop every future camera
+    // stream the instant it opened, and "setup-scan-video" would never show.
+    unmountedRef.current = false
     return () => {
       unmountedRef.current = true
       streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -95,6 +100,10 @@ export function ConnectFields({
     const stream = streamRef.current
     const video = videoRef.current
     if (stream === null || video === null) {
+      // security review (fix round 2, item 3, pre-existing): a stream can exist here with no video element yet
+      // (e.g. this effect firing before commit) — it must be stopped too, not just abandoned in the ref.
+      stream?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
       setScanning(false)
       return
     }

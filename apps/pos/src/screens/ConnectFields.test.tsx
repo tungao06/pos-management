@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useState, type JSX } from 'react'
+import { StrictMode, useState, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DayoProbe, PosApi } from '../api/types'
 import { ApiProvider } from '../app/api-context'
@@ -159,6 +159,30 @@ describe('ConnectFields — QR scan (quality review, fix round 1)', () => {
     const track = { stop: vi.fn() }
     resolveGetUserMedia({ getTracks: () => [track] } as unknown as MediaStream)
     await waitFor(() => expect(track.stop).toHaveBeenCalled())
+  })
+
+  // SECURITY (fix round 2, review item 1): main.tsx renders under <StrictMode>, which mounts every component
+  // twice in dev (mount → cleanup → mount) precisely to catch an effect that does not clean up idempotently.
+  // `unmountedRef` used to only ever get set to `true` and never reset, so the very first StrictMode
+  // mount/cleanup cycle left it stuck `true` — every real tap on "สแกน" after that would immediately stop the
+  // camera it had just opened and never show the preview.
+  it('still shows the camera preview after a tap, even mounted under <StrictMode>', async () => {
+    ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {}
+    stubCamera()
+    const api = {} as unknown as PosApi
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <ApiProvider api={api}>
+            <Controlled onChange={() => undefined} />
+          </ApiProvider>
+        </QueryClientProvider>
+      </StrictMode>,
+    )
+
+    fireEvent.click(screen.getByTestId('setup-scan'))
+    await screen.findByTestId('setup-scan-video')
   })
 
   it('shows a Thai message, not the raw browser text, when the camera is denied', async () => {
