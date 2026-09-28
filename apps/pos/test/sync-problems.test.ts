@@ -1,0 +1,242 @@
+import { eq } from 'drizzle-orm'
+import { describe, expect, it } from 'vitest'
+import * as s from '@dayo/db-schema/sqlite'
+import { posErrorCode } from '../src/api/errors'
+import { createPosApi } from '../src/api/pos-api'
+import { pushOnce } from '../src/sync/push'
+import { encodeLastError } from '../src/sync/state'
+import { openConnectedApi, STAFF } from './helpers/dayo'
+import { sellCode } from './helpers/db'
+
+const owner = { approverUserId: STAFF.TungAo, approverPin: '1111', reason: 'แก้ตามหน้าส่งไม่ผ่าน' }
+async function rejectedBill(reason: string, detail = 'x') {
+  const t = await openConnectedApi()
+  const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+  const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+  t.mock.override({ match: { receiptNo: r.receiptNo }, verdict: { status: 'rejected', reason, detail }, times: 1 })
+  await pushOnce(ctx)
+  const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+  return { t, ctx, r, p: p! }
+}
+
+describe('owner remedies (spec 04 §6.4)', () => {
+  it('a row far ahead of the server clock is listed as waiting; only the owner\'s EXCLUDE closes it (ruling N5)', async () => {
+    const t = await openConnectedApi({ now: '2026-09-27T03:00:00.000Z' }) // tablet clock 2 days fast
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.setNow('2026-09-25T03:00:00.000Z')
+    await pushOnce(ctx)
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    expect(p).toMatchObject({ receiptNo: r.receiptNo, reason: 'CLOCK_AHEAD', remedies: ['EXCLUDE'] })
+    try { await t.api.retrySyncRow({ ...owner, outboxId: p!.outboxId }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('REMEDY_NOT_ALLOWED') }
+    await t.api.excludeFromSync({ ...owner, outboxId: p!.outboxId })
+    expect((await t.db.select().from(s.outbox).where(eq(s.outbox.id, p!.outboxId)).get())?.status).toBe('local_only')
+  })
+  it('lists the problem with the allowed buttons only', async () => {
+    const { p } = await rejectedBill('CONFLICT', 'เลขใบเสร็จ A-000001 ถูกใช้แล้ว')
+    expect(p).toMatchObject({ kind: 'order', receiptNo: 'A-000001', reason: 'CONFLICT', remedies: ['RETRY', 'RENUMBER'] })
+  })
+  it('CONFLICT → a new receipt number, same key, then accepted', async () => {
+    const { t, ctx, r, p } = await rejectedBill('CONFLICT')
+    expect(await t.api.renumberReceipt({ ...owner, outboxId: p.outboxId })).toEqual({ oldReceiptNo: 'A-000001', newReceiptNo: 'A-000002' })
+    expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
+    const ev = await t.db.select().from(s.orderEvent).where(eq(s.orderEvent.type, 'RECEIPT_RENUMBERED')).get()
+    expect(ev?.payloadJson).toMatchObject({ old: 'A-000001', new: 'A-000002' })
+    expect((await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())?.totalSatang).toBe(4500) // money never changes
+    expect((await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get())?.idempotencyKey).toBe(p.key) // same key
+  })
+  it('a remedy that does not fit the reason is refused', async () => {
+    const { t, p } = await rejectedBill('UNKNOWN_STAFF')
+    try { await t.api.renumberReceipt({ ...owner, outboxId: p.outboxId }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('REMEDY_NOT_ALLOWED') }
+  })
+  it('UNKNOWN_STAFF → choose another seller from the latest list', async () => {
+    const { t, ctx, p } = await rejectedBill('UNKNOWN_STAFF')
+    await t.api.remapStaff({ ...owner, outboxId: p.outboxId, newStaffId: STAFF.DCm })
+    expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
+  })
+  it('UNKNOWN_CODE → map the line to an active menu of the latest catalog', async () => {
+    const { t, ctx, p } = await rejectedBill('UNKNOWN_CODE')
+    await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'line', lineIndex: 0, code: 'Thai Tea', size: '16 oz', sweetness: '50%' } })
+    expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
+  })
+  it('INVALID → closed as "นอกระบบกลาง": never sent again, still in the tablet reports (ruling R8)', async () => {
+    const { t, ctx, r, p } = await rejectedBill('INVALID')
+    await t.api.excludeFromSync({ ...owner, outboxId: p.outboxId })
+    expect(await t.api.listSyncProblems(STAFF.TungAo)).toEqual([])
+    expect(await pushOnce(ctx)).toMatchObject({ requests: 0 })
+    expect((await t.api.getOrder(r.orderId)).central.state).toBe('excluded')
+  })
+  it('needs an owner PIN', async () => {
+    const { t, p } = await rejectedBill('CONFLICT')
+    try { await t.api.renumberReceipt({ ...owner, approverPin: '0000', outboxId: p.outboxId }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('PIN_WRONG') }
+  })
+  it('export JSON holds the row and the reason, never the API key', async () => {
+    const { t, p } = await rejectedBill('CONFLICT')
+    const json = await t.api.exportSyncRow({ actorUserId: STAFF.TungAo, outboxId: p.outboxId })
+    expect(JSON.parse(json)).toMatchObject({ key: p.key, kind: 'order', lastError: { reason: 'CONFLICT' } })
+    expect(json).not.toContain('dayo_0123')
+  })
+  it('only an owner may list, export or read price differences — checked at the API (review item 22)', async () => {
+    const { t, p } = await rejectedBill('CONFLICT')
+    await t.api.setStaffPin({ staffId: STAFF.Mint, pin: '4321', approverUserId: STAFF.TungAo, approverPin: '1111' })
+    for (const call of [() => t.api.listSyncProblems(STAFF.Mint), () => t.api.exportSyncRow({ actorUserId: STAFF.Mint, outboxId: p.outboxId }), () => t.api.listPriceDiffs(STAFF.Mint)]) {
+      try { await call(); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('NOT_OWNER') }
+    }
+  })
+  it('UNKNOWN_CODE on the channel → map it to an active channel; the charged totals never change', async () => {
+    const { t, ctx, r, p } = await rejectedBill('UNKNOWN_CODE')
+    const before = (await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get())!.rowJson as { totals: unknown }
+    await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'channel', code: 'store' } })
+    const after = (await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get())!.rowJson as { totals: unknown }
+    expect(after.totals).toEqual(before.totals)
+    expect((await t.db.select().from(s.orderEvent).where(eq(s.orderEvent.type, 'CODE_REMAPPED')).get())?.orderId).toBe(r.orderId)
+    expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
+  })
+  it('remapCode refuses a menu that is not in the latest catalog', async () => {
+    const { t, p } = await rejectedBill('UNKNOWN_CODE')
+    try { await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'line', lineIndex: 0, code: 'Nope', size: '16 oz', sweetness: '50%' } }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('BAD_INPUT') }
+  })
+  it('remapStaff refuses a removed staff member', async () => {
+    const { t, p } = await rejectedBill('UNKNOWN_STAFF')
+    try { await t.api.remapStaff({ ...owner, outboxId: p.outboxId, newStaffId: STAFF.Old }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('BAD_INPUT') }
+  })
+  it('excluding a rejected void of a bill dayo has shows the bill as "void only on the tablet" (review item 23)', async () => {
+    const t = await openConnectedApi()
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    await pushOnce(ctx) // the bill reaches dayo
+    await t.api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, approverUserId: STAFF.DCm, approverPin: '2222', reason: 'x', made: false, refundReference: 'K' })
+    t.mock.override({ match: { key: `order_void:${r.orderId}` }, verdict: { status: 'rejected', reason: 'FORBIDDEN', detail: 'x' }, times: 1 })
+    await pushOnce(ctx)
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    await t.api.excludeFromSync({ ...owner, outboxId: p!.outboxId })
+    expect(await t.api.listPriceDiffs(STAFF.TungAo)).toEqual([expect.objectContaining({ kind: 'void_local_only', orderId: r.orderId })])
+  })
+
+  // ── beyond the brief (controller dispatch, carried from earlier reviews) ──────────────────────────────────────
+  it('a dead row whose reason has no table entry (REQUEST_FAILED) lists with RETRY only and retries', async () => {
+    const t = await openConnectedApi()
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    await t.db.update(s.outbox).set({ status: 'dead', deadAt: t.clock.now(), attempts: 3, lastError: encodeLastError('REQUEST_FAILED', 'HTTP 500') }).where(eq(s.outbox.idempotencyKey, `order:${r.orderId}`))
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    expect(p).toMatchObject({ kind: 'order', orderId: r.orderId, reason: 'REQUEST_FAILED', detail: 'HTTP 500', remedies: ['RETRY'], children: [] })
+    await t.api.retrySyncRow({ ...owner, outboxId: p!.outboxId })
+    expect(await t.db.select().from(s.outbox).where(eq(s.outbox.id, p!.outboxId)).get()).toMatchObject({ status: 'pending', attempts: 0 })
+  })
+  it('a far-ahead row that later failed a request (REQUEST_FAILED + farAhead) still offers EXCLUDE only — never a RETRY that is refused', async () => {
+    const t = await openConnectedApi()
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    await t.db.update(s.outbox).set({ lastError: encodeLastError('REQUEST_FAILED', 'HTTP 500', { farAhead: true, requestFailed: true }) }).where(eq(s.outbox.idempotencyKey, `order:${r.orderId}`))
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    expect(p).toMatchObject({ reason: 'REQUEST_FAILED', remedies: ['EXCLUDE'] })
+    await t.api.excludeFromSync({ ...owner, outboxId: p!.outboxId })
+    expect((await t.db.select().from(s.outbox).where(eq(s.outbox.id, p!.outboxId)).get())?.status).toBe('local_only')
+  })
+  it('a void waiting on a rejected bill is listed under it, and comes back with it after the fix', async () => {
+    const t = await openConnectedApi()
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    await t.api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, approverUserId: STAFF.DCm, approverPin: '2222', reason: 'x', made: false, refundReference: 'K' })
+    t.mock.override({ match: { receiptNo: r.receiptNo }, verdict: { status: 'rejected', reason: 'UNKNOWN_STAFF', detail: 'x' }, times: 1 })
+    await pushOnce(ctx)
+    const list = await t.api.listSyncProblems(STAFF.TungAo)
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatchObject({ kind: 'order', children: [{ kind: 'order_void', reason: 'PARENT_REJECTED', remedies: [] }] })
+    await t.api.remapStaff({ ...owner, outboxId: list[0]!.outboxId, newStaffId: STAFF.DCm })
+    expect(await pushOnce(ctx)).toMatchObject({ sent: 2 })
+    expect(t.mock.orders()).toEqual([expect.objectContaining({ posOrderId: r.orderId, status: 'cancelled' })])
+  })
+  it('a remedy on a row that is not on the problem page (pending, sent) is refused, and nothing is written', async () => {
+    const t = await openConnectedApi()
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const row = (await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, `order:${r.orderId}`)).get())!
+    for (const call of [() => t.api.retrySyncRow({ ...owner, outboxId: row.id }), () => t.api.excludeFromSync({ ...owner, outboxId: row.id })]) {
+      try { await call(); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('REMEDY_NOT_ALLOWED') }
+    }
+    expect((await t.db.select().from(s.outbox).where(eq(s.outbox.id, row.id)).get())).toEqual(row)
+    expect(await t.db.select().from(s.orderEvent).where(eq(s.orderEvent.type, 'EXCLUDED_FROM_SYNC')).all()).toEqual([])
+  })
+  it('a remedy needs a reason', async () => {
+    const { t, p } = await rejectedBill('INVALID')
+    try { await t.api.excludeFromSync({ ...owner, reason: '   ', outboxId: p.outboxId }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('BAD_INPUT') }
+  })
+})
+
+describe('remedies and the sender never interleave on one row (Iron Rule 5 · task 14 item 4)', () => {
+  /** A PosApi on the same database whose serial queue is held by an exportBackup until `release()`. */
+  async function heldApi(t: Awaited<ReturnType<typeof openConnectedApi>>) {
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    let hold = true
+    const api = createPosApi(t.db, { ...t.deps, exportDbFile: async () => { if (hold) { hold = false; await gate } return t.deps.exportDbFile() } })
+    const backup = api.exportBackup(STAFF.TungAo) // holds the queue, as a PIN check followed by its write would
+    return { api, backup, release }
+  }
+  const tick = () => new Promise((r) => setTimeout(r, 50))
+
+  it('every remedy waits in the PosApi\'s own serial queue — the one the sender uses — and writes nothing while it is held', async () => {
+    type Case = { reason: string; call: (api: ReturnType<typeof createPosApi>, outboxId: string) => Promise<unknown> }
+    const cases: Case[] = [
+      { reason: 'CONFLICT', call: (api, outboxId) => api.retrySyncRow({ ...owner, outboxId }) },
+      { reason: 'CONFLICT', call: (api, outboxId) => api.renumberReceipt({ ...owner, outboxId }) },
+      { reason: 'UNKNOWN_CODE', call: (api, outboxId) => api.remapCode({ ...owner, outboxId, target: { field: 'channel', code: 'store' } }) },
+      { reason: 'UNKNOWN_STAFF', call: (api, outboxId) => api.remapStaff({ ...owner, outboxId, newStaffId: STAFF.DCm }) },
+      { reason: 'INVALID', call: (api, outboxId) => api.excludeFromSync({ ...owner, outboxId }) },
+    ]
+    for (const c of cases) {
+      const { t, p } = await rejectedBill(c.reason)
+      const before = await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get()
+      const { api, backup, release } = await heldApi(t)
+      let done = false
+      const remedy = c.call(api, p.outboxId).then(() => { done = true })
+      await tick()
+      expect(done).toBe(false)
+      expect(await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get()).toEqual(before) // nothing written while held
+      release()
+      await backup
+      await remedy
+      expect((await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get())?.status).not.toBe('dead')
+    }
+  })
+  it('a push cycle and a remedy on the same row run one after the other: the remedy queued first is committed before the cycle reads the queue', async () => {
+    const { t, p } = await rejectedBill('UNKNOWN_STAFF')
+    const { api, backup, release } = await heldApi(t)
+    const remedy = api.remapStaff({ ...owner, outboxId: p.outboxId, newStaffId: STAFF.DCm })
+    const sync = api.syncNow() // its first read queues behind the remedy
+    await tick()
+    expect(t.mock.requests().filter((x) => x.path === '/api/v1/pos/push')).toHaveLength(1) // only rejectedBill's own push so far
+    release()
+    await backup
+    await remedy
+    const cycle = await sync
+    expect(cycle.push).toMatchObject({ sent: 1 })
+    expect(await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get()).toMatchObject({ status: 'sent', rowJson: expect.objectContaining({ staff_id: STAFF.DCm }) })
+  })
+  it('EXCLUDE of a far-ahead row while a push of that row is on the wire: the verdict that comes back never overwrites the owner\'s decision', async () => {
+    const t = await openConnectedApi({ now: '2026-09-27T03:00:00.000Z' })
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.setNow('2026-09-25T03:00:00.000Z')
+    await pushOnce(ctx) // CLOCK_AHEAD, far ahead: pending, flagged
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    t.clock.advanceMs(120_000) // past the row's 60 s retry time
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    let onWire!: () => void
+    const wire = new Promise<void>((r) => { onWire = r })
+    const gated: typeof fetch = async (input, init) => {
+      if (String(input).endsWith('/pos/push')) { onWire(); await gate }
+      return t.mock.fetch(input, init)
+    }
+    const api = createPosApi(t.db, { ...t.deps, fetch: gated })
+    const sync = api.syncNow()
+    await wire                                                  // the push carrying this row is on the wire (outside the queue)
+    await api.excludeFromSync({ ...owner, outboxId: p!.outboxId }) // not blocked by the network wait — and committed now
+    release()
+    await sync
+    const row = await t.db.select().from(s.outbox).where(eq(s.outbox.id, p!.outboxId)).get()
+    expect(row?.status).toBe('local_only') // the in-flight answer (CLOCK_AHEAD again) was not applied over it
+    expect(await t.db.select().from(s.orderEvent).where(eq(s.orderEvent.type, 'EXCLUDED_FROM_SYNC')).all()).toHaveLength(1)
+    expect(t.mock.requests().filter((x) => x.path === '/api/v1/pos/push')).toHaveLength(2) // the first push + the one on the wire, nothing after
+  })
+})

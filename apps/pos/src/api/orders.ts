@@ -8,7 +8,7 @@ import { DAYO_KEYS, decodeLastError, readKey, SKEW_FRESH_MS } from '../sync/stat
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import type { CentralStateDto, OrderDetailDto, OrderLineDto, OrderSummaryDto } from './types'
+import type { CentralStateDto, DayoEditDto, OrderDetailDto, OrderLineDto, OrderSummaryDto } from './types'
 
 type OrderRow = typeof s.order.$inferSelect
 type OutboxRow = typeof s.outbox.$inferSelect
@@ -53,7 +53,15 @@ function summarize(o: OrderRow, payments: readonly { method: string }[], cupRows
     soldById: o.createdById,
     soldByName: ctx.sellerName(o.createdById),
     central: centralState(o, ctx.outbox.get(rowKey('order', o.id)), ctx.outbox.get(rowKey('order_void', o.id))),
+    dayoEdit: dayoEditOf(o),
   }
+}
+
+/** order.central_dayo_edit_json (written only by applyDayoEdits, already bounded there) → the DTO; display only. */
+function dayoEditOf(o: OrderRow): DayoEditDto | null {
+  const e = o.centralDayoEditJson
+  if (e === null || e === undefined) return null
+  return { kind: e.kind, editedAt: e.edited_at, editedByName: e.edited_by_name ?? null, reason: e.reason ?? null, version: e.version ?? null }
 }
 
 /** D61: the name of the user on this tablet, else dayo's staff list (spec §4.4 rule 5), else "พนักงาน" + the id's tail. */
@@ -156,6 +164,7 @@ export async function getOrder(db: RemoteDb, deps: Pick<ApiDeps, 'now'>, orderId
     promotions: promotionsOf(o),
     lines,
     events: events.map((e) => ({ seq: e.seq, type: e.type, at: e.at, actorId: e.actorId, payload: e.payloadJson })),
-    voidable: o.status === 'paid' && shift !== null && o.shiftId === shift.id && o.deviceId === device.id && sameDay,
+    // a bill dayo reports cancelled on its web is not offered again (it would only earn a duplicate) — spec §4.6, Task 15
+    voidable: o.status === 'paid' && shift !== null && o.shiftId === shift.id && o.deviceId === device.id && sameDay && o.centralDayoEditJson?.kind !== 'cancel',
   }
 }

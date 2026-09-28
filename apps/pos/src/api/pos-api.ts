@@ -5,6 +5,7 @@ import { confirmBackupSaved, exportBackup } from './backup'
 import { createDayoPacer, createSyncScheduler, RATE_WINDOW_MS, type Scheduler } from '../sync/scheduler'
 import { bootstrap, syncStatus } from './bootstrap'
 import { recordCashMovement } from './cash'
+import { listCentralOrdersToday, refreshDayoEdits } from './central-orders'
 import { closeShift, getZReport, listZReports } from './close'
 import { connectShop, probeDayo, recoverOwner, replaceApiKey } from './connect'
 import type { ApiDeps } from './deps'
@@ -22,6 +23,7 @@ import { shiftReport } from './shift-report'
 import { setStaffPin } from './staff'
 import { closeStockCount, getOpenStockCount, removeCountLine, saveCountLine, startStockCount } from './stock-count'
 import { stockOverview } from './stock-overview'
+import { excludeFromSync, exportSyncRow, listPriceDiffs, listSyncProblems, remapCode, remapStaff, renumberReceipt, retrySyncRow } from './sync-problems'
 import type { PosApi } from './types'
 import { cancelSale, voidOrder } from './void'
 
@@ -39,14 +41,20 @@ export type PosApiOptions = {
  * 45 + 6 × 2 = 57). E3 (Task 15) needs its own cap under the same ceiling.
  */
 export const SETUP_CALLS_PER_MIN = 6
+/**
+ * Task 15: E3 requests (listCentralOrdersToday, refreshDayoEdits — one request each) at most this many times per
+ * minute: SYNC_BUDGET_PER_MIN 45 + setup 6 × 2 + E3 3 = 60, dayo's per-key limit. The bot/web page asks once on open
+ * and every 5 minutes, so the cap only bites on a page opened again and again.
+ */
+export const E3_CALLS_PER_MIN = 3
 
-/** A sliding one-minute count of setup calls on a monotonic clock; over the cap = refused before any request. */
-function createSetupLimiter(monoMs: () => number = () => performance.now()): () => void {
+/** A sliding one-minute count of calls on a monotonic clock; over the cap = refused before any request. */
+function createLimiter(max: number, refuse: () => PosError, monoMs: () => number = () => performance.now()): () => void {
   let log: number[] = []
   return () => {
     const now = monoMs()
     log = log.filter((x) => x > now - RATE_WINDOW_MS && x <= now)
-    if (log.length >= SETUP_CALLS_PER_MIN) throw new PosError('DAYO_UNREACHABLE', `SETUP_RATE_LIMITED: at most ${SETUP_CALLS_PER_MIN} tries a minute — wait a minute`)
+    if (log.length >= max) throw refuse()
     log.push(now)
   }
 }
@@ -64,7 +72,8 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
   const serial = createSerialQueue()
   const auto = opts.autoSync === true
   const pacer = createDayoPacer(undefined, () => Date.parse(baseDeps.now()))
-  const setupCall = createSetupLimiter()
+  const setupCall = createLimiter(SETUP_CALLS_PER_MIN, () => new PosError('DAYO_UNREACHABLE', `SETUP_RATE_LIMITED: at most ${SETUP_CALLS_PER_MIN} tries a minute — wait a minute`))
+  const e3Call = createLimiter(E3_CALLS_PER_MIN, () => new PosError('OFFLINE', `E3_RATE_LIMITED: at most ${E3_CALLS_PER_MIN} a minute — wait a minute`))
   let scheduler: Scheduler | null = null
   // reads through to baseDeps on every use (the Worker never swaps them; fault-injection tests do), plus the counted
   // fetch and the write wake
@@ -120,6 +129,21 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     recoverOwner: async (input) => { setupCall(); return serial(() => recoverOwner(db, deps, input)) },
     syncNow: () => sch.runNow(), // network inside: NOT in the serial queue (its reads and writes are)
     syncStatus: () => serial(() => syncStatus(db, deps)),
+    // Task 15 · Iron Rule 5: every remedy runs WHOLE in this serial queue — the same one the scheduler's pushOnce reads
+    // and writes the outbox through (`serial` above) — so a remedy never interleaves with a push decision on the same
+    // row. A verdict of a request already on the wire meets the remedy's result, and applyVerdicts judges only rows
+    // still pending (test/sync-problems.test.ts "never interleave").
+    listSyncProblems: (actorUserId) => serial(() => listSyncProblems(db, actorUserId)),
+    retrySyncRow: (input) => serial(() => retrySyncRow(db, deps, input)),
+    renumberReceipt: (input) => serial(() => renumberReceipt(db, deps, input)),
+    remapCode: (input) => serial(() => remapCode(db, deps, input)),
+    remapStaff: (input) => serial(() => remapStaff(db, deps, input)),
+    excludeFromSync: (input) => serial(() => excludeFromSync(db, deps, input)),
+    exportSyncRow: (input) => serial(() => exportSyncRow(db, input)),
+    listPriceDiffs: (actorUserId) => serial(() => listPriceDiffs(db, actorUserId)),
+    // E3: network OUTSIDE the serial queue (its reads and writes are inside) — sales keep going; own cap under 60/min
+    listCentralOrdersToday: () => listCentralOrdersToday({ db, deps, serial }, { beforeRequest: e3Call }),
+    refreshDayoEdits: () => refreshDayoEdits({ db, deps, serial }, { beforeRequest: e3Call }),
   }
   if (auto) sch.start()
   return { api, scheduler: sch }

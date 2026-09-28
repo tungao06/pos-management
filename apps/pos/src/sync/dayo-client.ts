@@ -28,7 +28,8 @@ export type Timed<T> = { value: T; sentAtMs: number; receivedAtMs: number }
 export type DayoClient = {
   getCatalog(knownVersion: number): Promise<Timed<PosCatalogLooseData>>
   push(body: PushRequest): Promise<Timed<PushResponseData>>
-  listOrders(q: { from: string; to: string }): Promise<Timed<CentralOrder[]>>
+  /** E3 · `updatedSince` = dayo's `updated_since` (coalesce(updated_at, created_at) > it — 0052_pos_push.sql:840). */
+  listOrders(q: { from: string; to: string; updatedSince?: string }): Promise<Timed<CentralOrder[]>>
 }
 
 /** plan 5 transport (fix M-4): setTimeout + AbortController, not AbortSignal.timeout, so tests can use fake timers. */
@@ -93,6 +94,6 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
   return {
     getCatalog: (known) => call(`/pos/catalog?known_version=${Math.max(0, Math.trunc(known))}`, { method: 'GET' }, (b) => PosCatalogLooseResponse.parse(b).data), // `catalog` checked by the caller (R12)
     push: (body) => call('/pos/push', { method: 'POST', body: JSON.stringify(body) }, (b) => PushResponse.parse(b).data),
-    listOrders: (q) => call(`/orders?from=${encodeURIComponent(q.from)}&to=${encodeURIComponent(q.to)}`, { method: 'GET' }, (b) => OrdersListResponse.parse(b).data),
+    listOrders: (q) => call(`/orders?from=${encodeURIComponent(q.from)}&to=${encodeURIComponent(q.to)}${q.updatedSince === undefined ? '' : `&updated_since=${encodeURIComponent(q.updatedSince)}`}`, { method: 'GET' }, (b) => OrdersListResponse.parse(b).data),
   }
 }
