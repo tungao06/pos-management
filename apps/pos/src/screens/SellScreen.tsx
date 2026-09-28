@@ -101,9 +101,6 @@ export function SellScreen(): JSX.Element {
             {TH.storageNotPersistent}
           </span>
         )}
-        <span className="badge" data-testid="pending-sync">
-          {TH.pendingSync(boot.data?.pendingSyncItems ?? 0)}
-        </span>
         <button type="button" data-testid="nav-orders" onClick={() => void navigate({ to: '/orders' })}>
           {TH.orders}
         </button>

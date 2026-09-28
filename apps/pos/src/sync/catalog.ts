@@ -13,6 +13,16 @@ export type StoredCatalog = { catalogVersion: number; catalog: PosOrderCatalog; 
 /** 'backoff' (fix round 1 item 3): E1's own failure backoff, or a 429 Retry-After of this key, is still running — no request. */
 export type CatalogPullResult = { outcome: 'changed' | 'unchanged' | 'catalog_rejected' | 'not_linked' | 'blocked' | 'backoff' | 'failed'; failure?: DayoFailure }
 
+/**
+ * Deliberately the raw `dayo.base_url` key, NOT `storedBaseUrl` (final review round flagged this as the same
+ * anti-pattern as `isDayoLinked`'s — it is not: `isDayoLinked` gates whether the device counts as linked at all,
+ * where a malformed stored URL must fall through to `connectShop`'s re-link path, not report "linked". Here the
+ * raw value is passed on so `createDayoClient` (`./dayo-client.ts`) — which itself calls `normalizeBaseUrl` — is
+ * what classifies a malformed-but-non-null URL as the specific `bad_base_url` failure (Task 9 review note, fix
+ * round 1 item 3): a failed pull/push with no request sent, apiState `bad_base_url`, exempt from ordinary backoff,
+ * pointing the owner at re-linking rather than a retry. Pre-filtering with `storedBaseUrl` here would turn that
+ * into an undifferentiated `not_linked` and drop the dedicated diagnostic (`catalog-sync.test.ts`, `push.test.ts`).
+ */
 export async function readDayoConfig(db: RemoteDb, deps: ApiDeps): Promise<{ baseUrl: string; apiKey: string } | null> {
   const baseUrl = await readKey(db, DAYO_KEYS.baseUrl)
   const apiKey = await deps.secrets.getApiKey()

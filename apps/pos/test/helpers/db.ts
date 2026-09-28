@@ -163,6 +163,16 @@ export async function sellCode(
  * before block 2 can still have rows shaped like this, so this stays as a fixture for the screens that must keep
  * reading them correctly. `NO_OPEN_SHIFT` / `BAD_INPUT` are thrown with the same wording that old API used, for
  * tests that check for them.
+ *
+ * This is NOT a drop-in replacement for the old sale path's validation — it is a narrow test-seed helper. It picks
+ * whichever price row `.get()` returns rather than choosing by `effectiveFrom` (only seed one current price row per
+ * SKU), only refuses a discount strictly greater than the subtotal (a discount exactly equal to it hits the raw DB
+ * `CHECK` constraint instead of the old `DISCOUNT_TOO_BIG`, so keep discounts strictly less than the total), and
+ * never checks `TENDER_TOO_LOW`, quantity limits, or the acting user the way `recordSale` does.
+ *
+ * It also writes with `t.db.transaction` directly, not through the API's `serial` queue the way the old
+ * `sellSku`→`commitSale` did — do not call this while another API call may still be in flight in the same test
+ * (SQLite does not allow a transaction to start inside another one).
  */
 export async function legacySale(
   t: ReadyApi,

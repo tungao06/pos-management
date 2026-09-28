@@ -5,7 +5,7 @@ import { API_KEY_RE, PosOrderCatalog, RECEIPT_NO_RE, type PosCatalogLooseData } 
 import { classifyPromptPayId, parseReceiptNo } from '@dayo/domain'
 import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 import { hashPin } from '../lib/pin'
-import { normalizeBaseUrl } from '../sync/base-url'
+import { normalizeBaseUrl, storedBaseUrl } from '../sync/base-url'
 import { roleOf, staffDisplayName, writeCatalogAnswer } from '../sync/catalog'
 import { createDayoClient, DayoError, type Timed } from '../sync/dayo-client'
 import { DAYO_KEYS, readKey, writeKey } from '../sync/state'
@@ -17,7 +17,7 @@ import { PROMPTPAY_SETTING_KEY } from './setup'
 import type { ConnectShopInput, DayoProbe, DayoProbeInput, RecoverOwnerInput, ReplaceApiKeyInput } from './types'
 
 /** The one base-URL rule of the tablet (Task 9) — re-exported so the setup screens need only this module. */
-export { normalizeBaseUrl }
+export { normalizeBaseUrl, storedBaseUrl }
 
 type ChangedAnswer = Extract<PosCatalogLooseData, { changed: true }>
 
@@ -161,29 +161,14 @@ export async function connectShop(db: RemoteDb, deps: ApiDeps, input: ConnectSho
   deps.afterWrite?.()
 }
 
-/** bootstrap's `dayoLinked`: an address is stored AND the key is in the secret store. */
-export async function isDayoLinked(db: RemoteDb, deps: ApiDeps): Promise<boolean> {
-  return (await readKey(db, DAYO_KEYS.baseUrl)) !== null && (await deps.secrets.getApiKey()) !== null
-}
-
 /**
- * Fix round 1 (security C1/I1) — the same central address rule: a key swap or an owner recovery never moves the tablet
- * to another server. The typed address must equal the stored `dayo.base_url` (both normalized, whole strings); the
- * old key and the new one are only ever sent there. Returns null when the stored address is missing or refused by
- * the shared rule (a restored backup can carry one) — that tablet needs a full setup.
- *
- * M3 (fix round 1 round 2, security): exported so `bootstrap()` shows the UI exactly the same null/normalized
- * value this function itself would refuse or accept — never the unvalidated raw column.
+ * bootstrap's `dayoLinked`: a valid address is stored AND the key is in the secret store. Goes through
+ * `storedBaseUrl` (not the raw `dayo.base_url` key) so a malformed-but-non-null stored URL — a hypothetical
+ * future restore, or a tampered DB — correctly falls through to `connectShop`'s normal PIN-gated re-link path
+ * instead of a dead `ALREADY_SET_UP` with no valid address to recover to (final review round, both reviewers).
  */
-export async function storedBaseUrl(db: RemoteDb): Promise<string | null> {
-  const raw = await readKey(db, DAYO_KEYS.baseUrl)
-  if (raw === null) return null
-  try {
-    const url = normalizeBaseUrl(raw)
-    return url.endsWith('/api/v1') ? url : null
-  } catch {
-    return null
-  }
+export async function isDayoLinked(db: RemoteDb, deps: ApiDeps): Promise<boolean> {
+  return (await storedBaseUrl(db)) !== null && (await deps.secrets.getApiKey()) !== null
 }
 
 /** The linked device, its prefix and the check that a key's last receipt number belongs to it. */

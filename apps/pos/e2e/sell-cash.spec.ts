@@ -4,7 +4,8 @@ import { addItem, firstRun } from './helpers'
 test('cash sale: defaults, discount, quick tender, change, queue and receipt; next sale continues; done screen auto-closes', async ({ page, request }) => {
   await firstRun(page, request)
   // block 2: shift/cash rows are local_only and never counted here (spec 04 §6.1) — only bills (order/order_void), and none yet.
-  await expect(page.getByTestId('pending-sync')).toContainText(' 0 ')
+  // StatusBanners' badge-pending (mounted once at the router root) hides itself entirely at 0 pending bills.
+  await expect(page.getByTestId('badge-pending')).toBeHidden()
 
   await addItem(page, 'Pink Milk') // 16 oz / 100% preselected — ฿65
   await addItem(page, 'Cocoa', { size: '20 oz', sweet: '100%' }) // ฿55
@@ -33,7 +34,7 @@ test('cash sale: defaults, discount, quick tender, change, queue and receipt; ne
 
   await expect(page).toHaveURL(/\/sell$/)
   await expect(page.getByTestId('pay-cash')).toBeDisabled() // cart cleared
-  await expect(page.getByTestId('pending-sync')).toContainText(' 1 ') // one bill pending — the open shift never counts here (block 2, spec §6.1)
+  await expect(page.getByTestId('badge-pending')).toContainText(' 1 ') // one bill pending — the open shift never counts here (block 2, spec §6.1)
 
   await addItem(page, 'Pink Milk')
   await page.getByTestId('pay-cash').click()
