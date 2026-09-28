@@ -25,6 +25,8 @@ button:focus-visible { outline: 3px solid var(--forest); outline-offset: 2px; }
 button.primary { background: var(--forest); color: var(--cream); border-color: var(--forest); font-weight: 700; }
 button[aria-pressed='true'] { outline: 3px solid var(--forest); background: var(--selected); font-weight: 700; }
 input, textarea, select { font: inherit; color: var(--forest); background: var(--surface); min-height: 56px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; width: 100%; }
+/* the rule above is for text fields — a checkbox/radio stretched to it renders as a big empty box */
+input[type='checkbox'], input[type='radio'] { width: 28px; height: 28px; min-height: 28px; padding: 0; margin: 0; flex: none; accent-color: var(--forest); }
 /* controller ruling SECURITY I1 (Task 17 fix round 1): the dayo key and every PIN render as type="text" so Chrome
    never offers to save them to Google Password Manager (it ignores autocomplete=off on type="password" inside a
    form) — this is the only thing that still hides the value on screen. Chrome-only (the tablet's one browser). */
@@ -32,49 +34,122 @@ input, textarea, select { font: inherit; color: var(--forest); background: var(-
 input:focus-visible { outline: 3px solid var(--forest); }
 label { display: grid; gap: 4px; }
 fieldset { border: 1px solid var(--line); border-radius: 12px; }
-.brandbar { height: var(--brandbar-h); display: grid; grid-template-rows: 56px 12px; background: var(--forest); color: var(--cream); }
+/* Root layout (router.tsx): a full-height column — bar and banners take their own height, the route gets the rest
+   and scrolls inside it. Screens like .sell fill it exactly and scroll their own parts instead. */
+.app-shell { display: flex; flex-direction: column; height: 100dvh; }
+.route { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.brandbar { flex: none; height: var(--brandbar-h); display: grid; grid-template-rows: 56px 12px; background: var(--forest); color: var(--cream); }
 .brandbar .bar { display: flex; align-items: center; gap: 12px; padding: 0 12px; }
 .brandbar .logo { height: 48px; width: auto; display: block; }
 .brandbar .name { font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
 .brandbar .wave { background: url('/brand/wave.svg') repeat-x left center / auto 12px; }
-.page { padding: 16px; max-width: 760px; margin: 0 auto; display: grid; gap: 12px; }
+/* minmax(0,1fr): the one column may shrink below its widest child (a figures table, a long heading) on a phone */
+.page { padding: 16px; width: 100%; max-width: 760px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-content: start; }
+.page h1 { overflow-wrap: anywhere; }
+/* Task 20 banners, under the brand bar on every screen — orange stays a decoration edge only (D44), never text */
+.status-banners { flex: none; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.status-banners:empty { display: none; }
+.banner { margin: 0; flex: 1 1 280px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 10px; font-weight: 600; text-align: left; min-height: 48px; }
+.banner.warn { background: var(--selected); color: var(--forest); border: 1px solid var(--line); border-left: 6px solid var(--orange); }
+.banner.error { background: var(--surface); color: var(--danger); border: 1px solid var(--danger); border-left-width: 6px; }
+.banner button { min-height: 44px; }
 .error { color: var(--danger); font-weight: 600; }
 .list { display: grid; gap: 8px; }
 .choices { display: flex; flex-wrap: wrap; gap: 8px; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
-.sell { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: auto 1fr; height: calc(100dvh - var(--brandbar-h)); }
-.topbar { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--line); overflow-x: auto; background: var(--cream); }
-.topbar .spacer { flex: 1; }
+/* Sell screen: menu grid + cart side by side, each scrolling on its own inside the height the root layout leaves. */
+.sell { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 32vw, 400px); grid-template-rows: auto auto minmax(0, 1fr); }
+.topbar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--line); background: var(--cream); }
+.topbar button { white-space: nowrap; flex: none; }
+/* category tabs: one line that scrolls sideways — however many categories dayo has */
+.topbar .tabs { display: flex; gap: 8px; flex: 1 1 320px; min-width: 0; overflow-x: auto; scrollbar-width: thin; padding: 3px; }
+.topbar .nav { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+/* explicit rows: an empty (hidden) alerts row must not pull the menu and cart up into the auto-height row */
+.sell > .grid, .sell > .cart { grid-row: 3; }
+.sell-alerts { grid-column: 1 / -1; display: grid; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.sell-alerts:empty { display: none; }
+.sell-alerts > * { margin: 0; }
+.sell-alerts > button { min-height: 48px; justify-self: start; text-align: left; }
 .badge { color: var(--muted); font-size: 14px; white-space: nowrap; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; padding: 10px; align-content: start; overflow-y: auto; }
+.grid { min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 10px; align-content: start; overflow-y: auto; }
 .product { display: flex; flex-direction: column; justify-content: center; min-height: 96px; }
 .product .th { font-size: 18px; font-weight: 700; }
 .product .en { font-size: 13px; color: var(--muted); }
-.cart { border-left: 1px solid var(--line); display: flex; flex-direction: column; padding: 10px; gap: 8px; overflow-y: auto; background: var(--surface); }
-.cart-line { display: grid; grid-template-columns: 1fr auto; gap: 4px; border-bottom: 1px dashed var(--line); padding-bottom: 6px; }
+.cart { min-height: 0; border-left: 1px solid var(--line); display: flex; flex-direction: column; background: var(--surface); }
+.cart-head { flex: none; display: grid; gap: 8px; padding: 10px 10px 8px; }
+.cart-head h2 { margin: 0; font-size: 20px; }
+.cart-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; padding: 0 10px 8px; }
+.cart-body > p { margin: 0; }
+.cart-foot { flex: none; display: grid; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }
+.cart-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px; border-bottom: 1px dashed var(--line); padding-bottom: 6px; }
 .qty { display: flex; gap: 6px; align-items: center; }
-.totals { margin-top: auto; display: grid; gap: 4px; font-size: 18px; }
+.qty button { min-height: 52px; min-width: 52px; padding: 4px 12px; }
+.promo-panel { display: grid; gap: 8px; }
+.promo-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.promo-line button { min-height: 48px; }
+.promo-line-skipped span { color: var(--muted); text-decoration: line-through; }
+.totals { display: grid; gap: 4px; font-size: 18px; }
 .totals .total { font-size: 28px; font-weight: 800; }
 .pay { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dialog-backdrop { position: fixed; inset: 0; background: var(--backdrop); display: grid; place-items: center; padding: 16px; }
 .dialog { background: var(--surface); border-radius: 16px; padding: 16px; width: min(680px, 100%); display: grid; gap: 10px; max-height: 100%; overflow-y: auto; border-top: 6px solid var(--orange); }
 .big-amount { font-size: 48px; font-weight: 800; }
-.done { display: grid; place-items: center; align-content: center; gap: 8px; min-height: calc(100dvh - var(--brandbar-h)); text-align: center; }
-.queue-no { font-size: 160px; font-weight: 900; line-height: 1; color: var(--forest); }
+.done { flex: 1 0 auto; display: grid; place-items: center; align-content: center; gap: 8px; padding: 16px; text-align: center; }
+.queue-no { font-size: clamp(96px, 28vw, 160px); font-weight: 900; line-height: 1; color: var(--forest); }
 .qr img { width: min(80vw, 560px); height: auto; image-rendering: pixelated; background: var(--qr-bg); }
 .pinpad { display: grid; gap: 10px; justify-items: center; }
 .pin-dots { font-size: 32px; letter-spacing: 8px; min-height: 40px; }
 .pin-grid { display: grid; grid-template-columns: repeat(3, 96px); gap: 10px; }
 .row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; text-align: left; width: 100%; }
-@media (max-width: 820px) {
-  .sell { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
-  .cart { border-left: 0; border-top: 1px solid var(--line); max-height: 45dvh; }
+/* Phones held upright: the cart moves under the menu, its lines scroll and the total + pay buttons stay visible. */
+@media (max-width: 639px) {
+  :root { --brandbar-h: 52px; }
+  .brandbar { grid-template-rows: 44px 8px; }
+  .brandbar .logo { height: 36px; }
+  .brandbar .name { font-size: 18px; }
+  .sell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+  .sell > .cart { grid-row: 4; border-left: 0; border-top: 1px solid var(--line); max-height: 46dvh; }
+  .cart-head { grid-template-columns: auto 1fr; align-items: center; padding-top: 8px; }
+  .cart-head label { grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
+  .cart-head select { min-height: 48px; }
+  /* tabs on one sideways-scrolling row, the shift/bill buttons on another — never three rows */
+  .topbar { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; }
+  .topbar .tabs { flex: none; }
+  .topbar .nav { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: thin; padding: 3px; }
+  .topbar button, .cart button, .promo-line button { min-height: 48px; }
+  .sell-alerts { font-size: 14px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; padding: 8px; }
+  .product { min-height: 72px; }
+  .totals .total { font-size: 24px; }
+  .page { padding: 12px; }
+}
+/* Short screens (a phone turned sideways): a thinner bar and smaller touch rows so the menu still fits. */
+@media (max-height: 520px) {
+  :root { --brandbar-h: 44px; }
+  .brandbar { grid-template-rows: 36px 8px; }
+  .brandbar .logo { height: 28px; }
+  .brandbar .name { font-size: 16px; }
+  /* everything on the top bar in ONE sideways-scrolling row */
+  .topbar { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; padding: 4px 6px; gap: 6px; scrollbar-width: thin; }
+  .topbar .tabs, .topbar .nav { flex: none; overflow: visible; flex-wrap: nowrap; padding: 2px; }
+  .topbar button, .cart button, .promo-line button, .banner, .sell-alerts > button { min-height: 44px; padding: 4px 12px; }
+  .sell-alerts { font-size: 14px; padding: 4px 8px; }
+  .qty button { min-height: 44px; min-width: 44px; }
+  .cart-head { padding: 6px 8px; }
+  .cart-head h2 { display: none; }
+  .cart-head label { grid-template-columns: auto 1fr; align-items: center; gap: 6px; font-size: 14px; }
+  .cart-head select { min-height: 40px; padding: 4px 8px; }
+  .cart-foot { padding: 6px 8px; gap: 6px; grid-template-columns: 1fr 1fr; }
+  .cart-foot .totals { grid-column: 1 / -1; font-size: 14px; gap: 0; }
+  .cart-foot .choices, .cart-foot .pay { display: contents; }
+  .product { min-height: 64px; }
+  .totals .total { font-size: 20px; }
 }
 
 /* แผน 3b: ตารางตัวเลขของรายงาน X/Z และตารางนับเงิน */
 .figures { width: 100%; border-collapse: collapse; font-size: 18px; }
 .figures th { text-align: left; font-weight: 500; padding: 6px 4px; }
-.figures td { text-align: right; font-variant-numeric: tabular-nums; padding: 6px 4px; }
+.figures td { text-align: right; font-variant-numeric: tabular-nums; padding: 6px 4px; white-space: nowrap; }
 .figures tr + tr { border-top: 1px solid var(--line); }
 .figures input { width: 7em; font-size: 20px; text-align: right; }
 

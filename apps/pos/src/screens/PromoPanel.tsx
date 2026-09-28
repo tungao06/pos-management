@@ -30,7 +30,7 @@ export function PromoPanel({ priced, catalog }: { priced: PricedCart | null; cat
           </button>
         </div>
       ))}
-      <label>
+      <label className="check">
         <input type="checkbox" data-testid="no-promotions" checked={state.noPromotions} onChange={(e) => dispatch({ type: 'setNoPromotions', value: e.target.checked })} />
         {TH.noPromotions}
       </label>

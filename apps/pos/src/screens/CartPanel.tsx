@@ -51,115 +51,122 @@ export function CartPanel({
 
   return (
     <aside className="cart" data-testid="cart">
-      <h2>{TH.cart}</h2>
-      <label>
-        {TH.channel}
-        <select data-testid="channel-select" value={state.channelCode} onChange={(e) => dispatch({ type: 'setChannel', channelCode: e.target.value })}>
-          {channels.map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {empty && <p>{TH.cartEmpty}</p>}
-      {state.lines.map((l, i) => {
-        // A promotion (e.g. buy-2-get-1) can split one cart line into a free priced line and a paid one — both share
-        // this line's code/size/sweetness/milk/grade (only qty splits), so summing them back is exact, never a
-        // hand-computed price (spec: "bills priced by dayo can split a line — display them as stored").
-        const matched = priced?.lines.filter((p) => sameCombo(p, l)) ?? []
-        const lineTotal = sumSatang(matched.map((p) => p.lineTotalSatang))
-        const freeQty = sumSatang(matched.filter((p) => p.promotionId !== null && p.lineTotalSatang === 0).map((p) => p.qty))
-        const badLine = catalog === undefined ? null : lineError(catalog, l, i, maxQtyPerLineOf(catalog))
-        return (
-          <div key={l.key} className="cart-line" data-testid={`cart-line-${i}`}>
-            <div>
-              <strong>{l.nameTh}</strong>
+      <div className="cart-head">
+        <h2>{TH.cart}</h2>
+        <label>
+          {TH.channel}
+          <select data-testid="channel-select" value={state.channelCode} onChange={(e) => dispatch({ type: 'setChannel', channelCode: e.target.value })}>
+            {channels.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {/* only this part scrolls — the totals and pay buttons below stay on screen however long the bill gets */}
+      <div className="cart-body">
+        {empty && <p>{TH.cartEmpty}</p>}
+        {state.lines.map((l, i) => {
+          // A promotion (e.g. buy-2-get-1) can split one cart line into a free priced line and a paid one — both share
+          // this line's code/size/sweetness/milk/grade (only qty splits), so summing them back is exact, never a
+          // hand-computed price (spec: "bills priced by dayo can split a line — display them as stored").
+          const matched = priced?.lines.filter((p) => sameCombo(p, l)) ?? []
+          const lineTotal = sumSatang(matched.map((p) => p.lineTotalSatang))
+          const freeQty = sumSatang(matched.filter((p) => p.promotionId !== null && p.lineTotalSatang === 0).map((p) => p.qty))
+          const badLine = catalog === undefined ? null : lineError(catalog, l, i, maxQtyPerLineOf(catalog))
+          return (
+            <div key={l.key} className="cart-line" data-testid={`cart-line-${i}`}>
               <div>
-                {l.size} · {TH.sweetShort} {l.sweetness}
-                {l.milk === 'oat' ? ` · ${TH.milkOat}` : ''}
-                {l.grade !== null ? ` · ${l.grade}` : ''}
-                {freeQty > 0 && ` · ${TH.freeUnits(freeQty)}`}
+                <strong>{l.nameTh}</strong>
+                <div>
+                  {l.size} · {TH.sweetShort} {l.sweetness}
+                  {l.milk === 'oat' ? ` · ${TH.milkOat}` : ''}
+                  {l.grade !== null ? ` · ${l.grade}` : ''}
+                  {freeQty > 0 && ` · ${TH.freeUnits(freeQty)}`}
+                </div>
+                {badLine !== null && (
+                  <p role="alert" className="error" data-testid={`cart-line-error-${i}`}>
+                    {cartErrorMessage(badLine)}
+                  </p>
+                )}
               </div>
-              {badLine !== null && (
-                <p role="alert" className="error" data-testid={`cart-line-error-${i}`}>
-                  {cartErrorMessage(badLine)}
-                </p>
+              <div>{matched.length > 0 ? formatBahtFull(lineTotal) : TH.noPrice}</div>
+              <div className="qty">
+                <button type="button" data-testid={`cart-dec-${i}`} onClick={() => dispatch({ type: 'dec', key: l.key })}>
+                  −
+                </button>
+                <span data-testid={`cart-qty-${i}`}>{l.qty}</span>
+                <button type="button" data-testid={`cart-inc-${i}`} onClick={() => dispatch({ type: 'inc', key: l.key, maxQty: maxQtyPerLine })}>
+                  +
+                </button>
+                <button type="button" data-testid={`cart-remove-${i}`} onClick={() => dispatch({ type: 'remove', key: l.key })}>
+                  {TH.remove}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        <PromoPanel priced={priced} catalog={catalog} />
+        {error !== null && (
+          <p role="alert" className="error" data-testid="cart-error">
+            {cartErrorMessage(error)}
+          </p>
+        )}
+        {priced !== null && !priced.ok && (
+          <p role="alert" className="error" data-testid="cart-warnings">
+            {priced.warnings.join(' · ')}
+          </p>
+        )}
+        {billDiscountTooBig && (
+          <p role="alert" className="error" data-testid="cart-discount-too-big">
+            {TH.errBillDiscountTooBig}
+          </p>
+        )}
+        {zeroTotal && !billDiscountTooBig && (
+          <p role="alert" className="error" data-testid="cart-zero-total">
+            {TH.errZeroTotal}
+          </p>
+        )}
+      </div>
+      <div className="cart-foot">
+        <div className="totals">
+          {priced !== null && (
+            <>
+              <div>
+                {TH.subtotal} <span data-testid="cart-subtotal">{formatBahtFull(priced.itemsSubtotalSatang)}</span>
+              </div>
+              {state.billDiscount !== null && (
+                <div>
+                  {TH.discount} ({state.billDiscount.reason}) <span data-testid="cart-discount">−{formatBahtFull(priced.billDiscountSatang)}</span>
+                </div>
               )}
-            </div>
-            <div>{matched.length > 0 ? formatBahtFull(lineTotal) : TH.noPrice}</div>
-            <div className="qty">
-              <button type="button" data-testid={`cart-dec-${i}`} onClick={() => dispatch({ type: 'dec', key: l.key })}>
-                −
-              </button>
-              <span data-testid={`cart-qty-${i}`}>{l.qty}</span>
-              <button type="button" data-testid={`cart-inc-${i}`} onClick={() => dispatch({ type: 'inc', key: l.key, maxQty: maxQtyPerLine })}>
-                +
-              </button>
-              <button type="button" data-testid={`cart-remove-${i}`} onClick={() => dispatch({ type: 'remove', key: l.key })}>
-                {TH.remove}
-              </button>
-            </div>
+            </>
+          )}
+          <div className="total">
+            {TH.total} <span data-testid="cart-total">{formatBahtFull(priced?.totalSatang ?? 0)}</span>
           </div>
-        )
-      })}
-      <PromoPanel priced={priced} catalog={catalog} />
-      {error !== null && (
-        <p role="alert" className="error" data-testid="cart-error">
-          {cartErrorMessage(error)}
-        </p>
-      )}
-      {priced !== null && !priced.ok && (
-        <p role="alert" className="error" data-testid="cart-warnings">
-          {priced.warnings.join(' · ')}
-        </p>
-      )}
-      {billDiscountTooBig && (
-        <p role="alert" className="error" data-testid="cart-discount-too-big">
-          {TH.errBillDiscountTooBig}
-        </p>
-      )}
-      {zeroTotal && !billDiscountTooBig && (
-        <p role="alert" className="error" data-testid="cart-zero-total">
-          {TH.errZeroTotal}
-        </p>
-      )}
-      <div className="totals">
-        {priced !== null && (
-          <>
-            <div>
-              {TH.subtotal} <span data-testid="cart-subtotal">{formatBahtFull(priced.itemsSubtotalSatang)}</span>
-            </div>
-            {state.billDiscount !== null && (
-              <div>
-                {TH.discount} ({state.billDiscount.reason}) <span data-testid="cart-discount">−{formatBahtFull(priced.billDiscountSatang)}</span>
-              </div>
-            )}
-          </>
-        )}
-        <div className="total">
-          {TH.total} <span data-testid="cart-total">{formatBahtFull(priced?.totalSatang ?? 0)}</span>
         </div>
-      </div>
-      <div className="choices">
-        <button type="button" data-testid="discount-open" disabled={empty} onClick={onOpenDiscount}>
-          {TH.discount}
-        </button>
-        <button type="button" data-testid="cart-clear" disabled={empty} onClick={clear}>
-          {TH.clearCart}
-        </button>
-      </div>
-      <div className="pay">
-        {payments.cash && (
-          <button type="button" className="primary" data-testid="pay-cash" disabled={!canPay} onClick={() => onPay('CASH')}>
-            {TH.payCash}
+        <div className="choices">
+          <button type="button" data-testid="discount-open" disabled={empty} onClick={onOpenDiscount}>
+            {TH.discount}
           </button>
-        )}
-        {payments.qr && (
-          <button type="button" className="primary" data-testid="pay-qr" disabled={!canPay} onClick={() => onPay('PROMPTPAY')}>
-            {TH.payQr}
+          <button type="button" data-testid="cart-clear" disabled={empty} onClick={clear}>
+            {TH.clearCart}
           </button>
-        )}
+        </div>
+        <div className="pay">
+          {payments.cash && (
+            <button type="button" className="primary" data-testid="pay-cash" disabled={!canPay} onClick={() => onPay('CASH')}>
+              {TH.payCash}
+            </button>
+          )}
+          {payments.qr && (
+            <button type="button" className="primary" data-testid="pay-qr" disabled={!canPay} onClick={() => onPay('PROMPTPAY')}>
+              {TH.payQr}
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   )
