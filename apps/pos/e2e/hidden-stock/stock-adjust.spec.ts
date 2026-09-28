@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test'
 import { firstRun } from '../helpers'
 
-test('a free drink by recipe and spilled milk by item, each with a reason — no bill (spec §5 · D50 Q3-20 · Q4-8)', async ({ page }) => {
-  await firstRun(page)
+test('a free drink by recipe and spilled milk by item, each with a reason — no bill (spec §5 · D50 Q3-20 · Q4-8)', async ({ page, request }) => {
+  await firstRun(page, request)
   await page.getByTestId('nav-stock').click()
   await page.getByTestId('nav-adjust').click()
 
