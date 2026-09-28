@@ -115,6 +115,52 @@ describe('ConnectFields — QR scan (quality review, fix round 1)', () => {
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ baseUrl: 'https://edited-mid-scan.example/api/v1', apiKey: key }))
   })
 
+  // SECURITY (fix round 2): a double-tap on the scan button used to fire `getUserMedia` twice, and the second
+  // stream silently replaced `streamRef.current` — leaking the first stream forever, with nothing ever calling
+  // `stop()` on it.
+  it('a double-tap on the scan button only ever starts one camera stream', async () => {
+    ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {}
+    let resolveGetUserMedia!: (stream: MediaStream) => void
+    const getUserMedia = vi.fn(() => new Promise<MediaStream>((r) => { resolveGetUserMedia = r }))
+    vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia } })
+    HTMLMediaElement.prototype.play = vi.fn(async () => undefined)
+    mount()
+
+    fireEvent.click(screen.getByTestId('setup-scan'))
+    fireEvent.click(screen.getByTestId('setup-scan')) // the double-tap
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1))
+
+    const track = { stop: vi.fn() }
+    resolveGetUserMedia({ getTracks: () => [track] } as unknown as MediaStream)
+    await screen.findByTestId('setup-scan-video')
+  })
+
+  // SECURITY (fix round 2): unmounting while `getUserMedia` is still pending used to leave the camera on forever —
+  // by the time the browser handed back a stream, nothing in the (now-gone) component ever called `stop()` on it.
+  it('stops the camera stream if the component unmounts while the camera is still starting', async () => {
+    ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {}
+    let resolveGetUserMedia!: (stream: MediaStream) => void
+    const getUserMedia = vi.fn(() => new Promise<MediaStream>((r) => { resolveGetUserMedia = r }))
+    vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia } })
+    const api = {} as unknown as PosApi
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ApiProvider api={api}>
+          <Controlled onChange={() => undefined} />
+        </ApiProvider>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('setup-scan'))
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalled())
+    unmount()
+
+    const track = { stop: vi.fn() }
+    resolveGetUserMedia({ getTracks: () => [track] } as unknown as MediaStream)
+    await waitFor(() => expect(track.stop).toHaveBeenCalled())
+  })
+
   it('shows a Thai message, not the raw browser text, when the camera is denied', async () => {
     ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {}
     vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia: vi.fn(async () => { throw new Error('Permission denied') }) } })
