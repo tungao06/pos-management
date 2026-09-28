@@ -154,6 +154,7 @@ fieldset { border: 1px solid var(--line); border-radius: 12px; }
 .figures input { width: 7em; font-size: 20px; text-align: right; }
 
 /* แผน 4: สต็อก */
-.check { display: flex; gap: 12px; align-items: center; }
+/* the whole row (box + text) is the touch target, not just the 28px box */
+.check { display: flex; gap: 12px; align-items: center; min-height: 48px; cursor: pointer; }
 .check input { width: 28px; min-height: 28px; }
 .figures small { font-size: 14px; }
