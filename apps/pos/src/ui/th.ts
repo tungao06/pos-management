@@ -451,6 +451,9 @@ export const TH = {
   priceDiffVoidLocalOnly: 'ยกเลิกในเครื่องเท่านั้น — ระบบกลางยังนับเป็นยอดขาย (ก้อน 3 จะจัดการเงิน)',
   priceDiffEmpty: 'ไม่มียอดไม่ตรงระบบกลาง',
   priceDiffCatalog: (version: string): string => `ฉบับแคตตาล็อก ${version}`,
+  priceDiffPos: (amount: string): string => `POS ${amount}`,
+  priceDiffCentral: (amount: string): string => `ระบบกลาง ${amount}`,
+  priceDiffDiff: (amount: string): string => `ต่าง ${amount}`,
 
   // VOID_NOT_ALLOWED with a structured detail prefix (ruling R11 · same-day-only) — the code already writes this
   // exact Thai text after the prefix (void.ts); matched by the prefix (never by parsing the rest as free text).
