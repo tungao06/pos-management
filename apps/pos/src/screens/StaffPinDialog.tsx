@@ -116,7 +116,7 @@ export function StaffPinDialog({
             {error}
           </p>
         )}
-        <div className="row">
+        <div className="row dialog-foot">
           <button type="button" data-testid="staff-pin-cancel" onClick={onClose}>
             {TH.cancel}
           </button>

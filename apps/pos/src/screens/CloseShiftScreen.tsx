@@ -136,7 +136,7 @@ export function CloseShiftScreen(): JSX.Element {
           {TH.cartNotEmpty}
         </p>
       )}
-      <table className="figures">
+      <table className="figures count">
         <thead>
           <tr>
             <th scope="col">{TH.denomination}</th>
@@ -171,7 +171,7 @@ export function CloseShiftScreen(): JSX.Element {
               {error}
             </p>
           )}
-          <div className="actions">
+          <div className="actions sticky-foot">
             <button
               type="button"
               className="primary"

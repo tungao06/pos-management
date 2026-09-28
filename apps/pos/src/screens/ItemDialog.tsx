@@ -131,8 +131,8 @@ export function ItemDialog({
             {TH.itemUnavailable}
           </p>
         )}
-        <div className="big-amount">{price === null ? TH.noPrice : formatBaht(price)}</div>
-        <div className="actions">
+        <div className="actions dialog-foot item-foot">
+          <div className="big-amount">{price === null ? TH.noPrice : formatBaht(price)}</div>
           <button type="button" data-testid="item-cancel" onClick={onClose}>
             {TH.cancel}
           </button>

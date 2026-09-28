@@ -152,3 +152,54 @@ describe('CartPanel', () => {
     expect(screen.queryByTestId('pay-qr')).toBeNull()
   })
 })
+
+describe('CartPanel — phone bottom sheet', () => {
+  const EMPTY: CartState = { orderId: 'o', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, lines: [] }
+  const panel = (initial: CartState) => (
+    <CartProvider initial={initial}>
+      <CartPanel catalog={CATALOG} channels={CHANNELS} payments={PAYMENTS} maxQtyPerLine={99} onOpenDiscount={() => undefined} onPay={() => undefined} />
+    </CartProvider>
+  )
+
+  it('starts collapsed, summarises the cups and channel, and a tap expands and collapses it', async () => {
+    render(panel(twoCups))
+    const toggle = screen.getByTestId('cart-toggle')
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveTextContent('2 แก้ว')
+    expect(toggle).toHaveTextContent('หน้าร้าน')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('cart')).toHaveAttribute('data-expanded', 'true')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('a swipe up on the handle expands it, a swipe down collapses it — without the tap also toggling', () => {
+    render(panel(twoCups))
+    const toggle = screen.getByTestId('cart-toggle')
+    fireEvent.pointerDown(toggle, { clientY: 500 })
+    fireEvent.pointerUp(toggle, { clientY: 400 })
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.pointerDown(toggle, { clientY: 100 })
+    fireEvent.pointerUp(toggle, { clientY: 300 })
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('an empty cart never expands, and emptying an open cart folds it back down', () => {
+    const { unmount } = render(panel(EMPTY))
+    fireEvent.click(screen.getByTestId('cart-toggle'))
+    expect(screen.getByTestId('cart-toggle')).toHaveAttribute('aria-expanded', 'false')
+    unmount()
+    render(panel(twoCups))
+    fireEvent.click(screen.getByTestId('cart-toggle'))
+    fireEvent.click(screen.getByTestId('cart-remove-0'))
+    expect(screen.getByTestId('cart-toggle')).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('flags a cart problem on the handle so a collapsed sheet never hides why pay is disabled', () => {
+    render(panel({ ...twoCups, lines: [line('12 oz')] })) // 12 oz is closed in CATALOG
+    expect(screen.getByTestId('cart-toggle')).toHaveTextContent('ตะกร้ามีปัญหา')
+  })
+})

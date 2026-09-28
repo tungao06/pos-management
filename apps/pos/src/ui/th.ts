@@ -79,6 +79,11 @@ export const TH = {
   tabBestSellers: 'ขายดี',
   cart: 'ตะกร้า',
   cartEmpty: 'ยังไม่มีรายการ',
+  // phone bottom-sheet cart handle (CartPanel)
+  cartCups: (n: number): string => (n === 0 ? 'ว่าง' : `${n} แก้ว`),
+  cartExpand: 'ดูรายการ ▲',
+  cartCollapse: 'ย่อ ▼',
+  cartCheck: 'ตะกร้ามีปัญหา — แตะเพื่อดู',
   subtotal: 'รวม',
   discount: 'ส่วนลด',
   total: 'ยอดสุทธิ',
@@ -446,6 +451,9 @@ export const TH = {
   priceDiffVoidLocalOnly: 'ยกเลิกในเครื่องเท่านั้น — ระบบกลางยังนับเป็นยอดขาย (ก้อน 3 จะจัดการเงิน)',
   priceDiffEmpty: 'ไม่มียอดไม่ตรงระบบกลาง',
   priceDiffCatalog: (version: string): string => `ฉบับแคตตาล็อก ${version}`,
+  priceDiffPos: (amount: string): string => `POS ${amount}`,
+  priceDiffCentral: (amount: string): string => `ระบบกลาง ${amount}`,
+  priceDiffDiff: (amount: string): string => `ต่าง ${amount}`,
 
   // VOID_NOT_ALLOWED with a structured detail prefix (ruling R11 · same-day-only) — the code already writes this
   // exact Thai text after the prefix (void.ts); matched by the prefix (never by parsing the rest as free text).
@@ -522,4 +530,7 @@ export const TH = {
   remapCodeGradeOnly: 'ระบบกลางไม่รู้จักเกรดของบรรทัดนี้ — เมนู ขนาด และความหวานคงเดิม เปลี่ยนเป็นเกรดเริ่มต้นเท่านั้น',
   remapCodeLineOption: (index: number, code: string, size: string, sweetness: string): string => `บรรทัดที่ ${index} · ${code} ${size} ${sweetness}`,
   remapStaffLabel: 'พนักงานแทน',
+
+  // fu app-version — เวอร์ชันที่กำลังใช้งาน (/status เต็มบรรทัด, BrandBar ย่อ)
+  statusVersionLine: (version: string, commit: string, builtAt: string): string => `เวอร์ชัน v${version} · commit ${commit} · build ${builtAt}`,
 } as const

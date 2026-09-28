@@ -107,8 +107,9 @@ export function OrderDetailScreen(): JSX.Element {
           {TH.subtotal} {formatBaht(o.subtotalSatang)}
         </div>
         {o.discountSatang > 0 && (
-          <div>
-            {TH.discount} ({o.discountReason}) −{formatBaht(o.discountSatang)}
+          <div data-testid="order-discount">
+            {TH.discount}
+            {o.discountReason !== null && o.discountReason.trim() !== '' && ` (${o.discountReason})`} −{formatBaht(o.discountSatang)}
           </div>
         )}
         <div className="total">
@@ -129,9 +130,11 @@ export function OrderDetailScreen(): JSX.Element {
         ))}
       </ol>
       {mayVoid && (
-        <button type="button" data-testid="order-void" onClick={() => setVoiding(true)}>
-          {TH.voidButton}
-        </button>
+        <div className="actions sticky-foot">
+          <button type="button" data-testid="order-void" onClick={() => setVoiding(true)}>
+            {TH.voidButton}
+          </button>
+        </div>
       )}
       {voiding && <VoidDialog order={o} onClose={() => setVoiding(false)} />}
     </main>

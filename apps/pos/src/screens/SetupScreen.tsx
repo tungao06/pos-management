@@ -226,9 +226,11 @@ export function SetupScreen(): JSX.Element {
                 {error}
               </p>
             )}
-            <button type="submit" className="primary" data-testid="setup-save" disabled={save.isPending}>
-              {TH.setupSave}
-            </button>
+            <div className="actions sticky-foot">
+              <button type="submit" className="primary" data-testid="setup-save" disabled={save.isPending}>
+                {TH.setupSave}
+              </button>
+            </div>
           </>
         )}
       </form>

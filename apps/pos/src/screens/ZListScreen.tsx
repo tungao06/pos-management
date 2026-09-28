@@ -30,7 +30,7 @@ export function ZListScreen(): JSX.Element {
       {list.data?.length === 0 && <p>{TH.noZ}</p>}
       <div className="list">
         {list.data?.map((z, i) => (
-          <button key={z.shiftId} type="button" className="row" data-testid={`z-row-${i}`} onClick={() => void navigate({ to: '/z/$shiftId', params: { shiftId: z.shiftId } })}>
+          <button key={z.shiftId} type="button" className="row z-row" data-testid={`z-row-${i}`} onClick={() => void navigate({ to: '/z/$shiftId', params: { shiftId: z.shiftId } })}>
             <strong>{z.businessDate ?? '—'}</strong>
             <span>
               {TH.netSales} {z.netSalesSatang === null ? '—' : formatBaht(z.netSalesSatang)}
