@@ -1,6 +1,6 @@
 // scripts/release-version.mjs — bump apps/pos/package.json's version only (owner ask: see which deploy is
 // running). Never touches git (no tag, no commit) — the owner reviews the diff and commits it like any other
-// change, same as everything else in this repo (D106).
+// change, same as everything else in this repo (D108).
 // Usage (root):
 //   pnpm release:version patch|minor|major
 
