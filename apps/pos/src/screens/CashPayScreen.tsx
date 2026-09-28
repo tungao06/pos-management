@@ -8,7 +8,7 @@ import { sellCatalogKey } from '../app/queries'
 import { useCommitSale } from '../app/use-commit-sale'
 import { usePricedCart } from '../app/use-priced-cart'
 import { cartErrorMessage, errorMessage } from '../ui/errors'
-import { formatBaht, parseBahtInput } from '../ui/format'
+import { formatBaht, formatBahtFull, parseBahtInput } from '../ui/format'
 import { TH } from '../ui/th'
 
 /** spec §5: quick buttons exact / 50 / 100 / 500 / 1000 and a large change amount. Priced with dayo's own code
@@ -17,7 +17,7 @@ export function CashPayScreen(): JSX.Element {
   const api = useApi()
   const { state } = useCart()
   const navigate = useNavigate()
-  const { pay, isPending, isSuccess, isError, error, priceChanged, confirmPriceChange } = useCommitSale()
+  const { pay, isPending, isSuccess, isError, error, priceChanged } = useCommitSale()
   const catalogQuery = useQuery({ queryKey: sellCatalogKey, queryFn: () => api.loadSellCatalog() })
   const { priced, error: cartError } = usePricedCart(state, catalogQuery.data?.catalog)
   const [tenderText, setTenderText] = useState('')
@@ -31,7 +31,7 @@ export function CashPayScreen(): JSX.Element {
     <main className="page">
       <h1>{TH.cashTitle}</h1>
       <div>
-        {TH.total} <span className="big-amount" data-testid="cash-total">{formatBaht(total)}</span>
+        {TH.total} <span className="big-amount" data-testid="cash-total">{formatBahtFull(total)}</span>
       </div>
       <div className="choices">
         {quickTenderOptions(total).map((amount, i) => (
@@ -45,11 +45,11 @@ export function CashPayScreen(): JSX.Element {
         <input data-testid="tender-input" inputMode="decimal" value={tenderText} onChange={(e) => setTenderText(e.target.value)} />
       </label>
       <div>
-        {TH.change} <span className="big-amount" data-testid="cash-change">{change === null ? '–' : formatBaht(change)}</span>
+        {TH.change} <span className="big-amount" data-testid="cash-change">{change === null ? '–' : formatBahtFull(change)}</span>
       </div>
       {priceChanged !== null && (
         <p role="alert" className="error" data-testid="price-changed">
-          {TH.priceChanged(formatBaht(priceChanged.shownSatang), formatBaht(priceChanged.nowSatang))}
+          {TH.priceChanged(formatBahtFull(priceChanged.shownSatang), formatBahtFull(priceChanged.nowSatang))}
         </p>
       )}
       {cartError !== null && (
@@ -67,7 +67,15 @@ export function CashPayScreen(): JSX.Element {
           {TH.back}
         </button>
         {priceChanged !== null ? (
-          <button type="button" className="primary" data-testid="price-changed-confirm" disabled={isPending} onClick={() => void confirmPriceChange()}>
+          // review I3: resends with the CURRENT tender and the fresh total (`priced.totalSatang`, already re-priced
+          // from the refetched catalog — C1) — never the stale tendered/total of the attempt that got PRICE_CHANGED.
+          <button
+            type="button"
+            className="primary"
+            data-testid="price-changed-confirm"
+            disabled={isPending || tendered === null || priced === null || tendered < total}
+            onClick={() => tendered !== null && priced !== null && void pay({ method: 'CASH', tenderedSatang: tendered }, priced.totalSatang)}
+          >
             {TH.priceChangedConfirm}
           </button>
         ) : (

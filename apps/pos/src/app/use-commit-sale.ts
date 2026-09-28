@@ -47,14 +47,25 @@ export function useCommitSale() {
     },
   })
 
-  /** Sends the cart; never throws — a PRICE_CHANGED lands in `priceChanged`, anything else in `pay.isError`/`pay.error`. */
+  /**
+   * Sends the cart; never throws — a PRICE_CHANGED lands in `priceChanged`, anything else in `pay.isError`/`pay.error`
+   * (review I3: any OTHER error clears a stale `priceChanged` first, so the screen shows the new error, not a frozen
+   * "price changed" banner from an earlier attempt). Review C1: the fresh catalog is fetched — with `refetchQueries`,
+   * not just invalidated — BEFORE `priceChanged` is set, so `usePricedCart` (fed the caller's own `catalog` query) has
+   * already re-priced the cart to the new total by the time the screen re-renders; the cash/QR total, the change and
+   * the PromptPay payload (keyed on that total) are never stale.
+   */
   const pay = async (payment: RecordSaleInput['payment'], expectedTotalSatang: number): Promise<void> => {
     setLastPayment(payment)
     try {
       await mutation.mutateAsync({ payment, expectedTotalSatang })
       setPriceChanged(null)
     } catch (e) {
-      if (posErrorCode(e) !== 'PRICE_CHANGED') return
+      if (posErrorCode(e) !== 'PRICE_CHANGED') {
+        setPriceChanged(null)
+        return
+      }
+      await queryClient.refetchQueries({ queryKey: sellCatalogKey })
       const raw = e instanceof Error ? e.message : ''
       const m = /shown (\d+), now (\d+)/.exec(raw)
       setPriceChanged({ shownSatang: expectedTotalSatang, nowSatang: m ? Number(m[2]) : expectedTotalSatang })

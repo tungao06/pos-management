@@ -89,3 +89,59 @@ describe('ItemDialog', () => {
     expect(screen.queryByTestId('item-size-12oz')).toBeNull()
   })
 })
+
+// review I2: 16 oz offers 50%/100%, 22 oz offers only 100% — switching size must derive a usable sweetness
+// synchronously (no useEffect lag) and never throw mid-render.
+function sweetVariant(size: string, sweetness: '50%' | '100%', price: number) {
+  return {
+    menuCode: 'Original', menuNameTh: 'ชาไทยเย็น', family: 'ชาไทย', categoryLabel: 'ชา', menuSortOrder: 1,
+    size, sweetness, price, allowOatMilk: false, isMatcha: false,
+    recipeLines: [{ ingredientId: FRESH_ID, baseId: null, qty: 150, unit: 'ml' as const }],
+  }
+}
+const SWEET_CATALOG: PosOrderCatalog = {
+  ...CATALOG,
+  variants: [sweetVariant('16 oz', '50%', 45), sweetVariant('16 oz', '100%', 45), sweetVariant('22 oz', '100%', 65)],
+}
+const SWEET_MENU: SellMenuDto = {
+  ...MENU,
+  sizes: ['16 oz', '22 oz'],
+  sweetnessBySize: { '16 oz': ['50%', '100%'], '22 oz': ['100%'] },
+  defaultSweetness: '50%',
+}
+
+describe('ItemDialog — review I2: derived sweetness, never a crash', () => {
+  it('picks 50% on 16 oz, switches to 22 oz (only 100%) with no crash', () => {
+    expect(() =>
+      render(
+        <CartProvider>
+          <ItemDialog catalog={SWEET_CATALOG} menu={SWEET_MENU} channelCode="store" maxQtyPerLine={99} onClose={() => undefined} />
+        </CartProvider>,
+      ),
+    ).not.toThrow()
+    expect(screen.getByTestId('item-sweet-50%').getAttribute('aria-pressed')).toBe('true')
+    expect(() => fireEvent.click(screen.getByTestId('item-size-22oz'))).not.toThrow()
+    expect(screen.getByTestId('item-sweet-100%').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByTestId('item-sweet-50%')).toBeNull()
+    expect((screen.getByTestId('item-add') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('a refetch that closes the only size open while the dialog is open disables item-add, no crash', () => {
+    const { rerender } = render(
+      <CartProvider>
+        <ItemDialog catalog={CATALOG} menu={MENU} channelCode="store" maxQtyPerLine={99} onClose={() => undefined} />
+      </CartProvider>,
+    )
+    expect((screen.getByTestId('item-add') as HTMLButtonElement).disabled).toBe(false)
+    const closed: PosOrderCatalog = { ...CATALOG, sizes: CATALOG.sizes.map((s) => (s.code === '16 oz' ? { ...s, isActive: false } : s)) }
+    expect(() =>
+      rerender(
+        <CartProvider>
+          <ItemDialog catalog={closed} menu={MENU} channelCode="store" maxQtyPerLine={99} onClose={() => undefined} />
+        </CartProvider>,
+      ),
+    ).not.toThrow()
+    expect(screen.getByTestId('item-unavailable')).toBeInTheDocument()
+    expect((screen.getByTestId('item-add') as HTMLButtonElement).disabled).toBe(true)
+  })
+})

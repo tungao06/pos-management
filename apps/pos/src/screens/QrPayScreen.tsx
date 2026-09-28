@@ -8,16 +8,17 @@ import { sellCatalogKey } from '../app/queries'
 import { useCommitSale } from '../app/use-commit-sale'
 import { usePricedCart } from '../app/use-priced-cart'
 import { cartErrorMessage, errorMessage } from '../ui/errors'
-import { formatBaht } from '../ui/format'
+import { formatBahtFull } from '../ui/format'
 import { TH } from '../ui/th'
 
 /** spec §5: full-screen PromptPay QR with the bill amount, confirmed by eye (D48 Q3-4). Priced with dayo's own code
- * (`usePricedCart`); a PRICE_CHANGED rebuilds the QR for the new total (D50 Q3-27). */
+ * (`usePricedCart`); a PRICE_CHANGED refetches the catalog first (C1) so the QR below rebuilds for the new total,
+ * with a freshly generated payload (the `['promptpay', total]` query key changes with it). */
 export function QrPayScreen(): JSX.Element {
   const api = useApi()
   const { state } = useCart()
   const navigate = useNavigate()
-  const { pay, isPending, isSuccess, isError, error, priceChanged, confirmPriceChange } = useCommitSale()
+  const { pay, isPending, isSuccess, isError, error, priceChanged } = useCommitSale()
   const catalogQuery = useQuery({ queryKey: sellCatalogKey, queryFn: () => api.loadSellCatalog() })
   const { priced, error: cartError } = usePricedCart(state, catalogQuery.data?.catalog)
   const total = priced?.totalSatang ?? 0 // after a PRICE_CHANGED re-price the QR below is rebuilt for the new total
@@ -34,12 +35,12 @@ export function QrPayScreen(): JSX.Element {
     <main className="page qr">
       <h1>{TH.qrTitle}</h1>
       <div className="big-amount" data-testid="qr-total">
-        {formatBaht(total)}
+        {formatBahtFull(total)}
       </div>
       {image.data !== undefined && payload.data !== undefined && <img data-testid="qr-image" data-payload={payload.data} src={image.data} alt={TH.qrTitle} />}
       {priceChanged !== null && (
         <p role="alert" className="error" data-testid="price-changed">
-          {TH.priceChanged(formatBaht(priceChanged.shownSatang), formatBaht(priceChanged.nowSatang))} {TH.qrRescan}
+          {TH.priceChanged(formatBahtFull(priceChanged.shownSatang), formatBahtFull(priceChanged.nowSatang))} {TH.qrRescan}
         </p>
       )}
       {cartError !== null && (
@@ -57,7 +58,15 @@ export function QrPayScreen(): JSX.Element {
           {TH.back}
         </button>
         {priceChanged !== null ? (
-          <button type="button" className="primary" data-testid="price-changed-confirm" disabled={isPending} onClick={() => void confirmPriceChange()}>
+          // review I3/C1: resends with the fresh total (`priced.totalSatang`, already re-priced from the refetched
+          // catalog), never the stale `priceChanged.nowSatang` captured at the moment of the first refusal.
+          <button
+            type="button"
+            className="primary"
+            data-testid="price-changed-confirm"
+            disabled={isPending || priced === null}
+            onClick={() => priced !== null && void pay({ method: 'PROMPTPAY' }, priced.totalSatang)}
+          >
             {TH.priceChangedConfirm}
           </button>
         ) : (

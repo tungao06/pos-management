@@ -75,6 +75,23 @@ export function cartErrorMessage(message: string): string {
 }
 
 /**
+ * Thai message for one bad cart line (review I5, `checkLine`/`findSellableVariant`) — `UNKNOWN_VARIANT` carries a
+ * `NO_SUCH_MENU`/`SIZE_CLOSED` marker in its detail so a menu dayo removed entirely reads differently from a size
+ * the shop merely closed (ADR-0054).
+ */
+export function cartLineErrorMessage(message: string): string {
+  const m = /^([A-Z_]+): (.*)$/.exec(message)
+  if (m === null) {
+    console.error(message)
+    return TH.errUnexpected
+  }
+  const code = m[1] as CartErrorCode
+  const detail = m[2] ?? ''
+  if (code === 'UNKNOWN_VARIANT') return detail.startsWith('NO_SUCH_MENU') ? TH.errMenuGone : TH.errSizeClosed
+  return cartErrorMessage(message)
+}
+
+/**
  * Thai message for any error thrown by PosApi (BAD_INPUT keeps its technical detail for troubleshooting).
  * M10: an unrecognized code (a raw DrizzleError, a CHECK failure, …) must never leak English/SQL text onto the
  * screen — it is logged to the console and shown as a generic Thai message.

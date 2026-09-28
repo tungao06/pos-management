@@ -93,7 +93,58 @@ describe('CartPanel', () => {
       </CartProvider>,
     )
     expect(await screen.findByTestId('cart-error')).toHaveTextContent('ขนาดนี้ปิดขายแล้ว')
+    // review I5: the same bad line is also marked on its own row, with the "closed size" wording (not "menu gone").
+    expect(await screen.findByTestId('cart-line-error-0')).toHaveTextContent('ขนาดนี้ปิดขายแล้ว')
     expect((screen.getByTestId('pay-cash') as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByTestId('pay-qr') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('review I4: a bill discount that clamps the ฿90 total to ฿0 disables paying and warns in Thai', async () => {
+    const withDiscount: CartState = { ...twoCups, billDiscount: { satang: 8_000, reason: 'ลูกค้าประจำ' } }
+    render(
+      <CartProvider initial={withDiscount}>
+        <CartPanel catalog={CATALOG} channels={CHANNELS} payments={PAYMENTS} maxQtyPerLine={99} onOpenDiscount={() => undefined} onPay={() => undefined} />
+      </CartProvider>,
+    )
+    expect(await screen.findByTestId('cart-total')).toHaveTextContent('฿10') // ฿90 − ฿80, still above 0 — payable
+    expect((screen.getByTestId('pay-cash') as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.queryByTestId('cart-discount-too-big')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('cart-dec-0')) // 2 cups → 1: subtotal ฿45, the ฿80 discount now clamps to ฿0
+    expect(await screen.findByTestId('cart-discount-too-big')).toBeInTheDocument()
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('฿0')
+    expect((screen.getByTestId('pay-cash') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByTestId('pay-qr') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('review I5: 5 lines, only the one with a menu dayo removed entirely is marked bad', async () => {
+    const five: CartState = {
+      ...twoCups,
+      lines: [
+        { key: 'l1', code: 'Original', nameTh: 'ชาไทยเย็น', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 },
+        { key: 'l2', code: 'Original', nameTh: 'ชาไทยเย็น', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 },
+        { key: 'l3', code: 'Ghost', nameTh: 'ผีสิง', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 },
+        { key: 'l4', code: 'Original', nameTh: 'ชาไทยเย็น', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 },
+        { key: 'l5', code: 'Original', nameTh: 'ชาไทยเย็น', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 },
+      ],
+    }
+    render(
+      <CartProvider initial={five}>
+        <CartPanel catalog={CATALOG} channels={CHANNELS} payments={PAYMENTS} maxQtyPerLine={99} onOpenDiscount={() => undefined} onPay={() => undefined} />
+      </CartProvider>,
+    )
+    expect(await screen.findByTestId('cart-line-error-2')).toHaveTextContent('เมนูนี้ไม่มีขายแล้ว')
+    for (const i of [0, 1, 3, 4]) expect(screen.queryByTestId(`cart-line-error-${i}`)).toBeNull()
+    expect((screen.getByTestId('pay-cash') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('review I6 (minor): hides pay-qr when payments.qr is false', () => {
+    render(
+      <CartProvider initial={twoCups}>
+        <CartPanel catalog={CATALOG} channels={CHANNELS} payments={{ cash: true, qr: false }} maxQtyPerLine={99} onOpenDiscount={() => undefined} onPay={() => undefined} />
+      </CartProvider>,
+    )
+    expect(screen.getByTestId('pay-cash')).toBeInTheDocument()
+    expect(screen.queryByTestId('pay-qr')).toBeNull()
   })
 })

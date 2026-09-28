@@ -18,7 +18,10 @@ export function DiscountDialog({ catalog, onClose }: { catalog: PosOrderCatalog 
   const apply = (): void => {
     const satang = parseBahtInput(amountText)
     if (satang === null || satang <= 0) return setError(TH.errBadInput)
-    if (priced === null || satang >= priced.itemsSubtotalSatang) return setError(TH.errDiscountTooBig) // total stays > 0 (D50 Q3-20)
+    // minor (review round 1): a null priced cart (no catalog yet, or the cart itself refuses to price) is a
+    // different problem from a discount that is simply too big — say so instead of reusing errDiscountTooBig.
+    if (priced === null) return setError(TH.errCartNotPriced)
+    if (satang >= priced.itemsSubtotalSatang) return setError(TH.errDiscountTooBig) // total stays > 0 (D50 Q3-20)
     if (reason.trim() === '') return setError(TH.errReasonRequired)
     dispatch({ type: 'setDiscount', satang, reason })
     onClose()

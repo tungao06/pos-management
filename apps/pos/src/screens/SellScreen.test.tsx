@@ -7,6 +7,7 @@ import type { BootstrapState, PosApi, StockOverviewDto, UserDto } from '../api/t
 import { ApiProvider } from '../app/api-context'
 import { CartProvider } from '../app/cart-context'
 import { SessionProvider, useSession } from '../app/session'
+import { sellCatalogKey } from '../app/queries'
 import { testSellCatalog } from '../test-utils/sell-catalog'
 import { TH } from '../ui/th'
 import { SellScreen } from './SellScreen'
@@ -49,7 +50,7 @@ function sellApi(overrides: Partial<PosApi> = {}): { api: PosApi } {
   return { api }
 }
 
-function renderSell(api: PosApi): void {
+function renderSell(api: PosApi): QueryClient {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
@@ -62,6 +63,7 @@ function renderSell(api: PosApi): void {
       </ApiProvider>
     </QueryClientProvider>,
   )
+  return queryClient
 }
 
 function mount(overrides: Partial<PosApi> = {}): void {
@@ -146,5 +148,22 @@ describe('Task 18: sell with dayo\'s catalog (options, promotions, channel)', ()
     fireEvent.click(screen.getByTestId('item-size-20oz'))
     fireEvent.click(screen.getByTestId('item-add'))
     expect(await screen.findByTestId('cart-total')).toHaveTextContent('59.00')
+  })
+
+  it('review I6: shows "catalog-changed" once the refetched catalogVersion differs from the one first shown', async () => {
+    const first = testSellCatalog()
+    const second = { ...first, catalogVersion: first.catalogVersion + 1 }
+    const loadSellCatalog = vi.fn().mockResolvedValueOnce(first).mockResolvedValue(second)
+    const { api } = sellApi({ loadSellCatalog })
+    const queryClient = renderSell(api)
+    await screen.findByTestId('menu-Thai Tea')
+    expect(screen.queryByTestId('catalog-changed')).toBeNull()
+
+    await queryClient.refetchQueries({ queryKey: sellCatalogKey })
+    expect(await screen.findByTestId('catalog-changed')).toHaveTextContent(TH.catalogChanged)
+
+    // dismissible — clicking it clears the banner (it does not reappear until the version changes again).
+    fireEvent.click(screen.getByTestId('catalog-changed'))
+    expect(screen.queryByTestId('catalog-changed')).toBeNull()
   })
 })
