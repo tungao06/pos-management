@@ -519,5 +519,7 @@ export const TH = {
   remapCodeMenu: 'เมนูแทน',
   remapCodeSize: 'ขนาดแทน',
   remapCodeSweetness: 'ความหวานแทน',
+  remapCodeGradeOnly: 'ระบบกลางไม่รู้จักเกรดของบรรทัดนี้ — เมนู ขนาด และความหวานคงเดิม เปลี่ยนเป็นเกรดเริ่มต้นเท่านั้น',
+  remapCodeLineOption: (index: number, code: string, size: string, sweetness: string): string => `บรรทัดที่ ${index} · ${code} ${size} ${sweetness}`,
   remapStaffLabel: 'พนักงานแทน',
 } as const
