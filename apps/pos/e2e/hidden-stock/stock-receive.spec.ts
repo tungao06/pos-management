@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test'
 import { firstRun } from '../helpers'
 
-test('receive goods paid from the drawer → stock and X report; a price jump and an over-drawer payment each need a confirm (spec §5 · D19 · D47-3 · Q4-6)', async ({ page }) => {
-  await firstRun(page) // float ฿500
+test('receive goods paid from the drawer → stock and X report; a price jump and an over-drawer payment each need a confirm (spec §5 · D19 · D47-3 · Q4-6)', async ({ page, request }) => {
+  await firstRun(page, request) // float ฿500
   await page.getByTestId('nav-stock').click()
   await expect(page.getByTestId('stock-row-RM-TEA-01')).toHaveAttribute('data-status', 'out')
 

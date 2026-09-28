@@ -10,10 +10,10 @@ async function sellCash(page: Page, productCode: string): Promise<void> {
   await expect(page).toHaveURL(/\/sell$/)
 }
 
-test('paid-out from the sell screen → X report live, without the expected cash (spec §4.8 · Q3b-3/9 · D52)', async ({ page }) => {
-  await firstRun(page) // float ฿500
-  await sellCash(page, 'Original') // ฿45
-  await sellCash(page, 'Original') // ฿45
+test('paid-out from the sell screen → X report live, without the expected cash (spec §4.8 · Q3b-3/9 · D52)', async ({ page, request }) => {
+  await firstRun(page, request) // float ฿500
+  await sellCash(page, 'Cocoa') // 16 oz / 100% preselected — ฿45
+  await sellCash(page, 'Cocoa') // ฿45
 
   // paid-out ฿20 for ice — anyone signed in, with a reason (Q3b-9)
   await page.getByTestId('cash-move-open').click()
