@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  // D107: same shape as dayo's Workers (Workers Builds from GitHub, one Worker per app) — name must match the
+  // Cloudflare project name. Static assets only: no "main", so no request ever runs Worker code — asset requests
+  // are free and unlimited and never touch the account-wide 100,000 requests/day shared with dayo-web/dayo-line-bot.
+  "name": "dayo-pos",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    // Deep links (/sell, /shift …) fall back to index.html; the service worker's navigateFallback does the same offline.
+    "not_found_handling": "single-page-application"
+  },
+  // No vars/secrets: the tablet talks to dayo with the key the owner types on the setup screen (spec 04 §7).
+  // No KV/R2/D1 bindings: free tier only (rule 7).
+  "observability": {
+    "enabled": false
+  }
+}

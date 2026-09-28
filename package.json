@@ -9,7 +9,9 @@
   "scripts": {
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "build": "turbo run build"
+    "build": "turbo run build",
+    "release:build": "node scripts/deploy.mjs build",
+    "release:deploy": "node scripts/deploy.mjs deploy"
   },
   "devDependencies": {
     "turbo": "^2.10.0",
