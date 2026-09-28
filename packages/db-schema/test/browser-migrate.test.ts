@@ -11,6 +11,7 @@ import { migrateSqliteRemote, SQLITE_MIGRATIONS, SQLITE_TABLES, SQLITE_TRIGGERS,
 import { migrateSqlite, SQLITE_MIGRATIONS_FOLDER } from '../src/migrate-sqlite.js'
 import { nodeSqliteCallback, type NodeSqliteLike } from '../src/testing/node-sqlite-callback.js'
 import { renderMigrationsModule } from '../scripts/render-sqlite-migrations.js'
+import { NOW, PLAN4_ORDER_COLUMNS, plan4DeviceWithBills, UNTOUCHED_BILL_TABLES } from './plan4-device.js'
 
 type Journal = { entries: { tag: string; when: number }[] }
 const journal = JSON.parse(readFileSync(join(SQLITE_MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8')) as Journal
@@ -58,6 +59,45 @@ describe('migrateSqliteRemote (drizzle migrator over sqlite-proxy, browser-safe)
     expect(raw.prepare('select count(*) as n from stock_movement').get()).toEqual({ n: 1 })
     expect(() => raw.exec(`delete from stock_movement where id = 'm1'`)).toThrow(/append-only/)
     expect(names(raw, 'trigger')).toEqual([...SQLITE_TRIGGERS])
+  })
+
+  // The tablet upgrades with this runner, not migrateSqlite: block2.test.ts proves 0003's `order` rebuild on the Node
+  // runner; this runs the same plan-3/4 bill through the browser runner (its own foreign_keys OFF/ON handling).
+  it('upgrades a plan-3/4 device with a paid bill through block 2: every old order column and child row survives, order_item is append-only', async () => {
+    const plan4 = await plan4DeviceWithBills()
+    const dir = mkdtempSync(join(tmpdir(), 'dayo-mig-'))
+    try {
+      const file = join(dir, 'plan4.sqlite3')
+      writeFileSync(file, plan4.raw.export())
+      const { raw, db } = open(new DatabaseSync(file))
+      const rows = (q: string) => raw.prepare(q).all()
+      const orderCols = PLAN4_ORDER_COLUMNS.map((c) => `"${c}"`).join(', ')
+      const orderBefore = rows(`select ${orderCols} from "order"`)
+      expect(Object.values(orderBefore[0]!).filter((v) => v === null)).toEqual([]) // a value in every old column
+      const childrenBefore = UNTOUCHED_BILL_TABLES.map((t) => rows(`select * from "${t}" order by id`))
+      const outboxBefore = rows(`select * from outbox order by id`)
+
+      const pending = SQLITE_MIGRATIONS.slice(SQLITE_MIGRATIONS.findIndex((m) => m.tag === '0003_block2_central_catalog'))
+      expect((await migrateSqliteRemote(db)).applied).toEqual(pending.map((m) => m.tag))
+      expect(rows(`select ${orderCols} from "order"`)).toEqual(orderBefore)
+      expect(UNTOUCHED_BILL_TABLES.map((t) => rows(`select * from "${t}" order by id`))).toEqual(childrenBefore)
+      expect(rows(`select * from outbox order by id`)).toEqual(outboxBefore.map((r) => ({ ...r, status: 'local_only', next_attempt_at: null, parent_key: null, result_json: null })))
+      expect(rows('PRAGMA foreign_key_check')).toEqual([])
+      expect(raw.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
+      expect(names(raw, 'trigger')).toEqual([...SQLITE_TRIGGERS])
+
+      raw.exec(`insert into "order" (id, origin, device_id, receipt_no, queue_no, business_date, shift_id, channel_code, status,
+          subtotal_satang, discount_satang, total_satang, vat_satang, cost_satang, created_by_type, created_by_id, created_at, sold_at)
+        values ('order-b2', 'device', 'dev-1', 'A-000002', 2, '2026-09-25', 'shift-1', 'store', 'paid', 4500, 0, 4500, 0, 0, 'user', 'u1', '${NOW}', '${NOW}');
+        insert into order_item (id, order_id, line_no, menu_code, menu_name_th, size, sweetness, milk, grade, qty, unit_price_satang, discount_per_cup_satang, discount_reason, promotion_id, line_total_satang)
+        values ('oi-1', 'order-b2', 1, 'TT01', 'ชาไทย', '16 oz', '100%', 'fresh', null, 1, 4500, 0, null, null, 4500)`)
+      expect(() => raw.exec(`update order_item set qty = 2 where id = 'oi-1'`)).toThrow(/order_item is append-only: UPDATE rejected/)
+      expect(() => raw.exec(`delete from order_item where id = 'oi-1'`)).toThrow(/order_item is append-only: DELETE rejected/)
+      expect(rows(`select qty from order_item`)).toEqual([{ qty: 1 }])
+      raw.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('is idempotent', async () => {
