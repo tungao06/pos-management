@@ -26,7 +26,7 @@ test('PromptPay sale shows a QR with the amount; void it with a refund reference
 
   await openOrder(page, 'A-000001')
   await expect(page.getByTestId('event-3')).toContainText('PAID')
-  await page.getByTestId('void-open').click()
+  await page.getByTestId('order-void').click()
   await expect(page.getByTestId('void-cash-refund')).toHaveCount(0)
   await page.getByTestId('void-reason-preset-0').click()
   await page.getByTestId('void-made-no').click()
@@ -36,7 +36,7 @@ test('PromptPay sale shows a QR with the amount; void it with a refund reference
   await page.getByTestId('void-refund-ref').fill('KBANK-123')
   await enterPin(page, OTHER.pin)
   await expect(page.getByTestId('order-status')).toHaveAttribute('data-status', 'voided')
-  await expect(page.getByTestId('void-open')).toHaveCount(0)
+  await expect(page.getByTestId('order-void')).toHaveCount(0)
   await expect(page.getByTestId('event-6')).toContainText('STOCK_RETURNED')
 })
 
@@ -49,7 +49,7 @@ test('cash sale voided after the drink was made: cash refund shown, wrong PIN re
   await expect(page.getByTestId('done-receipt')).toHaveText('A-000001')
 
   await openOrder(page, 'A-000001')
-  await page.getByTestId('void-open').click()
+  await page.getByTestId('order-void').click()
   await expect(page.getByTestId('void-cash-refund')).toContainText('฿50')
   await expect(page.getByTestId('void-refund-ref')).toHaveCount(0)
   await page.getByTestId('void-reason').fill('ลูกค้าเปลี่ยนใจหลังทำเสร็จ')

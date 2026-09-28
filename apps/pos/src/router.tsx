@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/re
 import { RequireSession } from './app/guards'
 import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
+import { CentralOrdersScreen } from './screens/CentralOrdersScreen'
 import { CloseShiftScreen } from './screens/CloseShiftScreen'
 import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
@@ -10,6 +11,7 @@ import { OpenShiftScreen } from './screens/OpenShiftScreen'
 import { OrderDetailScreen } from './screens/OrderDetailScreen'
 import { OrdersScreen } from './screens/OrdersScreen'
 import { OwnerRecoveryScreen } from './screens/OwnerRecoveryScreen'
+import { PriceDiffScreen } from './screens/PriceDiffScreen'
 import { QrPayScreen } from './screens/QrPayScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
@@ -98,6 +100,26 @@ const orderDetailRoute = createRoute({
     </RequireSession>
   ),
 })
+// spec §4.6: today's bot/web bills, online only.
+const centralOrdersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/central-orders',
+  component: () => (
+    <RequireSession>
+      <CentralOrdersScreen />
+    </RequireSession>
+  ),
+})
+// spec §4.3, review item 23: owner-only "ยอดไม่ตรงระบบกลาง" (R11 — PriceDiffScreen checks `can(role,'price_diffs')` itself).
+const priceDiffsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/price-diffs',
+  component: () => (
+    <RequireSession>
+      <PriceDiffScreen />
+    </RequireSession>
+  ),
+})
 
 // แผน 3b: X report / close shift / Z / backup
 const backupRoute = createRoute({
@@ -159,6 +181,8 @@ export const routeTree = rootRoute.addChildren([
   doneRoute,
   ordersRoute,
   orderDetailRoute,
+  centralOrdersRoute,
+  priceDiffsRoute,
   backupRoute,
   zListRoute,
   zReportRoute,

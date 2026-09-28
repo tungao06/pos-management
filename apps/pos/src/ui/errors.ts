@@ -107,5 +107,12 @@ export function errorMessage(e: unknown): string {
   // m-3 (Task 12 fix round 1): closeStockCount sends the missing item codes as the detail (stock-count.ts) — shown
   // here so a ~38-row opening count does not need a scroll-and-guess to find what is still uncounted.
   if (code === 'BAD_INPUT' || code === 'OPENING_COUNT_INCOMPLETE') return `${MESSAGES[code]} — ${raw.slice(code.length + 2)}`
+  // Task 19: cancelSale's VOID_NOT_ALLOWED carries a structured reason prefix (void.ts) for the two cases Q44/ruling
+  // R11 actually distinguishes — matched by the prefix, never by parsing dayo/void.ts's own Thai text as free text.
+  if (code === 'VOID_NOT_ALLOWED') {
+    if (raw.startsWith(`${code}: SAME_DAY_ONLY:`)) return TH.errVoidSameDayOnly
+    if (raw.startsWith(`${code}: OWN_BILLS_ONLY:`)) return TH.errVoidOwnBillsOnly
+    return MESSAGES[code]
+  }
   return MESSAGES[code]
 }

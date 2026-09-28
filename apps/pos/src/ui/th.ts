@@ -411,4 +411,50 @@ export const TH = {
   countClose: 'ปิดใบนับ',
   countCloseConfirm: 'ยืนยันปิดใบนับ (ปรับยอดตามที่นับ)',
   countClosed: (n: number, baht: string): string => `ปิดใบนับแล้ว ปรับ ${n} รายการ · ส่วนต่างรวม ${baht}`,
+
+  // Task 19 — ใบเสร็จ · ประวัติบิล · รายละเอียดบิล · บิลบอท/เว็บวันนี้ · ยอดไม่ตรงระบบกลาง (spec §4.3, §4.6, §4.7, §4.8, §6.4 · D61)
+  doneSoldBy: (name: string): string => `ขายโดย ${name} · แท็บเล็ต`,
+  navCentralOrders: 'บิลบอท/เว็บวันนี้',
+
+  // §6.4: dayo's state of this bill (CentralStateChip)
+  centralPending: 'ยังไม่ถึงระบบกลาง',
+  centralSent: (orderNo: string): string => `ระบบกลาง ${orderNo}`,
+  centralProblem: (reason: string): string => `ส่งไม่ผ่าน: ${reason}`,
+  centralExcluded: 'นอกระบบกลาง',
+  centralLegacy: 'บิลก่อนเชื่อมระบบกลาง',
+  // review item 23: a voided bill whose order row WAS sent — dayo still counts it as a sale.
+  centralVoidLocalOnly: 'ยกเลิกในเครื่องเท่านั้น — ระบบกลางยังนับเป็นยอดขาย',
+
+  // §4.3: dayo's computed total vs. what was charged, shown down to 1 satang · §4.8 duplicate-of-bot label
+  orderDiff: (computed: string, diff: string): string => `ระบบกลางคิด ${computed} (ต่าง ${diff})`,
+  orderDup: (orderNos: string): string => `อาจซ้ำกับบิลบอท ${orderNos}`,
+
+  // §4.6 · O1 pending: dayo_edit shown read-only — no button anywhere edits a bill from the tablet (ADR-0050)
+  dayoEditKindEdit: 'เจ้าของแก้บิลนี้บนเว็บ',
+  dayoEditKindCancel: 'เจ้าของยกเลิกบิลนี้บนเว็บ',
+  dayoEditKindOther: 'ระบบกลางเปลี่ยนบิลนี้',
+  dayoEditReason: (reason: string): string => `เหตุผล: ${reason}`,
+  dayoEditMoneyNote: 'ยอดในเครื่องคือเงินที่เก็บจริง',
+  orderDayoEditChipEdit: 'แก้บนเว็บ',
+  orderDayoEditChipCancel: 'ยกเลิกบนเว็บ',
+
+  // §4.6: today's bot/web bills, online only
+  centralOrdersTitle: 'บิลบอท/เว็บวันนี้',
+  centralOrdersOffline: 'ต้องออนไลน์เพื่อดูบิลจากบอท/เว็บ',
+  centralOrdersRefresh: 'รีเฟรช',
+  centralOrdersDuplicate: 'อาจซ้ำ',
+  centralOrdersEmpty: 'ยังไม่มีบิลจากบอท/เว็บวันนี้',
+  centralOrdersUnknownBy: 'ไม่ทราบผู้บันทึก',
+
+  // §4.3, review item 23: owner's "ยอดไม่ตรงระบบกลาง" (R11)
+  priceDiffTitle: 'ยอดไม่ตรงระบบกลาง',
+  priceDiffAmountMismatch: 'ต่างเกิน ฿1',
+  priceDiffVoidLocalOnly: 'ยกเลิกในเครื่องเท่านั้น — ระบบกลางยังนับเป็นยอดขาย (ก้อน 3 จะจัดการเงิน)',
+  priceDiffEmpty: 'ไม่มียอดไม่ตรงระบบกลาง',
+  priceDiffCatalog: (version: string): string => `ฉบับแคตตาล็อก ${version}`,
+
+  // VOID_NOT_ALLOWED with a structured detail prefix (ruling R11 · same-day-only) — the code already writes this
+  // exact Thai text after the prefix (void.ts); matched by the prefix (never by parsing the rest as free text).
+  errVoidSameDayOnly: 'ยกเลิกได้เฉพาะวันเดียวกับวันขาย',
+  errVoidOwnBillsOnly: 'staff และ manager ยกเลิกได้เฉพาะบิลที่ตัวเองขาย',
 } as const

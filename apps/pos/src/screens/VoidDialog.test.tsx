@@ -115,3 +115,21 @@ describe('VoidDialog — review m-2: the shift-report cache must be invalidated 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: stockKey }) // plan 4: VOID_RETURN moves stock back
   })
 })
+
+// Task 19: cancelSale's VOID_NOT_ALLOWED carries a structured reason (void.ts) — the two cases Q44/ruling R11
+// distinguishes get their own Thai text (ui/errors.ts), not the generic "ยกเลิกได้เฉพาะบิลที่ชำระแล้วในกะที่เปิดอยู่".
+describe('VoidDialog — VOID_NOT_ALLOWED with a structured reason (Q44, ruling R11)', () => {
+  it('shows the same-day-only message', async () => {
+    const { onClose } = mount({ cancelSale: vi.fn(async () => { throw new Error('VOID_NOT_ALLOWED: SAME_DAY_ONLY: ยกเลิกได้เฉพาะวันเดียวกับวันขาย') }) })
+    await submitVoid()
+    expect(await screen.findByText('ยกเลิกได้เฉพาะวันเดียวกับวันขาย')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('shows the own-bills-only message', async () => {
+    const { onClose } = mount({ cancelSale: vi.fn(async () => { throw new Error('VOID_NOT_ALLOWED: OWN_BILLS_ONLY: staff และ manager ยกเลิกได้เฉพาะบิลที่ตัวเองขาย') }) })
+    await submitVoid()
+    expect(await screen.findByText('staff และ manager ยกเลิกได้เฉพาะบิลที่ตัวเองขาย')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+})

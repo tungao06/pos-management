@@ -17,6 +17,12 @@ export function formatBahtFull(satang: number): string {
   return `${sign}฿${baht}.${rest}`
 }
 
+/** Like `formatBahtFull`, with a leading '+' on a positive amount (negatives already show their own '-') — display
+ * only, no arithmetic: for a difference already computed in `@dayo/domain` (e.g. `centralDiffSatang`), spec §4.3. */
+export function formatBahtDiff(satang: number): string {
+  return satang > 0 ? `+${formatBahtFull(satang)}` : formatBahtFull(satang)
+}
+
 /** "45" → 4500 · "45.5" → 4550 · invalid → null. The only way UI text becomes money. */
 export function parseBahtInput(text: string): number | null {
   const m = /^(\d{1,7})(?:\.(\d{1,2}))?$/.exec(text.trim())
