@@ -1,0 +1,42 @@
+# เรื่องที่ต้องแจ้งฝั่ง dayo
+
+**วิธีใช้ไฟล์นี้:** เอาไฟล์นี้ไปให้ session ของ repo `dayo-shop-system` อ่าน (ไม่ต้องเล่าเอง — อ่านตารางข้างล่างพอ) แต่ละแถวมีอ้างอิงกลับมาที่เอกสาร/แผนของ POS เผื่อฝั่ง dayo อยากดูที่มา ทำหรือไม่ทำเป็นสิทธิ์ของฝั่ง dayo ทั้งหมด (POS แก้โค้ด/ตัดสินใจแทนฝั่ง dayo ไม่ได้)
+
+เรียงจากความสำคัญสูงไปต่ำ
+
+| # | เรื่อง | ผลกระทบ | ข้อเสนอแก้ (ฝั่ง dayo) | ความสำคัญ | อ้างอิง |
+|---|---|---|---|---|---|
+| 1 | เวลาโปร `timeFrom`/`timeTo` ของแคตตาล็อก (E1) ส่งเป็น `"HH:MM:SS"` ดิบจาก SQL แต่ `@dayo/shared` ตีความเป็น `"HH:MM"` | บิลที่ขายตรงนาทีแรกของช่วงเวลาโปร (เช่น 17:00:00) จะตัดสินไม่ตรงกันระหว่าง SQL กับ shared — parity/ยอดขายจริงอาจต่าง | แก้ที่ต้นทาง SQL ด้วย `left(time::text,5)` ก่อนส่งออก | สูง | progress.md `TO TELL DAYO (1)`, `TO TELL DAYO (6)`; แผน Task 23 Step 6 บิล 11–12/18 |
+| 2 | E1 `client` ยังไม่มี `last_z_until` (ADR-0056 ข้อ 16 มีแค่ `last_z_no`/`last_z_hash`) | แท็บเล็ตที่ติดตั้งใหม่/เชื่อมใหม่ไม่รู้เวลาสิ้นสุดของ Z ใบล่าสุด จึงใช้ 00:00 ของวันเป็น `bot_window.after` — Z ใบแรกหลังติดตั้งใหม่จะขึ้น `mismatch` + แจ้ง Discord ทุกครั้ง | เพิ่ม `last_z_until` (timestamptz หรือ null = `until` ของ Z ใบเดียวกับ `last_z_hash`) ใน E1 `client` ผ่าน ADR ฉบับถัดไป | สูง | สเปก 04 §13.8 R5-1; `dayo-shop-system/docs/adr/0056-pos-shifts-cash-drawer.md:77` |
+| 3 | export ไฟล์ parity (`pos-parity.json`) ยังใช้แคตตาล็อกประกอบเอง + `computeOrder` ไม่ใช่ชั้น ข จริง (`api_pos_catalog`/`quote_order`) | ปิดเกณฑ์ parity ได้แค่ "ตัวห่อ+การแปลง" ยังไม่ยืนยันว่าชั้น ข (endpoint จริงที่แท็บเล็ตเรียก) ให้ผลตรงกัน | เปลี่ยน `scripts/export-pos-parity.ts` ให้เรียก `api_pos_catalog`/`quote_order` จริงแทนการประกอบแคตตาล็อกเอง | สูง | progress.md `TO TELL DAYO (2)`; สเปก 04 §5.2; แผน Task 23 Step 3 |
+| 4 | ไม่มีชุด fixture สัญญา (`pos-contract/`) ของฝั่ง dayo — POS เป็นเจ้าของชุด fixture ไปก่อน (คำวินิจฉัย O4) | ถ้าฝั่ง dayo แก้ API โดยไม่รู้ fixture ของ POS อาจหลุดไม่ตรงกันจนกว่าจะเทียบกันครั้งถัดไป | dayo สร้างชุด fixture ของตัวเอง (แผนก้อน 1B) แล้วรับชุดที่ POS ส่งให้ไปเทียบ/รวมของ dayo | สูง | บันทึกงานแผน 07 (O4), แผน 07 Task 23 ("ส่งให้ dayo ในก้อน 1B") |
+| 5 | export parity ไม่มี `saleTime` ในทุกเคส | บางเคสของ parity เทสต์ไม่ได้เพราะไม่รู้เวลาขายที่ใช้ตัดสินโปรตามเวลา ต้องใส่ `TABLET_UNREACHABLE`/ข้ามเคสไปก่อน | เพิ่ม `saleTime` ให้ครบทุกเคสใน `pos-parity.json` | กลาง | progress.md `TO TELL DAYO (4)`; แผน Task 23 Step 3 |
+| 6 | สเปกของ POS อ้าง "ADR-0035 ข้อ 3" ในจุดที่ควรเป็น "ADR-0040 ข้อ 3" (กติกา "API ไม่ส่งต้นทุน/กำไร") | ไม่กระทบโค้ด แต่ถ้า dayo อ้างอิงเลข ADR ตามสเปกนี้ต่อจะสับสน (S27) | รับทราบว่าเป็นเลขที่ POS อ้างผิด ไม่ต้องแก้ ADR ฝั่ง dayo | กลาง | progress.md `TO TELL DAYO (5)`; `06-การเปลี่ยนสเปกจากฝั่ง-dayo.md` §1 (S27) |
+| 7 | sha256 ของ fixture คำนวณตอน checkout เป็น CRLF บน Windows ทำให้แฮชไม่ตรงข้ามเครื่อง และไฟล์ตัวอย่างแคตตาล็อกของ dayo ใช้ `"17:00"` ไม่ใช่ `"17:00:00"` (ไม่ตรงกับปัญหาข้อ 1) | เทียบแฮช fixture ข้ามเครื่อง/ข้าม repo ไม่ตรงถ้าไม่แปลง CRLF→LF ก่อน; รูปแบบเวลาของไฟล์ตัวอย่างไม่สอดคล้องกับที่ SQL จริงส่งออก | ใช้กติกา CRLF→LF ก่อนคำนวณแฮชทุกครั้ง (ทั้งสอง repo ตกลงร่วมกัน); ตรวจให้ไฟล์ตัวอย่าง/เอกสารใช้รูปแบบเวลาเดียวกับ SQL จริง | กลาง | progress.md `TO TELL DAYO (6)` |
+| 8 | ตัวเลือกนมโอ๊ต/เกรดที่ `ingredient_id` เป็น `null`: โค้ด TS (`applyOptions`/`defaultLineMilk` ของ shared) จับคู่ `null === null` กับบรรทัดสูตรฐานที่เป็น `null` ได้ แต่ฝั่ง SQL ไม่จับคู่แบบนี้ (`= NULL` ไม่จริงใน SQL) | ราคาของออปชันนมโอ๊ต/เกรดที่ ingredient_id เป็น null อาจคิดต่างกันระหว่างโค้ดคิดราคา TS ของ dayo เองกับ SQL ของ dayo เอง (ไม่ใช่แค่ต่างจาก POS) | dayo ตัดสินว่าเป็นบั๊กหรือของตั้งใจ ถ้าเป็นบั๊กแก้ SQL ให้จับคู่ null-to-null เหมือน TS (หรือแก้ TS ให้เหมือน SQL ถ้า SQL ถูก) | กลาง | progress.md `TO TELL DAYO (7)` (line 215, 223); POS ยึดพฤติกรรม shared (vendored) ไว้ก่อน |
+
+---
+
+## รายการที่ล็อกแล้ว/รอฝั่ง dayo ทำต่อ (ไม่ใช่คำถามใหม่ แต่ควรแจ้งให้ทราบสถานะ)
+
+| เรื่อง | สถานะ | อ้างอิง |
+|---|---|---|
+| ADR-0056 (กะ/เงินสด/ใบปิดกะของ POS ก้อน 3) | **dayo ยอมรับแล้วจริง** (28 ก.ย. 2569 ครบ 18 ข้อ) — ปิดเรื่องนี้ได้ ยกเว้นช่องว่าง `last_z_until` ด้านล่าง | `dayo-shop-system/docs/adr/0056-pos-shifts-cash-drawer.md` บรรทัด 3 |
+| แก้ ADR-0024 ข้อ 2 (กะมีเฉพาะที่แท็บเล็ต บอทไม่มีคำสั่งกะ) | **แก้แล้วจริง** โดย ADR-0056 ข้อ 14 | `dayo-shop-system/docs/adr/0024-confirmed-operating-assumptions.md` บรรทัด 3, 7 |
+| ยกเลิกการเลื่อน ADR-0051 (สำรองอัตโนมัติทุกคืนขึ้น OneDrive) | **ยอมรับแล้วจริง** (28 ก.ย. 2569) — เหลืองานของเจ้าของ POS เอง (สร้าง role, secrets ฯลฯ ตามข้อ 17) ไม่ใช่เรื่องต้องแจ้ง dayo เพิ่ม | `dayo-shop-system/docs/adr/0051-nightly-auto-backup-onedrive.md` บรรทัด 3, 22, 23 |
+| unique index บน `orders` — `(shop_id, pos_order_id) where pos_order_id is not null` | **มีอยู่แล้วจริง** ใน ADR-0056 ข้อ 3 (แทน `orders_api_client_pos_order_key` เดิม) | `dayo-shop-system/docs/adr/0056-pos-shifts-cash-drawer.md` บรรทัด 18 |
+| `pos_push_rejections` (ตารางใหม่ก้อน 3) | **มีอยู่แล้วจริง** — เก็บทุกเหตุผลที่แถว `order` เคยถูก `rejected` ต่อ `(api_client_id, pos_order_id, reason)` + ดัชนี `(shop_id, pos_order_id)` ใช้ตัดสิน `order_off_catalog` | `dayo-shop-system/docs/adr/0056-pos-shifts-cash-drawer.md` บรรทัด 17 |
+| `last_z_no` / `last_z_hash` (E1 `client`) | **มีอยู่แล้วจริง** ในข้อ 16 | `dayo-shop-system/docs/adr/0056-pos-shifts-cash-drawer.md` บรรทัด 77 |
+| `last_z_until` (E1 `client`) | **ยังไม่มีใน ADR-0056** — ดูข้อ 2 ในตารางด้านบน (ต้องแจ้ง dayo เพิ่ม) | สเปก POS R5-1 |
+
+## เทียบ ADR ต้นฉบับของ dayo กับที่ POS ต้องการ (อ่านจาก repo dayo แบบอ่านอย่างเดียว)
+
+| ADR (ไฟล์ dayo) | ADR พูดไว้วันนี้ | POS ต้องการ/สถานะ | อ้างอิง |
+|---|---|---|---|
+| `docs/adr/0024-confirmed-operating-assumptions.md` ข้อ 2 | **แก้แล้ว** (28 ก.ย. 2569 โดย ADR-0056 ข้อ 14): "เครื่องใช้ร่วมมีเครื่องเดียวคือแท็บเล็ต POS … กะ นับเงิน ใบปิดกะมีเฉพาะที่แท็บเล็ต" | ตรงกับที่ POS ขอแล้ว (D92) — **ไม่ต้องแจ้งอะไรเพิ่ม ปิดเรื่องนี้ได้** | `0024-confirmed-operating-assumptions.md:3,7`; POS D92 ใน `04-สเปกการเชื่อม-POS-กับ-dayo.md` "ขอ dayo แก้ ADR-0024 ข้อ 2" |
+| `docs/adr/0051-nightly-auto-backup-onedrive.md` | **ยอมรับแล้ว** (28 ก.ย. 2569) ยกเลิกการเลื่อน ครบทุกข้อ 1–17 รวมเงื่อนไขใหม่ข้อ 16: "สำรองอัตโนมัติเป็นเงื่อนไขก่อนเปิดขายจริงบนแท็บเล็ต … `backup.yml` สำเร็จ 3 คืนติดกัน + `restore-test.yml` ผ่าน 1 ครั้ง" และข้อ 17 มอบงานที่เจ้าของต้องทำเอง (สร้าง role `dayo_backup`, `rclone config`, PAT, secrets 5 ตัว) | ตรงกับที่ POS ขอแล้ว (D95) — เหลือแค่ "POS เขียนแผนเปิดใช้งานที่ตรวจเงื่อนไขนี้" (ข้อ 16 บอกไว้ตรง ๆ) ซึ่งเป็นงานของ POS เอง ไม่ใช่เรื่องต้องแจ้ง dayo เพิ่ม — **ปิดเรื่องนี้ได้** | `0051-nightly-auto-backup-onedrive.md:3,22,23`; POS D95 ใน `00-บันทึกการตัดสินใจ.md` |
+| `docs/adr/0056-pos-shifts-cash-drawer.md` | **ยอมรับแล้ว** ครบ 18 ข้อ ตรงกับร่าง P3 ของ POS แทบทั้งหมด รวม `pos_push_rejections`, unique index `(shop_id, pos_order_id)` บน `orders` (ข้อ 3 ตาราง `orders`), `last_z_no`/`last_z_hash` บน E1 `client` (ข้อ 16) | **มีช่องว่างจุดเดียว**: ADR-0056 ข้อ 16 ให้แค่ `last_z_no`/`last_z_hash` — **ไม่มี `last_z_until`** แต่สเปก POS (R5-1, ตัดสินใจโดยผู้คุมงานฝั่ง POS วันที่ 28 ก.ย. ทีหลัง ADR-0056) ต้องใช้ `last_z_until` เป็น `bot_window.after` ของ Z ใบแรกหลังตั้งเครื่องใหม่ — dayo ยังไม่รับรู้/ไม่ได้ยอมรับฟิลด์นี้ **ต้องแจ้งขอเพิ่มในรอบ ADR ถัดไป** | `0056-pos-shifts-cash-drawer.md:77` (ข้อ 16 มีแค่ 2 ฟิลด์); สเปก POS `04-สเปกการเชื่อม-POS-กับ-dayo.md` §13.8 R5-1 "E1 `client` เพิ่ม `last_z_until`" |
+
+## ต้องหาข้อมูลเพิ่ม
+
+*(ไม่มี — ตรวจ ADR ต้นฉบับทั้ง 3 ฉบับจาก repo dayo แล้ว ครบทุกจุดที่ระบุไว้ในงานนี้)*
