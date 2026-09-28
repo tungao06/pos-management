@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { firstRun, login, mock } from './helpers'
+import { firstRun, login, mock, mockState } from './helpers'
 
 /**
  * spec table row "block2-sell-options" (ADR-0054): milk/grade options, the buy-2-get-1 promo, a channel switch and
@@ -7,9 +7,9 @@ import { firstRun, login, mock } from './helpers'
  * Node script against `@dayo/contracts/fixtures/pos-test/e1-catalog-rich.json` — the same catalog this e1 mock
  * serves), never hand-arithmetic: ฿155.00 for Thai Tea (oat) + Matcha Latte (Premium grade) on the store channel ·
  * ฿70.00 for Thai Tea ×3 on the store channel (2-แถม-1 pays for 2 × ฿35) · ฿59.00 for one Thai Tea 20 oz on Grab
- * (ceil(45 × 1.30)).
+ * (ceil(45 × 1.30)) · ฿55.00 for one Thai Tea 22 oz on the store channel after the bump below (no promotion applies).
  */
-test('block2: milk/grade options price correctly, the buy-2-get-1 promo applies, and a channel switch reprices', async ({ page, request }) => {
+test('block2: milk/grade options price correctly, the buy-2-get-1 promo applies, a channel switch reprices, and a bumped 22 oz sells and reaches dayo', async ({ page, request }) => {
   await firstRun(page, request)
 
   await page.getByTestId('menu-Thai Tea').click()
@@ -60,29 +60,50 @@ test('block2: milk/grade options price correctly, the buy-2-get-1 promo applies,
   await page.getByTestId('qr-received').click()
   await expect(page.getByTestId('done-receipt')).toHaveText('A-000003')
 
-  // a catalog bump can open a new, currently-inactive size — its buttons must sort by the catalog's own sortOrder
-  await mock(request, 'bump-catalog', {
-    sizes: [
-      { code: '16 oz', label: '16 oz', sortOrder: 0, isActive: true },
-      { code: '20 oz', label: '20 oz', sortOrder: 1, isActive: true },
-      { code: '22 oz', label: '22 oz', sortOrder: 2, isActive: true },
+  // a catalog bump opens the inactive 22 oz AND prices Thai Tea in it (a size with no priced variant has no button —
+  // the menu's sizes come from its variants). The sizes are listed out of order on purpose: the buttons must follow
+  // the catalog's own sortOrder, not the order dayo happens to send them in.
+  const thaiTea22 = (sweetness: string) => ({
+    menuCode: 'Thai Tea', menuNameTh: 'ชาไทย', family: 'ชาไทย', categoryLabel: 'ชา', menuSortOrder: 1,
+    size: '22 oz', sweetness, price: 55, allowOatMilk: true, isMatcha: false,
+    recipeLines: [
+      { ingredientId: null, baseId: '5e1f0000-0000-4000-8000-000000000001', qty: 170, unit: 'ml' },
+      { ingredientId: 'c3d4e5f6-0000-4000-8000-000000000001', baseId: null, qty: 90, unit: 'ml' },
     ],
   })
+  await mock(request, 'bump-catalog', {
+    sizes: [
+      { code: '22 oz', label: '22 oz', sortOrder: 2, isActive: true },
+      { code: '16 oz', label: '16 oz', sortOrder: 0, isActive: true },
+      { code: '20 oz', label: '20 oz', sortOrder: 1, isActive: true },
+    ],
+    variants: ['0%', '25%', '50%', '75%', '100%'].map(thaiTea22),
+  })
+  const catalogPulls = async () => (await mockState(request)).requests.filter((r) => r.path === '/api/v1/pos/catalog' && r.status === 200).length
+  const pullsBefore = await catalogPulls()
   await page.getByTestId('done-new-sale').click()
   await page.reload()
+  // the reloaded app pulls E1 on open ('open' wake) — wait for it so the sell screen reads the bumped catalog
+  await expect.poll(catalogPulls).toBeGreaterThan(pullsBefore)
   await login(page)
   await expect(page).toHaveURL(/\/sell$/)
 
+  await page.getByTestId('channel-select').selectOption('store')
   await page.getByTestId('menu-Thai Tea').click()
-  // finding (Task 21, real gap in @dayo/dayo-mock — see report "Real bugs found, not fixed here"): `/__mock/bump-
-  // catalog` only ever replaces `catalog.sizes` (packages/dayo-mock/src/control.ts) — there is no way through this
-  // control endpoint to add a matching `catalog.variants` entry for the newly-active size. A menu's own `sizes`
-  // list (SellCatalogDto, ADR-0054) is built from `catalog.variants`, never `catalog.sizes` alone, so activating
-  // "22 oz" this way still shows only the two sizes Thai Tea actually has priced variants for — the size-button-
-  // sortOrder and "a 22 oz bill reaches central" halves of this scenario cannot be built with the mock as it is;
-  // this checks the reachable half (the catalog change lands, in the ordering the two REAL sizes always had).
   const sizeButtons = page.locator('[data-testid^="item-size-"]')
-  await expect(sizeButtons).toHaveCount(2)
+  await expect(sizeButtons).toHaveCount(3)
   await expect(sizeButtons.nth(0)).toHaveAttribute('data-testid', 'item-size-16oz')
   await expect(sizeButtons.nth(1)).toHaveAttribute('data-testid', 'item-size-20oz')
+  await expect(sizeButtons.nth(2)).toHaveAttribute('data-testid', 'item-size-22oz')
+  await page.getByTestId('item-size-22oz').click()
+  await expect(page.getByTestId('item-add')).toBeEnabled()
+  await page.getByTestId('item-add').click()
+  await expect(page.getByTestId('cart-total')).toHaveText('฿55.00')
+  await page.getByTestId('pay-cash').click()
+  await page.getByTestId('tender-exact').click()
+  await page.getByTestId('confirm-cash').click()
+  await expect(page.getByTestId('done-receipt')).toHaveText('A-000004')
+
+  // the 22 oz bill reaches dayo: accepted (dayo knows the variant — an unknown one is rejected UNKNOWN_CODE) at ฿55
+  await expect.poll(async () => (await mockState(request)).orders.find((o) => o.receiptNo === 'A-000004')).toMatchObject({ status: 'ok', total: 55 })
 })
