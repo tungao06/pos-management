@@ -41,7 +41,7 @@ export function OrdersScreen(): JSX.Element {
           <button
             key={o.id}
             type="button"
-            className="row"
+            className="row order-row"
             data-testid={`order-row-${o.receiptNo}`}
             data-status={o.status}
             onClick={() => void navigate({ to: '/orders/$orderId', params: { orderId: o.id } })}

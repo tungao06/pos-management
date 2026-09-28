@@ -238,7 +238,7 @@ function ProblemRow({
   const isClockAhead = row.reason === 'CLOCK_AHEAD'
   const testId = `problem-${row.receiptNo ?? row.key}`
   return (
-    <div className="row" style={{ marginLeft: depth * 16 }}>
+    <div className="problem" style={{ marginLeft: depth * 16 }}>
       <div data-testid={testId}>
         <span>{TH.syncProblemKind[row.kind] ?? row.kind}</span>
         <span>

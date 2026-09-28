@@ -116,7 +116,7 @@ export function CashMoveDialog({ onClose }: { onClose: () => void }): JSX.Elemen
             </div>
           </>
         )}
-        <div className="actions">
+        <div className="actions dialog-foot">
           <button type="button" onClick={onClose}>
             {TH.cancel}
           </button>

@@ -44,7 +44,7 @@ export function DiscountDialog({ catalog, onClose }: { catalog: PosOrderCatalog 
             {error}
           </p>
         )}
-        <div className="actions">
+        <div className="actions dialog-foot">
           {state.billDiscount !== null && (
             <button
               type="button"

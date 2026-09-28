@@ -48,10 +48,10 @@ export function LoginScreen(): JSX.Element {
   }
 
   return (
-    <main className="page">
+    <main className="page login">
       <h1>{TH.loginTitle}</h1>
       {boot.data.ownerRecovery && (
-        <div data-testid="owner-recovery-banner" className="warn">
+        <div data-testid="owner-recovery-banner" className="banner warn">
           <p>{TH.ownerRecoveryBanner}</p>
           <button type="button" data-testid="owner-recovery" onClick={() => void navigate({ to: '/owner-recovery' })}>
             {TH.ownerRecoveryButton}
