@@ -78,8 +78,10 @@ const Variant = z.looseObject({
 })
 const Ingredient = z.looseObject({ id: z.string(), code: z.string(), name: z.string(), useUnit: UseUnit })
 const Base = z.looseObject({ id: z.string(), code: z.string(), name: z.string(), yieldQty: z.number().finite(), yieldUnit: z.enum(['ml', 'g']), lines: z.array(z.looseObject({ ingredientId: z.string(), qty: z.number().finite() })) })
-const MilkOption = z.looseObject({ code: MilkCodeSchema, ingredientId: z.string(), priceAdd: z.number().finite(), aliases: z.array(z.string()) })
-const GradeOption = z.looseObject({ code: z.string().min(1), ingredientId: z.string(), multiplier: z.number().finite(), priceAdd: z.number().finite(), isDefault: z.boolean(), aliases: z.array(z.string()) })
+// menu_options.ingredient_id and .multiplier are nullable columns (dayo 0002_catalog.sql) and get_full_catalog passes
+// them through as is; dayo's web lets the owner save an option with no ingredient. A null must never refuse the whole E1.
+const MilkOption = z.looseObject({ code: MilkCodeSchema, ingredientId: z.string().nullable(), priceAdd: z.number().finite(), aliases: z.array(z.string()) })
+const GradeOption = z.looseObject({ code: z.string().min(1), ingredientId: z.string().nullable(), multiplier: z.number().finite().nullable(), priceAdd: z.number().finite(), isDefault: z.boolean(), aliases: z.array(z.string()) })
 const Channel = z.looseObject({ code: z.string().min(1), name: z.string(), aliases: z.array(z.string()), priceMarkupPct: z.number().finite(), priceAddBaht: z.number().finite(), rounding: z.enum(['ceil_baht', 'none']), feePct: z.number().finite(), defaultPaymentMethodCode: z.string().nullable() })
 const PaymentMethod = z.looseObject({ code: z.string().min(1), name: z.string(), aliases: z.array(z.string()) })
 const promoCommon = {
