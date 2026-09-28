@@ -67,16 +67,20 @@ export function StockScreen(): JSX.Element {
         <button type="button" data-testid="nav-sell" onClick={() => void navigate({ to: '/sell' })}>
           {TH.back}
         </button>
-        <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' as never })}>
+        {/* @ts-expect-error D60: /stock* removed from routeTree */}
+        <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' })}>
           {TH.navReceive}
         </button>
-        <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' as never })}>
+        {/* @ts-expect-error D60: /stock* removed from routeTree */}
+        <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' })}>
           {TH.navProduce}
         </button>
-        <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' as never })}>
+        {/* @ts-expect-error D60: /stock* removed from routeTree */}
+        <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' })}>
           {o.openCountId === null ? TH.navCount : TH.navCountResume}
         </button>
-        <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' as never })}>
+        {/* @ts-expect-error D60: /stock* removed from routeTree */}
+        <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' })}>
           {TH.navAdjust}
         </button>
       </div>

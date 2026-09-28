@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { can } from './permissions'
+import { can, type UserRole } from './permissions'
 
 describe('Q44 role table', () => {
   it.each([
@@ -22,5 +22,9 @@ describe('Q44 role table', () => {
     ['owner', 'backup', true],
   ] as const)('%s may %s: %s', (role, action, ok) => {
     expect(can(role, action)).toBe(ok)
+  })
+
+  it('fails closed for a role not in the table', () => {
+    expect(can('supervisor' as unknown as UserRole, 'sell')).toBe(false)
   })
 })

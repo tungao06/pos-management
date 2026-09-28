@@ -216,8 +216,8 @@ export const TH = {
   save: 'บันทึก',
 
   // แผน 4 — สต็อก
-  stockMenu: 'สต็อก',
-  stockMenuAlerts: (n: number): string => `สต็อก ⚠ ${n}`,
+  stockMenu: 'สต็อก', // D60 hidden
+  stockMenuAlerts: (n: number): string => `สต็อก ⚠ ${n}`, // D60 hidden
   stockTitle: 'สต็อก',
   stockTotalValue: 'มูลค่าสต็อกรวม',
   stockFilterAll: 'ทั้งหมด',
@@ -233,7 +233,7 @@ export const TH = {
   stockNeverCounted: 'ยังไม่เคยนับสต็อก',
   stockCountDue: 'ถึงเวลานับสต็อกประจำสัปดาห์แล้ว',
   stockNoItems: 'ไม่มีรายการ',
-  baseExpiredBanner: (names: string): string => `เบสหมดอายุ: ${names} — ทิ้งแล้วทำใหม่ (หน้าสต็อก)`,
+  baseExpiredBanner: (names: string): string => `เบสหมดอายุ: ${names} — ทิ้งแล้วทำใหม่ (หน้าสต็อก)`, // D60 hidden
   navProduce: 'ทำเบส',
   navReceive: 'รับของเข้า',
   navCount: 'นับสต็อก',

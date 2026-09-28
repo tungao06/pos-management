@@ -1,10 +1,12 @@
 // D60 · Task 16 · spec §11, §12 Q44 · ruling R11: role permission table.
 //
 // `@dayo/contracts` UserRole is still `owner | staff` on this branch (the `manager` value lands with
-// Task 5's zod change, out of scope here). This module keeps its own UserRole union so it does not
-// depend on that landing — a UserDto.role value from the current contracts is always assignable into
-// it, and once Task 5 adds `manager` upstream this type can be swapped for the `@dayo/contracts` one.
-export type UserRole = 'staff' | 'manager' | 'owner'
+// Task 5's zod change, out of scope here). Widening it here with `| 'manager'` means this file compiles
+// today, and if Task 5 ever adds a role that isn't `manager` (or renames it), `ContractRole` picks up
+// the mismatch and this union — and the TABLE below — stop compiling instead of silently drifting.
+import type { UserRole as ContractRole } from '@dayo/contracts'
+
+export type UserRole = ContractRole | 'manager'
 
 export type Action =
   | 'sell'
@@ -38,5 +40,5 @@ const TABLE: Record<UserRole, ReadonlySet<Action>> = {
 }
 
 export function can(role: UserRole, action: Action): boolean {
-  return TABLE[role].has(action)
+  return TABLE[role]?.has(action) ?? false
 }

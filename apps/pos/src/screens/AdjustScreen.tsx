@@ -120,7 +120,8 @@ export function AdjustScreen(): JSX.Element {
   return (
     <main className="page">
       <div className="actions">
-        <button type="button" data-testid="nav-stock" onClick={() => void navigate({ to: '/stock' as never })}>
+        {/* @ts-expect-error D60: /stock* removed from routeTree */}
+        <button type="button" data-testid="nav-stock" onClick={() => void navigate({ to: '/stock' })}>
           {TH.back}
         </button>
       </div>
