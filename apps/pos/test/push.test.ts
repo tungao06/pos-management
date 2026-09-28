@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { clearFailureBackoff, pushOnce, REQUEST_FAILED, retryRow } from '../src/sync/push'
 import { MOCK_API_KEY } from '@dayo/dayo-mock'
-import { DAYO_KEYS, encodeLastError, readKey, writeKey } from '../src/sync/state'
+import { DAYO_KEYS, encodeLastError, readKey, STUCK_AFTER_ATTEMPTS, writeKey } from '../src/sync/state'
+import { countSyncProblems } from '../src/api/bootstrap'
 import { openConnectedApi, STAFF } from './helpers/dayo'
 import { sellCode } from './helpers/db'
 
@@ -619,22 +620,46 @@ describe('pushOnce — a failed row is charged only when dayo shows it is up', (
     expect(await pushOnce(ctx)).toMatchObject({ requests: 2, sent: 1 })
     expect((await outbox(t))[0]).toMatchObject({ status: 'pending', attempts: 2 })
   })
-  it('dayo down for 15 hours with two good rows in one-row mode: no row is ever charged (the queue runs out before K every time)', async () => {
+  it('dayo down for hours with two rows in one-row mode: no charge is ever kept, yet each row\'s OWN 50th failure ends it STUCK (fix round 2 ruling)', async () => {
     const { t, ctx } = await ready()
     await cocoa(t); await cocoa(t)
     t.mock.setMode('server_down')
-    await intoOneRowMode(t, ctx)
-    const start = Date.parse(t.clock.now())
-    let calls = 0
-    while (Date.parse(t.clock.now()) - start < 15 * 3_600_000) {
+    await intoOneRowMode(t, ctx) // batch requests: no row's own failure yet
+    for (let call = 1; call < STUCK_AFTER_ATTEMPTS; call++) {
       expect(await pushOnce(ctx)).toMatchObject({ requests: 2, sent: 0, stopped: 'server' })
-      expect((await outbox(t)).map((r) => [r.status, r.attempts])).toEqual([['pending', 0], ['pending', 0]])
+      expect((await outbox(t)).map((r) => [r.status, r.attempts])).toEqual([['pending', 0], ['pending', 0]]) // refunded every time (Path A)
       await waitOut(t)
-      calls++
     }
-    expect(calls).toBeGreaterThan(50) // more calls than a row's 50-try budget
-    t.mock.setMode('normal')
+    await pushOnce(ctx)
+    const rows = await outbox(t)
+    expect(rows.map((r) => [r.status, JSON.parse(r.lastError!).reason])).toEqual([['dead', 'STUCK'], ['dead', 'STUCK']])
+    t.mock.setMode('normal') // the owner's "ลองใหม่" sends them once dayo is back
+    for (const r of rows) await retryRow(t.db, r.id)
+    await waitOut(t)
     expect(await pushOnce(ctx)).toMatchObject({ sent: 2 })
+  })
+  it('a lone row failing every call reaches STUCK after 50 of its own failures with no other bill ever arriving — no neighbour\'s 200 needed (fix round 2 ruling)', async () => {
+    const { t } = await ready()
+    await cocoa(t)
+    const ctx = withFetch(t, poisonFetch(t, ['A-000001']))
+    for (let call = 1; call < STUCK_AFTER_ATTEMPTS; call++) {
+      expect(await pushOnce(ctx)).toMatchObject({ requests: 1, stopped: 'server' })
+      const row = (await outbox(t))[0]!
+      expect(row).toMatchObject({ status: 'pending', attempts: 0 }) // never charged: nothing confirmed a charge
+      expect(JSON.parse(row.lastError!)).toMatchObject({ ownFailures: call, requestFailed: true })
+      await waitOut(t)
+    }
+    await pushOnce(ctx)
+    const dead = (await outbox(t))[0]!
+    expect(dead).toMatchObject({ status: 'dead', attempts: STUCK_AFTER_ATTEMPTS })
+    expect(JSON.parse(dead.lastError!).reason).toBe('STUCK')
+    expect(await countSyncProblems(t.db)).toBe(1) // on the "ส่งไม่ผ่าน" page
+    await retryRow(t.db, dead.id) // "ลองใหม่" starts its own count again
+    await waitOut(t)
+    await pushOnce(ctx)
+    const again = (await outbox(t))[0]!
+    expect(again.status).toBe('pending')
+    expect(JSON.parse(again.lastError!)).toMatchObject({ ownFailures: 1 })
   })
   it('a charge and its refund keep the farAhead flag and the noVerdict count (the owner banner and M5 survive)', async () => {
     const { t, ctx } = await ready()

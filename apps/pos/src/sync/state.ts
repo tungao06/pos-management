@@ -72,8 +72,12 @@ export async function recordServerTime(db: RemoteDb, serverTimeIso: string, sent
 }
 
 /** outbox.last_error is JSON (plan 5 I-12); the detail is clipped by code points so the JSON stays whole. */
-/** requestFailed: the row was part of a request that failed (a provisional charge or its refund) — not a trusted probe. */
-export type LastErrorExtra = { supportedHash?: string; farAhead?: true; noVerdict?: number; requestFailed?: true }
+/**
+ * requestFailed: the row was part of a request that failed (a provisional charge or its refund) — not a trusted probe.
+ * ownFailures: requests that carried only this row and failed (5xx / unknown 4xx / timeout / unreadable 200), counted
+ * whatever happened to its charge; STUCK at STUCK_AFTER_ATTEMPTS. Any verdict from dayo (a 200) starts it again.
+ */
+export type LastErrorExtra = { supportedHash?: string; farAhead?: true; noVerdict?: number; requestFailed?: true; ownFailures?: number }
 export function encodeLastError(reason: string, detail: string, extra: LastErrorExtra = {}): string {
   return JSON.stringify({ reason: clipCodePoints(reason, 60), detail: clipCodePoints(detail, 500), ...extra })
 }
@@ -82,8 +86,8 @@ export function decodeLastError(raw: string | null): { reason: string; detail: s
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { reason: '', detail: raw }
-    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown; noVerdict?: unknown; requestFailed?: unknown }
-    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}), ...(typeof p.noVerdict === 'number' && Number.isSafeInteger(p.noVerdict) && p.noVerdict > 0 ? { noVerdict: p.noVerdict } : {}), ...(p.requestFailed === true ? { requestFailed: true as const } : {}) }
+    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown; noVerdict?: unknown; requestFailed?: unknown; ownFailures?: unknown }
+    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}), ...(typeof p.noVerdict === 'number' && Number.isSafeInteger(p.noVerdict) && p.noVerdict > 0 ? { noVerdict: p.noVerdict } : {}), ...(p.requestFailed === true ? { requestFailed: true as const } : {}), ...(typeof p.ownFailures === 'number' && Number.isSafeInteger(p.ownFailures) && p.ownFailures > 0 ? { ownFailures: p.ownFailures } : {}) }
   } catch {
     return { reason: '', detail: raw }
   }
