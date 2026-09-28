@@ -11,13 +11,14 @@ import type { ApiDeps } from '../../src/api/deps'
 import { PosError } from '../../src/api/errors'
 import { createPosApi } from '../../src/api/pos-api'
 import { PROMPTPAY_SETTING_KEY } from '../../src/api/setup'
-import { PAYMENT_CODE, REASON_MAX_LENGTH, type CommitSaleResult, type DeviceDto, type PosApi, type RecordSaleInput, type ShiftDto, type UserDto } from '../../src/api/types'
+import { PAYMENT_CODE, REASON_MAX_LENGTH, type DeviceDto, type PosApi, type RecordSaleInput, type RecordSaleResult, type ShiftDto, type UserDto } from '../../src/api/types'
 import { appendOrderEvents, type NewEvent } from '../../src/db/events'
 import { initDatabase } from '../../src/db/init'
 import { insertMovements, loadCostStates, makeCostOf } from '../../src/db/stock'
 import { hashPin } from '../../src/lib/pin'
 import { createMemorySecretStore } from '../../src/sync/secret-store'
 import { openConnectedApi } from './dayo'
+import { createTestLocks } from './locks'
 
 // Node's built-ins are taken from `process.getBuiltinModule`, never named in an `import` statement: this helper is
 // also used by a jsdom test file (`test/close-shift-screen.test.tsx`, the close screen driven against the real
@@ -69,6 +70,10 @@ export function vacuumInto(raw: DatabaseSync): Uint8Array {
 
 export type TestApi = { api: PosApi; db: RemoteDb; raw: DatabaseSync; clock: TestClock; deps: ApiDeps }
 
+/**
+ * The PosApi's scheduler gets its own Web Locks stand-in (helpers/locks.ts) — never the host's navigator.locks, which
+ * Node 24 has and Node 22 does not, and which one test's hung request would hold for the whole file.
+ */
 export async function openTestApi(opts: { fetch?: typeof fetch; now?: string } = {}): Promise<TestApi> {
   const { raw, db } = await openTestDb()
   const clock = testClock(opts.now)
@@ -78,7 +83,7 @@ export async function openTestApi(opts: { fetch?: typeof fetch; now?: string } =
     secrets: createMemorySecretStore(),
     random: () => 0.5,
   }
-  return { api: createPosApi(db, deps), db, raw, clock, deps }
+  return { api: createPosApi(db, deps, { locks: createTestLocks() }), db, raw, clock, deps }
 }
 
 export const PINS = { TungAo: '1111', DCm: '2222' } as const
@@ -137,7 +142,7 @@ export async function sellCode(
   lines: { code: string; size?: Size; sweetness?: Sweetness; milk?: MilkCode; grade?: string | null; qty: number }[],
   payment: RecordSaleInput['payment'],
   extra: { billDiscountSatang?: number; reason?: string; channelCode?: string; actorUserId?: string; orderId?: string } = {},
-): Promise<CommitSaleResult> {
+): Promise<RecordSaleResult> {
   const cat = await t.api.loadSellCatalog()
   const cart: RecordSaleInput['cart'] = {
     channelCode: extra.channelCode ?? cat.defaultChannelCode, promoCode: null, skipPromotionIds: [], noPromotions: false,
@@ -180,7 +185,7 @@ export async function legacySale(
   qty: number,
   payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' },
   discount: { amountSatang: number; reason: string } | null = null,
-): Promise<CommitSaleResult> {
+): Promise<RecordSaleResult> {
   const cleanDiscount = discount === null ? null : { amountSatang: discount.amountSatang, reason: discount.reason.trim() }
   if (cleanDiscount !== null && cleanDiscount.reason.length > REASON_MAX_LENGTH) throw new PosError('BAD_INPUT', `a reason is at most ${REASON_MAX_LENGTH} characters`)
 

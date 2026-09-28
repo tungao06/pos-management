@@ -1,6 +1,6 @@
 import fc from 'fast-check'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { computeOrder, type CupSizeEntry, type OrderCatalog } from '@dayo/dayo-pricing'
+import { computeOrder, type CupSizeEntry, type OrderCatalog, type OrderDraft } from '@dayo/dayo-pricing'
 import { PosOrderCatalog as PosOrderCatalogSchema, type PosOrderCatalogParsed } from '@dayo/contracts'
 import { loadRichCatalog } from '@dayo/contracts/fixture-files'
 import { edgeBahtToSatang } from '../src/money-edge.js'
@@ -105,46 +105,123 @@ describe('priceCart', () => {
     expect(centralDiffSatang(15_501, 15_500)).toBe(1)
     expect(centralDiffSatang(null, 15_500)).toBeNull()
   })
-  it('every money field equals edgeBahtToSatang of the vendored computeOrder (random carts)', () => {
+  /**
+   * Random carts over every input a sale can carry — line baht/percent discounts, free cups (with and without the
+   * reason dayo requires), oat on menus that allow it and on menus that do not, matcha grades, bill baht/percent
+   * discounts, promo codes (right, wrong case, unknown), skipped promotions, "no promotions", both payment methods and
+   * sale instants in and out of the weekday 14:00–16:00 matcha promotion. The expected numbers never come from the
+   * code under test: the dayo draft is built here by hand from the generated inputs (satang / 100, Bangkok date and
+   * time written out per instant) and priced by dayo's vendored computeOrder on a zero-cost copy of the catalog.
+   */
+  it('every money field equals the vendored computeOrder on a hand-built draft (random carts)', () => {
     const variants = POS_CATALOG.variants
-    // oat only where dayo's option rules allow it (spec §5.3 case 6) — a refused oat line is covered by its own test
+    // oat where dayo's option rules allow it (spec §5.3 case 6) is the common case; 'oat-any' also sends oat where they do not
     const oatOk = variants.map((v) => lineOptions(POS_CATALOG, v.menuCode, v.size, v.sweetness).milk.some((m) => m.code === 'oat'))
     const grades = POS_CATALOG.gradeOptions.map((g) => g.code)
+    const promotionIds = POS_CATALOG.promotions.map((p) => p.id)
+    /** dayo's pricing code needs a cost per ingredient; the tablet has none (spec §4.4 rule 1) and cost never moves a price. */
+    const dayoCatalog = { ...POS_CATALOG, ingredients: Object.fromEntries(Object.entries(POS_CATALOG.ingredients).map(([k, v]) => [k, { ...v, costPerUseUnit: 0 }])) } as unknown as OrderCatalog
+    /** Sale instants with their Bangkok date and HH:MM written out by hand (UTC+7, no DST). */
+    const instants = [
+      { iso: FRI_1030, saleDate: '2026-09-25', saleTime: '10:30' },
+      { iso: '2026-09-25T07:00:00.000Z', saleDate: '2026-09-25', saleTime: '14:00' }, // Friday, the matcha promotion opens
+      { iso: '2026-09-25T08:15:42.000Z', saleDate: '2026-09-25', saleTime: '15:15' }, // Friday, inside it (seconds cut)
+      { iso: '2026-09-25T09:00:00.000Z', saleDate: '2026-09-25', saleTime: '16:00' }, // Friday, its last minute
+      { iso: '2026-09-26T08:00:00.000Z', saleDate: '2026-09-26', saleTime: '15:00' }, // Saturday, not a promotion day
+      { iso: '2026-09-25T17:30:00.000Z', saleDate: '2026-09-26', saleTime: '00:30' }, // Friday in UTC, already Saturday in Bangkok
+    ] as const
+    // weighted towards bills dayo accepts, so every promotion is reached in every run (the refusals still come up often)
     const lineDiscount = fc.oneof(
-      fc.constant({ discountSatang: null, discountPercent: null }),
-      fc.integer({ min: 1, max: 50 }).map((p) => ({ discountSatang: null, discountPercent: p })),
-      fc.integer({ min: 1, max: 3000 }).map((s) => ({ discountSatang: s, discountPercent: null })),
+      { weight: 4, arbitrary: fc.constant({ discountSatang: null, discountPercent: null }) },
+      { weight: 1, arbitrary: fc.integer({ min: 1, max: 100 }).map((p) => ({ discountSatang: null, discountPercent: p })) },
+      { weight: 1, arbitrary: fc.integer({ min: 1, max: 12_000 }).map((s) => ({ discountSatang: s, discountPercent: null })) },
     )
     const billDiscount = fc.oneof(
       fc.constant(null),
-      fc.integer({ min: 1, max: 20_000 }).map((satang) => ({ kind: 'satang' as const, satang, reason: 'ลูกค้าประจำ' })),
-      fc.integer({ min: 1, max: 100 }).map((percent) => ({ kind: 'percent' as const, percent, reason: 'ลูกค้าประจำ' })),
+      fc.integer({ min: 1, max: 20_000 }).map((satang) => ({ kind: 'satang' as const, satang, reason: 'ลูกค้าประจำ' as string | null })),
+      fc.integer({ min: 1, max: 100 }).map((percent) => ({ kind: 'percent' as const, percent, reason: null as string | null })),
     )
+    const row = fc.record({
+      v: fc.integer({ min: 0, max: variants.length - 1 }), qty: fc.integer({ min: 1, max: 5 }), milk: fc.oneof({ weight: 4, arbitrary: fc.constant('fresh') }, { weight: 3, arbitrary: fc.constant('oat') }, { weight: 1, arbitrary: fc.constant('oat-any') }), g: fc.nat(),
+      d: lineDiscount, free: fc.integer({ min: 0, max: 7 }).map((n) => n === 0), reason: fc.oneof({ weight: 1, arbitrary: fc.constant(null) }, { weight: 2, arbitrary: fc.constant('ลูกค้าประจำ') }, { weight: 1, arbitrary: fc.constant('   ') }),
+    })
+    const seen = {
+      freeOk: 0, freeRefused: 0, oat: 0, notOk: 0, billSatang: 0, billPercent: 0, lineBaht: 0, linePercent: 0,
+      qr: 0, promoLowercase: 0, promoUnknown: 0, noPromotions: 0, promos: new Set<string>(),
+    }
+
     fc.assert(fc.property(
-      fc.array(fc.record({ v: fc.integer({ min: 0, max: variants.length - 1 }), qty: fc.integer({ min: 1, max: 5 }), oat: fc.boolean(), g: fc.nat(), d: lineDiscount }), { minLength: 1, maxLength: 6 }),
-      fc.constantFrom('store', 'grab', 'lineman'),
-      billDiscount,
-      (rows, channelCode, bill) => {
-        const c = cart(rows.map((r) => {
+      fc.array(row, { minLength: 1, maxLength: 6 }), fc.constantFrom('store', 'grab', 'lineman'), fc.constantFrom('cash', 'qr'), billDiscount,
+      fc.constantFrom(null, 'DAYO10', 'dayo10', 'NOPE'), fc.subarray(promotionIds), fc.integer({ min: 0, max: 5 }).map((n) => n === 0), fc.constantFrom(...instants),
+      (rows, channelCode, paymentCode, bill, promoCode, skip, noPromotions, when) => {
+        const lines = rows.map((r) => {
           const v = variants[r.v]!
           return line({
-            code: v.menuCode, size: v.size, sweetness: v.sweetness, qty: r.qty, milk: r.oat && oatOk[r.v] ? 'oat' : 'fresh',
-            grade: v.isMatcha ? grades[r.g % grades.length]! : null, ...r.d,
+            code: v.menuCode, size: v.size, sweetness: v.sweetness, qty: r.qty, milk: r.milk === 'oat-any' || (r.milk === 'oat' && oatOk[r.v]) ? 'oat' : 'fresh',
+            grade: v.isMatcha ? grades[r.g % grades.length]! : null, free: r.free, discountReason: r.reason, ...r.d,
           })
-        }), { channelCode, billDiscount: bill })
-        const p = priceCart(c, POS_CATALOG, FRI_1030)
-        const q = computeOrder(toOrderDraft(c, POS_CATALOG, FRI_1030), withZeroCosts(POS_CATALOG))
+        })
+        const c = cart(lines, { channelCode, paymentCode, billDiscount: bill, promoCode, skipPromotionIds: skip, noPromotions })
+        const draft: OrderDraft = {
+          saleDate: when.saleDate, saleTime: when.saleTime, channelCode, paymentCode,
+          lines: lines.map((l) => ({
+            code: l.code, size: l.size, sweetness: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty, free: l.free,
+            discountBaht: l.discountSatang === null ? null : l.discountSatang / 100, discountPercent: l.discountPercent, discountReason: l.discountReason,
+          })),
+          billDiscountBaht: bill?.kind === 'satang' ? bill.satang / 100 : null,
+          billDiscountPercent: bill?.kind === 'percent' ? bill.percent : null,
+          billDiscountReason: bill?.reason ?? null,
+          promoCode,
+          skipPromotionIds: noPromotions ? promotionIds : skip, // spec §4.5: no_promotions = skip every promotion of the catalog
+        }
+
+        const p = priceCart(c, POS_CATALOG, when.iso)
+        const q = computeOrder(draft, dayoCatalog)
+        expect(p.draft).toEqual(draft)
+        expect(p.ok).toBe(q.ok)
         expect(p.totalSatang).toBe(edgeBahtToSatang(q.totalAmount))
         expect(p.itemsSubtotalSatang).toBe(edgeBahtToSatang(q.itemsSubtotal))
         expect(p.itemsDiscountSatang).toBe(edgeBahtToSatang(q.itemsDiscount))
         expect(p.billDiscountSatang).toBe(edgeBahtToSatang(q.billDiscountAmount))
         expect(p.channelFeeSatang).toBe(edgeBahtToSatang(q.channelFeeAmount))
-        expect(p.ok).toBe(q.ok)
-        expect(p.lines.map((l) => [l.unitPriceSatang, l.discountPerCupSatang, l.lineTotalSatang]))
-          .toEqual(q.lines.map((l) => [edgeBahtToSatang(l.unitPrice), edgeBahtToSatang(l.discountPerCup), edgeBahtToSatang(l.lineTotal)]))
-        expect(p.promotionsApplied.map((x) => x.discountSatang)).toEqual(q.promotionsApplied.map((x) => edgeBahtToSatang(x.discountAmount)))
+        expect(p.lines.map((l) => [l.code, l.milk, l.qty, l.unitPriceSatang, l.discountPerCupSatang, l.promotionId, l.lineTotalSatang]))
+          .toEqual(q.lines.map((l) => [l.menuCode, l.milk, l.qty, edgeBahtToSatang(l.unitPrice), edgeBahtToSatang(l.discountPerCup), l.promotionId, edgeBahtToSatang(l.lineTotal)]))
+        expect(p.promotionsApplied.map((x) => [x.promotionId, x.discountSatang])).toEqual(q.promotionsApplied.map((x) => [x.promotionId, edgeBahtToSatang(x.discountAmount)]))
+
+        if (noPromotions) expect(q.promotionsApplied).toEqual([]) // spec §4.5: "no promotions" really applies none
+
+        if (!q.ok) seen.notOk++
+        if (q.ok && lines.some((l) => l.free)) seen.freeOk++
+        // refused BECAUSE of the free cup: a one-line bill whose only line is an unreasoned free cup on a milk it may
+        // have (oat is refused on its own otherwise), and dayo's own free-needs-a-reason warning (ADR-0023) is there
+        const onlyFreeUnreasoned = rows.length === 1 && rows[0]!.free && (rows[0]!.reason === null || rows[0]!.reason.trim() === '') && (rows[0]!.milk !== 'oat-any' || oatOk[rows[0]!.v])
+        if (!q.ok && onlyFreeUnreasoned && q.warnings.some((w) => w.includes('ให้ฟรีต้องมีหมายเหตุ'))) seen.freeRefused++
+        if (q.ok && q.lines.some((l) => l.milk === 'oat')) seen.oat++
+        if (q.ok && q.billDiscountAmount > 0) seen[bill?.kind === 'percent' ? 'billPercent' : 'billSatang']++
+        if (q.ok && lines.some((l) => l.discountSatang !== null && !l.free)) seen.lineBaht++
+        if (q.ok && lines.some((l) => l.discountPercent !== null && !l.free)) seen.linePercent++
+        if (q.ok && paymentCode === 'qr') seen.qr++
+        if (q.ok && promoCode === 'dayo10') seen.promoLowercase++
+        if (q.ok && promoCode === 'NOPE') seen.promoUnknown++
+        if (q.ok && noPromotions) seen.noPromotions++
+        if (q.ok) for (const x of q.promotionsApplied) seen.promos.add(x.promotionId)
       },
-    ), { numRuns: 500 })
+    ), { numRuns: 1000 })
+
+    // the generator really reached every kind of input (a narrowed generator fails here, not silently)
+    expect(seen.freeOk).toBeGreaterThan(0)
+    expect(seen.freeRefused).toBeGreaterThan(0)
+    expect(seen.oat).toBeGreaterThan(0)
+    expect(seen.notOk).toBeGreaterThan(0)
+    expect(seen.billSatang).toBeGreaterThan(0)
+    expect(seen.billPercent).toBeGreaterThan(0)
+    expect(seen.lineBaht).toBeGreaterThan(0)
+    expect(seen.linePercent).toBeGreaterThan(0)
+    expect(seen.qr).toBeGreaterThan(0)
+    expect(seen.promoLowercase).toBeGreaterThan(0)
+    expect(seen.promoUnknown).toBeGreaterThan(0)
+    expect(seen.noPromotions).toBeGreaterThan(0)
+    expect([...seen.promos].sort()).toEqual([...promotionIds].sort()) // every promotion of the test catalog, DAYO10 and the matcha hour included
   })
   it.each<[string, CartDraft, CartError['code']]>([
     ['empty', cart([]), 'EMPTY_CART'],

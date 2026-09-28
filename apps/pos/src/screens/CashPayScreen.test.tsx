@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PosError } from '../api/errors'
-import type { CommitSaleResult, PosApi, SellCatalogDto, UserDto } from '../api/types'
+import type { PosApi, RecordSaleResult, SellCatalogDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { CartProvider } from '../app/cart-context'
 import { SessionProvider, useSession } from '../app/session'
@@ -62,7 +62,7 @@ describe('CashPayScreen — PRICE_CHANGED refetches the catalog before showing i
     const recordSale = vi
       .fn()
       .mockRejectedValueOnce(new PosError('PRICE_CHANGED', 'shown 3500, now 4000'))
-      .mockResolvedValueOnce({ orderId: 'o1', receiptNo: 'A-000001', queueNo: 1, businessDate: '2026-09-28', totalSatang: 4_000, changeSatang: 1_000, method: 'CASH' } satisfies CommitSaleResult)
+      .mockResolvedValueOnce({ orderId: 'o1', receiptNo: 'A-000001', queueNo: 1, businessDate: '2026-09-28', totalSatang: 4_000, changeSatang: 1_000, method: 'CASH' } satisfies RecordSaleResult)
     mount({ loadSellCatalog, recordSale })
 
     await waitFor(() => expect(screen.getByTestId('cash-total')).toHaveTextContent('35.00'))

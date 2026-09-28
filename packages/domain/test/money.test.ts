@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
-import { bahtToSatang, bahtToUsat, costSatang, roundDiv, roundDivBig, splitLargestRemainder } from '../src/money.js'
-import { milliArb, satangArb, usatArb } from './arb.js'
+import { bahtToSatang, bahtToUsat, costSatang, roundDivBig } from '../src/money.js'
+import { milliArb, usatArb } from './arb.js'
 
 describe('roundDivBig', () => {
   it('rounds half away from zero', () => {
@@ -16,7 +16,7 @@ describe('roundDivBig', () => {
   })
   it('matches Math.round for positive numbers', () => {
     fc.assert(fc.property(fc.integer({ min: 0, max: 1e9 }), fc.integer({ min: 1, max: 1e6 }), (a, b) => {
-      expect(roundDiv(a, b)).toBe(Math.round(a / b))
+      expect(Number(roundDivBig(BigInt(a), BigInt(b)))).toBe(Math.round(a / b))
     }))
   })
 })
@@ -48,25 +48,5 @@ describe('costSatang', () => {
   })
   it('rejects non-integers', () => {
     expect(() => costSatang(1.5, 1)).toThrow(RangeError)
-  })
-})
-
-describe('splitLargestRemainder', () => {
-  it('splits exactly with sum preserved', () => {
-    expect(splitLargestRemainder(100, [1, 1, 1])).toEqual([34, 33, 33])
-    expect(splitLargestRemainder(7, [50, 50])).toEqual([4, 3])
-    expect(splitLargestRemainder(0, [5, 5])).toEqual([0, 0])
-  })
-  it('returns [] for no weights and gives all to first when weights are all zero', () => {
-    expect(splitLargestRemainder(10, [])).toEqual([])
-    expect(splitLargestRemainder(10, [0, 0])).toEqual([10, 0])
-  })
-  it('always sums to total and every part is >= 0', () => {
-    fc.assert(fc.property(satangArb, fc.array(satangArb, { minLength: 1, maxLength: 20 }), (total, weights) => {
-      const parts = splitLargestRemainder(total, weights)
-      expect(parts.length).toBe(weights.length)
-      expect(parts.reduce((a, b) => a + b, 0)).toBe(total)
-      for (const p of parts) expect(p).toBeGreaterThanOrEqual(0)
-    }))
   })
 })

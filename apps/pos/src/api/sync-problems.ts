@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNotNull, like, ne, or, sql } from 'drizzle-orm
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { OrderRowData, OrderVoidRowData, rowKey, Text200, type PushKind } from '@dayo/contracts'
-import { CartError, centralDiffSatang, findSellableVariant, nextReceiptNo, type PosOrderCatalog } from '@dayo/domain'
+import { CartError, centralDiffSatang, findSellableVariant, nextReceiptNo } from '@dayo/domain'
 import { appendOrderEvents } from '../db/events'
 import { readCatalog, roleOf } from '../sync/catalog'
 import { retryRow } from '../sync/push'
@@ -12,7 +12,7 @@ import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { lastReceiptNoOverall } from './sale'
-import { PAYMENT_CODE, type OwnerApproval, type PriceDiffDto, type RemapCodeInput, type Remedy, type SyncProblemDto } from './types'
+import { PAYMENT_CODE, type OwnerApproval, type PriceDiffDto, type RemapCodeInput, type RemapScope, type Remedy, type SyncProblemDto } from './types'
 
 /**
  * spec 04 §6.4 (locked): which fix fits which reason of a DEAD row. A reason missing here (STUCK, ENVELOPE,
@@ -57,7 +57,80 @@ function remediesFor(r: Row): Remedy[] {
   if (isFarAheadWaiting(r)) return ['EXCLUDE']
   if (r.status !== 'dead') return []
   const e = decodeLastError(r.lastError)
-  return (REMEDIES[e.reason] ?? ['RETRY']).filter((x) => x !== 'RENUMBER' || (r.tableName === 'order' && isReceiptCollision(e.detail)))
+  return (REMEDIES[e.reason] ?? ['RETRY'])
+    .filter((x) => x !== 'RENUMBER' || (r.tableName === 'order' && isReceiptCollision(e.detail)))
+    .filter((x) => x !== 'REMAP_CODE' || remapScope(r).named !== null)
+}
+
+type OrderLine = OrderRowData['lines'][number]
+/**
+ * The one value of a bill dayo's UNKNOWN_CODE named: the channel, the payment, or the line(s) it describes — by their
+ * menu or variant ('code'), or by their grade alone ('grade': then only the grade may change, fix round security Low 1).
+ */
+type NamedUnknown = { field: 'channel' | 'payment'; code: string } | { field: 'line'; by: 'code' | 'grade'; matches: (l: OrderLine) => boolean }
+
+/**
+ * Follow-up item 2: dayo rejects UNKNOWN_CODE only for a code the shop does not have AT ALL — a disabled one is still
+ * accepted (0052_pos_push.sql:369 "ปิดใช้แล้วยังรับ — ADR-0049 ข้อ 5"), while the tablet's latest catalog (E1) lists
+ * active codes only. "Missing from the local catalog" is therefore a wider test than dayo's, and it let a remedy for one
+ * unknown line also swap a channel dayo had merely disabled (a different fee %, never shown in "ยอดไม่ตรงระบบกลาง"). So
+ * the value a remap may change is the one dayo NAMED, read from the detail dayo writes itself — the same technique as
+ * RECEIPT_COLLISION above:
+ *   0052:371 ไม่พบช่องทางขาย "<channel>" · 0052:374 (and create_order's unknown_code, 0051:1077 → 0052:648-649 strips
+ *   the prefix) ไม่พบวิธีชำระ "<payment>" · 0052:379 ไม่พบเมนู "<code>" · 0052:385-386 ไม่พบ "<code> <size> <sweetness>"
+ *   · 0052:402 ไม่พบเกรด "<grade>".
+ * Whole-detail matches only (the tablet clips a detail at its end, so a clipped one matches nothing). Not a remap:
+ * 0052:391 ไม่พบตัวเลือกนม "oat" (a remap cannot change the milk), DY404's raw text (0052:663), anything dayo adds
+ * later — those get RETRY only.
+ */
+const NAMED_BY_DETAIL: readonly [RegExp, (value: string) => NamedUnknown][] = [
+  [/^ไม่พบช่องทางขาย "(.*)"$/su, (code) => ({ field: 'channel', code })],
+  [/^ไม่พบวิธีชำระ "(.*)"$/su, (code) => ({ field: 'payment', code })],
+  [/^ไม่พบเมนู "(.*)"$/su, (code) => ({ field: 'line', by: 'code', matches: (l) => l.code === code })],
+  [/^ไม่พบ "(.*)"$/su, (v) => ({ field: 'line', by: 'code', matches: (l) => `${l.code} ${l.size} ${l.sweetness}` === v })],
+  [/^ไม่พบเกรด "(.*)"$/su, (grade) => ({ field: 'line', by: 'grade', matches: (l) => l.grade === grade })],
+]
+
+/**
+ * Fix round code Low 2: dayo refused the payment 'cash' itself (the shop's cash method is gone from dayo). A cash bill
+ * can only stay 'cash' (isCashCode below), and 'cash' is the refused value — no remap can fix it; dayo must have the
+ * code back. Shown on the row (remapHint) and as remapCode's refusal.
+ */
+export const CASH_REFUSED_HINT = 'ระบบกลางไม่รู้จักวิธีชำระเงินสด (รหัส cash) — บิลเงินสดย้ายไปวิธีชำระอื่นไม่ได้: ให้เพิ่มวิธีชำระเงินสดรหัส cash กลับในเว็บระบบกลาง แล้วกด "ลองใหม่"'
+
+/** What a remap of this row may change (`named`, null = no remap), and why not when dayo named a value no remap can fix. */
+function remapScope(r: Row): { named: NamedUnknown | null; hint: string | null } {
+  const named = namedUnknown(r)
+  if (named?.field === 'payment' && isCashCode(named.code)) return { named: null, hint: CASH_REFUSED_HINT }
+  return { named, hint: null }
+}
+
+/** remapScope as the page shows it (RemapScope, api/types.ts) — the named lines with their index and current variant. */
+function remapScopeDto(r: Row): { remap: RemapScope | null; remapHint: string | null } {
+  const { named, hint } = remapScope(r)
+  if (named === null) return { remap: null, remapHint: hint }
+  if (named.field !== 'line') return { remap: { field: named.field }, remapHint: hint }
+  const lines = OrderRowData.parse(r.rowJson).lines
+    .map((l, index) => ({ l, index })).filter(({ l }) => named.matches(l))
+    .map(({ l, index }) => ({ index, code: l.code, size: l.size, sweetness: l.sweetness }))
+  return { remap: { field: 'line', lines, gradeOnly: named.by === 'grade' }, remapHint: hint }
+}
+
+/** What dayo named in this dead UNKNOWN_CODE bill row — and only if the row still carries it; else null (no remap). */
+function namedUnknown(r: Row): NamedUnknown | null {
+  if (r.tableName !== 'order') return null
+  const e = decodeLastError(r.lastError)
+  if (e.reason !== 'UNKNOWN_CODE') return null
+  const data = OrderRowData.safeParse(r.rowJson)
+  if (!data.success) return null
+  for (const [re, named] of NAMED_BY_DETAIL) {
+    const m = re.exec(e.detail)
+    if (m === null) continue
+    const n = named(m[1]!)
+    const carried = n.field === 'line' ? data.data.lines.some(n.matches) : data.data[n.field] === n.code
+    return carried ? n : null
+  }
+  return null
 }
 
 /**
@@ -72,7 +145,10 @@ async function remedyRow(db: RemoteDb, deps: ApiDeps, i: OwnerApproval & { outbo
   const row = await db.select().from(s.outbox).where(eq(s.outbox.id, i.outboxId)).get()
   const allowed = row === undefined ? [] : remediesFor(row)
   if (row === undefined || allowed.length === 0) throw new PosError('REMEDY_NOT_ALLOWED', 'the row is not on the "ส่งไม่ผ่าน" page')
-  if (!allowed.includes(remedy)) throw new PosError('REMEDY_NOT_ALLOWED', `${remedy} does not fit ${decodeLastError(row.lastError).reason || row.status}`)
+  if (!allowed.includes(remedy)) {
+    const hint = remedy === 'REMAP_CODE' ? remapScope(row).hint : null
+    throw new PosError('REMEDY_NOT_ALLOWED', hint ?? `${remedy} does not fit ${decodeLastError(row.lastError).reason || row.status}`)
+  }
   return { row, approver, reason }
 }
 
@@ -123,45 +199,43 @@ export async function renumberReceipt(db: RemoteDb, deps: ApiDeps, i: OwnerAppro
   return out
 }
 
-/** A line the latest catalog sells as it is: an active size + existing variant, the matcha/grade rule, oat only where allowed. */
-function lineSellable(c: PosOrderCatalog, l: OrderRowData['lines'][number]): boolean {
-  let v
-  try {
-    v = findSellableVariant(c, l.code, l.size, l.sweetness)
-  } catch (e) {
-    if (e instanceof CartError) return false
-    throw e
-  }
-  if (v.isMatcha ? !(l.grade !== null && c.gradeOptions.some((g) => g.code === l.grade)) : l.grade !== null) return false
-  return l.milk !== 'oat' || v.allowOatMilk
-}
+/**
+ * Follow-up item 1: cash is dayo's payment code 'cash' and nothing else — the one code dayo itself counts as cash
+ * (cash_total = payment_code = 'cash', 0051_multi_source_sales.sql:1900 · 0009_stock_reports.sql:122,579; seed.sql:23).
+ * A name or alias is never read: a substring match took "Cashless QR" for cash and "ไม่ใช่เงินสด" for cash.
+ */
+const isCashCode = (code: string): boolean => code === PAYMENT_CODE.CASH
 
-/** fix round 1 item 2: a payment method that takes cash into the drawer (dayo's code 'cash', or named cash / เงินสด). */
-function cashLike(c: PosOrderCatalog, code: string): boolean {
-  const pm = c.paymentMethods.find((x) => x.code === code)
-  return code === PAYMENT_CODE.CASH || (pm !== undefined && [pm.name, ...pm.aliases].some((t) => /cash|เงินสด/i.test(t)))
-}
+const NOT_NAMED = 'แก้ได้เฉพาะรายการที่ระบบกลางแจ้งว่าไม่รู้จัก'
+const FIELD_TH: Record<NamedUnknown['field'], string> = { line: 'บรรทัดสินค้า', channel: 'ช่องทางขาย', payment: 'วิธีชำระ' }
 
 /**
- * UNKNOWN_CODE: replace the ONE code dayo cannot know with one the latest catalog sells. Fix round 1 item 2 (security):
- * only a field whose CURRENT value the latest catalog does not have may be changed — a valid channel, payment or line
- * is refused (BAD_INPUT), so a remedy for one unknown line cannot also move the payment or the channel (which would
- * never show in "ยอดไม่ตรงระบบกลาง" / would shift dayo's fee). A payment stays the kind of money collected: cash
- * stays cash-like, a QR stays non-cash. `totals` stay the charged ones (spec §6.4) — if dayo prices a new line code
- * differently, the bill shows in "ยอดไม่ตรงระบบกลาง".
+ * UNKNOWN_CODE: replace the ONE value dayo named in its rejection (namedUnknown — follow-up item 2) with one the latest
+ * catalog sells. Any other field or line is refused (BAD_INPUT), so a remedy for one unknown line cannot also move the
+ * payment or the channel (which would never show in "ยอดไม่ตรงระบบกลาง" / would shift dayo's fee), and a value the
+ * tablet's stale catalog still lists can be fixed once dayo said it does not know it. The new value is never the one
+ * dayo refused. A payment stays the kind of money collected: a cash bill stays 'cash', a QR bill stays non-cash.
+ * `totals` stay the charged ones (spec §6.4) — if dayo prices a new line code differently, the bill shows in
+ * "ยอดไม่ตรงระบบกลาง".
  */
 export async function remapCode(db: RemoteDb, deps: ApiDeps, i: RemapCodeInput): Promise<void> {
   const { row, approver, reason } = await remedyRow(db, deps, i, 'REMAP_CODE')
-  if (row.tableName !== 'order') throw new PosError('REMEDY_NOT_ALLOWED', 'only a bill row has codes')
+  const { named, hint } = remapScope(row)
+  if (named === null) throw new PosError('REMEDY_NOT_ALLOWED', hint ?? 'dayo named no code of this bill')
   const c = await readCatalog(db)
   if (c === null) throw new PosError('NO_CATALOG', 'no catalog')
   const data = OrderRowData.parse(row.rowJson)
   const next = structuredClone(data)
   const tg = i.target
-  if (tg.field === 'line') {
+  if (tg.field !== named.field) throw new PosError('BAD_INPUT', `${NOT_NAMED} — ระบบกลางแจ้งเรื่อง${FIELD_TH[named.field]}`)
+  if (tg.field === 'line' && named.field === 'line') {
     const line = Number.isSafeInteger(tg.lineIndex) && tg.lineIndex >= 0 ? next.lines[tg.lineIndex] : undefined
     if (line === undefined) throw new PosError('BAD_INPUT', 'ไม่มีบรรทัดนี้ในบิล')
-    if (lineSellable(c.catalog, line)) throw new PosError('BAD_INPUT', 'บรรทัดนี้ใช้ได้กับแคตตาล็อกล่าสุดอยู่แล้ว — แก้ได้เฉพาะรายการที่ระบบกลางไม่รู้จัก')
+    if (!named.matches(line)) throw new PosError('BAD_INPUT', `${NOT_NAMED} — บรรทัดนี้ไม่ใช่บรรทัดที่ระบบกลางแจ้ง`)
+    // fix round security Low 1: dayo named only the grade — menu, size and sweetness are known to dayo and stay
+    if (named.by === 'grade' && (tg.code !== line.code || tg.size !== line.size || tg.sweetness !== line.sweetness)) {
+      throw new PosError('BAD_INPUT', `${NOT_NAMED} — ระบบกลางแจ้งเรื่องเกรด: แก้ได้เฉพาะเกรด เมนู/ขนาด/ความหวานต้องเหมือนเดิม`)
+    }
     let v
     try {
       v = findSellableVariant(c.catalog, tg.code, tg.size, tg.sweetness)
@@ -169,21 +243,26 @@ export async function remapCode(db: RemoteDb, deps: ApiDeps, i: RemapCodeInput):
       if (e instanceof CartError) throw new PosError('BAD_INPUT', 'เลือกเมนู/ขนาด/ความหวานที่มีในแคตตาล็อกล่าสุด')
       throw e
     }
-    const known = (g: string | null): g is string => g !== null && c.catalog.gradeOptions.some((x) => x.code === g)
-    const grade = v.isMatcha ? (known(line.grade) ? line.grade : (c.catalog.gradeOptions.find((g) => g.isDefault)?.code ?? null)) : null
+    const moved = { ...line, code: tg.code, size: tg.size, sweetness: tg.sweetness }
+    // a matcha line keeps its grade if the latest catalog has it AND dayo did not name it; else the default grade
+    const usable = (g: string | null | undefined): g is string => typeof g === 'string' && c.catalog.gradeOptions.some((x) => x.code === g) && !named.matches({ ...moved, grade: g })
+    const fallback = c.catalog.gradeOptions.find((g) => g.isDefault)?.code
+    const grade = v.isMatcha ? (usable(line.grade) ? line.grade : usable(fallback) ? fallback : null) : null
     if (v.isMatcha && grade === null) throw new PosError('BAD_INPUT', 'เมนูมัตฉะต้องมีเกรด')
     if (line.milk === 'oat' && !v.allowOatMilk) throw new PosError('BAD_INPUT', 'เมนูนี้ไม่มีนมโอ๊ต')
-    next.lines[tg.lineIndex] = { ...line, code: tg.code, size: tg.size, sweetness: tg.sweetness, grade }
-  } else if (tg.field === 'channel') {
-    if (c.catalog.channels.some((x) => x.code === data.channel)) throw new PosError('BAD_INPUT', 'ช่องทางของบิลนี้ใช้ได้อยู่แล้ว — แก้ได้เฉพาะรายการที่ระบบกลางไม่รู้จัก')
+    const replaced = { ...moved, grade }
+    if (named.matches(replaced)) throw new PosError('BAD_INPUT', 'ยังเป็นรหัสเดิมที่ระบบกลางไม่รู้จัก — เลือกรายการอื่น')
+    next.lines[tg.lineIndex] = replaced
+  } else if (tg.field === 'channel' && named.field === 'channel') {
+    if (tg.code === named.code) throw new PosError('BAD_INPUT', 'ยังเป็นรหัสเดิมที่ระบบกลางไม่รู้จัก — เลือกช่องทางอื่น')
     if (!c.catalog.channels.some((x) => x.code === tg.code)) throw new PosError('BAD_INPUT', 'ไม่มีช่องทางนี้ในแคตตาล็อกล่าสุด')
     next.channel = tg.code
-  } else if (tg.field === 'payment') {
-    if (c.catalog.paymentMethods.some((x) => x.code === data.payment)) throw new PosError('BAD_INPUT', 'วิธีชำระของบิลนี้ใช้ได้อยู่แล้ว — แก้ได้เฉพาะรายการที่ระบบกลางไม่รู้จัก')
+  } else if (tg.field === 'payment' && named.field === 'payment') {
+    if (tg.code === named.code) throw new PosError('BAD_INPUT', 'ยังเป็นรหัสเดิมที่ระบบกลางไม่รู้จัก — เลือกวิธีชำระอื่น')
     if (!c.catalog.paymentMethods.some((x) => x.code === tg.code)) throw new PosError('BAD_INPUT', 'ไม่มีวิธีชำระนี้ในแคตตาล็อกล่าสุด')
     const collected = (await db.select({ method: s.payment.method }).from(s.payment).where(eq(s.payment.orderId, data.pos_order_id)).orderBy(asc(s.payment.createdAt)).get())?.method
     if (collected === undefined) throw new PosError('BAD_INPUT', 'บิลนี้ไม่มีการชำระเงินในเครื่อง')
-    if (cashLike(c.catalog, tg.code) !== (collected === 'CASH')) throw new PosError('BAD_INPUT', collected === 'CASH' ? 'บิลนี้รับเงินสด — เลือกวิธีชำระแบบเงินสดเท่านั้น' : 'บิลนี้ไม่ได้รับเงินสด — เลือกวิธีชำระที่ไม่ใช่เงินสด')
+    if (isCashCode(tg.code) !== (collected === 'CASH')) throw new PosError('BAD_INPUT', collected === 'CASH' ? 'บิลนี้รับเงินสด — เลือกวิธีชำระเงินสด (cash) เท่านั้น' : 'บิลนี้ไม่ได้รับเงินสด — เลือกวิธีชำระที่ไม่ใช่เงินสด')
     next.payment = tg.code
   } else {
     throw new PosError('BAD_INPUT', 'unknown field')
@@ -253,7 +332,13 @@ export async function listSyncProblems(db: RemoteDb, actorUserId: string): Promi
   const receipts = new Map((await db.select({ id: s.order.id, receiptNo: s.order.receiptNo }).from(s.order).where(inArray(s.order.id, [...new Set(shown.map(orderIdOf))])).all()).map((o) => [o.id, o.receiptNo]))
   const dto = (r: Row): SyncProblemDto => {
     const e = decodeLastError(r.lastError)
-    return { outboxId: r.id, key: r.idempotencyKey, kind: r.tableName as PushKind, orderId: orderIdOf(r), receiptNo: receipts.get(orderIdOf(r)) ?? null, at: r.createdAt, reason: e.reason, detail: e.detail, remedies: remediesFor(r), children: [] }
+    const remedies = remediesFor(r)
+    // `remap` exactly when REMAP_CODE is offered; the hint of a dead UNKNOWN_CODE row no remap can fix
+    const scope = r.status === 'dead' ? remapScopeDto(r) : { remap: null, remapHint: null }
+    return {
+      outboxId: r.id, key: r.idempotencyKey, kind: r.tableName as PushKind, orderId: orderIdOf(r), receiptNo: receipts.get(orderIdOf(r)) ?? null, at: r.createdAt, reason: e.reason, detail: e.detail, remedies,
+      remap: remedies.includes('REMAP_CODE') ? scope.remap : null, remapHint: scope.remapHint, children: [],
+    }
   }
   const byKey = new Map(shown.map((r) => [r.idempotencyKey, dto(r)]))
   const top: SyncProblemDto[] = []

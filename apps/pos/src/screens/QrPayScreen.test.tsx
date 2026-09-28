@@ -5,7 +5,7 @@ import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { priceCart, type CartDraft, type CartLineDraft } from '@dayo/domain'
 import { PosError } from '../api/errors'
-import type { CommitSaleResult, PosApi, SellCatalogDto, UserDto } from '../api/types'
+import type { PosApi, RecordSaleResult, SellCatalogDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { CartProvider } from '../app/cart-context'
 import { SessionProvider, useSession } from '../app/session'
@@ -65,7 +65,7 @@ describe('QrPayScreen — PRICE_CHANGED refetches the catalog and rebuilds the Q
     const recordSale = vi
       .fn()
       .mockRejectedValueOnce(new PosError('PRICE_CHANGED', 'shown 3500, now 4000'))
-      .mockResolvedValueOnce({ orderId: 'o1', receiptNo: 'A-000001', queueNo: 1, businessDate: '2026-09-28', totalSatang: 4_000, changeSatang: null, method: 'PROMPTPAY' } satisfies CommitSaleResult)
+      .mockResolvedValueOnce({ orderId: 'o1', receiptNo: 'A-000001', queueNo: 1, businessDate: '2026-09-28', totalSatang: 4_000, changeSatang: null, method: 'PROMPTPAY' } satisfies RecordSaleResult)
     mount({ loadSellCatalog, recordSale })
 
     await waitFor(() => expect(screen.getByTestId('qr-total')).toHaveTextContent('35.00'))
@@ -110,7 +110,7 @@ describe('QrPayScreen — review round 2 item 1 (Medium): a clock-crossed promot
       const recordSale = vi
         .fn()
         .mockRejectedValueOnce(new PosError('PRICE_CHANGED', `shown ${beforeTotal}, now ${duringTotal}`))
-        .mockResolvedValueOnce({ orderId: 'o1', receiptNo: 'A-000001', queueNo: 1, businessDate: '2026-09-25', totalSatang: duringTotal, changeSatang: null, method: 'PROMPTPAY' } satisfies CommitSaleResult)
+        .mockResolvedValueOnce({ orderId: 'o1', receiptNo: 'A-000001', queueNo: 1, businessDate: '2026-09-25', totalSatang: duringTotal, changeSatang: null, method: 'PROMPTPAY' } satisfies RecordSaleResult)
       mount({ loadSellCatalog, recordSale }, matchaCart)
 
       await waitFor(() => expect(screen.getByTestId('qr-total')).toHaveTextContent(formatBahtFull(beforeTotal)))

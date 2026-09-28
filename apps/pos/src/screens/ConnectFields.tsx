@@ -45,6 +45,26 @@ export function ConnectFields({
   }, [value])
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+  // SECURITY (fix round 2): guards the camera against a leaked `MediaStream`. A double-tap on the scan button (or
+  // an unmount while `getUserMedia` is still pending) used to leave a live stream nobody ever stopped — the two
+  // refs below close both gaps: `startingRef` stops a second tap from starting a second stream while the first is
+  // still being requested, and `unmountedRef` lets `startScan` notice the component is gone by the time the browser
+  // finally hands back a stream, so that stream is stopped immediately instead of being stored and forgotten.
+  const startingRef = useRef(false)
+  const unmountedRef = useRef(false)
+
+  useEffect(() => {
+    // security review (fix round 2, item 1): reset on every mount, not just the initial one — under
+    // <StrictMode> (main.tsx) React mounts, cleans up, then mounts again in dev; without this reset the first
+    // cleanup would leave `unmountedRef.current` true forever, so `startScan` would stop every future camera
+    // stream the instant it opened, and "setup-scan-video" would never show.
+    unmountedRef.current = false
+    return () => {
+      unmountedRef.current = true
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+  }, [])
 
   const probe = useMutation({
     mutationFn: () => api.probeDayo({ baseUrl: value.baseUrl, apiKey: value.apiKey }),
@@ -55,13 +75,23 @@ export function ConnectFields({
   // once React has committed the `<video>` element `scanning` reveals (quality review: reading `videoRef.current`
   // right here, before that commit, is why the scan could never succeed before this fix).
   const startScan = async (): Promise<void> => {
+    if (startingRef.current || scanning) return
+    startingRef.current = true
     setScanError(null)
+    let stream: MediaStream
     try {
-      streamRef.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
     } catch {
+      startingRef.current = false
       setScanError(TH.scanCameraDenied)
       return
     }
+    startingRef.current = false
+    if (unmountedRef.current) {
+      stream.getTracks().forEach((t) => t.stop())
+      return
+    }
+    streamRef.current = stream
     setScanning(true)
   }
 
@@ -70,6 +100,10 @@ export function ConnectFields({
     const stream = streamRef.current
     const video = videoRef.current
     if (stream === null || video === null) {
+      // security review (fix round 2, item 3, pre-existing): a stream can exist here with no video element yet
+      // (e.g. this effect firing before commit) — it must be stopped too, not just abandoned in the ref.
+      stream?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
       setScanning(false)
       return
     }
@@ -132,7 +166,7 @@ export function ConnectFields({
         />
       </label>
       {qrScanSupported() && (
-        <button type="button" data-testid="setup-scan" onClick={() => void startScan()} disabled={scanning}>
+        <button type="button" data-testid="setup-scan" onClick={() => void startScan()} disabled={scanning || startingRef.current}>
           {TH.setupScan}
         </button>
       )}

@@ -8,15 +8,22 @@ import { pushOnce } from '../src/sync/push'
 import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
 import { openConnectedApi, STAFF } from './helpers/dayo'
 import { sellCode } from './helpers/db'
+import { createTestLocks } from './helpers/locks'
 
 afterEach(() => { vi.useRealTimers() })
+/**
+ * Follow-up item 4: every scheduler here gets its own Web Locks stand-in — never the host's navigator.locks (Node 24
+ * has one, Node 22 none; a hung request of one test held 'dayo-push' there for every later test of the file). A test
+ * that passes its own `locks` keeps it; the default lookup itself is tested at the end of the file.
+ */
+const scheduler: typeof createSyncScheduler = (ctx) => createSyncScheduler({ locks: createTestLocks(), ...ctx })
 const pushes = (t: Awaited<ReturnType<typeof openConnectedApi>>) => t.mock.requests().filter((r) => r.path === '/api/v1/pos/push').length
 
 describe('sync scheduler (spec 04 §6.2)', () => {
   it('a save wakes the sender 2 seconds later, several saves wake it once', async () => {
     const t = await openConnectedApi()
     vi.useFakeTimers()
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' }); sch.kick('write')
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' }); sch.kick('write')
     await vi.advanceTimersByTimeAsync(1_999)
@@ -29,7 +36,7 @@ describe('sync scheduler (spec 04 §6.2)', () => {
     vi.useFakeTimers()
     const catalogCalls = () => t.mock.requests().filter((r) => r.path === '/api/v1/pos/catalog').length
     const base = catalogCalls() // connectShop's own call
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
     sch.start()
     await vi.waitFor(() => expect(catalogCalls()).toBe(base + 1)) // 'open'
     for (let minute = 1; minute <= 4; minute++) { t.clock.advanceMs(60_000); await vi.advanceTimersByTimeAsync(60_000) }
@@ -51,7 +58,7 @@ describe('sync scheduler (spec 04 §6.2)', () => {
     }
     expect(await readKey(t.db, DAYO_KEYS.pushFailStreak)).toBe('4')
     expect(Date.parse((await readKey(t.db, DAYO_KEYS.pushBackoffUntil))!) - Date.parse(t.clock.now())).toBeGreaterThanOrEqual(240_000)
-    const sch = createSyncScheduler(ctx)
+    const sch = scheduler(ctx)
     online = true
     sch.kick('online')
     await vi.waitFor(() => expect(t.mock.orders()).toHaveLength(5))
@@ -61,7 +68,7 @@ describe('sync scheduler (spec 04 §6.2)', () => {
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     t.mock.setMode('server_down')
     // fix round 1 item 5: the 30 s window runs on a monotonic clock; here it moves with the test clock
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
     await pushOnce({ db: t.db, deps: t.deps, serial: (fn) => fn() })
     expect(pushes(t)).toBe(1)                // 5xx → a failure backoff to clear
     await sch.runNow()
@@ -75,7 +82,7 @@ describe('sync scheduler (spec 04 §6.2)', () => {
   })
   it('online wakes it at once; a second wake during a cycle runs one more cycle, never two in parallel', async () => {
     const t = await openConnectedApi()
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     const a = sch.runNow()
     const b = sch.runNow()
@@ -86,7 +93,7 @@ describe('sync scheduler (spec 04 §6.2)', () => {
   it('skips the cycle when another tab holds the dayo-push lock', async () => {
     const t = await openConnectedApi()
     const locks = { request: async (_n: string, _o: { ifAvailable: true }, cb: (lock: unknown) => Promise<void>) => cb(null) } // null = not available
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), locks })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), locks })
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     await sch.runNow()
     expect(pushes(t)).toBe(0)
@@ -132,7 +139,7 @@ describe('sync scheduler — one call at a time, paced under dayo\'s 60 requests
         calls.push({ path: new URL(String(input)).pathname, start, end: Date.now() })
       }
     }
-    const sch = createSyncScheduler({ db: t.db, deps: { ...t.deps, fetch: slow }, serial: (fn) => fn() })
+    const sch = scheduler({ db: t.db, deps: { ...t.deps, fetch: slow }, serial: (fn) => fn() })
     sch.kick('online')                                                // cycle 1: the catalog is not due — one push
     await vi.advanceTimersByTimeAsync(1_000)
     sch.kick('online'); void sch.runNow(); sch.kick('before_shift')   // three wakes while cycle 1 is on the wire
@@ -152,7 +159,7 @@ describe('sync scheduler — one call at a time, paced under dayo\'s 60 requests
     vi.useFakeTimers()
     const at: number[] = []
     const counted: typeof fetch = async (input, init) => { at.push(Date.now()); return t.mock.fetch(input, init) }
-    const sch = createSyncScheduler({ db: t.db, deps: { ...t.deps, fetch: counted }, serial: (fn) => fn() })
+    const sch = scheduler({ db: t.db, deps: { ...t.deps, fetch: counted }, serial: (fn) => fn() })
     sch.start()
     for (let sec = 0; sec < 240; sec++) {                            // woken every second, pressed every second
       sch.kick('online'); sch.kick('write'); void sch.runNow().catch(() => undefined)
@@ -169,7 +176,7 @@ describe('sync scheduler — one call at a time, paced under dayo\'s 60 requests
     const t = await openConnectedApi()
     let release!: () => void
     const gate = new Promise<void>((r) => { release = r })
-    const api = createPosApi(t.db, { ...t.deps, exportDbFile: async () => { await gate; return t.deps.exportDbFile() } })
+    const api = createPosApi(t.db, { ...t.deps, exportDbFile: async () => { await gate; return t.deps.exportDbFile() } }, { locks: createTestLocks() })
     t.mock.bumpCatalog()
     const version = async () => (await t.db.select({ v: s.dayoCatalog.catalogVersion }).from(s.dayoCatalog).get())?.v
     const before = await version()
@@ -199,7 +206,7 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     t.mock.setMode('server_down')
     t.clock.advanceMs(180_000) // the last GOOD pull (connectShop) is 3 minutes old when the app opens
     const base = catalogCalls(t)
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
     sch.start()
     await vi.waitFor(() => expect(catalogCalls(t)).toBe(base + 1)) // 'open' — 500
     for (let minute = 1; minute <= 4; minute++) { t.clock.advanceMs(60_000); await vi.advanceTimersByTimeAsync(60_000) }
@@ -212,7 +219,7 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     const t = await openConnectedApi()
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     t.mock.setMode('rate_limited') // Retry-After: 30
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
     await sch.runNow()
     const n = t.mock.requests().length // E1 answered 429: the push waits too
     expect(pushes(t)).toBe(0)
@@ -226,7 +233,7 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
   it('"online" forgets only a backoff that a lost network caused, never a 5xx one (item 4)', async () => {
     const t = await openConnectedApi()
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
     await failureBackoff(t, 'failure')
     sch.kick('online')
     await new Promise((r) => setTimeout(r, 100))
@@ -240,11 +247,11 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     t.mock.setMode('server_down')
     await failureBackoff(t, 'failure')
-    await createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() }).runNow() // clears, tries, fails
+    await scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() }).runNow() // clears, tries, fails
     t.mock.setMode('normal')
     await failureBackoff(t, 'failure')
     t.clock.advanceMs(1_000)
-    const reloaded = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    const reloaded = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
     await reloaded.runNow()
     expect(pushes(t)).toBe(1) // the new page may not clear again within 30 s
     t.clock.advanceMs(MANUAL_CLEAR_GAP_MS)
@@ -255,7 +262,7 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     const t = await openConnectedApi()
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     let mono = 0
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => mono })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => mono })
     t.mock.setMode('server_down')
     await failureBackoff(t, 'failure')
     await sch.runNow() // clears, tries, fails
@@ -272,7 +279,7 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     const t = await openConnectedApi()
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     t.mock.setMode('server_down')
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
     await sch.runNow() // no backoff yet: nothing cleared, tried, 5xx
     expect(pushes(t)).toBe(1)
     t.clock.advanceMs(1_000)
@@ -291,12 +298,12 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
       await t.db.insert(s.outbox).values({ id, tableName: 'order', rowJson: { ...(from.rowJson as Record<string, unknown>), pos_order_id: id, receipt_no: `H-${String(i).padStart(6, '0')}`, queue_no: 2000 + i }, idempotencyKey: `order:${id}`, status: 'pending', createdAt: t.clock.now(), attempts: 0, lastError: null, sentAt: null, deadAt: null, nextAttemptAt: null, parentKey: null, resultJson: null })
     }
     vi.useFakeTimers()
-    const first = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    const first = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
     await first.runNow()
     await first.runNow() // 32 requests in this minute
     first.stop()
     const n = t.mock.requests().length
-    const reloaded = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    const reloaded = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
     const run = reloaded.runNow()
     await vi.advanceTimersByTimeAsync(50_000)
     expect(t.mock.requests().length).toBe(n) // still inside the old page's minute
@@ -309,7 +316,7 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     vi.useFakeTimers()
     const slow: typeof fetch = async (input, init) => { await new Promise((r) => setTimeout(r, 3_000)); return t.mock.fetch(input, init) }
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
-    const sch = createSyncScheduler({ db: t.db, deps: { ...t.deps, fetch: slow }, serial: (fn) => fn() })
+    const sch = scheduler({ db: t.db, deps: { ...t.deps, fetch: slow }, serial: (fn) => fn() })
     sch.kick('online') // the catalog is not due: this cycle only pushes
     await vi.advanceTimersByTimeAsync(1_000)
     const pressed = sch.runNow()
@@ -367,7 +374,7 @@ describe('sync scheduler — the real timers (hotfix: "TypeError: Illegal invoca
       brandTheGlobalTimers()
       const catalogCalls = () => t.mock.requests().filter((r) => r.path === '/api/v1/pos/catalog').length
       const base = catalogCalls()
-      const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() }) // no timers: the default branch
+      const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() }) // no timers: the default branch
       expect(() => sch.start()).not.toThrow()
       await vi.waitFor(() => expect(catalogCalls()).toBe(base + 1)) // the 'open' cycle ran
       await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
@@ -391,7 +398,7 @@ describe('sync scheduler — onCycleDone, the "a cycle ran" signal to the screen
     const seen: number[] = []
     const pendingRows = async () => (await t.db.select({ id: s.outbox.id }).from(s.outbox).where(eq(s.outbox.status, 'pending')).all()).length
     let pendingAtSignal = -1
-    const sch = createSyncScheduler({
+    const sch = scheduler({
       db: t.db, deps: t.deps, serial: (fn) => fn(),
       onCycleDone: () => { seen.push(t.mock.orders().length); void pendingRows().then((n) => { pendingAtSignal = n }) },
     })
@@ -404,7 +411,7 @@ describe('sync scheduler — onCycleDone, the "a cycle ran" signal to the screen
     const t = await openConnectedApi()
     vi.useFakeTimers()
     let calls = 0
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), onCycleDone: () => { calls += 1 } })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), onCycleDone: () => { calls += 1 } })
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     const a = sch.runNow()
     const b = sch.runNow() // rides on the follow-up
@@ -419,7 +426,7 @@ describe('sync scheduler — onCycleDone, the "a cycle ran" signal to the screen
     const t = await openConnectedApi()
     const locks = { request: async (_n: string, _o: { ifAvailable: true }, cb: (lock: unknown) => Promise<void>) => cb(null) }
     let calls = 0
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), locks, onCycleDone: () => { calls += 1 } })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), locks, onCycleDone: () => { calls += 1 } })
     await sch.runNow()
     expect(calls).toBe(1)
   })
@@ -428,7 +435,7 @@ describe('sync scheduler — onCycleDone, the "a cycle ran" signal to the screen
     vi.useFakeTimers()
     const pacer: DayoPacer = { wrap: (f) => f, used: () => SYNC_BUDGET_PER_MIN, waitFor: () => 10_000, snapshot: () => [], seed: () => undefined }
     let calls = 0
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), pacer, onCycleDone: () => { calls += 1 } })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), pacer, onCycleDone: () => { calls += 1 } })
     const run = sch.runNow()
     await vi.advanceTimersByTimeAsync(1_000) // still waiting on the budget
     sch.stop()
@@ -438,14 +445,77 @@ describe('sync scheduler — onCycleDone, the "a cycle ran" signal to the screen
   it('a throwing signal never fails the cycle', async () => {
     const t = await openConnectedApi()
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), onCycleDone: () => { throw new Error('channel gone') } })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), onCycleDone: () => { throw new Error('channel gone') } })
     await expect(sch.runNow()).resolves.toMatchObject({ push: { sent: 1 } })
   })
   it('the PosApi passes its onCycleDone option to its scheduler (worker.ts gives notifySyncCycleDone)', async () => {
     const t = await openConnectedApi()
     let calls = 0
-    const api = createPosApi(t.db, t.deps, { onCycleDone: () => { calls += 1 } })
+    const api = createPosApi(t.db, t.deps, { locks: createTestLocks(), onCycleDone: () => { calls += 1 } })
     await api.syncNow()
     expect(calls).toBe(1)
+  })
+})
+
+describe('sync scheduler — the Web Locks it uses without ctx.locks (follow-up item 4: tests never lean on the host\'s)', () => {
+  /**
+   * A browser's LockManager.request is a WebIDL operation: called with any receiver other than the LockManager itself
+   * (a destructured `request`, a copy on another object) it throws "TypeError: Illegal invocation". Node does not check
+   * it — this stand-in does, like brandedFetch / the branded timers.
+   */
+  function brandedLockManager(inner: ReturnType<typeof createTestLocks>, asked: string[] = []) {
+    const manager = {
+      request(this: unknown, name: string, o: { ifAvailable: true }, cb: (lock: unknown) => Promise<void>): Promise<void> {
+        if (this !== manager) throw new TypeError('Illegal invocation')
+        asked.push(name)
+        return inner.request(name, o, cb)
+      },
+    }
+    return manager
+  }
+  it('the LockManager stand-in checks its receiver like the browser: a request detached from it throws', () => {
+    const manager = brandedLockManager(createTestLocks())
+    const { request } = manager
+    expect(() => request('dayo-push', { ifAvailable: true }, async () => undefined)).toThrow(new TypeError('Illegal invocation'))
+    const copy = { request: manager.request }
+    expect(() => copy.request('dayo-push', { ifAvailable: true }, async () => undefined)).toThrow(new TypeError('Illegal invocation'))
+  })
+  it('takes navigator.locks when the host has it (a browser; Node 24): the cycle runs inside the \'dayo-push\' lock', async () => {
+    const t = await openConnectedApi()
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const locks = createTestLocks()
+    const asked: string[] = []
+    let heldDuringPush: string[] = []
+    const fetchSeen: typeof fetch = async (input, init) => { if (String(input).endsWith('/pos/push')) heldDuringPush = locks.held(); return t.mock.fetch(input, init) }
+    vi.stubGlobal('navigator', { locks: brandedLockManager(locks, asked) })
+    try {
+      const sch = createSyncScheduler({ db: t.db, deps: { ...t.deps, fetch: fetchSeen }, serial: (fn) => fn() }) // no ctx.locks
+      await sch.runNow()
+      expect(asked).toEqual(['dayo-push'])
+      expect(heldDuringPush).toEqual(['dayo-push'])
+      expect(pushes(t)).toBe(1)
+      expect(locks.held()).toEqual([]) // released after the cycle
+    } finally { vi.unstubAllGlobals() }
+  })
+  it('runs unlocked when the host has no navigator.locks (Node 22; an old browser)', async () => {
+    const t = await openConnectedApi()
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    vi.stubGlobal('navigator', {})
+    try {
+      await createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() }).runNow()
+      expect(pushes(t)).toBe(1)
+    } finally { vi.unstubAllGlobals() }
+  })
+  it('the stand-in answers like the browser\'s ifAvailable: a name already held gets null at once, and is free again after', async () => {
+    const locks = createTestLocks()
+    let release!: () => void
+    const first = locks.request('dayo-push', { ifAvailable: true }, () => new Promise<void>((r) => { release = r }))
+    const seen: unknown[] = []
+    await locks.request('dayo-push', { ifAvailable: true }, async (lock) => { seen.push(lock) })
+    release()
+    await first
+    await locks.request('dayo-push', { ifAvailable: true }, async (lock) => { seen.push(lock) })
+    expect(seen[0]).toBeNull()
+    expect(seen[1]).not.toBeNull()
   })
 })

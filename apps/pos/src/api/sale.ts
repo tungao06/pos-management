@@ -11,7 +11,7 @@ import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { getSetting, PROMPTPAY_SETTING_KEY } from './setup'
-import { PAYMENT_CODE, REASON_MAX_LENGTH, type CommitSaleResult, type DeviceDto, type RecordSaleInput } from './types'
+import { PAYMENT_CODE, REASON_MAX_LENGTH, type DeviceDto, type RecordSaleInput, type RecordSaleResult } from './types'
 
 export { PAYMENT_CODE }
 
@@ -59,7 +59,7 @@ function cartSignature(c: CartDraft): string {
  * on the satang cart stored at payment (pricing_json.cart). A resend that differs is refused, never answered with the
  * first bill.
  */
-async function existingCentralResult(db: RemoteDb, orderId: string, cart: CartDraft): Promise<CommitSaleResult | null> {
+async function existingCentralResult(db: RemoteDb, orderId: string, cart: CartDraft): Promise<RecordSaleResult | null> {
   const o = await db.select().from(s.order).where(eq(s.order.id, orderId)).get()
   if (!o) return null
   const pay = await db.select().from(s.payment).where(eq(s.payment.orderId, o.id)).get()
@@ -91,7 +91,7 @@ function checkReason(text: string | null, what: string): void {
  * not see (PRICE_CHANGED), then write order + order_item + payment (+ discount) + hash-chained events + ONE E2 row in
  * one transaction. No stock rows (D60). shift_id stays local; the E2 row sends null (block 2). Never calls dayo.
  */
-export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleInput): Promise<CommitSaleResult> {
+export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleInput): Promise<RecordSaleResult> {
   const cart = normalizeCart(input)
   const done = await existingCentralResult(db, input.orderId, cart)
   if (done !== null) return done

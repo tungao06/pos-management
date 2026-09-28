@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { useState, type JSX } from 'react'
+import { StrictMode, useState, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DayoProbe, PosApi } from '../api/types'
 import { ApiProvider } from '../app/api-context'
@@ -113,6 +113,104 @@ describe('ConnectFields — QR scan (quality review, fix round 1)', () => {
     const key = 'dayo_scanned_after_edit_0123456789abcdef0123456789abcdef012345'
     resolve([{ rawValue: key }])
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ baseUrl: 'https://edited-mid-scan.example/api/v1', apiKey: key }))
+  })
+
+  // SECURITY (fix round 2): a double-tap on the scan button used to fire `getUserMedia` twice, and the second
+  // stream silently replaced `streamRef.current` — leaking the first stream forever, with nothing ever calling
+  // `stop()` on it.
+  it('a double-tap on the scan button only ever starts one camera stream', async () => {
+    ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {}
+    let resolveGetUserMedia!: (stream: MediaStream) => void
+    const getUserMedia = vi.fn(() => new Promise<MediaStream>((r) => { resolveGetUserMedia = r }))
+    vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia } })
+    HTMLMediaElement.prototype.play = vi.fn(async () => undefined)
+    mount()
+
+    fireEvent.click(screen.getByTestId('setup-scan'))
+    fireEvent.click(screen.getByTestId('setup-scan')) // the double-tap
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(1))
+
+    const track = { stop: vi.fn() }
+    resolveGetUserMedia({ getTracks: () => [track] } as unknown as MediaStream)
+    await screen.findByTestId('setup-scan-video')
+  })
+
+  // SECURITY (fix round 2): unmounting while `getUserMedia` is still pending used to leave the camera on forever —
+  // by the time the browser handed back a stream, nothing in the (now-gone) component ever called `stop()` on it.
+  it('stops the camera stream if the component unmounts while the camera is still starting', async () => {
+    ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {}
+    let resolveGetUserMedia!: (stream: MediaStream) => void
+    const getUserMedia = vi.fn(() => new Promise<MediaStream>((r) => { resolveGetUserMedia = r }))
+    vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia } })
+    const api = {} as unknown as PosApi
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ApiProvider api={api}>
+          <Controlled onChange={() => undefined} />
+        </ApiProvider>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByTestId('setup-scan'))
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalled())
+    unmount()
+
+    const track = { stop: vi.fn() }
+    resolveGetUserMedia({ getTracks: () => [track] } as unknown as MediaStream)
+    await waitFor(() => expect(track.stop).toHaveBeenCalled())
+  })
+
+  // SECURITY (fix round 2, review item 1): main.tsx renders under <StrictMode>, which mounts every component
+  // twice in dev (mount → cleanup → mount) precisely to catch an effect that does not clean up idempotently.
+  // `unmountedRef` used to only ever get set to `true` and never reset, so the very first StrictMode
+  // mount/cleanup cycle left it stuck `true` — every real tap on "สแกน" after that would immediately stop the
+  // camera it had just opened and never show the preview.
+  it('still shows the camera preview after a tap, even mounted under <StrictMode>', async () => {
+    ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {}
+    stubCamera()
+    const api = {} as unknown as PosApi
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <ApiProvider api={api}>
+            <Controlled onChange={() => undefined} />
+          </ApiProvider>
+        </QueryClientProvider>
+      </StrictMode>,
+    )
+
+    fireEvent.click(screen.getByTestId('setup-scan'))
+    await screen.findByTestId('setup-scan-video')
+  })
+
+  // Under <StrictMode> the camera must stay on while detection keeps retrying — a superseded run of the scan
+  // loop must never stop the stream the live run is still reading from.
+  it('keeps the camera on while detection retries under <StrictMode>', async () => {
+    ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {
+      async detect(): Promise<{ rawValue: string }[]> {
+        return []
+      }
+    }
+    const { track } = stubCamera()
+    const api = {} as unknown as PosApi
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <ApiProvider api={api}>
+            <Controlled onChange={() => undefined} />
+          </ApiProvider>
+        </QueryClientProvider>
+      </StrictMode>,
+    )
+
+    fireEvent.click(screen.getByTestId('setup-scan'))
+    await screen.findByTestId('setup-scan-video')
+    await new Promise((r) => setTimeout(r, 700)) // several 200 ms retry rounds
+    expect(track.stop).not.toHaveBeenCalled()
+    expect(screen.getByTestId('setup-scan-video')).toBeTruthy()
   })
 
   it('shows a Thai message, not the raw browser text, when the camera is denied', async () => {

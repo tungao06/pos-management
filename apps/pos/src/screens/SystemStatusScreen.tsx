@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useEffect, useState, type JSX } from 'react'
 import type { ApiState } from '../sync/state'
 import type { DayoProbe } from '../api/types'
+import { PIN_RE } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
@@ -79,6 +80,9 @@ export function SystemStatusScreen(): JSX.Element {
   const submitReplace = (): void => {
     if (probed === null) return
     if (approverId === null) return setReplaceError(TH.errNotOwner)
+    // SECURITY (fix round 2, parked Low): a blank/malformed PIN must never reach the API — every attempt that does
+    // burns one of the login-lockout attempts (same PIN_RE rule OwnerApprovalDialog already applies).
+    if (!PIN_RE.test(pin)) return setReplaceError(TH.errPinFormat)
     setReplaceError(null)
     replace.mutate()
   }

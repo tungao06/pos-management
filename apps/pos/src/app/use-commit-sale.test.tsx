@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { JSX, ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import type { CommitSaleResult, PosApi } from '../api/types'
+import type { PosApi, RecordSaleResult } from '../api/types'
 import { testSellCatalog } from '../test-utils/sell-catalog'
 import { ApiProvider } from './api-context'
 import { CartProvider } from './cart-context'
@@ -16,7 +16,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => ({
   useNavigate: () => vi.fn(),
 }))
 
-const RESULT: CommitSaleResult = { orderId: 'o1', receiptNo: 'A-000001', queueNo: 1, businessDate: '2026-09-25', totalSatang: 7_500, changeSatang: null, method: 'PROMPTPAY' }
+const RESULT: RecordSaleResult = { orderId: 'o1', receiptNo: 'A-000001', queueNo: 1, businessDate: '2026-09-25', totalSatang: 7_500, changeSatang: null, method: 'PROMPTPAY' }
 
 function withApi(overrides: Partial<PosApi>, queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   const api = { loadSellCatalog: async () => testSellCatalog(), ...overrides } as unknown as PosApi
@@ -53,7 +53,7 @@ describe('useCommitSale — PRICE_CHANGED (D50 Q3-27)', () => {
 
 describe('useCommitSale — review m-2 (carried): the shift-report cache must be invalidated after a recorded sale', () => {
   it('invalidates shiftReportKey and stockKey on success', async () => {
-    const recordSale = vi.fn(async (): Promise<CommitSaleResult> => RESULT)
+    const recordSale = vi.fn(async (): Promise<RecordSaleResult> => RESULT)
     const { wrapper, queryClient } = withApi({ recordSale })
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
     const { result } = renderHook(() => useCommitSale(), { wrapper })

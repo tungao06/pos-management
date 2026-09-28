@@ -81,7 +81,9 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
   const deps: ApiDeps = {
     get now() { return baseDeps.now }, get newId() { return baseDeps.newId }, get pinCost() { return baseDeps.pinCost },
     get exportDbFile() { return baseDeps.exportDbFile }, get secrets() { return baseDeps.secrets }, get random() { return baseDeps.random },
-    fetch: pacer.wrap((input, init) => baseDeps.fetch(input, init)),
+    // read at call time, then called as a plain function — `baseDeps.fetch(...)` would make baseDeps the receiver of a
+    // native fetch: "TypeError: Illegal invocation" in a browser (follow-up item 5)
+    fetch: pacer.wrap((input, init) => { const f = baseDeps.fetch; return f(input, init) }),
     afterWrite: () => { baseDeps.afterWrite?.(); if (auto) scheduler?.kick('write') },
   }
   const sch = createSyncScheduler({ db, deps, serial, pacer, ...(opts.timers === undefined ? {} : { timers: opts.timers }), ...(opts.locks === undefined ? {} : { locks: opts.locks }), ...(opts.onCycleDone === undefined ? {} : { onCycleDone: opts.onCycleDone }) })
