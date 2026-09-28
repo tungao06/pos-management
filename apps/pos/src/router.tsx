@@ -16,15 +16,20 @@ import { QrPayScreen } from './screens/QrPayScreen'
 import { SellScreen } from './screens/SellScreen'
 import { SetupScreen } from './screens/SetupScreen'
 import { ShiftScreen } from './screens/ShiftScreen'
+import { StatusBanners } from './screens/StatusBanners'
+import { SyncProblemsScreen } from './screens/SyncProblemsScreen'
+import { SystemStatusScreen } from './screens/SystemStatusScreen'
 import { ZListScreen } from './screens/ZListScreen'
 import { ZReportScreen } from './screens/ZReportScreen'
 import { BrandBar } from './ui/BrandBar'
 
-// Root layout: the brand bar (D44) above every screen.
+// Root layout: the brand bar (D44), then every warning of spec §4.4 ข้อ 9 / §6.3 / §6.4 / §6.7 / §10.5 (Task 20,
+// D80) on every screen after login, above whatever the route itself renders.
 const rootRoute = createRootRoute({
   component: () => (
     <>
       <BrandBar />
+      <StatusBanners />
       <Outlet />
     </>
   ),
@@ -121,6 +126,26 @@ const priceDiffsRoute = createRoute({
   ),
 })
 
+// Task 20: /status (every role) and /sync-problems (owner only — the screen itself redirects to /sell otherwise).
+const statusRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/status',
+  component: () => (
+    <RequireSession>
+      <SystemStatusScreen />
+    </RequireSession>
+  ),
+})
+const syncProblemsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sync-problems',
+  component: () => (
+    <RequireSession>
+      <SyncProblemsScreen />
+    </RequireSession>
+  ),
+})
+
 // แผน 3b: X report / close shift / Z / backup
 const backupRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -183,6 +208,8 @@ export const routeTree = rootRoute.addChildren([
   orderDetailRoute,
   centralOrdersRoute,
   priceDiffsRoute,
+  statusRoute,
+  syncProblemsRoute,
   backupRoute,
   zListRoute,
   zReportRoute,
