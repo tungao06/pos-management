@@ -263,8 +263,8 @@ export function CountScreen(): JSX.Element {
   return (
     <main className="page">
       <div className="actions">
-        {/* Task 16 removed the /stock route from the routeTree; this link is unreachable until a later task restores it */}
-        <button type="button" data-testid="nav-stock" onClick={() => void navigate({ to: '/stock' as any })}>
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
+        <button type="button" data-testid="nav-stock" onClick={() => void navigate({ to: '/stock' })}>
           {TH.back}
         </button>
       </div>

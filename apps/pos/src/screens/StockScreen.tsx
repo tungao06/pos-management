@@ -67,17 +67,20 @@ export function StockScreen(): JSX.Element {
         <button type="button" data-testid="nav-sell" onClick={() => void navigate({ to: '/sell' })}>
           {TH.back}
         </button>
-        {/* Task 16 removed the /stock* routes from the routeTree; these links are unreachable until a later task restores them */}
-        <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' as any })}>
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
+        <button type="button" data-testid="nav-receive" onClick={() => void navigate({ to: '/stock/receive' })}>
           {TH.navReceive}
         </button>
-        <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' as any })}>
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
+        <button type="button" data-testid="nav-produce" onClick={() => void navigate({ to: '/stock/produce' })}>
           {TH.navProduce}
         </button>
-        <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' as any })}>
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
+        <button type="button" data-testid="nav-count" onClick={() => void navigate({ to: '/stock/count' })}>
           {o.openCountId === null ? TH.navCount : TH.navCountResume}
         </button>
-        <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' as any })}>
+        {/* @ts-expect-error D60: the /stock* routes are hidden — this fails to compile once they return */}
+        <button type="button" data-testid="nav-adjust" onClick={() => void navigate({ to: '/stock/adjust' })}>
           {TH.navAdjust}
         </button>
       </div>
