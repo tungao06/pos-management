@@ -329,3 +329,57 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     expect(t.mock.requests().length).toBe(n + SETUP_CALLS_PER_MIN - 1)
   })
 })
+
+describe('sync scheduler — the real timers (hotfix: "TypeError: Illegal invocation" on every app start)', () => {
+  /**
+   * A browser's setTimeout / setInterval / clearTimeout / clearInterval are WebIDL operations of Window /
+   * WorkerGlobalScope: called with any receiver other than the global object (or undefined → the global object) they
+   * throw "TypeError: Illegal invocation". Node and jsdom do not check this, so the check is put back in here, around
+   * the (fake) global timers — the same rule the browser applies.
+   */
+  function branded<F extends (...args: never[]) => unknown>(real: F): F {
+    return function (this: unknown, ...args: Parameters<F>) {
+      if (this !== undefined && this !== null && this !== globalThis) throw new TypeError('Illegal invocation')
+      return real.apply(globalThis, args)
+    } as unknown as F
+  }
+  function brandTheGlobalTimers(): void {
+    vi.stubGlobal('setTimeout', branded(globalThis.setTimeout))
+    vi.stubGlobal('clearTimeout', branded(globalThis.clearTimeout))
+    vi.stubGlobal('setInterval', branded(globalThis.setInterval))
+    vi.stubGlobal('clearInterval', branded(globalThis.clearInterval))
+  }
+
+  it('the brand check behaves like the browser: a timer held on a plain object and called as its method throws', () => {
+    vi.useFakeTimers()
+    try {
+      brandTheGlobalTimers()
+      const held = { setInterval: globalThis.setInterval }
+      expect(() => held.setInterval(() => undefined, 1_000)).toThrow(new TypeError('Illegal invocation'))
+      const id = setInterval(() => undefined, 1_000) // a plain call: fine
+      clearInterval(id)
+    } finally { vi.unstubAllGlobals() }
+  })
+  it('without ctx.timers (as worker.ts runs it): start() does not throw, the minute tick and the write debounce fire, stop() clears them', async () => {
+    const t = await openConnectedApi()
+    vi.useFakeTimers()
+    try {
+      brandTheGlobalTimers()
+      const catalogCalls = () => t.mock.requests().filter((r) => r.path === '/api/v1/pos/catalog').length
+      const base = catalogCalls()
+      const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() }) // no timers: the default branch
+      expect(() => sch.start()).not.toThrow()
+      await vi.waitFor(() => expect(catalogCalls()).toBe(base + 1)) // the 'open' cycle ran
+      await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+      expect(pushes(t)).toBe(0)
+      t.clock.advanceMs(60_000); await vi.advanceTimersByTimeAsync(60_000) // setInterval's tick: a bill is waiting
+      await vi.waitFor(() => expect(pushes(t)).toBe(1))
+      await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+      expect(() => { sch.kick('write'); sch.kick('write') }).not.toThrow() // setTimeout + clearTimeout
+      await vi.advanceTimersByTimeAsync(2_000)
+      await vi.waitFor(() => expect(pushes(t)).toBe(2))
+      expect(() => sch.stop()).not.toThrow() // clearInterval
+      expect(t.mock.orders()).toHaveLength(2)
+    } finally { vi.unstubAllGlobals() }
+  })
+})

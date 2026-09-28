@@ -38,7 +38,26 @@ const PULL_FIRST: ReadonlySet<WakeReason> = new Set(['open', 'manual', 'before_s
 /** These wakes mean "the user is waiting": they may clear a 5xx / timeout / network backoff — at most once per 30 s (N4). */
 const CLEARS_WITH_N4: ReadonlySet<WakeReason> = new Set(['manual', 'open', 'before_close'])
 
-type Timers = { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout; setInterval: typeof setInterval; clearInterval: typeof clearInterval }
+type TimeoutId = ReturnType<typeof setTimeout>
+type IntervalId = ReturnType<typeof setInterval>
+type Timers = {
+  setTimeout(cb: () => void, ms: number): TimeoutId
+  clearTimeout(id: TimeoutId): void
+  setInterval(cb: () => void, ms: number): IntervalId
+  clearInterval(id: IntervalId): void
+}
+/**
+ * The real timers. Each one is CALLED as a plain function, never as a method of this object: a browser's setTimeout /
+ * setInterval are WebIDL operations of Window / WorkerGlobalScope, and `timers.setInterval(...)` on an object holding the
+ * bare function makes that object the receiver — "TypeError: Illegal invocation" on every app start. (Node and jsdom
+ * do not check the receiver, which is why only a real browser showed it.) The globals are also looked up at call time.
+ */
+const globalTimers: Timers = {
+  setTimeout: (cb, ms) => setTimeout(cb, ms),
+  clearTimeout: (id) => clearTimeout(id),
+  setInterval: (cb, ms) => setInterval(cb, ms),
+  clearInterval: (id) => clearInterval(id),
+}
 type Locks = { request(name: string, opts: { ifAvailable: true }, cb: (lock: unknown) => Promise<void>): Promise<void> }
 const monotonic = (): number => performance.now()
 
@@ -98,7 +117,7 @@ const EMPTY: SyncCycleResult = { catalog: null, push: NO_PUSH }
  * without it the scheduler counts its own requests only. `monoMs`: a test seam for the monotonic clock.
  */
 export function createSyncScheduler(ctx: SyncContext & { timers?: Timers; locks?: Locks | undefined; pacer?: DayoPacer; monoMs?: () => number }): Scheduler {
-  const timers: Timers = ctx.timers ?? { setTimeout, clearTimeout, setInterval, clearInterval }
+  const timers: Timers = ctx.timers ?? globalTimers
   const locks: Locks | undefined = ctx.locks ?? (globalThis.navigator as { locks?: Locks } | undefined)?.locks
   const monoMs = ctx.monoMs ?? monotonic
   const wallMs = (): number => Date.parse(ctx.deps.now())
