@@ -13,8 +13,13 @@ export const stockKey = ['stock'] as const
 export const stockCountKey = ['stock-count'] as const
 export const centralOrdersKey = ['central-orders'] as const
 export const priceDiffsKey = (actorUserId: string) => ['price-diffs', actorUserId] as const
+export const syncProblemsKey = (actorUserId: string) => ['sync-problems', actorUserId] as const
+
+/** Task 20: every screen's `StatusBanners` reads `sync` off this — refetched every 30 s so a key revoked or a
+ * problem raised on another tab of the same tablet shows up here without a manual reload. */
+export const BOOTSTRAP_REFETCH_MS = 30_000
 
 export function useBootstrap() {
   const api = useApi()
-  return useQuery({ queryKey: bootstrapKey, queryFn: () => api.bootstrap() })
+  return useQuery({ queryKey: bootstrapKey, queryFn: () => api.bootstrap(), refetchInterval: BOOTSTRAP_REFETCH_MS })
 }
