@@ -20,7 +20,10 @@ const REFUSE = (f: () => unknown, code: CartError['code']): void => {
 describe('toPricingCatalog (the E1 catalog as dayo\'s OrderCatalog)', () => {
   it('the parsed contract type satisfies the POS catalog type with no cast, sizes included', () => {
     expectTypeOf<PosOrderCatalogParsed>().toExtend<PosOrderCatalog>()
-    expectTypeOf<PosOrderCatalog>().toExtend<Omit<OrderCatalog, 'ingredients'>>()
+    expectTypeOf<PosOrderCatalog>().toExtend<Omit<OrderCatalog, 'ingredients' | 'milkOptions' | 'gradeOptions'>>()
+    // the only other widening: an option's ingredientId/multiplier may be null (dayo menu_options columns are nullable)
+    expectTypeOf<PosOrderCatalog['milkOptions'][number]['ingredientId']>().toEqualTypeOf<string | null>()
+    expectTypeOf<PosOrderCatalog['gradeOptions'][number]['multiplier']>().toEqualTypeOf<number | null>()
     expectTypeOf<PosOrderCatalog['sizes']>().toEqualTypeOf<CupSizeEntry[]>()
   })
   it('keeps every size, inactive ones too, exactly as E1 sent them', () => {
@@ -170,5 +173,49 @@ describe('lineOptions', () => {
     const o = lineOptions(POS_CATALOG, 'Matcha Latte', '16 oz', '50%')
     expect(o.grades.map((g) => [g.code, g.priceAddSatang])).toEqual([['Excellent', 0], ['Premium', 2000]])
     expect(o.defaultGrade).toBe('Excellent')
+  })
+})
+
+describe('a milk or grade option with no ingredient (dayo menu_options.ingredient_id/multiplier are nullable)', () => {
+  const raw = (): Record<string, unknown> => structuredClone(loadRichCatalog().catalog) as unknown as Record<string, unknown>
+  /** E1 JSON with nulls where dayo's web lets the owner leave them empty — parsed like any E1, never refused whole (R12). */
+  const withNulls = (edit: (c: { milkOptions: Record<string, unknown>[]; gradeOptions: Record<string, unknown>[] }) => void): PosOrderCatalog => {
+    const c = raw()
+    edit(c as never)
+    return toPricingCatalog(PosOrderCatalogSchema.parse(c))
+  }
+  const matcha = POS_CATALOG.variants.find((v) => v.isMatcha && v.size === '16 oz')!
+  const premium = POS_CATALOG.gradeOptions.find((g) => !g.isDefault)!
+  /** Parity: the POS result equals dayo's own computeOrder run on the SAME nulls (dayo reads menu_options as stored). */
+  const expectParity = (catalog: PosOrderCatalog, c: CartDraft): void => {
+    const got = priceCart(c, catalog, FRI_1030)
+    const q = computeOrder(toOrderDraft(c, catalog, FRI_1030), { ...catalog, ingredients: withZeroCosts(catalog).ingredients } as unknown as OrderCatalog)
+    expect(got.ok).toBe(q.ok)
+    expect(got.totalSatang).toBe(edgeBahtToSatang(q.totalAmount))
+    expect(got.lines.map((l) => l.unitPriceSatang)).toEqual(q.lines.map((l) => edgeBahtToSatang(l.unitPrice)))
+  }
+
+  it('a grade with null ingredientId and null multiplier parses and prices like dayo — the grade price still applies', () => {
+    const catalog = withNulls((c) => { const g = c.gradeOptions.find((x) => x['code'] === premium.code)!; g['ingredientId'] = null; g['multiplier'] = null })
+    expect(catalog.gradeOptions.find((g) => g.code === premium.code)).toMatchObject({ ingredientId: null, multiplier: null })
+    const c = cart([line({ code: matcha.menuCode, size: matcha.size, sweetness: matcha.sweetness, grade: premium.code })])
+    expectParity(catalog, c)
+    // cost-only fields: the price is the same as with the ingredient filled in
+    expect(priceCart(c, catalog, FRI_1030).totalSatang).toBe(priceCart(c, POS_CATALOG, FRI_1030).totalSatang)
+    expect(lineOptions(catalog, matcha.menuCode, matcha.size, matcha.sweetness).grades.map((g) => g.code)).toContain(premium.code)
+  })
+  it('an oat option with a null ingredientId parses and prices like dayo', () => {
+    const catalog = withNulls((c) => { c.milkOptions.find((x) => x['code'] === 'oat')!['ingredientId'] = null })
+    const oatable = POS_CATALOG.variants.find((v) => lineOptions(POS_CATALOG, v.menuCode, v.size, v.sweetness).milk.some((m) => m.code === 'oat'))!
+    expectParity(catalog, cart([line({ code: oatable.menuCode, size: oatable.size, sweetness: oatable.sweetness, milk: 'oat' })]))
+  })
+  it('a fresh-milk option with a null ingredientId parses, and every line prices exactly like dayo on the same null', () => {
+    const catalog = withNulls((c) => { c.milkOptions.find((x) => x['code'] === 'fresh')!['ingredientId'] = null })
+    const variants = catalog.variants.filter((x) => x.size === '16 oz')
+    expect(variants.length).toBeGreaterThan(1)
+    for (const v of variants) {
+      const opts = lineOptions(catalog, v.menuCode, v.size, v.sweetness)
+      for (const m of opts.milk) expectParity(catalog, cart([line({ code: v.menuCode, size: v.size, sweetness: v.sweetness, milk: m.code, grade: opts.defaultGrade })]))
+    }
   })
 })

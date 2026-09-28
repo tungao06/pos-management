@@ -8,6 +8,8 @@ export const MAX_DETAIL_CODE_POINTS = 500
 export const TEXT_MAX_CODE_POINTS = 200
 export const API_KEY_RE = /^dayo_[0-9a-f]{64}$/
 export const RECEIPT_NO_RE = /^[A-Z]{1,3}-\d{6}$/
+/** Row key dayo accepts (0052 dayo_pos_push_row): `<kind>:<lowercase uuid>`, kind `^[a-z][a-z_]{0,39}$`. */
+export const ROW_KEY_RE = /^[a-z][a-z_]{0,39}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const PUSH_KINDS = ['order', 'order_void'] as const
 export type PushKind = (typeof PUSH_KINDS)[number]
 export const KNOWN_REJECT_REASONS = ['INVALID', 'BAD_KEY', 'UNKNOWN_CODE', 'UNKNOWN_STAFF', 'CONFLICT', 'ALREADY_PRESENT', 'FORBIDDEN'] as const
@@ -28,16 +30,32 @@ export const rowKey = (kind: PushKind, id: string): string => `${kind}:${id}`
 
 // ── scalars (spec 04 §4.1) ─────────────────────────────────────────────────────────────────────────────────────────
 export const Uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+const isInstant = (s: string): boolean => !Number.isNaN(Date.parse(s))
 /** Times the tablet SENDS: UTC with milliseconds. */
-export const IsoSent = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/).refine((s) => !Number.isNaN(Date.parse(s)), 'not a real instant')
+export const IsoSent = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/).refine(isInstant, 'not a real instant')
 /** Times the tablet RECEIVES: Postgres timestamptz text, `Z` or `±HH:MM`. */
-export const IsoReceived = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/).refine((s) => !Number.isNaN(Date.parse(s)), 'not a real instant')
+export const IsoReceived = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/).refine(isInstant, 'not a real instant')
 export const Ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-/** Baht on the wire: finite, ≥ 0, ≤ numeric(10,2), at most 2 decimals (the same tolerance as edgeBahtToSatang). */
-export const Baht = z.number().finite().nonnegative().max(99_999_999.99).refine((v) => Math.abs(v * 100 - Math.round(v * 100)) <= 1e-6, 'more than 2 decimals')
+/**
+ * Baht the tablet SENDS = what dayo_pos_is_money accepts (0052): ≥ 0, ≤ 99,999,999.99 and `numeric*100 = trunc(numeric*100)`
+ * on the JSON TEXT. So the shortest decimal form of the double (what JSON.stringify writes) must have ≤ 2 decimals:
+ * satang/100 always does; 0.1 + 0.2 (→ "0.30000000000000004") does not and dayo would reject the row INVALID.
+ */
+export const Baht = z.number().finite().nonnegative().max(99_999_999.99).refine((v) => /^\d+(\.\d{1,2})?$/.test(String(v)), 'more than 2 decimals')
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u001f\u007f]/
-export const Text200 = z.string().refine((s) => !CONTROL_RE.test(s), 'control character').refine((s) => { const n = [...s].length; return n >= 1 && n <= TEXT_MAX_CODE_POINTS }, '1–200 code points')
+/** A UTF-16 surrogate with no partner (`!String#isWellFormed`): Postgres refuses it in jsonb, so dayo answers DY422 for the WHOLE request. */
+const LONE_SURROGATE_RE = /[\ud800-\udfff]/u
+/**
+ * dayo_pos_is_text (0052): 1..max code points · no C0/DEL · not blank after trimming spaces (Postgres btrim) · plus
+ * well-formed UTF-16, so one bad text can never turn a whole push into a DY422.
+ */
+const posText = (max: number) =>
+  z.string().refine((s) => {
+    const n = [...s].length
+    return n >= 1 && n <= max && !CONTROL_RE.test(s) && !LONE_SURROGATE_RE.test(s) && s.replace(/^ +| +$/g, '') !== ''
+  }, `1–${max} code points, no control characters, well-formed, not blank`)
+export const Text200 = posText(TEXT_MAX_CODE_POINTS)
 /** A cup size code — any "<n> oz" since ADR-0054 (dayo cup_sizes CHECK, 0048_cup_sizes.sql:33 = shared SIZE_CODE_PATTERN). The shop's real sizes come in E1 `catalog.sizes`. */
 export const SIZE_CODE_RE = /^[1-9][0-9]{0,2} oz$/
 export const SizeCode = z.string().regex(SIZE_CODE_RE)
@@ -60,8 +78,10 @@ const Variant = z.looseObject({
 })
 const Ingredient = z.looseObject({ id: z.string(), code: z.string(), name: z.string(), useUnit: UseUnit })
 const Base = z.looseObject({ id: z.string(), code: z.string(), name: z.string(), yieldQty: z.number().finite(), yieldUnit: z.enum(['ml', 'g']), lines: z.array(z.looseObject({ ingredientId: z.string(), qty: z.number().finite() })) })
-const MilkOption = z.looseObject({ code: MilkCodeSchema, ingredientId: z.string(), priceAdd: z.number().finite(), aliases: z.array(z.string()) })
-const GradeOption = z.looseObject({ code: z.string().min(1), ingredientId: z.string(), multiplier: z.number().finite(), priceAdd: z.number().finite(), isDefault: z.boolean(), aliases: z.array(z.string()) })
+// menu_options.ingredient_id and .multiplier are nullable columns (dayo 0002_catalog.sql) and get_full_catalog passes
+// them through as is; dayo's web lets the owner save an option with no ingredient. A null must never refuse the whole E1.
+const MilkOption = z.looseObject({ code: MilkCodeSchema, ingredientId: z.string().nullable(), priceAdd: z.number().finite(), aliases: z.array(z.string()) })
+const GradeOption = z.looseObject({ code: z.string().min(1), ingredientId: z.string().nullable(), multiplier: z.number().finite().nullable(), priceAdd: z.number().finite(), isDefault: z.boolean(), aliases: z.array(z.string()) })
 const Channel = z.looseObject({ code: z.string().min(1), name: z.string(), aliases: z.array(z.string()), priceMarkupPct: z.number().finite(), priceAddBaht: z.number().finite(), rounding: z.enum(['ceil_baht', 'none']), feePct: z.number().finite(), defaultPaymentMethodCode: z.string().nullable() })
 const PaymentMethod = z.looseObject({ code: z.string().min(1), name: z.string(), aliases: z.array(z.string()) })
 const promoCommon = {
@@ -128,7 +148,7 @@ export const PosCatalogLooseResponse = z.looseObject({ ok: z.literal(true), data
 
 // ── E2 request: what the tablet SENDS is strict (spec §4.5) ────────────────────────────────────────────────────────
 export const OrderLineData = z.strictObject({
-  code: z.string().min(1).max(100), size: SizeCode, sweetness: SweetnessCode, milk: MilkCodeSchema, grade: z.string().min(1).max(50).nullable(),
+  code: posText(100), size: SizeCode, sweetness: SweetnessCode, milk: MilkCodeSchema, grade: posText(100).nullable(),
   qty: z.number().int().min(1).max(999),
   free: z.boolean().optional(), discount_baht: Baht.nullable().optional(), discount_percent: z.number().min(0).max(100).nullable().optional(), discount_reason: Text200.nullable().optional(),
 }).refine((l) => l.discount_baht == null || l.discount_percent == null, 'not both discount_baht and discount_percent')
@@ -136,20 +156,21 @@ const BillDiscountData = z.strictObject({ baht: Baht.optional(), percent: z.numb
   .refine((b) => (b.baht === undefined) !== (b.percent === undefined), 'exactly one of baht or percent')
 export const OrderRowData = z.strictObject({
   pos_order_id: Uuid, receipt_no: z.string().regex(RECEIPT_NO_RE), queue_no: z.number().int().min(1).max(9999),
-  sale_date: Ymd, sold_at: IsoSent, channel: z.string().min(1).max(100), payment: z.string().min(1).max(100),
+  sale_date: Ymd, sold_at: IsoSent, channel: posText(100), payment: posText(100),
   staff_id: Uuid, catalog_version: z.number().int().min(1), shift_id: Uuid.nullable(),
   lines: z.array(OrderLineData).min(1).max(50), bill_discount: BillDiscountData.nullable(),
-  promo_code: z.string().min(1).max(100).nullable(), skip_promotion_ids: z.array(Uuid), no_promotions: z.boolean(),
+  promo_code: posText(100).nullable(), skip_promotion_ids: z.array(Uuid), no_promotions: z.boolean(),
   totals: z.strictObject({ items_subtotal: Baht, items_discount: Baht, bill_discount: Baht, total: Baht }),
   note: Text200.nullable(),
 }).superRefine((d, ctx) => {
-  if (bangkokDateOf(d.sold_at) !== d.sale_date) ctx.addIssue({ code: 'custom', path: ['sale_date'], message: 'sale_date must be the Thai date of sold_at' })
-  if (d.lines.reduce((a, l) => a + l.qty, 0) > 500) ctx.addIssue({ code: 'custom', path: ['lines'], message: 'more than 500 cups' })
+  // sold_at may have failed IsoSent already: bangkokDateOf would throw on it, and safeParse must answer, never throw
+  if (typeof d.sold_at === 'string' && isInstant(d.sold_at) && bangkokDateOf(d.sold_at) !== d.sale_date) ctx.addIssue({ code: 'custom', path: ['sale_date'], message: 'sale_date must be the Thai date of sold_at' })
+  if (Array.isArray(d.lines) && d.lines.reduce((a, l) => a + (typeof l?.qty === 'number' ? l.qty : 0), 0) > 500) ctx.addIssue({ code: 'custom', path: ['lines'], message: 'more than 500 cups' })
 })
 export type OrderRowData = z.infer<typeof OrderRowData>
 export const OrderVoidRowData = z.strictObject({ pos_order_id: Uuid, voided_at: IsoSent, staff_id: Uuid, approved_by: Uuid.nullable(), reason: Text200 })
 export type OrderVoidRowData = z.infer<typeof OrderVoidRowData>
-const rowKeyField = z.string().min(1).max(MAX_ROW_KEY_LENGTH)
+const rowKeyField = z.string().max(MAX_ROW_KEY_LENGTH).regex(ROW_KEY_RE)
 export const PushRow = z.discriminatedUnion('kind', [
   z.strictObject({ key: rowKeyField, kind: z.literal('order'), data: OrderRowData }),
   z.strictObject({ key: rowKeyField, kind: z.literal('order_void'), data: OrderVoidRowData }),
@@ -157,8 +178,11 @@ export const PushRow = z.discriminatedUnion('kind', [
 export type PushRow = z.infer<typeof PushRow>
 export const PushRequest = z.strictObject({ device_time: IsoSent, rows: z.array(PushRow).min(1).max(MAX_PUSH_ROWS) })
 export type PushRequest = z.infer<typeof PushRequest>
-/** Envelope only (spec §4.5: a bad row is that row's verdict, never a 422 of the whole request) — used by the mock. */
-export const PushEnvelope = z.looseObject({ device_time: z.string(), rows: z.array(z.unknown()).min(1).max(MAX_PUSH_ROWS) })
+/**
+ * Envelope only (spec §4.5: a bad row is that row's verdict, never a 422 of the whole request). dayo checks only `rows`
+ * (0052 api_pos_push) — it ignores `device_time`, which the tablet still sends for clock diagnostics.
+ */
+export const PushEnvelope = z.looseObject({ rows: z.array(z.unknown()).min(1).max(MAX_PUSH_ROWS) })
 
 // ── E2 response: what the tablet RECEIVES is tolerant (spec §4.1 · plan-5 ReceivedRowResult) ───────────────────────
 /** key is null when dayo could not read a string key off the sent row (0052_pos_push.sql:748) — the receive side stays tolerant of both. */

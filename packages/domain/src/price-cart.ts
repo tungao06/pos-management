@@ -1,18 +1,24 @@
 import {
   applyOptions, bkkDay, bkkTime, channelPrice, computeOrder, saleSettingsOf,
-  type IngredientEntry, type MenuVariantEntry, type MilkCode, type OrderCatalog, type OrderDraft, type Size, type Sweetness,
+  type IngredientEntry, type MenuOptionGradeEntry, type MenuOptionMilkEntry, type MenuVariantEntry, type MilkCode, type OrderCatalog,
+  type OrderDraft, type Size, type Sweetness,
 } from '@dayo/dayo-pricing'
 import type { PosOrderCatalogParsed } from '@dayo/contracts'
 import { edgeBahtToSatang, edgeSatangToBaht } from './money-edge.js'
 import { pricedFromQuote } from './priced-from-quote.js'
 
 /**
- * E1 catalog = dayo's OrderCatalog with one difference only: ingredients carry no cost (spec 04 §4.4 rule 1). Variants
- * (with categoryLabel/menuSortOrder) and sizes are dayo's own types.
+ * E1 catalog = dayo's OrderCatalog with two differences: ingredients carry no cost (spec 04 §4.4 rule 1), and a milk or
+ * grade option may have a null ingredientId/multiplier — dayo's menu_options columns are nullable (0002_catalog.sql) and
+ * E1 passes them through, although dayo's types.ts says string/number. Variants and sizes are dayo's own types.
  */
 export type PosIngredient = Omit<IngredientEntry, 'costPerUseUnit'>
 export type PosVariant = MenuVariantEntry
-export type PosOrderCatalog = Omit<OrderCatalog, 'ingredients'> & { ingredients: Record<string, PosIngredient> }
+export type PosMilkOption = Omit<MenuOptionMilkEntry, 'ingredientId'> & { ingredientId: string | null }
+export type PosGradeOption = Omit<MenuOptionGradeEntry, 'ingredientId' | 'multiplier'> & { ingredientId: string | null; multiplier: number | null }
+export type PosOrderCatalog = Omit<OrderCatalog, 'ingredients' | 'milkOptions' | 'gradeOptions'> & {
+  ingredients: Record<string, PosIngredient>; milkOptions: PosMilkOption[]; gradeOptions: PosGradeOption[]
+}
 
 export type CartLineDraft = {
   code: string; size: Size; sweetness: Sweetness; milk: MilkCode; grade: string | null; qty: number
@@ -50,11 +56,20 @@ export class CartError extends Error {
 export const MAX_CART_LINES = 50
 export const MAX_CART_CUPS = 500
 
+/**
+ * The options exactly as E1 sent them, typed as dayo's pricing code declares them. dayo runs the same code on the same
+ * nulls (it reads menu_options as stored), so passing them through unchanged is parity — never replace a null with a
+ * default here. The only type widening of the catalog, in one place.
+ */
+function dayoOptions(c: PosOrderCatalog): Pick<OrderCatalog, 'milkOptions' | 'gradeOptions'> {
+  return { milkOptions: c.milkOptions as MenuOptionMilkEntry[], gradeOptions: c.gradeOptions as MenuOptionGradeEntry[] }
+}
+
 /** Cost never reaches the tablet (spec §4.4 rule 1, §5.4): 0 keeps dayo's pricing code whole and changes no price. */
 export function withZeroCosts(c: PosOrderCatalog): OrderCatalog {
   const ingredients: Record<string, IngredientEntry> = {}
   for (const [id, ing] of Object.entries(c.ingredients)) ingredients[id] = { ...ing, costPerUseUnit: 0 }
-  return { ...c, ingredients }
+  return { ...c, ...dayoOptions(c), ingredients }
 }
 
 /**
@@ -134,17 +149,17 @@ export function centralDiffSatang(computedSatang: number | null, chargedSatang: 
 /** The milk dayo picks for an unspecified line (dayo_impl_price_line): shop default oat + oat possible → oat. */
 export function defaultMilkForLine(catalog: PosOrderCatalog, variant: PosVariant): MilkCode {
   if (saleSettingsOf(catalog).defaultMilk !== 'oat') return 'fresh'
-  return applyOptions(variant, { milk: 'oat', grade: null }, catalog).ok ? 'oat' : 'fresh'
+  return applyOptions(variant, { milk: 'oat', grade: null }, dayoOptions(catalog)).ok ? 'oat' : 'fresh'
 }
 
 export function lineOptions(catalog: PosOrderCatalog, code: string, size: Size, sweetness: Sweetness): { milk: MilkChoice[]; grades: GradeChoice[]; defaultMilk: MilkCode; defaultGrade: string | null } {
   const v = findSellableVariant(catalog, code, size, sweetness)
   const milk: MilkChoice[] = [{ code: 'fresh', priceAddSatang: 0 }]
-  const oat = applyOptions(v, { milk: 'oat', grade: null }, catalog)
+  const oat = applyOptions(v, { milk: 'oat', grade: null }, dayoOptions(catalog))
   if (oat.ok) milk.push({ code: 'oat', priceAddSatang: edgeBahtToSatang(oat.priceAdd) })
   const grades: GradeChoice[] = v.isMatcha
     ? catalog.gradeOptions.flatMap((g) => {
-        const r = applyOptions(v, { milk: 'fresh', grade: g.code }, catalog)
+        const r = applyOptions(v, { milk: 'fresh', grade: g.code }, dayoOptions(catalog))
         return r.ok ? [{ code: g.code, priceAddSatang: edgeBahtToSatang(r.priceAdd), isDefault: g.isDefault }] : []
       })
     : []
