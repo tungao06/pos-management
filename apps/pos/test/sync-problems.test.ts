@@ -9,15 +9,28 @@ import { openConnectedApi, STAFF } from './helpers/dayo'
 import { sellCode } from './helpers/db'
 
 const owner = { approverUserId: STAFF.TungAo, approverPin: '1111', reason: 'แก้ตามหน้าส่งไม่ผ่าน' }
-async function rejectedBill(reason: string, detail = 'x') {
+/** dayo's detail of a receipt collision (0052_pos_push.sql:421) — the only CONFLICT RENUMBER fits (fix round 1 item 4). */
+const COLLISION = 'เลขใบเสร็จ A-000001 ถูกใช้กับบิลอื่นของเครื่องนี้แล้ว'
+type RowData = { lines: { code: string }[]; channel: string; payment: string; approved_by?: string | null }
+/** Stands for "the code dayo rejected is not in the latest catalog": the queued row now carries codes the catalog lacks. */
+async function patchRow(t: Awaited<ReturnType<typeof openConnectedApi>>, key: string, patch: (d: RowData) => void) {
+  const row = (await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get())!
+  const d = structuredClone(row.rowJson) as RowData
+  patch(d)
+  await t.db.update(s.outbox).set({ rowJson: d }).where(eq(s.outbox.id, row.id))
+}
+async function rejectedBill(reason: string, detail = 'x', patch?: (d: RowData) => void) {
   const t = await openConnectedApi()
   const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
   const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+  if (patch !== undefined) await patchRow(t, `order:${r.orderId}`, patch)
   t.mock.override({ match: { receiptNo: r.receiptNo }, verdict: { status: 'rejected', reason, detail }, times: 1 })
   await pushOnce(ctx)
   const [p] = await t.api.listSyncProblems(STAFF.TungAo)
   return { t, ctx, r, p: p! }
 }
+const retiredMenu = (d: RowData) => { d.lines[0]!.code = 'Retired Menu' }
+const closedChannel = (d: RowData) => { d.channel = 'closed_channel' }
 
 describe('owner remedies (spec 04 §6.4)', () => {
   it('a row far ahead of the server clock is listed as waiting; only the owner\'s EXCLUDE closes it (ruling N5)', async () => {
@@ -37,11 +50,13 @@ describe('owner remedies (spec 04 §6.4)', () => {
     expect(p).toMatchObject({ kind: 'order', receiptNo: 'A-000001', reason: 'CONFLICT', remedies: ['RETRY', 'RENUMBER'] })
   })
   it('CONFLICT → a new receipt number, same key, then accepted', async () => {
-    const { t, ctx, r, p } = await rejectedBill('CONFLICT')
+    const { t, ctx, r, p } = await rejectedBill('CONFLICT', COLLISION)
+    const original = (await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get())!.rowJson
     expect(await t.api.renumberReceipt({ ...owner, outboxId: p.outboxId })).toEqual({ oldReceiptNo: 'A-000001', newReceiptNo: 'A-000002' })
     expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
     const ev = await t.db.select().from(s.orderEvent).where(eq(s.orderEvent.type, 'RECEIPT_RENUMBERED')).get()
     expect(ev?.payloadJson).toMatchObject({ old: 'A-000001', new: 'A-000002' })
+    expect((ev?.payloadJson as { before: unknown }).before).toEqual(original) // the whole old row stays in the hash chain
     expect((await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())?.totalSatang).toBe(4500) // money never changes
     expect((await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get())?.idempotencyKey).toBe(p.key) // same key
   })
@@ -55,8 +70,11 @@ describe('owner remedies (spec 04 §6.4)', () => {
     expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
   })
   it('UNKNOWN_CODE → map the line to an active menu of the latest catalog', async () => {
-    const { t, ctx, p } = await rejectedBill('UNKNOWN_CODE')
+    const { t, ctx, p } = await rejectedBill('UNKNOWN_CODE', 'x', retiredMenu)
+    const original = (await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get())!.rowJson
     await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'line', lineIndex: 0, code: 'Thai Tea', size: '16 oz', sweetness: '50%' } })
+    const ev = await t.db.select().from(s.orderEvent).where(eq(s.orderEvent.type, 'CODE_REMAPPED')).get()
+    expect((ev?.payloadJson as { before: unknown }).before).toEqual(original)
     expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
   })
   it('INVALID → closed as "นอกระบบกลาง": never sent again, still in the tablet reports (ruling R8)', async () => {
@@ -67,7 +85,7 @@ describe('owner remedies (spec 04 §6.4)', () => {
     expect((await t.api.getOrder(r.orderId)).central.state).toBe('excluded')
   })
   it('needs an owner PIN', async () => {
-    const { t, p } = await rejectedBill('CONFLICT')
+    const { t, p } = await rejectedBill('CONFLICT', COLLISION)
     try { await t.api.renumberReceipt({ ...owner, approverPin: '0000', outboxId: p.outboxId }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('PIN_WRONG') }
   })
   it('export JSON holds the row and the reason, never the API key', async () => {
@@ -84,7 +102,7 @@ describe('owner remedies (spec 04 §6.4)', () => {
     }
   })
   it('UNKNOWN_CODE on the channel → map it to an active channel; the charged totals never change', async () => {
-    const { t, ctx, r, p } = await rejectedBill('UNKNOWN_CODE')
+    const { t, ctx, r, p } = await rejectedBill('UNKNOWN_CODE', 'x', closedChannel)
     const before = (await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get())!.rowJson as { totals: unknown }
     await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'channel', code: 'store' } })
     const after = (await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get())!.rowJson as { totals: unknown }
@@ -93,8 +111,51 @@ describe('owner remedies (spec 04 §6.4)', () => {
     expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
   })
   it('remapCode refuses a menu that is not in the latest catalog', async () => {
-    const { t, p } = await rejectedBill('UNKNOWN_CODE')
+    const { t, p } = await rejectedBill('UNKNOWN_CODE', 'x', retiredMenu)
     try { await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'line', lineIndex: 0, code: 'Nope', size: '16 oz', sweetness: '50%' } }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('BAD_INPUT') }
+  })
+  it('remapCode touches only what dayo cannot know: a valid payment, channel or line of the same row is refused (fix round 1 item 2)', async () => {
+    const { t, p } = await rejectedBill('UNKNOWN_CODE', 'x', retiredMenu) // line 0's menu is the unknown code
+    const before = await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get()
+    const calls = [
+      () => t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'payment', code: 'cash' } }),
+      () => t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'channel', code: 'grab' } }),
+    ]
+    for (const call of calls) {
+      try { await call(); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('BAD_INPUT') }
+    }
+    expect(await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get()).toEqual(before)
+    expect(await t.db.select().from(s.orderEvent).where(eq(s.orderEvent.type, 'CODE_REMAPPED')).all()).toEqual([])
+    const valid = await rejectedBill('UNKNOWN_CODE') // nothing unknown on line 0
+    try { await valid.t.api.remapCode({ ...owner, outboxId: valid.p.outboxId, target: { field: 'line', lineIndex: 0, code: 'Thai Tea', size: '16 oz', sweetness: '50%' } }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('BAD_INPUT') }
+  })
+  it('a payment remap keeps the kind of money collected: a QR bill cannot become cash', async () => {
+    const { t, ctx, p } = await rejectedBill('UNKNOWN_CODE', 'x', (d) => { d.payment = 'old_qr' })
+    try { await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'payment', code: 'cash' } }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('BAD_INPUT') }
+    await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'payment', code: 'qr' } })
+    expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
+  })
+  it('CONFLICT because this key was already stored with other data: RETRY only, no new receipt number (fix round 1 item 4)', async () => {
+    const { t, p } = await rejectedBill('CONFLICT', 'key นี้เคยบันทึกสำเร็จด้วยข้อมูลอื่นแล้ว')
+    expect(p.remedies).toEqual(['RETRY'])
+    try { await t.api.renumberReceipt({ ...owner, outboxId: p.outboxId }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('REMEDY_NOT_ALLOWED') }
+  })
+  it('UNKNOWN_STAFF on a void\'s approver: the approver is replaced, the seller stays', async () => {
+    const t = await openConnectedApi()
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    await pushOnce(ctx)
+    await t.api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, approverUserId: STAFF.DCm, approverPin: '2222', reason: 'x', made: false, refundReference: 'K' })
+    await patchRow(t, `order_void:${r.orderId}`, (d) => { d.approved_by = 'abcdef01-2345-4678-89ab-cdef01234567' }) // no longer in dayo's list
+    t.mock.override({ match: { key: `order_void:${r.orderId}` }, verdict: { status: 'rejected', reason: 'UNKNOWN_STAFF', detail: 'x' }, times: 1 })
+    await pushOnce(ctx)
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    expect(p).toMatchObject({ kind: 'order_void', remedies: ['RETRY', 'REMAP_STAFF'] })
+    await t.api.remapStaff({ ...owner, outboxId: p!.outboxId, newStaffId: STAFF.DCm })
+    expect((await t.db.select().from(s.outbox).where(eq(s.outbox.id, p!.outboxId)).get())?.rowJson).toMatchObject({ approved_by: STAFF.DCm, staff_id: STAFF.TungAo })
+    expect((await t.db.select().from(s.orderEvent).where(eq(s.orderEvent.type, 'STAFF_REMAPPED')).get())?.payloadJson).toMatchObject({ field: 'approved_by', old: 'abcdef01-2345-4678-89ab-cdef01234567' })
+    expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
+    expect(t.mock.orders()).toEqual([expect.objectContaining({ posOrderId: r.orderId, status: 'cancelled' })])
   })
   it('remapStaff refuses a removed staff member', async () => {
     const { t, p } = await rejectedBill('UNKNOWN_STAFF')
@@ -175,16 +236,16 @@ describe('remedies and the sender never interleave on one row (Iron Rule 5 · ta
   const tick = () => new Promise((r) => setTimeout(r, 50))
 
   it('every remedy waits in the PosApi\'s own serial queue — the one the sender uses — and writes nothing while it is held', async () => {
-    type Case = { reason: string; call: (api: ReturnType<typeof createPosApi>, outboxId: string) => Promise<unknown> }
+    type Case = { reason: string; detail?: string; patch?: (d: RowData) => void; call: (api: ReturnType<typeof createPosApi>, outboxId: string) => Promise<unknown> }
     const cases: Case[] = [
       { reason: 'CONFLICT', call: (api, outboxId) => api.retrySyncRow({ ...owner, outboxId }) },
-      { reason: 'CONFLICT', call: (api, outboxId) => api.renumberReceipt({ ...owner, outboxId }) },
-      { reason: 'UNKNOWN_CODE', call: (api, outboxId) => api.remapCode({ ...owner, outboxId, target: { field: 'channel', code: 'store' } }) },
+      { reason: 'CONFLICT', detail: COLLISION, call: (api, outboxId) => api.renumberReceipt({ ...owner, outboxId }) },
+      { reason: 'UNKNOWN_CODE', patch: closedChannel, call: (api, outboxId) => api.remapCode({ ...owner, outboxId, target: { field: 'channel', code: 'store' } }) },
       { reason: 'UNKNOWN_STAFF', call: (api, outboxId) => api.remapStaff({ ...owner, outboxId, newStaffId: STAFF.DCm }) },
       { reason: 'INVALID', call: (api, outboxId) => api.excludeFromSync({ ...owner, outboxId }) },
     ]
     for (const c of cases) {
-      const { t, p } = await rejectedBill(c.reason)
+      const { t, p } = await rejectedBill(c.reason, c.detail, c.patch)
       const before = await t.db.select().from(s.outbox).where(eq(s.outbox.id, p.outboxId)).get()
       const { api, backup, release } = await heldApi(t)
       let done = false

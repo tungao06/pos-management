@@ -1,8 +1,8 @@
-import { and, asc, eq, inArray, like, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNotNull, like, ne, or, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { OrderRowData, OrderVoidRowData, Text200, type PushKind } from '@dayo/contracts'
-import { CartError, centralDiffSatang, findSellableVariant, nextReceiptNo } from '@dayo/domain'
+import { OrderRowData, OrderVoidRowData, rowKey, Text200, type PushKind } from '@dayo/contracts'
+import { CartError, centralDiffSatang, findSellableVariant, nextReceiptNo, type PosOrderCatalog } from '@dayo/domain'
 import { appendOrderEvents } from '../db/events'
 import { readCatalog, roleOf } from '../sync/catalog'
 import { retryRow } from '../sync/push'
@@ -12,7 +12,7 @@ import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { lastReceiptNoOverall } from './sale'
-import type { OwnerApproval, PriceDiffDto, RemapCodeInput, Remedy, SyncProblemDto } from './types'
+import { PAYMENT_CODE, type OwnerApproval, type PriceDiffDto, type RemapCodeInput, type Remedy, type SyncProblemDto } from './types'
 
 /**
  * spec 04 §6.4 (locked): which fix fits which reason of a DEAD row. A reason missing here (STUCK, ENVELOPE,
@@ -24,6 +24,17 @@ const REMEDIES: Record<string, Remedy[]> = {
 }
 const PAGE_KINDS: readonly PushKind[] = ['order', 'order_void']
 type Row = typeof s.outbox.$inferSelect
+
+/**
+ * fix round 1 item 4: dayo answers CONFLICT for two different things. A receipt number another bill already holds
+ * (0052_pos_push.sql:421 "เลขใบเสร็จ … ถูกใช้กับบิลอื่น…", :665 external_ref_taken…, :680 a unique violation after dayo
+ * found no bill with this pos_order_id) — a new number fixes it. Or this very key already stored with other data
+ * (:614 "key นี้เคยบันทึกสำเร็จด้วยข้อมูลอื่นแล้ว") — dayo HAS this bill; a new number would only burn receipt numbers
+ * and conflict again, so that one (and any detail not recognised) gets RETRY only. Matched by the known start of the
+ * detail dayo writes itself (the tablet clips a detail at its end, never its start).
+ */
+const RECEIPT_COLLISION = [/^เลขใบเสร็จ /, /^external_ref_taken/, /^SQLSTATE 23505$/]
+const isReceiptCollision = (detail: string): boolean => RECEIPT_COLLISION.some((re) => re.test(detail))
 
 /** review item 22: owner-only READS are checked here too (no PIN — the signed-in user id is enough for a read). */
 async function requireOwner(db: RemoteDb, actorUserId: string): Promise<void> {
@@ -38,13 +49,15 @@ const isFarAheadWaiting = (r: Row): boolean => r.status === 'pending' && decodeL
 /**
  * The fixes a row may take right now. A far-ahead row still pending = EXCLUDE only (N5), whatever reason its last
  * attempt left behind (a later failed request keeps the farAhead flag with reason REQUEST_FAILED — it must not then
- * show a RETRY that remedyRow refuses). A dead row: by its reason. Anything else: none (not on the page).
+ * show a RETRY that remedyRow refuses). A dead row: by its reason (RENUMBER only for a receipt collision). Anything
+ * else: none (not on the page).
  */
 function remediesFor(r: Row): Remedy[] {
   if (!isPageKind(r)) return []
   if (isFarAheadWaiting(r)) return ['EXCLUDE']
   if (r.status !== 'dead') return []
-  return (REMEDIES[decodeLastError(r.lastError).reason] ?? ['RETRY']).filter((x) => x !== 'RENUMBER' || r.tableName === 'order')
+  const e = decodeLastError(r.lastError)
+  return (REMEDIES[e.reason] ?? ['RETRY']).filter((x) => x !== 'RENUMBER' || (r.tableName === 'order' && isReceiptCollision(e.detail)))
 }
 
 /**
@@ -94,7 +107,7 @@ async function remedyEvent(tx: RemoteDb, deps: ApiDeps, row: Row, approverId: st
     [{ type, payload: { ...payload, key: row.idempotencyKey, approvedBy: approverId, before: row.rowJson } }])
 }
 
-/** CONFLICT: the next receipt number of this device → order.receipt_no + row_json.receipt_no. Money never changes. */
+/** CONFLICT on the receipt number: the next receipt number of this device → order.receipt_no + row_json.receipt_no. Money never changes. */
 export async function renumberReceipt(db: RemoteDb, deps: ApiDeps, i: OwnerApproval & { outboxId: string }): Promise<{ oldReceiptNo: string; newReceiptNo: string }> {
   const { row, approver, reason } = await remedyRow(db, deps, i, 'RENUMBER')
   const device = await requireDevice(db)
@@ -110,10 +123,32 @@ export async function renumberReceipt(db: RemoteDb, deps: ApiDeps, i: OwnerAppro
   return out
 }
 
+/** A line the latest catalog sells as it is: an active size + existing variant, the matcha/grade rule, oat only where allowed. */
+function lineSellable(c: PosOrderCatalog, l: OrderRowData['lines'][number]): boolean {
+  let v
+  try {
+    v = findSellableVariant(c, l.code, l.size, l.sweetness)
+  } catch (e) {
+    if (e instanceof CartError) return false
+    throw e
+  }
+  if (v.isMatcha ? !(l.grade !== null && c.gradeOptions.some((g) => g.code === l.grade)) : l.grade !== null) return false
+  return l.milk !== 'oat' || v.allowOatMilk
+}
+
+/** fix round 1 item 2: a payment method that takes cash into the drawer (dayo's code 'cash', or named cash / เงินสด). */
+function cashLike(c: PosOrderCatalog, code: string): boolean {
+  const pm = c.paymentMethods.find((x) => x.code === code)
+  return code === PAYMENT_CODE.CASH || (pm !== undefined && [pm.name, ...pm.aliases].some((t) => /cash|เงินสด/i.test(t)))
+}
+
 /**
- * UNKNOWN_CODE: replace one code with one the latest catalog SELLS (an active size, an existing variant, a matcha grade
- * dayo lists, oat milk only where allowed) / an existing channel / payment method. `totals` stay the charged ones
- * (spec §6.4) — if dayo prices the new code differently, the bill shows in "ยอดไม่ตรงระบบกลาง".
+ * UNKNOWN_CODE: replace the ONE code dayo cannot know with one the latest catalog sells. Fix round 1 item 2 (security):
+ * only a field whose CURRENT value the latest catalog does not have may be changed — a valid channel, payment or line
+ * is refused (BAD_INPUT), so a remedy for one unknown line cannot also move the payment or the channel (which would
+ * never show in "ยอดไม่ตรงระบบกลาง" / would shift dayo's fee). A payment stays the kind of money collected: cash
+ * stays cash-like, a QR stays non-cash. `totals` stay the charged ones (spec §6.4) — if dayo prices a new line code
+ * differently, the bill shows in "ยอดไม่ตรงระบบกลาง".
  */
 export async function remapCode(db: RemoteDb, deps: ApiDeps, i: RemapCodeInput): Promise<void> {
   const { row, approver, reason } = await remedyRow(db, deps, i, 'REMAP_CODE')
@@ -126,6 +161,7 @@ export async function remapCode(db: RemoteDb, deps: ApiDeps, i: RemapCodeInput):
   if (tg.field === 'line') {
     const line = Number.isSafeInteger(tg.lineIndex) && tg.lineIndex >= 0 ? next.lines[tg.lineIndex] : undefined
     if (line === undefined) throw new PosError('BAD_INPUT', 'ไม่มีบรรทัดนี้ในบิล')
+    if (lineSellable(c.catalog, line)) throw new PosError('BAD_INPUT', 'บรรทัดนี้ใช้ได้กับแคตตาล็อกล่าสุดอยู่แล้ว — แก้ได้เฉพาะรายการที่ระบบกลางไม่รู้จัก')
     let v
     try {
       v = findSellableVariant(c.catalog, tg.code, tg.size, tg.sweetness)
@@ -139,10 +175,15 @@ export async function remapCode(db: RemoteDb, deps: ApiDeps, i: RemapCodeInput):
     if (line.milk === 'oat' && !v.allowOatMilk) throw new PosError('BAD_INPUT', 'เมนูนี้ไม่มีนมโอ๊ต')
     next.lines[tg.lineIndex] = { ...line, code: tg.code, size: tg.size, sweetness: tg.sweetness, grade }
   } else if (tg.field === 'channel') {
+    if (c.catalog.channels.some((x) => x.code === data.channel)) throw new PosError('BAD_INPUT', 'ช่องทางของบิลนี้ใช้ได้อยู่แล้ว — แก้ได้เฉพาะรายการที่ระบบกลางไม่รู้จัก')
     if (!c.catalog.channels.some((x) => x.code === tg.code)) throw new PosError('BAD_INPUT', 'ไม่มีช่องทางนี้ในแคตตาล็อกล่าสุด')
     next.channel = tg.code
   } else if (tg.field === 'payment') {
+    if (c.catalog.paymentMethods.some((x) => x.code === data.payment)) throw new PosError('BAD_INPUT', 'วิธีชำระของบิลนี้ใช้ได้อยู่แล้ว — แก้ได้เฉพาะรายการที่ระบบกลางไม่รู้จัก')
     if (!c.catalog.paymentMethods.some((x) => x.code === tg.code)) throw new PosError('BAD_INPUT', 'ไม่มีวิธีชำระนี้ในแคตตาล็อกล่าสุด')
+    const collected = (await db.select({ method: s.payment.method }).from(s.payment).where(eq(s.payment.orderId, data.pos_order_id)).orderBy(asc(s.payment.createdAt)).get())?.method
+    if (collected === undefined) throw new PosError('BAD_INPUT', 'บิลนี้ไม่มีการชำระเงินในเครื่อง')
+    if (cashLike(c.catalog, tg.code) !== (collected === 'CASH')) throw new PosError('BAD_INPUT', collected === 'CASH' ? 'บิลนี้รับเงินสด — เลือกวิธีชำระแบบเงินสดเท่านั้น' : 'บิลนี้ไม่ได้รับเงินสด — เลือกวิธีชำระที่ไม่ใช่เงินสด')
     next.payment = tg.code
   } else {
     throw new PosError('BAD_INPUT', 'unknown field')
@@ -179,6 +220,8 @@ export async function remapStaff(db: RemoteDb, deps: ApiDeps, i: OwnerApproval &
  * the row and its waiting children become local_only. No order_excluded row in block 2 (R8), no PAID_IN/PAID_OUT.
  * The status write is guarded by the status the check saw; a verdict of a request already on the wire for this row
  * is then dropped by applyVerdicts (it judges only rows still pending).
+ * Ledger ruling 1: if dayo ACCEPTED that in-flight request of a far-ahead row just excluded here, dayo now counts it
+ * as a real sale while this tablet shows it excluded — block 3 must reconcile that (the accepted verdict is not kept).
  */
 export async function excludeFromSync(db: RemoteDb, deps: ApiDeps, i: OwnerApproval & { outboxId: string }): Promise<void> {
   const { row, approver, reason } = await remedyRow(db, deps, i, 'EXCLUDE')
@@ -189,6 +232,7 @@ export async function excludeFromSync(db: RemoteDb, deps: ApiDeps, i: OwnerAppro
     await tx.update(s.outbox).set({ status: 'local_only', nextAttemptAt: null }).where(and(eq(s.outbox.parentKey, row.idempotencyKey), inArray(s.outbox.status, ['pending', 'dead'])))
     if (row.tableName === 'order') await tx.update(s.order).set({ excludedAt: deps.now() }).where(eq(s.order.id, orderIdOf(row)))
   })
+  deps.afterWrite?.()
 }
 
 /** "ลองใหม่": dead → pending with a fresh budget (Task 13 retryRow), same data, same key. */
@@ -229,21 +273,34 @@ export async function exportSyncRow(db: RemoteDb, i: { actorUserId: string; outb
   return JSON.stringify({ key: r.idempotencyKey, kind: r.tableName, data: r.rowJson, lastError: decodeLastError(r.lastError), createdAt: r.createdAt }, null, 2)
 }
 
-/** spec §4.3 + review item 23 — owner only (R11). Money math: centralDiffSatang (@dayo/domain). */
+/**
+ * spec §4.3 + review item 23 — owner only (R11). Money math: centralDiffSatang (@dayo/domain). Fix round 1 item 6: the
+ * candidates are picked in SQL, so the serial queue never loads every bill and outbox row the tablet ever had —
+ * 'amount' = a computed total that is not the charged one; 'void_local_only' = an order_void row closed local_only
+ * whose bill row was sent.
+ */
 export async function listPriceDiffs(db: RemoteDb, actorUserId: string): Promise<PriceDiffDto[]> {
   await requireOwner(db, actorUserId)
-  const bills = await db.select().from(s.order).where(inArray(s.order.status, ['paid', 'voided'])).orderBy(asc(s.order.soldAt)).all()
-  const rows = await db.select({ key: s.outbox.idempotencyKey, status: s.outbox.status }).from(s.outbox).where(inArray(s.outbox.tableName, [...PAGE_KINDS])).all()
-  const statusOf = new Map(rows.map((r) => [r.key, r.status]))
-  const out: PriceDiffDto[] = []
-  for (const o of bills) {
-    if (o.soldAt === null || o.receiptNo === null) continue
-    const base = {
-      orderId: o.id, receiptNo: o.receiptNo, soldAt: o.soldAt, totalSatang: o.totalSatang, computedTotalSatang: o.centralComputedTotalSatang,
-      diffSatang: centralDiffSatang(o.centralComputedTotalSatang, o.totalSatang), catalogVersion: o.catalogVersion, amountMismatch: o.centralAmountMismatch === true,
-    }
-    if (base.diffSatang !== null && base.diffSatang !== 0) out.push({ ...base, kind: 'amount' })
-    if (o.status === 'voided' && statusOf.get(`order:${o.id}`) === 'sent' && statusOf.get(`order_void:${o.id}`) === 'local_only') out.push({ ...base, kind: 'void_local_only' })
+  const listed = and(inArray(s.order.status, ['paid', 'voided']), isNotNull(s.order.soldAt), isNotNull(s.order.receiptNo))
+  const amount = await db.select().from(s.order)
+    .where(and(listed, isNotNull(s.order.centralComputedTotalSatang), ne(s.order.centralComputedTotalSatang, s.order.totalSatang))).all()
+  const localVoids = await db.select({ data: s.outbox.rowJson }).from(s.outbox).where(and(eq(s.outbox.tableName, 'order_void'), eq(s.outbox.status, 'local_only'))).all()
+  const voidIds = [...new Set(localVoids.map((r) => String((r.data as { pos_order_id: string }).pos_order_id)))]
+  const sentIds = voidIds.length === 0 ? [] : (await db.select({ data: s.outbox.rowJson }).from(s.outbox)
+    .where(and(inArray(s.outbox.idempotencyKey, voidIds.map((id) => rowKey('order', id))), eq(s.outbox.status, 'sent'))).all())
+    .map((r) => String((r.data as { pos_order_id: string }).pos_order_id))
+  const voidOnly = sentIds.length === 0 ? [] : await db.select().from(s.order).where(and(listed, eq(s.order.status, 'voided'), inArray(s.order.id, sentIds))).all()
+  type Bill = typeof s.order.$inferSelect
+  const base = (o: Bill) => ({
+    orderId: o.id, receiptNo: o.receiptNo!, soldAt: o.soldAt!, totalSatang: o.totalSatang, computedTotalSatang: o.centralComputedTotalSatang,
+    diffSatang: centralDiffSatang(o.centralComputedTotalSatang, o.totalSatang), catalogVersion: o.catalogVersion, amountMismatch: o.centralAmountMismatch === true,
+  })
+  const out: (PriceDiffDto & { order: number })[] = []
+  for (const o of amount) {
+    const b = base(o)
+    if (b.diffSatang !== null && b.diffSatang !== 0) out.push({ ...b, kind: 'amount', order: 0 })
   }
-  return out
+  for (const o of voidOnly) out.push({ ...base(o), kind: 'void_local_only', order: 1 })
+  // oldest sale first; one bill's 'amount' before its 'void_local_only'
+  return out.sort((a, b) => a.soldAt.localeCompare(b.soldAt) || a.order - b.order).map(({ order: _order, ...d }) => d)
 }

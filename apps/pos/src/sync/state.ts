@@ -32,8 +32,10 @@ export const DAYO_KEYS = {
   manualClearAt: 'dayo.manual_clear_at',           // N4: the last time a wake cleared a failure backoff (survives a reload)
   requestWindow: 'dayo.request_window',            // the wall times of the dayo requests of the last 60 s (survives a reload)
   lastPushAt: 'dayo.last_push_at',
-  // Task 15: the newest E3 updated_at refreshDayoEdits has seen (absent = the device's setup time)
+  // Task 15: refreshDayoEdits' mark — E3 updated_since (absent = the device's setup time) — and its backward walk over
+  // full pages, kept between refreshes (fix round 1 item 1)
   dayoEditsSince: 'dayo.dayo_edits_since',
+  dayoEditsWalk: 'dayo.dayo_edits_walk',
 } as const
 export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled' | 'bad_base_url'
 

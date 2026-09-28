@@ -81,7 +81,11 @@ describe('dayo_edit — the owner\'s edit/cancel of a POS bill on the dayo web, 
   it('an edit shows on the bill with its reason; the money collected here never changes', async () => {
     const { t, r } = await sentBill()
     t.mock.editPosOrder(r.orderId, { kind: 'edit', reason: 'ลูกค้าเปลี่ยนเมนู', totals: { total: 50 } })
+    const events = (await t.db.select().from(s.orderEvent).all()).length
+    const outbox = await t.db.select().from(s.outbox).all()
     expect(await t.api.refreshDayoEdits()).toEqual({ updated: 1 })
+    expect(await t.db.select().from(s.orderEvent).all()).toHaveLength(events) // no event in the hash chain
+    expect(await t.db.select().from(s.outbox).all()).toEqual(outbox)          // nothing queued, nothing changed
     const d = await t.api.getOrder(r.orderId)
     expect(d.dayoEdit).toEqual({ kind: 'edit', editedAt: '2026-09-25T03:05:00+00:00', editedByName: 'TungAo', reason: 'ลูกค้าเปลี่ยนเมนู', version: 2 })
     expect(d).toMatchObject({ totalSatang: 4500, status: 'paid', voidable: true })
@@ -136,12 +140,39 @@ describe('dayo_edit — the owner\'s edit/cancel of a POS bill on the dayo web, 
     expect(await t.api.listCentralOrdersToday()).toEqual([])
     expect((await t.api.getOrder(r.orderId)).dayoEdit).toMatchObject({ kind: 'edit', reason: 'x' })
   })
-  it('a full page of 500 is a warning, and the "since" mark does not move past bills that were cut off', async () => {
+  it('a busy shop (> 500 changed bills in 60 days): full pages are walked back across refreshes, then the mark moves (fix round 1 item 1)', async () => {
+    const { t } = await sentBill()
+    const dayOf = (n: number) => new Date(Date.parse('2026-09-25T00:00:00.000Z') - n * 86_400_000).toISOString().slice(0, 10)
+    // 20 bot/web bills a day over 55 days = 1,100 changed bills (+ this tablet's bill of today)
+    t.mock.seedCentralOrders(Array.from({ length: 1_100 }, (_, i) => {
+      const day = Math.floor(i / 20)
+      const updated = day === 2 && i % 20 === 0 ? '2026-09-25T03:06:00+00:00' : day === 50 && i % 20 === 0 ? '2026-09-25T03:08:00+00:00' : '2026-09-25T03:04:00+00:00'
+      return bill({ order_no: `L${dayOf(day).replaceAll('-', '').slice(2)}-${String(100 + (i % 20))}`, sale_date: dayOf(day), sold_at: `${dayOf(day)}T02:00:00+00:00`, updated_at: updated })
+    }))
+    const tos: (string | null)[] = []
+    const inner = t.deps.fetch
+    t.deps.fetch = async (input, init) => { if (String(input).includes('/api/v1/orders')) tos.push(new URL(String(input)).searchParams.get('to')); return inner(input, init) }
+
+    await t.api.refreshDayoEdits() // pages 1–2 are full: the walk is kept, the mark stays
+    expect(tos).toEqual(['2026-09-25', dayOf(24)])
+    expect(await readKey(t.db, DAYO_KEYS.dayoEditsSince)).toBeNull()
+    expect(JSON.parse((await readKey(t.db, DAYO_KEYS.dayoEditsWalk))!)).toMatchObject({ to: dayOf(48), newest: '2026-09-25T03:06:00+00:00' })
+    expect((await t.api.syncStatus()).catalogError).toContain('DAYO_EDITS_TOO_MANY')
+
+    await t.api.refreshDayoEdits() // goes on from where it stopped; that page is not full: the walk ends
+    expect(tos).toEqual(['2026-09-25', dayOf(24), dayOf(48)])
+    // the newest updated_at of the walk's FIRST page (03:06) — not 03:08 from a later page, which the next refresh sees again
+    expect(await readKey(t.db, DAYO_KEYS.dayoEditsSince)).toBe('2026-09-25T03:06:00+00:00')
+    expect(await readKey(t.db, DAYO_KEYS.dayoEditsWalk)).toBeNull()
+    expect((await t.api.syncStatus()).catalogError).toBeNull()
+  })
+  it('a single day with more than 500 changed bills cannot be paged inside: that day is named, the walk goes on and ends', async () => {
     const { t } = await sentBill()
     t.mock.seedCentralOrders(Array.from({ length: 500 }, (_, i) => bill({ order_no: `L260925-${String(100 + i)}`, updated_at: '2026-09-25T03:04:00+00:00' })))
     await t.api.refreshDayoEdits()
-    expect((await t.api.syncStatus()).catalogError).toContain('DAYO_EDITS_TOO_MANY')
-    expect(await readKey(t.db, DAYO_KEYS.dayoEditsSince)).toBeNull()
+    expect(await readKey(t.db, DAYO_KEYS.dayoEditsSince)).toBe('2026-09-25T03:04:00+00:00') // never stuck on that day
+    expect(await readKey(t.db, DAYO_KEYS.dayoEditsWalk)).toBeNull()
+    expect((await t.api.syncStatus()).catalogError).toMatch(/^DAYO_EDITS_TOO_MANY: วันที่ 2026-09-25 /)
   })
   it('a revoked key: refreshDayoEdits makes no request', async () => {
     const { t } = await sentBill()

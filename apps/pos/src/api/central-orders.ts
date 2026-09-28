@@ -23,10 +23,12 @@ export const E3_PAGE_MAX = 500
  * transaction runs, so one that commits later with an earlier stamp is not missed. An edit seen twice writes nothing.
  */
 export const DAYO_EDITS_OVERLAP_MS = 5 * 60_000
-/** catalogError segment written when a refresh came back full (500) — the "since" mark is then not moved. */
+/** catalogError segment while a backward walk over full pages is still going (or a single day was cut off). */
 export const DAYO_EDITS_TOO_MANY = 'DAYO_EDITS_TOO_MANY'
-const TOO_MANY_TEXT = `${DAYO_EDITS_TOO_MANY}: บิลที่ระบบกลางแก้มีมากเกินดึงครั้งเดียว (${E3_PAGE_MAX}) — บางบิลอาจยังไม่ขึ้นว่าแก้แล้ว`
+/** Pages one refreshDayoEdits may ask for (each is one E3 request, counted by the PosApi's E3 cap too). */
+export const E3_PAGES_PER_REFRESH = 2
 const DAY_MS = 86_400_000
+const dayBefore = (ymd: string): string => new Date(Date.parse(`${ymd}T00:00:00.000Z`) - DAY_MS).toISOString().slice(0, 10)
 const NAME_MAX = 100   // code points kept of dayo's edited_by_name
 const REASON_MAX = 500 // code points kept of dayo's reason (dayo's answer is not trusted to be small — M6)
 
@@ -124,11 +126,11 @@ function totalOf(o: CentralOrder): number {
   }
 }
 
-/** Adds or removes the "too many edits" segment of catalogError, leaving any other problem written there as it is. */
-async function setTooManyWarning(db: RemoteDb, on: boolean): Promise<void> {
+/** Sets (text) or removes (null) the "too many edits" segment of catalogError, leaving any other problem there as it is. */
+async function setTooManyWarning(db: RemoteDb, text: string | null): Promise<void> {
   const cur = await readKey(db, DAYO_KEYS.catalogError)
   const parts = (cur ?? '').split(' · ').filter((p) => p !== '' && !p.startsWith(DAYO_EDITS_TOO_MANY))
-  if (on) parts.push(TOO_MANY_TEXT)
+  if (text !== null) parts.push(text)
   const next = parts.join(' · ')
   if (next === (cur ?? '')) return
   if (next === '') await deleteKey(db, DAYO_KEYS.catalogError)
@@ -136,31 +138,91 @@ async function setTooManyWarning(db: RemoteDb, on: boolean): Promise<void> {
 }
 
 /**
+ * A backward walk over full pages, kept between refreshes (sync_state dayo.dayo_edits_walk). `since` = the mark it
+ * walks under (a walk under another mark is dropped) · `to` = the sale_date the next page ends at (inclusive) ·
+ * `newest` = the newest updated_at of the walk's FIRST page — the mark once the walk ends · `lossy` = days that alone
+ * filled a page (their cut-off bills cannot be reached: E3 has no cursor inside a day).
+ */
+type Walk = { since: string; to: string; newest: string | null; lossy: string[] }
+const YMD = /^\d{4}-\d{2}-\d{2}$/
+function readWalk(raw: string | null, since: string): Walk | null {
+  if (raw === null) return null
+  try {
+    const w = JSON.parse(raw) as Partial<Walk>
+    if (w.since === since && typeof w.to === 'string' && YMD.test(w.to) && (w.newest === null || (typeof w.newest === 'string' && Number.isFinite(Date.parse(w.newest))))
+      && Array.isArray(w.lossy) && w.lossy.length <= DAYO_EDITS_LOOKBACK_DAYS + 1 && w.lossy.every((d) => typeof d === 'string' && YMD.test(d))) {
+      return { since: w.since, to: w.to, newest: w.newest ?? null, lossy: w.lossy }
+    }
+  } catch { /* an unreadable walk starts again from today */ }
+  return null
+}
+const walkingText = (to: string): string => `${DAYO_EDITS_TOO_MANY}: บิลที่ระบบกลางแก้มีมากเกินดึงครั้งเดียว — กำลังไล่ดึงย้อนหลัง (ถึงวันที่ ${to}) บางบิลอาจยังไม่ขึ้นว่าแก้แล้ว`
+const lossyText = (days: string[]): string => `${DAYO_EDITS_TOO_MANY}: วันที่ ${days.join(', ')} มีบิลที่ระบบกลางแก้เกิน ${E3_PAGE_MAX} — บางบิลของวันนั้นอาจไม่ขึ้นว่าแก้แล้ว`
+
+/**
  * E3 with updated_since (spec §4.6 · O1 pending): this tablet's bills the owner edited or cancelled on the dayo web in
- * the last 60 days → applyDayoEdits. The "since" mark = the newest updated_at seen (absent: the device's setup time).
- * A full page (500) cannot be trusted to hold every change (dayo sorts by sale_date, not updated_at): what came is
- * applied, a warning is written, and the mark does NOT move — nothing is guessed, nothing cut off is skipped for ever.
+ * the last 60 days → applyDayoEdits. The "since" mark starts at the device's setup time. updated_since is shop-wide
+ * (bot + web + POS), so a page of 500 is normal on a busy shop — and dayo sorts by sale_date, not updated_at, so a full
+ * page does not hold every change (fix round 1 item 1):
+ * - a full page → the next page ends at the page's lowest sale_date (inclusive; an edit seen twice writes nothing),
+ *   up to E3_PAGES_PER_REFRESH pages now, the rest on the next refresh (the walk is kept); a warning shows meanwhile;
+ * - a page of ONE sale_date that is full cannot be paged inside: that day is noted (lossy) and the walk goes on the day before;
+ * - a page that is not full ends the walk: the mark becomes the newest updated_at of the walk's first page. Not the
+ *   newest of later pages — an edit made during the walk on a date already walked past has a later updated_at than
+ *   the first page, so the next refresh still sees it.
+ * A later page that cannot be fetched (offline, the E3 cap) just stops this refresh; the walk resumes next time.
  */
 export async function refreshDayoEdits(ctx: SyncContext, opts: E3Options = {}): Promise<{ updated: number }> {
-  const since = await ctx.serial(async () => {
+  const start = await ctx.serial(async () => {
     const stored = await readKey(ctx.db, DAYO_KEYS.dayoEditsSince)
-    if (stored !== null && Number.isFinite(Date.parse(stored))) return stored
-    const device = await requireDevice(ctx.db)
-    const row = await ctx.db.select({ at: s.device.registeredAt }).from(s.device).where(eq(s.device.id, device.id)).get()
-    return row?.at ?? ctx.deps.now()
+    let since = stored !== null && Number.isFinite(Date.parse(stored)) ? stored : null
+    if (since === null) {
+      const device = await requireDevice(ctx.db)
+      since = (await ctx.db.select({ at: s.device.registeredAt }).from(s.device).where(eq(s.device.id, device.id)).get())?.at ?? ctx.deps.now()
+    }
+    return { since, walk: readWalk(await readKey(ctx.db, DAYO_KEYS.dayoEditsWalk), since) }
   })
+  const { since } = start
   const today = bangkokDateOf(ctx.deps.now())
   const from = new Date(Date.parse(`${today}T00:00:00.000Z`) - DAYO_EDITS_LOOKBACK_DAYS * DAY_MS).toISOString().slice(0, 10)
-  const rows = await e3(ctx, opts, { from, to: today, updatedSince: new Date(Date.parse(since) - DAYO_EDITS_OVERLAP_MS).toISOString() })
-  let newest: string | null = null
-  for (const r of rows) {
-    if (r.updated_at !== null && Date.parse(r.updated_at) > Date.parse(newest ?? since)) newest = r.updated_at
+  const updatedSince = new Date(Date.parse(since) - DAYO_EDITS_OVERLAP_MS).toISOString()
+  const fresh = start.walk === null
+  let to = start.walk?.to ?? today
+  let newest = start.walk?.newest ?? null
+  const lossy = [...(start.walk?.lossy ?? [])]
+  let updated = 0
+  for (let page = 0; page < E3_PAGES_PER_REFRESH; page++) {
+    let rows: CentralOrder[]
+    try {
+      rows = to < from ? [] : await e3(ctx, opts, { from, to, updatedSince })
+    } catch (e) {
+      if (page === 0) throw e
+      break // the walk is saved already — the next refresh goes on from `to`
+    }
+    if (fresh && page === 0) {
+      for (const r of rows) if (r.updated_at !== null && Number.isFinite(Date.parse(r.updated_at)) && (newest === null || Date.parse(r.updated_at) > Date.parse(newest))) newest = r.updated_at
+    }
+    let nextTo: string | null = null
+    if (rows.length >= E3_PAGE_MAX) {
+      const lowest = rows.reduce((m, r) => (r.sale_date < m ? r.sale_date : m), to)
+      if (lowest < to) nextTo = lowest
+      else { lossy.push(to); nextTo = dayBefore(to) }
+    }
+    const walkTo = nextTo
+    updated += await ctx.serial(() => ctx.db.transaction(async (tx) => {
+      const n = await applyDayoEdits(tx, ctx.deps, rows.filter((o) => o.pos_order_id != null))
+      if (walkTo !== null) {
+        await writeKey(tx, DAYO_KEYS.dayoEditsWalk, JSON.stringify({ since, to: walkTo, newest, lossy } satisfies Walk))
+        await setTooManyWarning(tx, walkingText(walkTo))
+      } else {
+        await deleteKey(tx, DAYO_KEYS.dayoEditsWalk)
+        if (newest !== null && Date.parse(newest) > Date.parse(since)) await writeKey(tx, DAYO_KEYS.dayoEditsSince, newest)
+        await setTooManyWarning(tx, lossy.length > 0 ? lossyText(lossy) : null)
+      }
+      return n
+    }))
+    if (walkTo === null) break
+    to = walkTo
   }
-  const capped = rows.length >= E3_PAGE_MAX
-  return ctx.serial(() => ctx.db.transaction(async (tx) => {
-    const updated = await applyDayoEdits(tx, ctx.deps, rows.filter((o) => o.pos_order_id != null))
-    await setTooManyWarning(tx, capped)
-    if (!capped && newest !== null) await writeKey(tx, DAYO_KEYS.dayoEditsSince, newest)
-    return { updated }
-  }))
+  return { updated }
 }
