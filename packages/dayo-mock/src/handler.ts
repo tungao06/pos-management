@@ -2,7 +2,7 @@
 // Route order as dayo main ships it (apps/web/src/app/api/v1/*/route.ts + lib/api/auth.ts + api_authenticate 0049:187-225):
 // Content-Length > 256 KB (push only) → 401 key → 403 scope → 429 → the route.
 import { MAX_PUSH_BODY_BYTES, type CentralOrder, type DayoEdit, type ReceivedRowResult } from '@dayo/contracts'
-import { judgeRow } from './judge.js'
+import { bodyJsonbRefuses, judgeRow } from './judge.js'
 import { ALL_SCOPES, emptyKnown, freshCatalog, learnCatalog, type MockDayo, type MockOptions, type MockState, type StoredOrder } from './state.js'
 
 export const MOCK_API_KEY = `dayo_${'0123456789abcdef'.repeat(4)}`
@@ -100,6 +100,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     if (utf8.encode(text).length > MAX_PUSH_BODY_BYTES) return err(422, 'DY422', 'invalid: body ต้องเป็น JSON ไม่เกิน 256 KB', h)
     let body: unknown
     try { body = JSON.parse(text) } catch { return err(422, 'DY422', 'invalid: body ไม่ใช่ JSON', h) }
+    if (bodyJsonbRefuses(body)) return err(422, 'DY422', 'invalid: body ไม่ใช่ JSON', h) // p_body::jsonb fails like a parse error
     const rows = body !== null && typeof body === 'object' && !Array.isArray(body) ? (body as { rows?: unknown }).rows : undefined
     if (!Array.isArray(rows)) return err(422, 'DY422', 'invalid: ต้องมี rows เป็น array', h)
     if (rows.length < 1 || rows.length > 20) return err(422, 'DY422', 'invalid: rows ต้องมี 1–20 แถว', h)
