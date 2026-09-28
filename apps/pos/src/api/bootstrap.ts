@@ -90,7 +90,7 @@ function pricingCommitOf(raw: string | null): string | null {
 export async function syncStatus(db: RemoteDb, deps: ApiDeps): Promise<SyncStatusDto> {
   const now = Date.parse(deps.now())
   const key = await deps.secrets.getApiKey()
-  const baseUrl = await readKey(db, DAYO_KEYS.baseUrl)
+  const baseUrl = await storedBaseUrl(db) // M3: never the raw column — a restored backup may carry a URL the tablet refuses
   const skewRaw = await readKey(db, DAYO_KEYS.clockSkewMs)
   const skew = skewRaw === null || !Number.isFinite(Number(skewRaw)) ? null : Number(skewRaw)
   const aheadAt = Date.parse((await readKey(db, DAYO_KEYS.clockAheadAt)) ?? '')

@@ -656,6 +656,18 @@ describe('pushOnce — a failed row is charged only when dayo shows it is up', (
     expect(JSON.parse(after.lastError!)).toMatchObject({ farAhead: true, noVerdict: 4, requestFailed: true })
     expect((await t.api.bootstrap()).sync.clockFarAheadBills).toBe(1)
   })
+  it('a row refunded by an older build (REQUEST_FAILED, no flag) is not taken as a trusted probe (fix round 1 item 9)', async () => {
+    const { t } = await ready()
+    for (let i = 0; i < 3; i++) await cocoa(t)
+    const sent: string[][] = []
+    const ctx = withFetch(t, poisonFetch(t, ['A-000001'], sent))
+    await intoOneRowMode(t, ctx)
+    const [poison, legacy, fresh] = await outbox(t)
+    await t.db.update(s.outbox).set({ lastError: JSON.stringify({ reason: REQUEST_FAILED, detail: 'HTTP 500' }) }).where(eq(s.outbox.id, legacy!.id))
+    const before = sent.length
+    await pushOnce(ctx)
+    expect(sent.slice(before, before + 2)).toEqual([[poison!.idempotencyKey], [fresh!.idempotencyKey]]) // the probe skips the legacy row
+  })
 })
 
 describe('pushOnce — good rows pass a run of failing rows', () => {

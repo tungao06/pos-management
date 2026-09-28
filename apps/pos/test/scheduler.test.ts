@@ -1,10 +1,11 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
-import { createPosApi } from '../src/api/pos-api'
+import { MOCK_API_KEY } from '@dayo/dayo-mock'
+import { createPosApi, SETUP_CALLS_PER_MIN } from '../src/api/pos-api'
 import { createSyncScheduler, FOLLOW_UP_GAP_MS, MANUAL_CLEAR_GAP_MS, SYNC_BUDGET_PER_MIN } from '../src/sync/scheduler'
 import { pushOnce } from '../src/sync/push'
-import { DAYO_KEYS, readKey } from '../src/sync/state'
+import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
 import { openConnectedApi, STAFF } from './helpers/dayo'
 import { sellCode } from './helpers/db'
 
@@ -59,7 +60,8 @@ describe('sync scheduler (spec 04 §6.2)', () => {
     const t = await openConnectedApi()
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     t.mock.setMode('server_down')
-    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    // fix round 1 item 5: the 30 s window runs on a monotonic clock; here it moves with the test clock
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
     await sch.runNow()
     expect(pushes(t)).toBe(1)                // cleared (nothing to clear), tried, 5xx → backoff
     t.clock.advanceMs(1_000)
@@ -179,5 +181,133 @@ describe('sync scheduler — one call at a time, paced under dayo\'s 60 requests
     await backup
     await sync
     expect(await version()).toBe(before! + 1)
+  })
+})
+
+describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
+  const catalogCalls = (t: Awaited<ReturnType<typeof openConnectedApi>>) => t.mock.requests().filter((r) => r.path === '/api/v1/pos/catalog').length
+  const failureBackoff = async (t: Awaited<ReturnType<typeof openConnectedApi>>, reason: string) => {
+    await writeKey(t.db, DAYO_KEYS.pushBackoffUntil, new Date(Date.parse(t.clock.now()) + 300_000).toISOString())
+    await writeKey(t.db, DAYO_KEYS.pushBackoffReason, reason)
+  }
+
+  it('a failed E1 is not retried by the minute tick before 5 minutes after that ATTEMPT (item 3)', async () => {
+    const t = await openConnectedApi()
+    vi.useFakeTimers()
+    t.mock.setMode('server_down')
+    t.clock.advanceMs(180_000) // the last GOOD pull (connectShop) is 3 minutes old when the app opens
+    const base = catalogCalls(t)
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    sch.start()
+    await vi.waitFor(() => expect(catalogCalls(t)).toBe(base + 1)) // 'open' — 500
+    for (let minute = 1; minute <= 4; minute++) { t.clock.advanceMs(60_000); await vi.advanceTimersByTimeAsync(60_000) }
+    expect(catalogCalls(t)).toBe(base + 1)
+    t.clock.advanceMs(60_000); await vi.advanceTimersByTimeAsync(60_000)
+    await vi.waitFor(() => expect(catalogCalls(t)).toBe(base + 2))
+    sch.stop()
+  })
+  it('"ส่งตอนนี้" does not get past a 429 Retry-After, for E1 or E2 (item 3)', async () => {
+    const t = await openConnectedApi()
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.setMode('rate_limited') // Retry-After: 30
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
+    await sch.runNow()
+    const n = t.mock.requests().length // E1 answered 429: the push waits too
+    expect(pushes(t)).toBe(0)
+    t.mock.setMode('normal')
+    for (let i = 0; i < 2; i++) { t.clock.advanceMs(14_000); await sch.runNow() }
+    expect(t.mock.requests().length).toBe(n)
+    t.clock.advanceMs(2_000)
+    await sch.runNow()
+    expect(pushes(t)).toBe(1)
+  })
+  it('"online" forgets only a backoff that a lost network caused, never a 5xx one (item 4)', async () => {
+    const t = await openConnectedApi()
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    await failureBackoff(t, 'failure')
+    sch.kick('online')
+    await new Promise((r) => setTimeout(r, 100))
+    expect(pushes(t)).toBe(0)
+    await failureBackoff(t, 'network')
+    sch.kick('online')
+    await vi.waitFor(() => expect(pushes(t)).toBe(1))
+  })
+  it('the 30 s window of N4 survives a reload (sync_state) (item 4)', async () => {
+    const t = await openConnectedApi()
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.setMode('server_down')
+    await createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() }).runNow() // clears, tries, fails
+    t.mock.setMode('normal')
+    await failureBackoff(t, 'failure')
+    t.clock.advanceMs(1_000)
+    const reloaded = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    await reloaded.runNow()
+    expect(pushes(t)).toBe(1) // the new page may not clear again within 30 s
+    t.clock.advanceMs(MANUAL_CLEAR_GAP_MS)
+    await reloaded.runNow()
+    expect(pushes(t)).toBe(2)
+  })
+  it('the 30 s window of N4 runs on a monotonic clock: moving the wall clock does not reopen it (item 5)', async () => {
+    const t = await openConnectedApi()
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    let mono = 0
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => mono })
+    t.mock.setMode('server_down')
+    await sch.runNow()
+    t.mock.setMode('normal')
+    await failureBackoff(t, 'failure')
+    t.clock.advanceMs(60_000) // the wall clock jumps; no real time passed
+    await sch.runNow()
+    expect(pushes(t)).toBe(1)
+    mono += MANUAL_CLEAR_GAP_MS
+    await sch.runNow()
+    expect(pushes(t)).toBe(2)
+  })
+  it('the request budget survives a reload: a new page waits for the window the old one used (item 4)', async () => {
+    const t = await openConnectedApi()
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const from = (await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'order')).get())!
+    for (let i = 1; i <= 599; i++) {
+      const id = `ffffffff-0000-4000-8000-${i.toString(16).padStart(12, '0')}`
+      await t.db.insert(s.outbox).values({ id, tableName: 'order', rowJson: { ...(from.rowJson as Record<string, unknown>), pos_order_id: id, receipt_no: `H-${String(i).padStart(6, '0')}`, queue_no: 2000 + i }, idempotencyKey: `order:${id}`, status: 'pending', createdAt: t.clock.now(), attempts: 0, lastError: null, sentAt: null, deadAt: null, nextAttemptAt: null, parentKey: null, resultJson: null })
+    }
+    vi.useFakeTimers()
+    const first = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    await first.runNow()
+    await first.runNow() // 32 requests in this minute
+    first.stop()
+    const n = t.mock.requests().length
+    const reloaded = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    const run = reloaded.runNow()
+    await vi.advanceTimersByTimeAsync(50_000)
+    expect(t.mock.requests().length).toBe(n) // still inside the old page's minute
+    await vi.advanceTimersByTimeAsync(15_000)
+    await run
+    expect(t.mock.requests().length).toBeGreaterThan(n)
+  })
+  it('"ส่งตอนนี้" pressed during a cycle answers with the follow-up cycle, not the one already running (item 8)', async () => {
+    const t = await openConnectedApi()
+    vi.useFakeTimers()
+    const slow: typeof fetch = async (input, init) => { await new Promise((r) => setTimeout(r, 3_000)); return t.mock.fetch(input, init) }
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const sch = createSyncScheduler({ db: t.db, deps: { ...t.deps, fetch: slow }, serial: (fn) => fn() })
+    sch.kick('online') // the catalog is not due: this cycle only pushes
+    await vi.advanceTimersByTimeAsync(1_000)
+    const pressed = sch.runNow()
+    await vi.advanceTimersByTimeAsync(30_000)
+    const r = await pressed
+    expect(r.catalog?.outcome).toBe('unchanged') // the manual follow-up pulled E1
+    expect(r.push.sent).toBe(0)
+    expect(t.mock.orders()).toHaveLength(1)
+    sch.stop()
+  })
+  it('setup calls to dayo are capped per minute so they cannot eat the shared 60/min (item 7)', async () => {
+    const t = await openConnectedApi()
+    const n = t.mock.requests().length
+    const input = { baseUrl: 'http://localhost:8787/api/v1', apiKey: MOCK_API_KEY }
+    for (let i = 0; i < SETUP_CALLS_PER_MIN - 1; i++) await t.api.probeDayo(input) // connectShop (in openConnectedApi) was the first
+    await expect(t.api.probeDayo(input)).rejects.toThrow(/^DAYO_UNREACHABLE: SETUP_RATE_LIMITED/)
+    expect(t.mock.requests().length).toBe(n + SETUP_CALLS_PER_MIN - 1)
   })
 })

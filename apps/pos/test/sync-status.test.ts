@@ -53,4 +53,10 @@ describe('bootstrap().sync (spec 04 §4.3, §6.7, §10.5 · D80)', () => {
     const t = await openTestApi()
     expect((await t.api.bootstrap()).sync).toMatchObject({ linked: false, apiState: null, maskedKey: null, pendingBills: 0, clockWarning: false })
   })
+  it('never shows a stored base URL the tablet would refuse (a restored backup) — not linked either (M3, fix round 1 item 6)', async () => {
+    const t = await openConnectedApi()
+    expect((await t.api.bootstrap()).sync).toMatchObject({ baseUrl: 'http://localhost:8787/api/v1', linked: true })
+    await writeKey(t.db, DAYO_KEYS.baseUrl, 'http://evil.example/api/v1')
+    expect((await t.api.bootstrap()).sync).toMatchObject({ baseUrl: null, linked: false })
+  })
 })

@@ -4,7 +4,7 @@ import * as s from '@dayo/db-schema/sqlite'
 import { bangkokDateOf, rowKey } from '@dayo/contracts'
 import { centralDiffSatang, type PricedPromotion } from '@dayo/domain'
 import { readCatalog, staffDisplayName } from '../sync/catalog'
-import { DAYO_KEYS, decodeLastError, readKey } from '../sync/state'
+import { DAYO_KEYS, decodeLastError, readKey, SKEW_FRESH_MS } from '../sync/state'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
@@ -102,13 +102,18 @@ function promotionsOf(o: OrderRow): { name: string; discountSatang: number }[] {
  *   a void is never stamped before its sale. Stays on the tablet clock (spec §6.7: dayo trusts the device time).
  * - `judge` (which Thai day it is): the latest of `stamp` and the device clock corrected by the last skew dayo
  *   reported (D80, task 14 item 5) — a clock set back to yesterday, even before the first sale of today, does not
- *   reopen yesterday's bills once the tablet has heard dayo's server_time since. Offline = the last skew measured.
+ *   reopen yesterday's bills once the tablet has heard dayo's server_time since.
+ * D106: the skew counts only while fresh — measured at most SKEW_FRESH_MS (15 min) before the device's now. A NEGATIVE
+ * age (the clock was set back after the measurement) still uses it: that is the back-dating it guards against. An older
+ * skew is ignored (judge = stamp, the original rule), so a stale one can never block a legitimate same-day cancel.
  */
 export async function voidInstant(db: RemoteDb, deviceId: string, deviceNow: string): Promise<{ stamp: string; judge: string }> {
   const latest = (await db.select({ v: max(s.order.soldAt) }).from(s.order).where(eq(s.order.deviceId, deviceId)).get())?.v ?? null
   const stamp = latest !== null && Date.parse(latest) > Date.parse(deviceNow) ? latest : deviceNow
-  const skew = Number(await readKey(db, DAYO_KEYS.clockSkewMs))
-  const server = Number.isFinite(skew) ? Date.parse(deviceNow) + skew : Number.NaN
+  const skewRaw = await readKey(db, DAYO_KEYS.clockSkewMs)
+  const skew = skewRaw === null ? Number.NaN : Number(skewRaw)
+  const age = Date.parse(deviceNow) - Date.parse((await readKey(db, DAYO_KEYS.clockMeasuredAt)) ?? '')
+  const server = Number.isFinite(skew) && Number.isFinite(age) && age <= SKEW_FRESH_MS ? Date.parse(deviceNow) + skew : Number.NaN
   const judge = Number.isFinite(server) && server > Date.parse(stamp) ? new Date(server).toISOString() : stamp
   return { stamp, judge }
 }

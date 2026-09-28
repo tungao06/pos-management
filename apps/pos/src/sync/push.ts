@@ -130,8 +130,14 @@ async function* pendingRows(db: RemoteDb, nowIso: string, rotate: boolean): Asyn
   }
 }
 
-/** A row not marked as part of a failed request (lastError.requestFailed) — the best probe after a failure. */
-const isTrusted = (r: Row): boolean => decodeLastError(r.lastError).requestFailed !== true
+/**
+ * A row not marked as part of a failed request — the best probe after a failure. fix round 1 item 9: a row an older
+ * build charged or refunded carries reason REQUEST_FAILED without the requestFailed flag; it is not trusted either.
+ */
+const isTrusted = (r: Row): boolean => {
+  const d = decodeLastError(r.lastError)
+  return d.requestFailed !== true && d.reason !== REQUEST_FAILED
+}
 
 /**
  * `probe` (one-row mode, after a failure in this call): the first sendable row that has never been part of a failed
@@ -189,11 +195,11 @@ async function gate(db: RemoteDb, deps: ApiDeps): Promise<{ cfg: { baseUrl: stri
  * - A 200 (or a 422 verdict on a row) = dayo is up: every provisional charge of the call is confirmed.
  * - K = SINGLE_FAILURES_PER_CALL failures in a row, or a failure that cannot be charged (offline, 401/403/404, 429) =
  *   dayo is down: every provisional charge is refunded (refundCharges), the call stops, the whole-request backoff holds.
- * - The queue runs out of sendable rows before K failures (task 14 item 6): the charges are kept only when
- *   dayo.last_push_at is newer than dayo.push_fail_since, the start of the current failure streak — evidence that dayo
- *   was up while these rows failed. Otherwise they are refunded: a 15-hour outage with two rows left must not spend
- *   their 50 tries. A 200 ends the streak, so today this means a row is charged only when a later row of the same
- *   call gets a 200 — a poison row alone waits under the whole-request backoff and goes STUCK once the shop sells again.
+ * - The queue runs out of sendable rows before K failures: every provisional charge is refunded, always (task 14 fix
+ *   round 1, Path A). Nothing in the call showed dayo was up, and a 15-hour outage with two rows left must not spend
+ *   their 50 tries. So a row is charged only when a later row of the SAME call gets a 200: a poison row alone in the
+ *   queue waits under the whole-request backoff (≤ 15 min) and is never charged — it reaches STUCK only while the shop
+ *   keeps selling (each new good bill confirms one charge); meanwhile it shows as pending (> 24 h = pendingOver24h).
  */
 /** The owner banner (farAhead) and the M5 count (noVerdict) outlive a charge or a refund (task 14 item 7). */
 function keptExtras(lastError: string | null): LastErrorExtra {
@@ -239,9 +245,9 @@ async function onRequestFailure(db: RemoteDb, deps: ApiDeps, f: DayoFailure, bat
     default: { // network, timeout, server (5xx and unknown 4xx), bad_response: whole-request retry with backoff (spec §6.3 row 1)
       const streak = Number(await readKey(db, DAYO_KEYS.pushFailStreak) ?? '0') + 1
       await writeKey(db, DAYO_KEYS.pushFailStreak, String(streak))
-      if (streak === 1) await writeKey(db, DAYO_KEYS.pushFailSince, now)
       await writeKey(db, DAYO_KEYS.pushBackoffUntil, later(now, backoffMs(streak, deps.random)))
-      await writeKey(db, DAYO_KEYS.pushBackoffReason, 'failure')
+      // fix round 1 item 4: only an offline tablet's backoff may be forgotten by the 'online' event
+      await writeKey(db, DAYO_KEYS.pushBackoffReason, f.kind === 'network' ? 'network' : 'failure')
       if (f.kind === 'network') return false // offline: not the rows' fault, and not part of the 5xx streak (m3) — a timeout is (m1)
       const serverStreak = Number(await readKey(db, DAYO_KEYS.pushServerStreak) ?? '0') + 1
       await writeKey(db, DAYO_KEYS.pushServerStreak, String(serverStreak))
@@ -325,7 +331,6 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
     if (!blockedStates.has((await readKey(tx, DAYO_KEYS.apiState)) ?? '')) await writeKey(tx, DAYO_KEYS.apiState, 'ok')
     await writeKey(tx, DAYO_KEYS.lastPushAt, at)
     await deleteKey(tx, DAYO_KEYS.pushFailStreak)
-    await deleteKey(tx, DAYO_KEYS.pushFailSince)
     await deleteKey(tx, DAYO_KEYS.pushServerStreak)
     await deleteKey(tx, DAYO_KEYS.pushBackoffUntil)
     await deleteKey(tx, DAYO_KEYS.pushBackoffReason)
@@ -360,13 +365,6 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
   })
 }
 
-/** task 14 item 6: dayo answered 200 after the current failure streak began — it was up while the charged rows failed. */
-async function dayoUpSinceStreakBegan(db: RemoteDb): Promise<boolean> {
-  const last = Date.parse((await readKey(db, DAYO_KEYS.lastPushAt)) ?? '')
-  const since = Date.parse((await readKey(db, DAYO_KEYS.pushFailSince)) ?? '')
-  return Number.isFinite(last) && Number.isFinite(since) && last > since
-}
-
 /**
  * One call of the sender (item 8 — the states it moves through):
  *
@@ -375,11 +373,11 @@ async function dayoUpSinceStreakBegan(db: RemoteDb): Promise<boolean> {
  * | gated (no request)            | not linked · apiBlocked · backoff running · no list | the owner re-links · the backoff runs out · E1 answers |
  * | batch mode (≤ 20 rows)        | push_single_through absent                          | 3 × 5xx/timeout/bad 200 in a row, or a 422 → one-row   |
  * | one-row mode                  | push_single_through = ids of the failed batch       | every one of those rows decided (a 200, or ENVELOPE)   |
- * | provisional charges (one-row) | a request that carried only this row failed         | a 200 (kept) · K in a row or an uncharged failure      |
- * |                               |                                                     | (refunded) · the queue runs out (kept only if dayo     |
- * |                               |                                                     | answered after the failure streak began)               |
- * | whole-request backoff         | network / timeout / 5xx / bad 200 (5 s … 15 min)    | a 200 · clearFailureBackoff on an online/open/manual/  |
- * |                               | · 429 Retry-After                                   | before_close wake (never 429's)                        |
+ * | provisional charges (one-row) | a request that carried only this row failed         | a 200 of a later row (kept) · K in a row, a failure    |
+ * |                               |                                                     | no row is blamed for, the queue running out, or the    |
+ * |                               |                                                     | round cap (all refunded)                               |
+ * | whole-request backoff         | network / timeout / 5xx / bad 200 (5 s … 15 min)    | a 200 · 'online' wake (network cause only) · manual /  |
+ * |                               | · a 429 of E1 or E2 (Retry-After)                   | open / before_close wake ≤ once per 30 s (never 429's) |
  */
 export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
   const out: PushOutcome = { requests: 0, sent: 0, rejected: 0, deferred: 0, held: 0, noAnswer: 0, stopped: null }
@@ -411,10 +409,7 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
       return { ...(await pickBatch(ctx.db, nowIso, sup, size, decided, { rotate: size === 1, probe: size === 1 && probe })), single: size === 1 }
     })
     out.held = held
-    if (batch.length === 0) { // the queue ran out before K failures (item 6)
-      if (provisional.length > 0 && !(await ctx.serial(() => dayoUpSinceStreakBegan(ctx.db)))) await refundAll()
-      return out
-    }
+    if (batch.length === 0) { await refundAll(); return out } // the queue ran out before K failures: refund, always (Path A)
     for (const r of batch) decided.add(r.id)
     const body = { device_time: nowIso, rows: batch.map((r) => ({ key: r.idempotencyKey, kind: r.tableName, data: r.rowJson })) } as PushRequest
     let answer: Timed<{ server_time: string; results: ReceivedRowResult[] }>
@@ -448,17 +443,24 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
 }
 
 /**
- * Task 14: a wake that means "the network may be back" forgets the network/5xx backoff — never 429's Retry-After
- * (review item 2). It leaves push_server_streak alone ON PURPOSE: that count says dayo itself kept answering 5xx /
- * unreadable 200s, which a reconnect does not change — only dayo's next 200 clears it (and with it the way into R4
- * one-row mode). The failure streak and its start go with the backoff: the next failure starts a new streak.
+ * Task 14: a wake that means "the network may be back" forgets the failure backoff of E2 and E1 — never a 429's
+ * Retry-After (review item 2). `onlyNetwork` (fix round 1 item 4, the 'online' event): only a backoff an offline tablet
+ * caused; a 5xx / timeout one must run out (or be cleared by a manual / open / before_close wake, ≤ once per 30 s).
+ * It leaves push_server_streak alone ON PURPOSE: that count says dayo itself kept answering 5xx / unreadable 200s,
+ * which a reconnect does not change — only dayo's next 200 clears it (and with it the way into R4 one-row mode).
  */
-export async function clearFailureBackoff(db: RemoteDb): Promise<void> {
-  if ((await readKey(db, DAYO_KEYS.pushBackoffReason)) === 'rate_limited') return
-  await deleteKey(db, DAYO_KEYS.pushBackoffUntil)
-  await deleteKey(db, DAYO_KEYS.pushFailStreak)
-  await deleteKey(db, DAYO_KEYS.pushFailSince)
-  await deleteKey(db, DAYO_KEYS.pushBackoffReason)
+export async function clearFailureBackoff(db: RemoteDb, opts: { onlyNetwork?: boolean } = {}): Promise<void> {
+  const may = (reason: string | null): boolean => reason !== 'rate_limited' && (opts.onlyNetwork !== true || reason === 'network')
+  if (may(await readKey(db, DAYO_KEYS.pushBackoffReason))) {
+    await deleteKey(db, DAYO_KEYS.pushBackoffUntil)
+    await deleteKey(db, DAYO_KEYS.pushFailStreak)
+    await deleteKey(db, DAYO_KEYS.pushBackoffReason)
+  }
+  if (may(await readKey(db, DAYO_KEYS.catalogBackoffReason))) {
+    await deleteKey(db, DAYO_KEYS.catalogBackoffUntil)
+    await deleteKey(db, DAYO_KEYS.catalogFailStreak)
+    await deleteKey(db, DAYO_KEYS.catalogBackoffReason)
+  }
 }
 
 /** Owner's "ลองใหม่" (spec §6.4): dead → pending with a fresh budget; children parked as PARENT_REJECTED come back too. */

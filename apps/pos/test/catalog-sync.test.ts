@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { createMockDayo, MOCK_API_KEY } from '@dayo/dayo-mock'
 import { apiBlocked, pullCatalog, readCatalog, staffDisplayName } from '../src/sync/catalog'
-import { pushOnce } from '../src/sync/push'
+import { clearFailureBackoff, pushOnce } from '../src/sync/push'
 import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
 import { openTestApi } from './helpers/db'
 
@@ -158,11 +158,47 @@ describe('pullCatalog (spec 04 §4.4, §6.5)', () => {
     expect(await readKey(t.db, DAYO_KEYS.pushBackoffUntil)).toBeNull()
     expect(await readKey(t.db, DAYO_KEYS.pushFailStreak)).toBeNull()
   })
+  it('E1 backs off after its own 5xx / network failures: 5 s, then 15 s … — no request while it runs (fix round 1 item 3)', async () => {
+    const { ctx, t, mock } = await linked()
+    mock.setMode('server_down')
+    expect((await pullCatalog(ctx)).failure).toEqual({ kind: 'server', status: 500 })
+    const calls = () => mock.requests().length
+    const n = calls()
+    t.clock.advanceMs(4_999)
+    expect(await pullCatalog(ctx)).toEqual({ outcome: 'backoff' })
+    expect(calls()).toBe(n)
+    t.clock.advanceMs(1)
+    expect((await pullCatalog(ctx)).outcome).toBe('failed') // 2nd failure → 15 s
+    t.clock.advanceMs(14_999)
+    expect(await pullCatalog(ctx)).toEqual({ outcome: 'backoff' })
+    mock.setMode('normal')
+    t.clock.advanceMs(1)
+    expect((await pullCatalog(ctx)).outcome).toBe('changed')
+    expect((await pullCatalog(ctx)).outcome).toBe('unchanged') // a 200 ends the backoff
+    const offline = { ...ctx, deps: { ...t.deps, fetch: (async () => { throw new TypeError('Failed to fetch') }) as typeof fetch } }
+    expect((await pullCatalog(offline)).failure?.kind).toBe('network')
+    expect(await pullCatalog(ctx)).toEqual({ outcome: 'backoff' })
+  })
+  it('a 429 on E1 holds E1 and E2 alike until its Retry-After — a wake that clears failures does not lift it (fix round 1 item 3)', async () => {
+    const { ctx, t, mock } = await linked()
+    mock.setMode('rate_limited') // Retry-After: 30
+    expect((await pullCatalog(ctx)).failure).toEqual({ kind: 'rate_limited', retryAfterMs: 30_000 })
+    mock.setMode('normal')
+    const n = mock.requests().length
+    await clearFailureBackoff(t.db)
+    t.clock.advanceMs(29_999)
+    expect(await pullCatalog(ctx)).toEqual({ outcome: 'backoff' })
+    expect((await pushOnce(ctx)).stopped).toBe('backoff')
+    expect(mock.requests().length).toBe(n)
+    t.clock.advanceMs(1)
+    expect((await pullCatalog(ctx)).outcome).toBe('changed')
+  })
   it('a proxy or WAF 403 without dayo\'s error body is a failed pull, not a refused key (task 14 item 3)', async () => {
     const { ctx, t } = await linked()
     const waf = { ...ctx, deps: { ...t.deps, fetch: (async () => new Response('<html>403 Forbidden</html>', { status: 403 })) as typeof fetch } }
     expect(await pullCatalog(waf)).toEqual({ outcome: 'failed', failure: { kind: 'server', status: 403 } })
     expect(await readKey(t.db, DAYO_KEYS.apiState)).toBeNull()
+    t.clock.advanceMs(5_000) // its own failure backoff (fix round 1 item 3)
     expect((await pullCatalog(ctx)).outcome).toBe('changed') // not blocked
   })
   it('a bad answer is forgotten by the next answer that parses, unchanged included', async () => {
@@ -171,6 +207,7 @@ describe('pullCatalog (spec 04 §4.4, §6.5)', () => {
     const garbled = { ...ctx, deps: { ...t.deps, fetch: (async () => new Response(JSON.stringify({ ok: true, data: { changed: 'maybe' } }), { status: 200 })) as typeof fetch } }
     expect((await pullCatalog(garbled)).failure?.kind).toBe('bad_response')
     expect(await readKey(t.db, DAYO_KEYS.catalogError)).toMatch(/^BAD_RESPONSE/)
+    t.clock.advanceMs(5_000) // an unreadable 200 backs E1 off like a 5xx (fix round 1 item 3)
     expect((await pullCatalog(ctx)).outcome).toBe('unchanged')
     expect(await readKey(t.db, DAYO_KEYS.catalogError)).toBeNull()
   })

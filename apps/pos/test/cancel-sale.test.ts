@@ -87,6 +87,26 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
     try { await t.api.cancelSale({ orderId: yesterday.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'x', made: false, refundReference: 'K' }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('VOID_NOT_ALLOWED') }
     expect(await t.db.select().from(s.outbox).all()).toEqual(before)
   })
+  it('a skew older than 15 minutes is not used: it can never block a legitimate same-day cancel (D106)', async () => {
+    const t = await openConnectedApi() // 10:00 Bangkok, 25 Sep
+    t.mock.setNow('2026-09-26T03:00:00.000Z') // dayo says the tablet is a day behind
+    await t.api.syncNow()
+    t.clock.advanceMs(10 * 60_000)
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    expect((await t.api.getOrder(r.orderId)).voidable).toBe(false) // a fresh skew: dayo's day is already the 26th
+    t.clock.advanceMs(6 * 60_000) // 16 minutes since the measurement, still offline
+    expect((await t.api.getOrder(r.orderId)).voidable).toBe(true)
+    await t.api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'x', made: false, refundReference: 'K' })
+  })
+  it('a clock set back after the measurement (negative age) still uses the skew — no back-dating around it (D106)', async () => {
+    const t = await openConnectedApi({ now: '2026-09-25T16:50:00.000Z' }) // 23:50 Bangkok, 25 Sep
+    const yesterday = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.clock.set('2026-09-25T16:55:00.000Z')
+    t.mock.setNow('2026-09-25T17:10:00.000Z') // really 00:10, 26 Sep: the tablet is 15 minutes slow
+    await t.api.syncNow()
+    t.clock.set('2026-09-25T16:54:00.000Z') // and is then set back one more minute
+    expect((await t.api.getOrder(yesterday.orderId)).voidable).toBe(false)
+  })
   it('the server time only judges the day: voided_at stays on the tablet clock (spec §6.7)', async () => {
     const t = await openConnectedApi()
     const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })

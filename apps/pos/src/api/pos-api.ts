@@ -2,12 +2,13 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import { adjustStock, discardBase } from './adjust'
 import { login } from './auth'
 import { confirmBackupSaved, exportBackup } from './backup'
-import { createDayoPacer, createSyncScheduler, type Scheduler } from '../sync/scheduler'
+import { createDayoPacer, createSyncScheduler, RATE_WINDOW_MS, type Scheduler } from '../sync/scheduler'
 import { bootstrap, syncStatus } from './bootstrap'
 import { recordCashMovement } from './cash'
 import { closeShift, getZReport, listZReports } from './close'
 import { connectShop, probeDayo, recoverOwner, replaceApiKey } from './connect'
 import type { ApiDeps } from './deps'
+import { PosError } from './errors'
 import { loadMenu } from './menu'
 import { getOrder, listOrders } from './orders'
 import { produceBatch } from './production'
@@ -32,6 +33,24 @@ export type PosApiOptions = {
   locks?: Parameters<typeof createSyncScheduler>[0]['locks']
 }
 
+/**
+ * fix round 1 item 7: probeDayo / connectShop / replaceApiKey / recoverOwner (1–2 E1 requests each) together at most
+ * this many times per minute, so setup screens cannot eat the 60/min dayo shares with the sender (SYNC_BUDGET_PER_MIN
+ * 45 + 6 × 2 = 57). E3 (Task 15) needs its own cap under the same ceiling.
+ */
+export const SETUP_CALLS_PER_MIN = 6
+
+/** A sliding one-minute count of setup calls on a monotonic clock; over the cap = refused before any request. */
+function createSetupLimiter(monoMs: () => number = () => performance.now()): () => void {
+  let log: number[] = []
+  return () => {
+    const now = monoMs()
+    log = log.filter((x) => x > now - RATE_WINDOW_MS && x <= now)
+    if (log.length >= SETUP_CALLS_PER_MIN) throw new PosError('DAYO_UNREACHABLE', `SETUP_RATE_LIMITED: at most ${SETUP_CALLS_PER_MIN} tries a minute — wait a minute`)
+    log.push(now)
+  }
+}
+
 export function createPosApi(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOptions = {}): PosApi {
   return createPosRuntime(db, baseDeps, opts).api
 }
@@ -44,7 +63,8 @@ export function createPosApi(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOption
 export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOptions = {}): { api: PosApi; scheduler: Scheduler } {
   const serial = createSerialQueue()
   const auto = opts.autoSync === true
-  const pacer = createDayoPacer()
+  const pacer = createDayoPacer(undefined, () => Date.parse(baseDeps.now()))
+  const setupCall = createSetupLimiter()
   let scheduler: Scheduler | null = null
   // reads through to baseDeps on every use (the Worker never swaps them; fault-injection tests do), plus the counted
   // fetch and the write wake
@@ -74,7 +94,10 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     quickOpenShift: async (input) => { const r = await serial(() => quickOpenShift(db, deps, input)); wake('before_shift'); return r },
     recordCashMovement: (input) => serial(() => recordCashMovement(db, deps, input)),
     shiftReport: () => serial(() => shiftReport(db, deps)),
-    closeShift: (input) => { wake('before_close'); return serial(() => closeShift(db, deps, input)) }, // spec §6.2: push what is queued first
+    // spec §6.2 "ก่อนปิดกะ": the wake comes only once the input and the PIN passed (fix round 1 item 4). Its reads and
+    // writes queue behind this closeShift in the serial queue, so the send itself happens AFTER the close commits —
+    // no effect in block 2 (the Z does not count unsent bills yet); block 3 must revisit this (fix round 1 item 11).
+    closeShift: (input) => serial(() => closeShift(db, deps, input, { validated: () => wake('before_close') })),
     listZReports: () => serial(() => listZReports(db)),
     getZReport: (shiftId) => serial(() => getZReport(db, shiftId)),
     exportBackup: (actorUserId) => serial(() => exportBackup(db, deps, actorUserId)),
@@ -89,12 +112,12 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     saveCountLine: (input) => serial(() => saveCountLine(db, deps, input)),
     removeCountLine: (input) => serial(() => removeCountLine(db, input)),
     closeStockCount: (input) => serial(() => closeStockCount(db, deps, input)),
-    probeDayo: (input) => probeDayo(deps, input), // not in the serial queue: it touches no table
-    connectShop: (input) => serial(() => connectShop(db, deps, input)),
+    probeDayo: async (input) => { setupCall(); return probeDayo(deps, input) }, // not in the serial queue: it touches no table
+    connectShop: async (input) => { setupCall(); return serial(() => connectShop(db, deps, input)) },
     setStaffPin: (input) => serial(() => setStaffPin(db, deps, input)),
     // network inside the queue is accepted here: the owner does this while the tablet cannot send anyway
-    replaceApiKey: (input) => serial(() => replaceApiKey(db, deps, input)),
-    recoverOwner: (input) => serial(() => recoverOwner(db, deps, input)),
+    replaceApiKey: async (input) => { setupCall(); return serial(() => replaceApiKey(db, deps, input)) },
+    recoverOwner: async (input) => { setupCall(); return serial(() => recoverOwner(db, deps, input)) },
     syncNow: () => sch.runNow(), // network inside: NOT in the serial queue (its reads and writes are)
     syncStatus: () => serial(() => syncStatus(db, deps)),
   }

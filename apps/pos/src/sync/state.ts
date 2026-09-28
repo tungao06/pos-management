@@ -19,10 +19,18 @@ export const DAYO_KEYS = {
   catalogError: 'dayo.catalog_error',
   pushFailStreak: 'dayo.push_fail_streak',
   pushBackoffUntil: 'dayo.push_backoff_until',
-  pushBackoffReason: 'dayo.push_backoff_reason', // 'failure' (network/5xx — cleared by online/manual/open/before_close wakes) | 'rate_limited' (kept)
+  // 'network' (offline — an online wake may forget it) | 'failure' (timeout / 5xx / unreadable 200 — only a manual, open or
+  // before_close wake, at most once per 30 s) | 'rate_limited' (a 429 from E1 or E2 — per key, never cleared: it runs out)
+  pushBackoffReason: 'dayo.push_backoff_reason',
   pushSingleThrough: 'dayo.push_single_through', // R4: {ids} of the rows of the batch that failed (task 13 fix round 1)
   pushServerStreak: 'dayo.push_server_streak',   // consecutive 5xx / unreadable 200 — enters R4; network failures do not count (m3)
-  pushFailSince: 'dayo.push_fail_since',         // when the current whole-request failure streak began (set with push_fail_streak = 1)
+  // E1's own failure backoff (fix round 1 item 3) — a 429 on E1 goes to push_backoff_* ('rate_limited'), shared per key
+  catalogAttemptAt: 'dayo.catalog_attempt_at',     // the last E1 request, answered or not (catalog_checked_at = the last good one)
+  catalogFailStreak: 'dayo.catalog_fail_streak',
+  catalogBackoffUntil: 'dayo.catalog_backoff_until',
+  catalogBackoffReason: 'dayo.catalog_backoff_reason', // 'network' | 'failure', as push_backoff_reason
+  manualClearAt: 'dayo.manual_clear_at',           // N4: the last time a wake cleared a failure backoff (survives a reload)
+  requestWindow: 'dayo.request_window',            // the wall times of the dayo requests of the last 60 s (survives a reload)
   lastPushAt: 'dayo.last_push_at',
 } as const
 export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled' | 'bad_base_url'
@@ -33,6 +41,10 @@ export const STUCK_AFTER_ATTEMPTS = 50
 export const API_DISABLED_RETRY_MS = 15 * 60_000
 export const RATE_LIMIT_DEFAULT_MS = 60_000
 export const NO_ANSWER_RETRY_MS = 60_000
+/** D106: a measured clock skew is used for the same-day void rule only this long after it was measured. */
+export const SKEW_FRESH_MS = 15 * 60_000
+/** The longest wait a stored backoff may still have: the last step + 20 % jitter. Anything longer is not trusted. */
+export const MAX_BACKOFF_WAIT_MS = Math.round(BACKOFF_MS[BACKOFF_MS.length - 1]! * 1.2)
 
 export async function readKey(db: RemoteDb, key: string): Promise<string | null> {
   return (await db.select().from(s.syncState).where(eq(s.syncState.key, key)).get())?.value ?? null
