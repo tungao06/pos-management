@@ -33,6 +33,8 @@ export type PosApiOptions = {
   /** Task 14 test seam: the scheduler's timers and Web Locks (defaults: the globals). */
   timers?: Parameters<typeof createSyncScheduler>[0]['timers']
   locks?: Parameters<typeof createSyncScheduler>[0]['locks']
+  /** Task 21 hotfix 2: told after every scheduler cycle — the Worker passes notifySyncCycleDone (sync/cycle-signal.ts). */
+  onCycleDone?: () => void
 }
 
 /**
@@ -83,7 +85,7 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     fetch: pacer.wrap((input, init) => baseDeps.fetch(input, init)),
     afterWrite: () => { baseDeps.afterWrite?.(); if (auto) scheduler?.kick('write') },
   }
-  const sch = createSyncScheduler({ db, deps, serial, pacer, ...(opts.timers === undefined ? {} : { timers: opts.timers }), ...(opts.locks === undefined ? {} : { locks: opts.locks }) })
+  const sch = createSyncScheduler({ db, deps, serial, pacer, ...(opts.timers === undefined ? {} : { timers: opts.timers }), ...(opts.locks === undefined ? {} : { locks: opts.locks }), ...(opts.onCycleDone === undefined ? {} : { onCycleDone: opts.onCycleDone }) })
   scheduler = sch
   const wake = (reason: 'before_shift' | 'before_close'): void => { if (auto) sch.kick(reason) }
   const api: PosApi = {

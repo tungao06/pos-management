@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { MOCK_API_KEY } from '@dayo/dayo-mock'
 import { createPosApi, SETUP_CALLS_PER_MIN } from '../src/api/pos-api'
-import { createSyncScheduler, FOLLOW_UP_GAP_MS, MANUAL_CLEAR_GAP_MS, SYNC_BUDGET_PER_MIN } from '../src/sync/scheduler'
+import { createSyncScheduler, FOLLOW_UP_GAP_MS, MANUAL_CLEAR_GAP_MS, SYNC_BUDGET_PER_MIN, type DayoPacer } from '../src/sync/scheduler'
 import { pushOnce } from '../src/sync/push'
 import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
 import { openConnectedApi, STAFF } from './helpers/dayo'
@@ -381,5 +381,71 @@ describe('sync scheduler — the real timers (hotfix: "TypeError: Illegal invoca
       expect(() => sch.stop()).not.toThrow() // clearInterval
       expect(t.mock.orders()).toHaveLength(2)
     } finally { vi.unstubAllGlobals() }
+  })
+})
+
+describe('sync scheduler — onCycleDone, the "a cycle ran" signal to the screens (Task 21 hotfix 2)', () => {
+  it('a background online wake signals once, after its push has landed — the screens need not wait for their 30 s poll', async () => {
+    const t = await openConnectedApi()
+    for (let i = 0; i < 3; i++) await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const seen: number[] = []
+    const pendingRows = async () => (await t.db.select({ id: s.outbox.id }).from(s.outbox).where(eq(s.outbox.status, 'pending')).all()).length
+    let pendingAtSignal = -1
+    const sch = createSyncScheduler({
+      db: t.db, deps: t.deps, serial: (fn) => fn(),
+      onCycleDone: () => { seen.push(t.mock.orders().length); void pendingRows().then((n) => { pendingAtSignal = n }) },
+    })
+    sch.kick('online') // no runNow, nobody waiting on the result: the worker's own wake
+    await vi.waitFor(() => expect(seen).toEqual([3]))
+    await vi.waitFor(() => expect(pendingAtSignal).toBe(0)) // what the refetch reads is already the sent state
+    sch.stop()
+  })
+  it('signals once per cycle — the follow-up cycle signals again; a cycle that found nothing to send still signals', async () => {
+    const t = await openConnectedApi()
+    vi.useFakeTimers()
+    let calls = 0
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), onCycleDone: () => { calls += 1 } })
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const a = sch.runNow()
+    const b = sch.runNow() // rides on the follow-up
+    await a
+    expect(calls).toBe(1)
+    await vi.advanceTimersByTimeAsync(FOLLOW_UP_GAP_MS)
+    await b
+    expect(calls).toBe(2) // the follow-up had nothing left to send — an extra harmless refetch beats a missed one
+    sch.stop()
+  })
+  it('signals even when another tab holds the dayo-push lock (the cycle was given its chance; the other tab may have sent)', async () => {
+    const t = await openConnectedApi()
+    const locks = { request: async (_n: string, _o: { ifAvailable: true }, cb: (lock: unknown) => Promise<void>) => cb(null) }
+    let calls = 0
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), locks, onCycleDone: () => { calls += 1 } })
+    await sch.runNow()
+    expect(calls).toBe(1)
+  })
+  it('does not signal when stop() comes while the cycle still waits for the request budget (no cycle ran)', async () => {
+    const t = await openConnectedApi()
+    vi.useFakeTimers()
+    const pacer: DayoPacer = { wrap: (f) => f, used: () => SYNC_BUDGET_PER_MIN, waitFor: () => 10_000, snapshot: () => [], seed: () => undefined }
+    let calls = 0
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), pacer, onCycleDone: () => { calls += 1 } })
+    const run = sch.runNow()
+    await vi.advanceTimersByTimeAsync(1_000) // still waiting on the budget
+    sch.stop()
+    await run
+    expect(calls).toBe(0)
+  })
+  it('a throwing signal never fails the cycle', async () => {
+    const t = await openConnectedApi()
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), onCycleDone: () => { throw new Error('channel gone') } })
+    await expect(sch.runNow()).resolves.toMatchObject({ push: { sent: 1 } })
+  })
+  it('the PosApi passes its onCycleDone option to its scheduler (worker.ts gives notifySyncCycleDone)', async () => {
+    const t = await openConnectedApi()
+    let calls = 0
+    const api = createPosApi(t.db, t.deps, { onCycleDone: () => { calls += 1 } })
+    await api.syncNow()
+    expect(calls).toBe(1)
   })
 })

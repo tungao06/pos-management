@@ -1,5 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
+import type { JSX } from 'react'
 import { RequireSession } from './app/guards'
+import { useSyncCycleSignal } from './app/useSyncCycleSignal'
 import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
 import { CentralOrdersScreen } from './screens/CentralOrdersScreen'
@@ -24,16 +26,19 @@ import { ZReportScreen } from './screens/ZReportScreen'
 import { BrandBar } from './ui/BrandBar'
 
 // Root layout: the brand bar (D44), then every warning of spec §4.4 ข้อ 9 / §6.3 / §6.4 / §6.7 / §10.5 (Task 20,
-// D80) on every screen after login, above whatever the route itself renders.
-const rootRoute = createRootRoute({
-  component: () => (
+// D80) on every screen after login, above whatever the route itself renders. Task 21 hotfix 2: the root also listens,
+// once for the whole app, for the worker's "a sync cycle ran" signal and refetches the badge/banner data at once.
+function RootLayout(): JSX.Element {
+  useSyncCycleSignal()
+  return (
     <>
       <BrandBar />
       <StatusBanners />
       <Outlet />
     </>
-  ),
-})
+  )
+}
+const rootRoute = createRootRoute({ component: RootLayout })
 
 // Every path of plan 3 is declared here; each screen task adds `component` to its route.
 const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: IndexRedirect })

@@ -7,6 +7,7 @@ import { PosError } from '../api/errors'
 import { createPosRuntime } from '../api/pos-api'
 import { POS_API_METHODS, type PosApi } from '../api/types'
 import { newId } from '../lib/ids'
+import { notifySyncCycleDone } from '../sync/cycle-signal'
 import { createIdbSecretStore } from '../sync/secret-store'
 import { initDatabase } from './init'
 
@@ -43,7 +44,7 @@ async function start(): Promise<PosApi> {
     const { api, scheduler } = createPosRuntime(db, {
       now: () => new Date().toISOString(), newId, pinCost: PROD_PIN_COST, exportDbFile: () => pool.exportFile(DB_FILE),
       fetch: (input, init) => fetch(input, init), secrets: createIdbSecretStore(), random: Math.random,
-    }, { autoSync: true })
+    }, { autoSync: true, onCycleDone: notifySyncCycleDone }) // Task 21 hotfix 2: the screens refetch after every cycle
     // WorkerGlobalScope fires `online`: send at once, forgetting the network backoff (a wake, not a manual press — no N4 limit)
     self.addEventListener('online', () => scheduler.kick('online'))
     return api

@@ -115,8 +115,10 @@ const EMPTY: SyncCycleResult = { catalog: null, push: NO_PUSH }
  * `ctx.serial` must be the PosApi's own queue (task 14 item 4): every read and write of a cycle then queues behind a
  * PIN/role check and its write, never between them. `pacer`: give the one that already counts `ctx.deps.fetch`;
  * without it the scheduler counts its own requests only. `monoMs`: a test seam for the monotonic clock.
+ * `onCycleDone` (Task 21 hotfix 2): called once after every cycle whose body was given the chance to run, changed or
+ * not — the Worker passes notifySyncCycleDone so the screens refetch at once instead of on their 30 s poll.
  */
-export function createSyncScheduler(ctx: SyncContext & { timers?: Timers; locks?: Locks | undefined; pacer?: DayoPacer; monoMs?: () => number }): Scheduler {
+export function createSyncScheduler(ctx: SyncContext & { timers?: Timers; locks?: Locks | undefined; pacer?: DayoPacer; monoMs?: () => number; onCycleDone?: () => void }): Scheduler {
   const timers: Timers = ctx.timers ?? globalTimers
   const locks: Locks | undefined = ctx.locks ?? (globalThis.navigator as { locks?: Locks } | undefined)?.locks
   const monoMs = ctx.monoMs ?? monotonic
@@ -202,6 +204,7 @@ export function createSyncScheduler(ctx: SyncContext & { timers?: Timers; locks?
       else await locks.request('dayo-push', { ifAvailable: true }, async (lock) => { if (lock !== null) await body() }) // one sender across tabs (spec §6.2)
     } finally {
       await ctx.serial(() => writeKey(ctx.db, DAYO_KEYS.requestWindow, JSON.stringify(pacer.snapshot()))).catch(() => undefined)
+      try { ctx.onCycleDone?.() } catch { /* a signal is best-effort: never fails or masks a cycle */ }
     }
     return result
   }
