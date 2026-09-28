@@ -1,5 +1,5 @@
 {
-  "dayo_commit": "135679ceefc0016ade2d94508fe3de615be0da3e",
+  "dayo_commit": "995fd4171c5191f86725d829e9ade918d883d322",
   "pricing_files_sha256": {
     "packages/shared/src/money.ts": "96abf33a850979298e3d3f3996acc03cdbbd6a17b33630b22a3cfcdb1407699e",
     "packages/shared/src/promotions.ts": "4850b98d5084e703bb1deb84ea4629253f510f37d6e0ab80161e2e5dab15ea11",
