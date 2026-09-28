@@ -43,12 +43,20 @@ export type MilkChoice = { code: MilkCode; priceAddSatang: number }
 export type GradeChoice = { code: string; priceAddSatang: number; isDefault: boolean }
 
 export type CartErrorCode = 'EMPTY_CART' | 'CART_TOO_LARGE' | 'QTY_OUT_OF_RANGE' | 'UNKNOWN_VARIANT' | 'GRADE_RULE' | 'BAD_DISCOUNT'
+/**
+ * Why a `CartErrorCode` of `UNKNOWN_VARIANT` happened — a structured field a caller switches on (review round 2 item
+ * 6), never the free-text `detail`/`message` (which can be reworded later without warning). `null` for every other
+ * code, which needs no sub-reason.
+ */
+export type CartErrorReason = 'no_such_menu' | 'size_closed'
 export class CartError extends Error {
   readonly code: CartErrorCode
-  constructor(code: CartErrorCode, detail: string) {
+  readonly reason: CartErrorReason | null
+  constructor(code: CartErrorCode, detail: string, reason: CartErrorReason | null = null) {
     super(`${code}: ${detail}`)
     this.name = 'CartError'
     this.code = code
+    this.reason = reason
   }
 }
 
@@ -59,9 +67,10 @@ export const MAX_CART_CUPS = 500
 /**
  * The options exactly as E1 sent them, typed as dayo's pricing code declares them. dayo runs the same code on the same
  * nulls (it reads menu_options as stored), so passing them through unchanged is parity — never replace a null with a
- * default here. The only type widening of the catalog, in one place.
+ * default here. The only type widening of the catalog, in one place. Exported so other domain code that calls dayo's
+ * `applyOptions` directly (e.g. `lineUnitPriceSatang`) reuses this same cast instead of adding a second one.
  */
-function dayoOptions(c: PosOrderCatalog): Pick<OrderCatalog, 'milkOptions' | 'gradeOptions'> {
+export function dayoOptions(c: PosOrderCatalog): Pick<OrderCatalog, 'milkOptions' | 'gradeOptions'> {
   return { milkOptions: c.milkOptions as MenuOptionMilkEntry[], gradeOptions: c.gradeOptions as MenuOptionGradeEntry[] }
 }
 
@@ -74,29 +83,50 @@ export function withZeroCosts(c: PosOrderCatalog): OrderCatalog {
 
 /**
  * The variant a line may be sold as: its size must be an ACTIVE entry of catalog.sizes (ADR-0054 — dayo stops selling a
- * closed size even if a stale variant row were still around) and the variant must exist.
+ * closed size even if a stale variant row were still around) and the variant must exist. Exported (review I5) so a
+ * caller can tell a closed size (the menu still exists, `reason: 'size_closed'`) from a menu dayo removed entirely
+ * (`reason: 'no_such_menu'`) — `checkLine`/the sell screen switch on `CartError.reason`, never on the message text
+ * (review round 2 item 6 — a later reword of the detail must not silently break that check).
  */
-function findSellableVariant(c: PosOrderCatalog, code: string, size: string, sweetness: string): PosVariant {
-  if (!c.sizes.some((s) => s.code === size && s.isActive)) throw new CartError('UNKNOWN_VARIANT', `${code} ${size} ${sweetness}: ${size} is not an active size of the shop`)
+export function findSellableVariant(c: PosOrderCatalog, code: string, size: string, sweetness: string): PosVariant {
+  if (!c.sizes.some((s) => s.code === size && s.isActive)) throw new CartError('UNKNOWN_VARIANT', `${code} ${size} ${sweetness}: ${size} is not an active size of the shop`, 'size_closed')
   const v = c.variants.find((x) => x.menuCode === code && x.size === size && x.sweetness === sweetness)
-  if (v === undefined) throw new CartError('UNKNOWN_VARIANT', `${code} ${size} ${sweetness}`)
+  if (v === undefined) {
+    const menuExists = c.variants.some((x) => x.menuCode === code)
+    if (menuExists) throw new CartError('UNKNOWN_VARIANT', `${code} ${size} ${sweetness}: this size/sweetness is no longer sold`, 'size_closed')
+    throw new CartError('UNKNOWN_VARIANT', `${code}: this menu is no longer sold`, 'no_such_menu')
+  }
   return v
+}
+
+/**
+ * Every check one line must pass to be sellable (review I5) — qty range, a sellable variant, the matcha/grade rule,
+ * and its own discount shape. `checkCart` runs this per line; a caller that wants to know exactly WHICH line of a
+ * multi-line cart is bad (the sell screen, before the whole cart even prices) can call it directly per line.
+ */
+export function checkLine(catalog: PosOrderCatalog, l: CartLineDraft, i: number, maxQty: number): void {
+  if (!Number.isSafeInteger(l.qty) || l.qty < 1 || l.qty > maxQty) throw new CartError('QTY_OUT_OF_RANGE', `line ${i + 1}: qty ${l.qty} (1–${maxQty})`)
+  const v = findSellableVariant(catalog, l.code, l.size, l.sweetness)
+  if (v.isMatcha !== (l.grade !== null)) throw new CartError('GRADE_RULE', `${l.code}: ${v.isMatcha ? 'a matcha menu needs a grade' : 'grade must be null'}`)
+  if (l.discountSatang !== null && l.discountPercent !== null) throw new CartError('BAD_DISCOUNT', `line ${i + 1}: baht and percent together`)
+  if (l.discountSatang !== null && (!Number.isSafeInteger(l.discountSatang) || l.discountSatang < 0)) throw new CartError('BAD_DISCOUNT', `line ${i + 1}: discount must be whole satang ≥ 0`)
+  if (l.discountPercent !== null && !(l.discountPercent >= 0 && l.discountPercent <= 100)) throw new CartError('BAD_DISCOUNT', `line ${i + 1}: percent must be 0–100`)
+}
+
+/** The tablet's own `maxQtyPerLine` (spec — computeOrder silently clamps qty otherwise, and the tablet must never
+ * price a different bill than it sends). Exported so a per-line check (checkLine) uses the exact same bound. */
+export function maxQtyPerLineOf(catalog: PosOrderCatalog): number {
+  return Math.min(saleSettingsOf(catalog).maxQtyPerLine, 999)
 }
 
 /** Everything the tablet refuses before pricing (throws CartError); priceCart runs it first. */
 export function checkCart(cart: CartDraft, catalog: PosOrderCatalog): void {
   if (cart.lines.length === 0) throw new CartError('EMPTY_CART', 'cart has no lines')
-  // computeOrder silently clamps qty to maxQtyPerLine; the tablet must never price a different bill than it sends
-  const maxQty = Math.min(saleSettingsOf(catalog).maxQtyPerLine, 999)
+  const maxQty = maxQtyPerLineOf(catalog)
   let cups = 0
   cart.lines.forEach((l, i) => {
-    if (!Number.isSafeInteger(l.qty) || l.qty < 1 || l.qty > maxQty) throw new CartError('QTY_OUT_OF_RANGE', `line ${i + 1}: qty ${l.qty} (1–${maxQty})`)
+    checkLine(catalog, l, i, maxQty)
     cups += l.qty
-    const v = findSellableVariant(catalog, l.code, l.size, l.sweetness)
-    if (v.isMatcha !== (l.grade !== null)) throw new CartError('GRADE_RULE', `${l.code}: ${v.isMatcha ? 'a matcha menu needs a grade' : 'grade must be null'}`)
-    if (l.discountSatang !== null && l.discountPercent !== null) throw new CartError('BAD_DISCOUNT', `line ${i + 1}: baht and percent together`)
-    if (l.discountSatang !== null && (!Number.isSafeInteger(l.discountSatang) || l.discountSatang < 0)) throw new CartError('BAD_DISCOUNT', `line ${i + 1}: discount must be whole satang ≥ 0`)
-    if (l.discountPercent !== null && !(l.discountPercent >= 0 && l.discountPercent <= 100)) throw new CartError('BAD_DISCOUNT', `line ${i + 1}: percent must be 0–100`)
   })
   if (cart.lines.length > MAX_CART_LINES || cups > MAX_CART_CUPS) throw new CartError('CART_TOO_LARGE', `${cart.lines.length} lines, ${cups} cups`)
   const d = cart.billDiscount

@@ -1,48 +1,144 @@
 import type { JSX } from 'react'
+import { CartError, checkLine, maxQtyPerLineOf, sumSatang, type CartLineDraft, type PosOrderCatalog, type PricedLine } from '@dayo/domain'
+import { usePricedCart } from '../app/use-priced-cart'
 import { useCart } from '../app/cart-context'
-import { cartTotals } from '../state/cart'
-import { formatBaht } from '../ui/format'
+import type { CartLine } from '../state/cart'
+import { cartErrorMessage } from '../ui/errors'
+import { formatBahtFull } from '../ui/format'
 import { TH } from '../ui/th'
+import { PromoPanel } from './PromoPanel'
 
-export function CartPanel({ onPay, onOpenDiscount }: { onPay: (method: 'CASH' | 'PROMPTPAY') => void; onOpenDiscount: () => void }): JSX.Element {
+const sameCombo = (p: PricedLine, l: CartLine): boolean => p.code === l.code && p.size === l.size && p.sweetness === l.sweetness && p.milk === l.milk && p.grade === l.grade
+
+/** Every check one cart line fails on its own (review I5) — `null` when it is fine. Never throws: `checkLine` only
+ * ever throws `CartError`, and this is the one place that catches it — the `CartError` itself (never a stringified
+ * message) is what `cartErrorMessage` reads, for both this line's own label and the combined banner below (review
+ * round 2 item 4: the same function, so the two can never disagree about the same error). */
+function lineError(catalog: PosOrderCatalog, l: CartLine, i: number, maxQty: number): CartError | null {
+  const draft: CartLineDraft = { code: l.code, size: l.size, sweetness: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty, free: false, discountSatang: null, discountPercent: null, discountReason: null }
+  try {
+    checkLine(catalog, draft, i, maxQty)
+    return null
+  } catch (e) {
+    if (e instanceof CartError) return e
+    throw e
+  }
+}
+
+export function CartPanel({
+  catalog,
+  channels,
+  payments,
+  maxQtyPerLine,
+  onOpenDiscount,
+  onPay,
+}: {
+  catalog: PosOrderCatalog | undefined
+  channels: { code: string; name: string }[]
+  payments: { cash: boolean; qr: boolean }
+  maxQtyPerLine: number
+  onOpenDiscount: () => void
+  onPay: (method: 'CASH' | 'PROMPTPAY') => void
+}): JSX.Element {
   const { state, dispatch, clear } = useCart()
-  const totals = cartTotals(state)
+  const { priced, error } = usePricedCart(state, catalog)
   const empty = state.lines.length === 0
+  // review I4: dayo's own pricing never goes negative — a bill discount left at/above the subtotal just clamps the
+  // total to ฿0 with `priced.ok` still true, so the ฿0 floor (D50 Q3-20 — no 0-baht bills) must be checked here too.
+  const canPay = priced !== null && priced.ok && priced.totalSatang > 0
+  const zeroTotal = priced !== null && priced.ok && priced.totalSatang === 0 && !empty
+  const billDiscountTooBig = zeroTotal && state.billDiscount !== null
+
   return (
     <aside className="cart" data-testid="cart">
       <h2>{TH.cart}</h2>
+      <label>
+        {TH.channel}
+        <select data-testid="channel-select" value={state.channelCode} onChange={(e) => dispatch({ type: 'setChannel', channelCode: e.target.value })}>
+          {channels.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
       {empty && <p>{TH.cartEmpty}</p>}
-      {state.lines.map((l, i) => (
-        <div key={l.key} className="cart-line" data-testid={`cart-line-${i}`}>
-          <div>
-            <strong>{l.productName}</strong>
+      {state.lines.map((l, i) => {
+        // A promotion (e.g. buy-2-get-1) can split one cart line into a free priced line and a paid one — both share
+        // this line's code/size/sweetness/milk/grade (only qty splits), so summing them back is exact, never a
+        // hand-computed price (spec: "bills priced by dayo can split a line — display them as stored").
+        const matched = priced?.lines.filter((p) => sameCombo(p, l)) ?? []
+        const lineTotal = sumSatang(matched.map((p) => p.lineTotalSatang))
+        const freeQty = sumSatang(matched.filter((p) => p.promotionId !== null && p.lineTotalSatang === 0).map((p) => p.qty))
+        const badLine = catalog === undefined ? null : lineError(catalog, l, i, maxQtyPerLineOf(catalog))
+        return (
+          <div key={l.key} className="cart-line" data-testid={`cart-line-${i}`}>
             <div>
-              {l.sizeName} · {TH.sweetShort} {l.sweetnessName}
+              <strong>{l.nameTh}</strong>
+              <div>
+                {l.size} · {TH.sweetShort} {l.sweetness}
+                {l.milk === 'oat' ? ` · ${TH.milkOat}` : ''}
+                {l.grade !== null ? ` · ${l.grade}` : ''}
+                {freeQty > 0 && ` · ${TH.freeUnits(freeQty)}`}
+              </div>
+              {badLine !== null && (
+                <p role="alert" className="error" data-testid={`cart-line-error-${i}`}>
+                  {cartErrorMessage(badLine)}
+                </p>
+              )}
+            </div>
+            <div>{matched.length > 0 ? formatBahtFull(lineTotal) : TH.noPrice}</div>
+            <div className="qty">
+              <button type="button" data-testid={`cart-dec-${i}`} onClick={() => dispatch({ type: 'dec', key: l.key })}>
+                −
+              </button>
+              <span data-testid={`cart-qty-${i}`}>{l.qty}</span>
+              <button type="button" data-testid={`cart-inc-${i}`} onClick={() => dispatch({ type: 'inc', key: l.key, maxQty: maxQtyPerLine })}>
+                +
+              </button>
+              <button type="button" data-testid={`cart-remove-${i}`} onClick={() => dispatch({ type: 'remove', key: l.key })}>
+                {TH.remove}
+              </button>
             </div>
           </div>
-          <div>{formatBaht(totals.lineTotals[i]!)}</div> {/* M4: domain total, not a hand-multiplied one */}
-          <div className="qty">
-            <button type="button" data-testid={`cart-dec-${i}`} onClick={() => dispatch({ type: 'dec', key: l.key })}>
-              −
-            </button>
-            <span data-testid={`cart-qty-${i}`}>{l.qty}</span>
-            <button type="button" data-testid={`cart-inc-${i}`} onClick={() => dispatch({ type: 'inc', key: l.key })}>
-              +
-            </button>
-          </div>
-        </div>
-      ))}
+        )
+      })}
+      <PromoPanel priced={priced} catalog={catalog} />
+      {error !== null && (
+        <p role="alert" className="error" data-testid="cart-error">
+          {cartErrorMessage(error)}
+        </p>
+      )}
+      {priced !== null && !priced.ok && (
+        <p role="alert" className="error" data-testid="cart-warnings">
+          {priced.warnings.join(' · ')}
+        </p>
+      )}
+      {billDiscountTooBig && (
+        <p role="alert" className="error" data-testid="cart-discount-too-big">
+          {TH.errBillDiscountTooBig}
+        </p>
+      )}
+      {zeroTotal && !billDiscountTooBig && (
+        <p role="alert" className="error" data-testid="cart-zero-total">
+          {TH.errZeroTotal}
+        </p>
+      )}
       <div className="totals">
-        <div>
-          {TH.subtotal} <span data-testid="cart-subtotal">{formatBaht(totals.subtotalSatang)}</span>
-        </div>
-        {state.discount !== null && (
-          <div>
-            {TH.discount} ({state.discount.reason}) <span data-testid="cart-discount">−{formatBaht(state.discount.amountSatang)}</span>
-          </div>
+        {priced !== null && (
+          <>
+            <div>
+              {TH.subtotal} <span data-testid="cart-subtotal">{formatBahtFull(priced.itemsSubtotalSatang)}</span>
+            </div>
+            {state.billDiscount !== null && (
+              <div>
+                {TH.discount} ({state.billDiscount.reason}) <span data-testid="cart-discount">−{formatBahtFull(priced.billDiscountSatang)}</span>
+              </div>
+            )}
+          </>
         )}
         <div className="total">
-          {TH.total} <span data-testid="cart-total">{formatBaht(totals.totalSatang)}</span>
+          {TH.total} <span data-testid="cart-total">{formatBahtFull(priced?.totalSatang ?? 0)}</span>
         </div>
       </div>
       <div className="choices">
@@ -54,12 +150,16 @@ export function CartPanel({ onPay, onOpenDiscount }: { onPay: (method: 'CASH' | 
         </button>
       </div>
       <div className="pay">
-        <button type="button" className="primary" data-testid="pay-cash" disabled={empty} onClick={() => onPay('CASH')}>
-          {TH.payCash}
-        </button>
-        <button type="button" className="primary" data-testid="pay-qr" disabled={empty || totals.totalSatang === 0} onClick={() => onPay('PROMPTPAY')}>
-          {TH.payQr}
-        </button>
+        {payments.cash && (
+          <button type="button" className="primary" data-testid="pay-cash" disabled={!canPay} onClick={() => onPay('CASH')}>
+            {TH.payCash}
+          </button>
+        )}
+        {payments.qr && (
+          <button type="button" className="primary" data-testid="pay-qr" disabled={!canPay} onClick={() => onPay('PROMPTPAY')}>
+            {TH.payQr}
+          </button>
+        )}
       </div>
     </aside>
   )

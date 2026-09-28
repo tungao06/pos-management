@@ -63,10 +63,14 @@ export async function firstRun(page: Page): Promise<void> {
   await openShift(page)
 }
 
-export async function addItem(page: Page, productCode: string, opts: { category?: string; size?: string; sweet?: string } = {}): Promise<void> {
-  await page.getByTestId(`tab-${opts.category ?? 'THAI'}`).click()
-  await page.getByTestId(`product-${productCode}`).click()
-  if (opts.size !== undefined) await page.getByTestId(`size-${opts.size}`).click()
-  if (opts.sweet !== undefined) await page.getByTestId(`sweet-${opts.sweet}`).click()
-  await page.getByTestId('add-to-cart').click()
+/**
+ * Task 18: the sell screen is driven by dayo's own catalog (`menu-<code>`/`item-*`), not the old plan-3
+ * `product-<code>`/`size-<code>`/`sweet-<code>`/`add-to-cart` — `size`/`sweet` are the catalog's own codes
+ * (e.g. "20 oz", "100%"), never a fixed local one (ADR-0054).
+ */
+export async function addItem(page: Page, menuCode: string, opts: { size?: string; sweet?: string } = {}): Promise<void> {
+  await page.getByTestId(`menu-${menuCode}`).click()
+  if (opts.size !== undefined) await page.getByTestId(`item-size-${opts.size.replace(/\s+/g, '').toLowerCase()}`).click()
+  if (opts.sweet !== undefined) await page.getByTestId(`item-sweet-${opts.sweet}`).click()
+  await page.getByTestId('item-add').click()
 }

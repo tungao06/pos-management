@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BootstrapState, MenuDto, PosApi, StockOverviewDto, UserDto } from '../api/types'
+import type { BootstrapState, PosApi, StockOverviewDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { CartProvider } from '../app/cart-context'
 import { SessionProvider, useSession } from '../app/session'
+import { sellCatalogKey } from '../app/queries'
+import { testSellCatalog } from '../test-utils/sell-catalog'
 import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { TH } from '../ui/th'
 import { SellScreen } from './SellScreen'
@@ -19,17 +21,6 @@ vi.mock('@tanstack/react-router', async (importOriginal) => ({
 afterEach(() => cleanup())
 
 const OWNER: UserDto = { id: 'u1', displayName: 'TungAo', role: 'owner' }
-const MENU: MenuDto = {
-  storeChannelId: 'shop',
-  categories: [],
-  products: [],
-  sizes: [],
-  sweetness: [],
-  variants: [],
-  defaultSizeId: 'sz',
-  defaultSweetnessId: 'sw',
-  bestSellerProductIds: [],
-}
 
 function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
   return {
@@ -56,8 +47,12 @@ function SignedIn(): JSX.Element {
   return <SellScreen />
 }
 
-function mount(overrides: Partial<PosApi> = {}): void {
-  const api = { loadMenu: vi.fn(async () => MENU), ...overrides } as unknown as PosApi
+function sellApi(overrides: Partial<PosApi> = {}): { api: PosApi } {
+  const api = { loadSellCatalog: vi.fn(async () => testSellCatalog()), ...overrides } as unknown as PosApi
+  return { api }
+}
+
+function renderSell(api: PosApi): QueryClient {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={queryClient}>
@@ -70,6 +65,12 @@ function mount(overrides: Partial<PosApi> = {}): void {
       </ApiProvider>
     </QueryClientProvider>,
   )
+  return queryClient
+}
+
+function mount(overrides: Partial<PosApi> = {}): void {
+  const api = { loadSellCatalog: vi.fn(async () => testSellCatalog()), ...overrides } as unknown as PosApi
+  renderSell(api)
 }
 
 describe('SellScreen — backup-due banner (Task 8 TH.backupDue wired to the sell screen)', () => {
@@ -112,5 +113,59 @@ describe('Task 16: the stock screens are hidden from the sell screen', () => {
     await waitFor(() => expect(screen.getByTestId('nav-shift')).toBeTruthy())
     expect(screen.queryByTestId('nav-stock')).toBeNull()
     expect(stockOverview).not.toHaveBeenCalled()
+  })
+})
+
+describe('Task 18: sell with dayo\'s catalog (options, promotions, channel)', () => {
+  it('Thai Tea ×3 shows the buy-2-get-1 promotion and ฿70.00; "ไม่ใช้" puts it back to ฿105.00', async () => {
+    const { api } = sellApi()
+    renderSell(api)
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(await screen.findByTestId('menu-Thai Tea'))
+      fireEvent.click(screen.getByTestId('item-add'))
+    }
+    expect(await screen.findByTestId('cart-total')).toHaveTextContent('70.00')
+    fireEvent.click(screen.getByTestId('promo-skip-9f8e0000-0000-4000-8000-000000000001'))
+    expect(screen.getByTestId('cart-total')).toHaveTextContent('105.00')
+  })
+
+  it('offers oat for Thai Tea but not for Cocoa; a matcha shows its grades', async () => {
+    const { api } = sellApi()
+    renderSell(api)
+    fireEvent.click(await screen.findByTestId('menu-Thai Tea'))
+    expect(screen.getByTestId('item-milk-oat')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('item-cancel'))
+    fireEvent.click(screen.getByTestId('menu-Cocoa'))
+    expect(screen.queryByTestId('item-milk-oat')).toBeNull()
+    fireEvent.click(screen.getByTestId('item-cancel'))
+    fireEvent.click(screen.getByTestId('menu-Matcha Latte'))
+    expect(screen.getByTestId('item-grade-Premium')).toBeInTheDocument()
+  })
+
+  it('the Grab channel prices Thai Tea 20 oz at ฿59.00 (45 × 1.30 rounded up)', async () => {
+    const { api } = sellApi()
+    renderSell(api)
+    fireEvent.change(await screen.findByTestId('channel-select'), { target: { value: 'grab' } })
+    fireEvent.click(screen.getByTestId('menu-Thai Tea'))
+    fireEvent.click(screen.getByTestId('item-size-20oz'))
+    fireEvent.click(screen.getByTestId('item-add'))
+    expect(await screen.findByTestId('cart-total')).toHaveTextContent('59.00')
+  })
+
+  it('review I6: shows "catalog-changed" once the refetched catalogVersion differs from the one first shown', async () => {
+    const first = testSellCatalog()
+    const second = { ...first, catalogVersion: first.catalogVersion + 1 }
+    const loadSellCatalog = vi.fn().mockResolvedValueOnce(first).mockResolvedValue(second)
+    const { api } = sellApi({ loadSellCatalog })
+    const queryClient = renderSell(api)
+    await screen.findByTestId('menu-Thai Tea')
+    expect(screen.queryByTestId('catalog-changed')).toBeNull()
+
+    await queryClient.refetchQueries({ queryKey: sellCatalogKey })
+    expect(await screen.findByTestId('catalog-changed')).toHaveTextContent(TH.catalogChanged)
+
+    // dismissible — clicking it clears the banner (it does not reappear until the version changes again).
+    fireEvent.click(screen.getByTestId('catalog-changed'))
+    expect(screen.queryByTestId('catalog-changed')).toBeNull()
   })
 })

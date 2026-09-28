@@ -1,55 +1,142 @@
-import { useState, type JSX } from 'react'
-import type { MenuDto, MenuProduct } from '../api/types'
+import { useMemo, useState, type JSX } from 'react'
+import type { MilkCode, Sweetness } from '@dayo/dayo-pricing'
+import { CartError, lineOptions, lineUnitPriceSatang, optionDeltaSatang, type GradeChoice, type MilkChoice, type PosOrderCatalog } from '@dayo/domain'
+import type { SellMenuDto } from '../api/types'
 import { useCart } from '../app/cart-context'
 import { formatBaht } from '../ui/format'
 import { TH } from '../ui/th'
 
-/** Popup on every tap with 16 oz / 50% preselected (spec §5 · D48 Q3-10). */
-export function ItemDialog({ menu, product, onClose }: { menu: MenuDto; product: MenuProduct; onClose: () => void }): JSX.Element {
+const SWEETNESS_ORDER: readonly Sweetness[] = ['0%', '25%', '50%', '75%', '100%']
+
+type Options = { milk: MilkChoice[]; grades: GradeChoice[]; defaultMilk: MilkCode; defaultGrade: string | null }
+
+/** Popup on every tap, `menu.defaultSize`/`defaultSweetness` preselected (spec §5, ADR-0054 — never a fixed size/
+ * sweetness). Options (milk, matcha grade) come from dayo's own `lineOptions`; every price shown (the big amount and
+ * every option's "+฿" label) comes from `lineUnitPriceSatang` — the screen never adds milk/grade/channel money itself
+ * (review I1). Size/sweetness/milk/grade are all derived state, never `useEffect`, so a render can never see a
+ * combo `lineOptions`/`lineUnitPriceSatang` cannot answer (review I2) — a menu or size that vanished from the
+ * catalog (a 60 s refetch while the dialog is open) just disables "เพิ่มลงตะกร้า" with a Thai message, never throws. */
+export function ItemDialog({
+  catalog,
+  menu,
+  channelCode,
+  maxQtyPerLine,
+  onClose,
+}: {
+  catalog: PosOrderCatalog
+  menu: SellMenuDto
+  channelCode: string
+  maxQtyPerLine: number
+  onClose: () => void
+}): JSX.Element {
   const { dispatch } = useCart()
-  const [sizeId, setSizeId] = useState(menu.defaultSizeId)
-  const [sweetnessId, setSweetnessId] = useState(menu.defaultSweetnessId)
-  const variant = menu.variants.find((v) => v.productId === product.id && v.sizeId === sizeId)
-  const size = menu.sizes.find((z) => z.id === sizeId)
-  const sweetness = menu.sweetness.find((x) => x.id === sweetnessId)
-  const price = variant?.priceSatang ?? null
-  const sizesOfProduct = menu.sizes.filter((z) => menu.variants.some((v) => v.productId === product.id && v.sizeId === z.id))
+
+  // review I2: every field below is derived from the latest props + the cashier's own choice — never `useEffect` —
+  // so switching size/sweetness never renders a stale combo before a later effect corrects it.
+  const [sizeChoice, setSizeChoice] = useState<string | null>(null)
+  const size = sizeChoice !== null && menu.sizes.includes(sizeChoice) ? sizeChoice : menu.sizes.includes(menu.defaultSize) ? menu.defaultSize : (menu.sizes[0] ?? null)
+  const sweetChoices = size === null ? [] : menu.sweetnessBySize[size] ?? []
+  const [sweetnessChoice, setSweetnessChoice] = useState<Sweetness | null>(null)
+  const sweetness = sweetnessChoice !== null && sweetChoices.includes(sweetnessChoice) ? sweetnessChoice : sweetChoices.includes(menu.defaultSweetness) ? menu.defaultSweetness : (sweetChoices[0] ?? null)
+
+  // never throws: a menu/size the catalog no longer sells (vanished after a refetch) just yields `null` here.
+  const opts: Options | null = useMemo(() => {
+    if (size === null || sweetness === null) return null
+    try {
+      return lineOptions(catalog, menu.code, size, sweetness)
+    } catch (e) {
+      if (e instanceof CartError) return null
+      throw e
+    }
+  }, [catalog, menu.code, size, sweetness])
+
+  const [milkChoice, setMilkChoice] = useState<MilkCode | null>(null)
+  const milk: MilkCode = milkChoice !== null && opts !== null && opts.milk.some((m) => m.code === milkChoice) ? milkChoice : (opts?.defaultMilk ?? 'fresh')
+  const [gradeChoice, setGradeChoice] = useState<string | null>(null)
+  const grade = menu.isMatcha && opts !== null ? (gradeChoice !== null && opts.grades.some((g) => g.code === gradeChoice) ? gradeChoice : opts.defaultGrade) : null
+
+  /** The only place this dialog ever prices anything (review I1) — always dayo's own `channelPrice(price + priceAdd)`. */
+  const priceOf = (m: MilkCode, g: string | null): number | null => (size === null || sweetness === null ? null : lineUnitPriceSatang(catalog, menu.code, size, sweetness, m, g, channelCode))
+  const price = priceOf(milk, grade)
+  const gone = size === null || sweetness === null || opts === null // the menu or every size/sweetness of it is gone
+  /** The "+฿"/"-฿" of an option button — `optionDeltaSatang` alone, never a subtraction in this screen (review round
+   * 2 item 5). Grade compares against the CURRENTLY selected grade (not the shop's default), so every grade always
+   * gets a correct delta — including one cheaper than what is selected now, which must show a negative label. */
+  const deltaFrom = (from: { milk: MilkCode; grade: string | null }, to: { milk: MilkCode; grade: string | null }): number | null =>
+    size === null || sweetness === null ? null : optionDeltaSatang(catalog, menu.code, size, sweetness, channelCode, from, to)
 
   const add = (): void => {
-    if (!variant || price === null || !size || !sweetness) return
-    dispatch({
-      type: 'add',
-      line: { variantId: variant.id, sweetnessId, productName: product.nameTh, sizeName: size.name, sweetnessName: sweetness.name, unitPriceSatang: price },
-    })
+    if (gone || price === null || size === null || sweetness === null) return
+    dispatch({ type: 'add', line: { code: menu.code, nameTh: menu.nameTh, size, sweetness, milk, grade }, maxQty: maxQtyPerLine })
     onClose()
   }
 
   return (
-    <div className="dialog-backdrop" role="dialog" aria-label={product.nameTh}>
+    <div className="dialog-backdrop" role="dialog" aria-label={menu.nameTh}>
       <div className="dialog">
-        <h2>{product.nameTh}</h2>
+        <h2>{menu.nameTh}</h2>
         <h3>{TH.size}</h3>
         <div className="choices">
-          {sizesOfProduct.map((z) => (
-            <button key={z.id} type="button" data-testid={`size-${z.code}`} aria-pressed={z.id === sizeId} onClick={() => setSizeId(z.id)}>
-              {z.name}
-            </button>
-          ))}
+          {menu.sizes.map((z) => {
+            const label = catalog.sizes.find((s) => s.code === z)?.label ?? z
+            return (
+              <button key={z} type="button" data-testid={`item-size-${z.replace(/\s+/g, '').toLowerCase()}`} aria-pressed={z === size} onClick={() => setSizeChoice(z)}>
+                {label}
+              </button>
+            )
+          })}
         </div>
         <h3>{TH.sweetness}</h3>
         <div className="choices">
-          {menu.sweetness.map((x) => (
-            <button key={x.id} type="button" data-testid={`sweet-${x.code}`} aria-pressed={x.id === sweetnessId} onClick={() => setSweetnessId(x.id)}>
-              {x.name}
+          {SWEETNESS_ORDER.filter((w) => sweetChoices.includes(w)).map((w) => (
+            <button key={w} type="button" data-testid={`item-sweet-${w}`} aria-pressed={w === sweetness} onClick={() => setSweetnessChoice(w)}>
+              {w}
             </button>
           ))}
         </div>
+        {opts !== null && (
+          <>
+            <h3>{TH.milk}</h3>
+            <div className="choices">
+              {opts.milk.map((m) => {
+                const d = deltaFrom({ milk: 'fresh', grade }, { milk: m.code, grade })
+                return (
+                  <button key={m.code} type="button" data-testid={`item-milk-${m.code}`} aria-pressed={m.code === milk} onClick={() => setMilkChoice(m.code)}>
+                    {m.code === 'oat' ? TH.milkOat : TH.milkFresh}
+                    {d !== null && d !== 0 && ` ${d > 0 ? '+' : ''}${formatBaht(d)}`}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+        {menu.isMatcha && opts !== null && (
+          <>
+            <h3>{TH.grade}</h3>
+            <div className="choices">
+              {opts.grades.map((g) => {
+                const d = deltaFrom({ milk, grade }, { milk, grade: g.code })
+                return (
+                  <button key={g.code} type="button" data-testid={`item-grade-${g.code}`} aria-pressed={g.code === grade} onClick={() => setGradeChoice(g.code)}>
+                    {g.code}
+                    {d !== null && d !== 0 && ` ${d > 0 ? '+' : ''}${formatBaht(d)}`}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+        {gone && (
+          <p role="alert" className="error" data-testid="item-unavailable">
+            {TH.itemUnavailable}
+          </p>
+        )}
         <div className="big-amount">{price === null ? TH.noPrice : formatBaht(price)}</div>
         <div className="actions">
-          <button type="button" onClick={onClose}>
+          <button type="button" data-testid="item-cancel" onClick={onClose}>
             {TH.cancel}
           </button>
-          <button type="button" className="primary" data-testid="add-to-cart" disabled={price === null} onClick={add}>
+          <button type="button" className="primary" data-testid="item-add" disabled={gone || price === null} onClick={add}>
             {TH.addToCart}
           </button>
         </div>

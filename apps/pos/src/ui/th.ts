@@ -81,6 +81,7 @@ export const TH = {
   shiftOpeningFloat: 'เงินทอนในลิ้นชักตอนเปิดกะ (บาท)',
   shiftOpen: 'เปิดกะ',
 
+  tabAll: 'ทั้งหมด',
   tabBestSellers: 'ขายดี',
   cart: 'ตะกร้า',
   cartEmpty: 'ยังไม่มีรายการ',
@@ -92,10 +93,27 @@ export const TH = {
   size: 'ขนาด',
   sweetness: 'ความหวาน',
   sweetShort: 'หวาน',
+  milk: 'นม',
+  milkFresh: 'นมสด',
+  milkOat: 'นมโอ๊ต',
+  grade: 'เกรด',
   addToCart: 'เพิ่มลงตะกร้า',
   clearCart: 'ล้างตะกร้า',
   noPrice: 'ไม่มีราคา',
   orders: 'บิลวันนี้',
+  // review I2: the menu, or every size/sweetness of it, disappeared from the catalog (e.g. a 60 s refetch closed the
+  // last size while this popup was open) — never a crash, just refuse to add it.
+  itemUnavailable: 'เมนูนี้หรือขนาดนี้ไม่มีขายแล้ว — ปิดหน้านี้แล้วเลือกใหม่',
+
+  // Task 18 — ขายด้วยแคตตาล็อกกลาง (spec 04 §4.4, §5.1, §6.5)
+  channel: 'ช่องทางขาย',
+  promotions: 'โปรโมชัน',
+  promoSkip: 'ไม่ใช้',
+  promoUnskip: 'ใช้โปรนี้',
+  noPromotions: 'ไม่ใช้โปรทั้งบิล',
+  promoCode: 'รหัสโปรโมชัน',
+  catalogChanged: 'เมนู/ราคาจากระบบกลางเปลี่ยน — คิดราคาใหม่แล้ว',
+  priceChangedConfirm: 'ตรวจยอดใหม่แล้วกดยืนยัน',
 
   discountTitle: 'ส่วนลดท้ายบิล',
   discountAmount: 'จำนวนเงิน (บาท)',
@@ -157,6 +175,9 @@ export const TH = {
   errNoRecipe: 'เมนูนี้ยังไม่มีสูตร ขายไม่ได้',
   errTenderTooLow: 'รับเงินน้อยกว่ายอด',
   errDiscountTooBig: 'ส่วนลดต้องน้อยกว่ายอดรวม',
+  // minor (review round 1): DiscountDialog's own message when the cart cannot be priced yet at all (no catalog, or a
+  // CartError) — distinct from errDiscountTooBig, which means the cart CAN be priced but this amount is too big.
+  errCartNotPriced: 'ยังคิดราคาตะกร้าไม่ได้ตอนนี้ — ลองใหม่อีกครั้ง',
   errPriceChanged: 'ราคาเปลี่ยนแล้ว — กำลังปรับราคาในตะกร้า',
   errReasonRequired: 'ต้องใส่เหตุผล',
   errNoPromptPayId: 'ยังไม่ได้ตั้งหมายเลขพร้อมเพย์',
@@ -175,6 +196,18 @@ export const TH = {
 
   // แผน 4
   errPriceJump: 'ราคาบางรายการต่างจากราคาที่รับครั้งก่อนเกิน 10% — ตรวจราคาอีกครั้ง แล้วกด "ยืนยันราคานี้"',
+  errCartTooLarge: 'ตะกร้ามีรายการหรือจำนวนแก้วมากเกินไป — ตัดบางรายการออกก่อน',
+  errQtyOutOfRange: 'จำนวนแก้วต่อรายการไม่ถูกต้อง',
+  errSizeClosed: 'ขนาดนี้ปิดขายแล้ว — ลบหรือแก้บรรทัดนี้ก่อนชำระ',
+  errGradeRule: 'เมนูนี้ต้องเลือกเกรด (หรือไม่ต้องเลือกเกรดถ้าไม่ใช่มัตฉะ)',
+  // review I5: dayo removed this menu entirely — differs from errSizeClosed (the menu exists, only this size closed).
+  errMenuGone: 'เมนูนี้ไม่มีขายแล้ว — ลบบรรทัดนี้ก่อนชำระ',
+  // review I4: a bill discount left with a reason still clamps to ฿0 (dayo never goes negative) — the tablet must
+  // still refuse to pay a ฿0 bill (D50 Q3-20) and say why, instead of a silent disabled button.
+  errBillDiscountTooBig: 'ส่วนลดท้ายบิลมากกว่าหรือเท่ากับยอดรวม — บิลเหลือ 0 บาท ขายไม่ได้ ลดส่วนลดหรือลบบรรทัด',
+  errZeroTotal: 'ยอดสุทธิเป็น 0 บาท ขายไม่ได้ — บิลต้องมากกว่า 0 บาท',
+  // minor: a line dayo priced some units at ฿0 from a promotion (buy-2-get-1) — shown next to that cart line.
+  freeUnits: (n: number): string => `แถม ${n} แก้ว`,
   errStockCountNotOpen: 'ใบนับนี้ปิดไปแล้ว — เปิดหน้านับสต็อกใหม่',
   errOpeningCountIncomplete: 'การนับครั้งแรก (ยอดยกมา) ต้องนับให้ครบทุกรายการ — กรอกรายการที่ยังเหลือ (ของที่ไม่มีให้กรอก 0)',
 

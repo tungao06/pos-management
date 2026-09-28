@@ -1,3 +1,4 @@
+import type { CartError, CartErrorCode } from '@dayo/domain'
 import { posErrorCode, type PosErrorCode } from '../api/errors'
 import { TH } from './th'
 
@@ -45,10 +46,34 @@ export const MESSAGES: Record<PosErrorCode, string> = {
   RECOVERY_NOT_ALLOWED: TH.recoveryNotAllowed,
   KEY_NOT_NEW: TH.keyNotNew,
   OLD_KEY_STILL_ACTIVE: TH.oldKeyStillActive,
-  // placeholders until the sell screen's wording lands in th.ts (stream D replaces these three)
-  PRICE_NOT_OK: 'ระบบกลางคิดราคาบิลนี้ไม่ได้ — ตรวจเมนู ช่องทาง และโปรโมชันในตะกร้า',
-  NO_PAYMENT_METHOD: 'ระบบกลางไม่ได้เปิดวิธีชำระเงินนี้',
-  QUEUE_FULL: 'เลขคิววันนี้ครบ 9999 แล้ว',
+  // Task 18: dayo's pricing code refused the cart, or the queue/payment method could not be used.
+  PRICE_NOT_OK: 'ระบบกลางคิดราคาบิลนี้ไม่ได้ — ลบหรือแก้บรรทัดที่ขึ้นเตือนในตะกร้าก่อนชำระ',
+  NO_PAYMENT_METHOD: 'ระบบกลางไม่ได้เปิดใช้วิธีชำระเงินนี้ — เลือกวิธีอื่น',
+  QUEUE_FULL: 'เลขคิววันนี้ครบ 9999 แล้ว — ต้องเปิดกะใหม่จึงขายต่อได้',
+}
+
+/** dayo's `CartError` code → Thai. `UNKNOWN_VARIANT` is refined by `CartError.reason` below (never by parsing the
+ * message text — review round 2 item 6). Used for both the combined `cart-error` banner and each per-line label
+ * (review round 2 item 4 — one function, so the two can never show a contradicting Thai message for the same error). */
+const CART_ERROR_MESSAGES: Record<CartErrorCode, string> = {
+  EMPTY_CART: TH.errEmptyCart,
+  CART_TOO_LARGE: TH.errCartTooLarge,
+  QTY_OUT_OF_RANGE: TH.errQtyOutOfRange,
+  // ADR-0054: a line whose size dayo has since closed for sale — the tablet must never price or send it.
+  UNKNOWN_VARIANT: TH.errSizeClosed,
+  GRADE_RULE: TH.errGradeRule,
+  BAD_DISCOUNT: TH.errBadInput,
+}
+
+/**
+ * Thai message for a `CartError` — from `usePricedCart`'s `error` (the whole cart) or a per-line `checkLine` check
+ * (review I5/round 2 item 4). `UNKNOWN_VARIANT` reads differently for a menu dayo removed entirely
+ * (`reason: 'no_such_menu'`) than for a size the shop merely closed (`reason: 'size_closed'`) — switched on the
+ * structured field, never the free-text detail (round 2 item 6).
+ */
+export function cartErrorMessage(e: CartError): string {
+  if (e.code === 'UNKNOWN_VARIANT') return e.reason === 'no_such_menu' ? TH.errMenuGone : TH.errSizeClosed
+  return CART_ERROR_MESSAGES[e.code] ?? TH.errUnexpected
 }
 
 /**
