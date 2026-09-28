@@ -176,6 +176,7 @@ export async function renumberReceipt(db: RemoteDb, deps: ApiDeps, i: OwnerAppro
 const isCashCode = (code: string): boolean => code === PAYMENT_CODE.CASH
 
 const NOT_NAMED = 'แก้ได้เฉพาะรายการที่ระบบกลางแจ้งว่าไม่รู้จัก'
+const FIELD_TH: Record<NamedUnknown['field'], string> = { line: 'บรรทัดสินค้า', channel: 'ช่องทางขาย', payment: 'วิธีชำระ' }
 
 /**
  * UNKNOWN_CODE: replace the ONE value dayo named in its rejection (namedUnknown — follow-up item 2) with one the latest
@@ -195,7 +196,7 @@ export async function remapCode(db: RemoteDb, deps: ApiDeps, i: RemapCodeInput):
   const data = OrderRowData.parse(row.rowJson)
   const next = structuredClone(data)
   const tg = i.target
-  if (tg.field !== named.field) throw new PosError('BAD_INPUT', `${NOT_NAMED} (${named.field})`)
+  if (tg.field !== named.field) throw new PosError('BAD_INPUT', `${NOT_NAMED} — ระบบกลางแจ้งเรื่อง${FIELD_TH[named.field]}`)
   if (tg.field === 'line' && named.field === 'line') {
     const line = Number.isSafeInteger(tg.lineIndex) && tg.lineIndex >= 0 ? next.lines[tg.lineIndex] : undefined
     if (line === undefined) throw new PosError('BAD_INPUT', 'ไม่มีบรรทัดนี้ในบิล')
