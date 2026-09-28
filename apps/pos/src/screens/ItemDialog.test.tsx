@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PosOrderCatalog } from '@dayo/domain'
 import type { SellMenuDto } from '../api/types'
 import { CartProvider, useCart } from '../app/cart-context'
+import { testSellCatalog } from '../test-utils/sell-catalog'
 import { ItemDialog } from './ItemDialog'
 
 afterEach(() => cleanup())
@@ -143,5 +144,24 @@ describe('ItemDialog — review I2: derived sweetness, never a crash', () => {
     ).not.toThrow()
     expect(screen.getByTestId('item-unavailable')).toBeInTheDocument()
     expect((screen.getByTestId('item-add') as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('ItemDialog — review round 2 item 5: option "+฿"/"-฿" labels come from optionDeltaSatang alone', () => {
+  it('grade compares against the CURRENTLY selected grade — picking the pricier Premium first makes Excellent show a negative delta, never hidden', () => {
+    const dto = testSellCatalog()
+    const menu = dto.menus.find((m) => m.code === 'Matcha Latte')!
+    render(
+      <CartProvider>
+        <ItemDialog catalog={dto.catalog} menu={menu} channelCode="store" maxQtyPerLine={99} onClose={() => undefined} />
+      </CartProvider>,
+    )
+    // Excellent (priceAdd 0) is the default grade — no label against itself.
+    expect(screen.getByTestId('item-grade-Excellent').textContent).toBe('Excellent')
+    fireEvent.click(screen.getByTestId('item-grade-Premium'))
+    expect(screen.getByTestId('item-grade-Premium').getAttribute('aria-pressed')).toBe('true')
+    // Now that the pricier Premium (+20) is selected, Excellent must read as a NEGATIVE delta relative to it —
+    // the old "compare against the shop default" bug hid this because Excellent WAS the default.
+    expect(screen.getByTestId('item-grade-Excellent').textContent).toMatch(/^Excellent -฿\d/)
   })
 })

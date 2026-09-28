@@ -17,9 +17,9 @@ export function CashPayScreen(): JSX.Element {
   const api = useApi()
   const { state } = useCart()
   const navigate = useNavigate()
-  const { pay, isPending, isSuccess, isError, error, priceChanged } = useCommitSale()
+  const { pay, isPending, isSuccess, isError, error, priceChanged, priceBump } = useCommitSale()
   const catalogQuery = useQuery({ queryKey: sellCatalogKey, queryFn: () => api.loadSellCatalog() })
-  const { priced, error: cartError } = usePricedCart(state, catalogQuery.data?.catalog)
+  const { priced, error: cartError } = usePricedCart(state, catalogQuery.data?.catalog, priceBump)
   const [tenderText, setTenderText] = useState('')
   if (state.lines.length === 0 && !isPending && !isSuccess) return <Navigate to="/sell" />
 
@@ -69,11 +69,13 @@ export function CashPayScreen(): JSX.Element {
         {priceChanged !== null ? (
           // review I3: resends with the CURRENT tender and the fresh total (`priced.totalSatang`, already re-priced
           // from the refetched catalog — C1) — never the stale tendered/total of the attempt that got PRICE_CHANGED.
+          // Round 2 item 1: also refuses until `priced.totalSatang` has genuinely caught up to `priceChanged.nowSatang`
+          // — `priceBump` forces that recompute right away, but the button still waits for it to have landed.
           <button
             type="button"
             className="primary"
             data-testid="price-changed-confirm"
-            disabled={isPending || tendered === null || priced === null || tendered < total}
+            disabled={isPending || tendered === null || priced === null || tendered < total || priced.totalSatang !== priceChanged.nowSatang}
             onClick={() => tendered !== null && priced !== null && void pay({ method: 'CASH', tenderedSatang: tendered }, priced.totalSatang)}
           >
             {TH.priceChangedConfirm}

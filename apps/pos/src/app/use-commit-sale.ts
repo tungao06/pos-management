@@ -25,6 +25,10 @@ export function useCommitSale() {
   const navigate = useNavigate()
   const [priceChanged, setPriceChanged] = useState<PriceChanged | null>(null)
   const [lastPayment, setLastPayment] = useState<RecordSaleInput['payment'] | null>(null)
+  // review round 2, item 1: forces `usePricedCart` to recompute right away — react-query's structural sharing can
+  // hand back the same `catalog` reference after a refetch when only the wall clock (a promotion's time window),
+  // not the catalog's own data, moved the price; the 30 s timer alone would leave the screen stale until then.
+  const [priceBump, setPriceBump] = useState(0)
 
   const mutation = useMutation({
     mutationFn: (input: { payment: RecordSaleInput['payment']; expectedTotalSatang: number }) =>
@@ -66,6 +70,7 @@ export function useCommitSale() {
         return
       }
       await queryClient.refetchQueries({ queryKey: sellCatalogKey })
+      setPriceBump((b) => b + 1)
       const raw = e instanceof Error ? e.message : ''
       const m = /shown (\d+), now (\d+)/.exec(raw)
       setPriceChanged({ shownSatang: expectedTotalSatang, nowSatang: m ? Number(m[2]) : expectedTotalSatang })
@@ -77,5 +82,5 @@ export function useCommitSale() {
     await pay(lastPayment, priceChanged.nowSatang)
   }
 
-  return { pay, priceChanged, confirmPriceChange, isPending: mutation.isPending, isSuccess: mutation.isSuccess, isError: mutation.isError && priceChanged === null, error: mutation.error }
+  return { pay, priceChanged, confirmPriceChange, priceBump, isPending: mutation.isPending, isSuccess: mutation.isSuccess, isError: mutation.isError && priceChanged === null, error: mutation.error }
 }

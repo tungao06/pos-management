@@ -3,7 +3,7 @@ import { CartError, checkLine, maxQtyPerLineOf, sumSatang, type CartLineDraft, t
 import { usePricedCart } from '../app/use-priced-cart'
 import { useCart } from '../app/cart-context'
 import type { CartLine } from '../state/cart'
-import { cartErrorMessage, cartLineErrorMessage } from '../ui/errors'
+import { cartErrorMessage } from '../ui/errors'
 import { formatBahtFull } from '../ui/format'
 import { TH } from '../ui/th'
 import { PromoPanel } from './PromoPanel'
@@ -11,14 +11,16 @@ import { PromoPanel } from './PromoPanel'
 const sameCombo = (p: PricedLine, l: CartLine): boolean => p.code === l.code && p.size === l.size && p.sweetness === l.sweetness && p.milk === l.milk && p.grade === l.grade
 
 /** Every check one cart line fails on its own (review I5) — `null` when it is fine. Never throws: `checkLine` only
- * ever throws `CartError`, and this is the one place that catches it into a `.message` for `cartLineErrorMessage`. */
-function lineError(catalog: PosOrderCatalog, l: CartLine, i: number, maxQty: number): string | null {
+ * ever throws `CartError`, and this is the one place that catches it — the `CartError` itself (never a stringified
+ * message) is what `cartErrorMessage` reads, for both this line's own label and the combined banner below (review
+ * round 2 item 4: the same function, so the two can never disagree about the same error). */
+function lineError(catalog: PosOrderCatalog, l: CartLine, i: number, maxQty: number): CartError | null {
   const draft: CartLineDraft = { code: l.code, size: l.size, sweetness: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty, free: false, discountSatang: null, discountPercent: null, discountReason: null }
   try {
     checkLine(catalog, draft, i, maxQty)
     return null
   } catch (e) {
-    if (e instanceof CartError) return e.message
+    if (e instanceof CartError) return e
     throw e
   }
 }
@@ -81,7 +83,7 @@ export function CartPanel({
               </div>
               {badLine !== null && (
                 <p role="alert" className="error" data-testid={`cart-line-error-${i}`}>
-                  {cartLineErrorMessage(badLine)}
+                  {cartErrorMessage(badLine)}
                 </p>
               )}
             </div>

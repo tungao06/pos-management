@@ -136,6 +136,10 @@ describe('CartPanel', () => {
     expect(await screen.findByTestId('cart-line-error-2')).toHaveTextContent('เมนูนี้ไม่มีขายแล้ว')
     for (const i of [0, 1, 3, 4]) expect(screen.queryByTestId(`cart-line-error-${i}`)).toBeNull()
     expect((screen.getByTestId('pay-cash') as HTMLButtonElement).disabled).toBe(true)
+    // review round 2 item 4: the combined banner and the per-line label share cartErrorMessage — they can never
+    // disagree about the same CartError (the banner must not still say "size closed" for a menu that is gone).
+    expect(screen.getByTestId('cart-error')).toHaveTextContent('เมนูนี้ไม่มีขายแล้ว')
+    expect(screen.getByTestId('cart-error').textContent).toBe(screen.getByTestId('cart-line-error-2').textContent)
   })
 
   it('review I6 (minor): hides pay-qr when payments.qr is false', () => {

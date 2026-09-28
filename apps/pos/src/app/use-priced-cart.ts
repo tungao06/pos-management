@@ -13,10 +13,17 @@ const REPRICE_INTERVAL_MS = 30_000
  */
 const PREVIEW_PAYMENT_CODE = 'cash'
 
-/** Prices the cart with dayo's own code (`priceCart`) — the screen never adds money itself. Re-prices on every cart
- * change, on every catalog change (the caller passes a fresh `catalog` reference after a refetch), and every 30 s
- * (spec §6.5, §4.4 rule 4). */
-export function usePricedCart(state: CartState, catalog: PosOrderCatalog | undefined): { priced: PricedCart | null; error: string | null } {
+/**
+ * Prices the cart with dayo's own code (`priceCart`) — the screen never adds money itself. Re-prices on every cart
+ * change, on every catalog change (the caller passes a fresh `catalog` reference after a refetch), every 30 s (spec
+ * §6.5, §4.4 rule 4), and whenever `bump` itself changes.
+ *
+ * `bump` (review round 2, item 1 — Medium): react-query's structural sharing can hand back the SAME `catalog`
+ * object after a refetch when nothing in the catalog's own data changed — only the wall clock crossed a promotion's
+ * time window. `catalog` alone then never re-triggers this memo, so a screen that just learned (via PRICE_CHANGED)
+ * that the price moved passes an incremented `bump` to force an immediate recompute, instead of waiting up to 30 s.
+ */
+export function usePricedCart(state: CartState, catalog: PosOrderCatalog | undefined, bump = 0): { priced: PricedCart | null; error: CartError | null } {
   const [tick, setTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), REPRICE_INTERVAL_MS)
@@ -28,8 +35,8 @@ export function usePricedCart(state: CartState, catalog: PosOrderCatalog | undef
       const priced = priceCart({ ...toCartDraft(state), paymentCode: PREVIEW_PAYMENT_CODE }, catalog, new Date().toISOString())
       return { priced, error: null }
     } catch (e) {
-      if (e instanceof CartError) return { priced: null, error: e.message }
+      if (e instanceof CartError) return { priced: null, error: e }
       throw e
     }
-  }, [state, catalog, tick])
+  }, [state, catalog, tick, bump])
 }

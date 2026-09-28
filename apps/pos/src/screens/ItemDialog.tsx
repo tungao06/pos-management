@@ -1,6 +1,6 @@
 import { useMemo, useState, type JSX } from 'react'
 import type { MilkCode, Sweetness } from '@dayo/dayo-pricing'
-import { CartError, lineOptions, lineUnitPriceSatang, type GradeChoice, type MilkChoice, type PosOrderCatalog } from '@dayo/domain'
+import { CartError, lineOptions, lineUnitPriceSatang, optionDeltaSatang, type GradeChoice, type MilkChoice, type PosOrderCatalog } from '@dayo/domain'
 import type { SellMenuDto } from '../api/types'
 import { useCart } from '../app/cart-context'
 import { formatBaht } from '../ui/format'
@@ -59,8 +59,11 @@ export function ItemDialog({
   const priceOf = (m: MilkCode, g: string | null): number | null => (size === null || sweetness === null ? null : lineUnitPriceSatang(catalog, menu.code, size, sweetness, m, g, channelCode))
   const price = priceOf(milk, grade)
   const gone = size === null || sweetness === null || opts === null // the menu or every size/sweetness of it is gone
-  const freshPrice = opts === null ? null : priceOf('fresh', grade)
-  const defaultGradePrice = opts === null || opts.defaultGrade === null ? null : priceOf(milk, opts.defaultGrade)
+  /** The "+฿"/"-฿" of an option button — `optionDeltaSatang` alone, never a subtraction in this screen (review round
+   * 2 item 5). Grade compares against the CURRENTLY selected grade (not the shop's default), so every grade always
+   * gets a correct delta — including one cheaper than what is selected now, which must show a negative label. */
+  const deltaFrom = (from: { milk: MilkCode; grade: string | null }, to: { milk: MilkCode; grade: string | null }): number | null =>
+    size === null || sweetness === null ? null : optionDeltaSatang(catalog, menu.code, size, sweetness, channelCode, from, to)
 
   const add = (): void => {
     if (gone || price === null || size === null || sweetness === null) return
@@ -96,12 +99,11 @@ export function ItemDialog({
             <h3>{TH.milk}</h3>
             <div className="choices">
               {opts.milk.map((m) => {
-                const p = priceOf(m.code, grade)
-                const add2 = p !== null && freshPrice !== null ? p - freshPrice : 0
+                const d = deltaFrom({ milk: 'fresh', grade }, { milk: m.code, grade })
                 return (
                   <button key={m.code} type="button" data-testid={`item-milk-${m.code}`} aria-pressed={m.code === milk} onClick={() => setMilkChoice(m.code)}>
                     {m.code === 'oat' ? TH.milkOat : TH.milkFresh}
-                    {add2 > 0 && ` +${formatBaht(add2)}`}
+                    {d !== null && d !== 0 && ` ${d > 0 ? '+' : ''}${formatBaht(d)}`}
                   </button>
                 )
               })}
@@ -113,12 +115,11 @@ export function ItemDialog({
             <h3>{TH.grade}</h3>
             <div className="choices">
               {opts.grades.map((g) => {
-                const p = priceOf(milk, g.code)
-                const add2 = p !== null && defaultGradePrice !== null ? p - defaultGradePrice : 0
+                const d = deltaFrom({ milk, grade }, { milk, grade: g.code })
                 return (
                   <button key={g.code} type="button" data-testid={`item-grade-${g.code}`} aria-pressed={g.code === grade} onClick={() => setGradeChoice(g.code)}>
                     {g.code}
-                    {add2 > 0 && ` +${formatBaht(add2)}`}
+                    {d !== null && d !== 0 && ` ${d > 0 ? '+' : ''}${formatBaht(d)}`}
                   </button>
                 )
               })}

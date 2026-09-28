@@ -1,4 +1,4 @@
-import type { CartErrorCode } from '@dayo/domain'
+import type { CartError, CartErrorCode } from '@dayo/domain'
 import { posErrorCode, type PosErrorCode } from '../api/errors'
 import { TH } from './th'
 
@@ -52,7 +52,9 @@ export const MESSAGES: Record<PosErrorCode, string> = {
   QUEUE_FULL: 'เลขคิววันนี้ครบ 9999 แล้ว — ต้องเปิดกะใหม่จึงขายต่อได้',
 }
 
-/** dayo's `CartError` code → Thai, for `usePricedCart`'s `error` (a `CartError.message`, "CODE: detail"). */
+/** dayo's `CartError` code → Thai. `UNKNOWN_VARIANT` is refined by `CartError.reason` below (never by parsing the
+ * message text — review round 2 item 6). Used for both the combined `cart-error` banner and each per-line label
+ * (review round 2 item 4 — one function, so the two can never show a contradicting Thai message for the same error). */
 const CART_ERROR_MESSAGES: Record<CartErrorCode, string> = {
   EMPTY_CART: TH.errEmptyCart,
   CART_TOO_LARGE: TH.errCartTooLarge,
@@ -63,32 +65,15 @@ const CART_ERROR_MESSAGES: Record<CartErrorCode, string> = {
   BAD_DISCOUNT: TH.errBadInput,
 }
 
-/** Thai message for `usePricedCart`'s `error` string (never shown as the domain's raw English detail). */
-export function cartErrorMessage(message: string): string {
-  const m = /^([A-Z_]+): /.exec(message)
-  const code = m?.[1] as CartErrorCode | undefined
-  if (code === undefined || !(code in CART_ERROR_MESSAGES)) {
-    console.error(message)
-    return TH.errUnexpected
-  }
-  return CART_ERROR_MESSAGES[code]
-}
-
 /**
- * Thai message for one bad cart line (review I5, `checkLine`/`findSellableVariant`) — `UNKNOWN_VARIANT` carries a
- * `NO_SUCH_MENU`/`SIZE_CLOSED` marker in its detail so a menu dayo removed entirely reads differently from a size
- * the shop merely closed (ADR-0054).
+ * Thai message for a `CartError` — from `usePricedCart`'s `error` (the whole cart) or a per-line `checkLine` check
+ * (review I5/round 2 item 4). `UNKNOWN_VARIANT` reads differently for a menu dayo removed entirely
+ * (`reason: 'no_such_menu'`) than for a size the shop merely closed (`reason: 'size_closed'`) — switched on the
+ * structured field, never the free-text detail (round 2 item 6).
  */
-export function cartLineErrorMessage(message: string): string {
-  const m = /^([A-Z_]+): (.*)$/.exec(message)
-  if (m === null) {
-    console.error(message)
-    return TH.errUnexpected
-  }
-  const code = m[1] as CartErrorCode
-  const detail = m[2] ?? ''
-  if (code === 'UNKNOWN_VARIANT') return detail.startsWith('NO_SUCH_MENU') ? TH.errMenuGone : TH.errSizeClosed
-  return cartErrorMessage(message)
+export function cartErrorMessage(e: CartError): string {
+  if (e.code === 'UNKNOWN_VARIANT') return e.reason === 'no_such_menu' ? TH.errMenuGone : TH.errSizeClosed
+  return CART_ERROR_MESSAGES[e.code] ?? TH.errUnexpected
 }
 
 /**

@@ -18,9 +18,9 @@ export function QrPayScreen(): JSX.Element {
   const api = useApi()
   const { state } = useCart()
   const navigate = useNavigate()
-  const { pay, isPending, isSuccess, isError, error, priceChanged } = useCommitSale()
+  const { pay, isPending, isSuccess, isError, error, priceChanged, priceBump } = useCommitSale()
   const catalogQuery = useQuery({ queryKey: sellCatalogKey, queryFn: () => api.loadSellCatalog() })
-  const { priced, error: cartError } = usePricedCart(state, catalogQuery.data?.catalog)
+  const { priced, error: cartError } = usePricedCart(state, catalogQuery.data?.catalog, priceBump)
   const total = priced?.totalSatang ?? 0 // after a PRICE_CHANGED re-price the QR below is rebuilt for the new total
   const payload = useQuery({ queryKey: ['promptpay', total], queryFn: () => api.promptPayForAmount(total), enabled: total > 0 })
   const image = useQuery({
@@ -60,11 +60,15 @@ export function QrPayScreen(): JSX.Element {
         {priceChanged !== null ? (
           // review I3/C1: resends with the fresh total (`priced.totalSatang`, already re-priced from the refetched
           // catalog), never the stale `priceChanged.nowSatang` captured at the moment of the first refusal.
+          // Round 2 item 1: also waits for `priced.totalSatang` to actually equal `priceChanged.nowSatang` (`priceBump`
+          // forces the recompute right away, but the button still waits for it to have landed) — never sends before
+          // the new QR (still loading below) matches what recordSale will price. Round 2 item 2: same guard as
+          // `qr-received` (payload ready, `priced.ok`), so this button can never fire on a bad/still-loading price.
           <button
             type="button"
             className="primary"
             data-testid="price-changed-confirm"
-            disabled={isPending || priced === null}
+            disabled={isPending || priced === null || !priced.ok || payload.data === undefined || priced.totalSatang !== priceChanged.nowSatang}
             onClick={() => priced !== null && void pay({ method: 'PROMPTPAY' }, priced.totalSatang)}
           >
             {TH.priceChangedConfirm}
