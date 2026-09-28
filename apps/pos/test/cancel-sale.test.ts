@@ -194,6 +194,7 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
     expect((await t.db.select().from(s.order).where(eq(s.order.id, legacy.orderId)).get())?.status).toBe('paid')
     expect(await t.db.select().from(s.stockMovement).where(eq(s.stockMovement.kind, 'VOID_RETURN')).all()).toEqual([])
   })
+
   describe('a plan-3 bill (no sold_at) — the voidWithStock path', () => {
     const legacyInput = (t: ReadyApi, orderId: string, patch: Partial<CancelSaleInput> = {}): CancelSaleInput => ({
       orderId, actorUserId: t.owner.id, approverUserId: t.other.id, approverPin: PINS.DCm, reason: 'กดผิดเมนู', made: false, refundReference: null, ...patch,

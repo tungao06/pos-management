@@ -130,10 +130,11 @@ describe('priceCart', () => {
       { iso: '2026-09-26T08:00:00.000Z', saleDate: '2026-09-26', saleTime: '15:00' }, // Saturday, not a promotion day
       { iso: '2026-09-25T17:30:00.000Z', saleDate: '2026-09-26', saleTime: '00:30' }, // Friday in UTC, already Saturday in Bangkok
     ] as const
+    // weighted towards bills dayo accepts, so every promotion is reached in every run (the refusals still come up often)
     const lineDiscount = fc.oneof(
-      fc.constant({ discountSatang: null, discountPercent: null }),
-      fc.integer({ min: 1, max: 100 }).map((p) => ({ discountSatang: null, discountPercent: p })),
-      fc.integer({ min: 1, max: 12_000 }).map((s) => ({ discountSatang: s, discountPercent: null })),
+      { weight: 4, arbitrary: fc.constant({ discountSatang: null, discountPercent: null }) },
+      { weight: 1, arbitrary: fc.integer({ min: 1, max: 100 }).map((p) => ({ discountSatang: null, discountPercent: p })) },
+      { weight: 1, arbitrary: fc.integer({ min: 1, max: 12_000 }).map((s) => ({ discountSatang: s, discountPercent: null })) },
     )
     const billDiscount = fc.oneof(
       fc.constant(null),
@@ -141,10 +142,13 @@ describe('priceCart', () => {
       fc.integer({ min: 1, max: 100 }).map((percent) => ({ kind: 'percent' as const, percent, reason: null as string | null })),
     )
     const row = fc.record({
-      v: fc.integer({ min: 0, max: variants.length - 1 }), qty: fc.integer({ min: 1, max: 5 }), milk: fc.constantFrom('fresh', 'oat', 'oat-any'), g: fc.nat(),
-      d: lineDiscount, free: fc.integer({ min: 0, max: 4 }).map((n) => n === 0), reason: fc.constantFrom(null, 'ลูกค้าประจำ', '   '),
+      v: fc.integer({ min: 0, max: variants.length - 1 }), qty: fc.integer({ min: 1, max: 5 }), milk: fc.oneof({ weight: 4, arbitrary: fc.constant('fresh') }, { weight: 3, arbitrary: fc.constant('oat') }, { weight: 1, arbitrary: fc.constant('oat-any') }), g: fc.nat(),
+      d: lineDiscount, free: fc.integer({ min: 0, max: 7 }).map((n) => n === 0), reason: fc.oneof({ weight: 1, arbitrary: fc.constant(null) }, { weight: 2, arbitrary: fc.constant('ลูกค้าประจำ') }, { weight: 1, arbitrary: fc.constant('   ') }),
     })
-    const seen = { freeOk: 0, freeRefused: 0, oat: 0, notOk: 0, billSatang: 0, billPercent: 0, lineBaht: 0, promos: new Set<string>() }
+    const seen = {
+      freeOk: 0, freeRefused: 0, oat: 0, notOk: 0, billSatang: 0, billPercent: 0, lineBaht: 0, linePercent: 0,
+      qr: 0, promoLowercase: 0, promoUnknown: 0, noPromotions: 0, promos: new Set<string>(),
+    }
 
     fc.assert(fc.property(
       fc.array(row, { minLength: 1, maxLength: 6 }), fc.constantFrom('store', 'grab', 'lineman'), fc.constantFrom('cash', 'qr'), billDiscount,
@@ -184,15 +188,25 @@ describe('priceCart', () => {
           .toEqual(q.lines.map((l) => [l.menuCode, l.milk, l.qty, edgeBahtToSatang(l.unitPrice), edgeBahtToSatang(l.discountPerCup), l.promotionId, edgeBahtToSatang(l.lineTotal)]))
         expect(p.promotionsApplied.map((x) => [x.promotionId, x.discountSatang])).toEqual(q.promotionsApplied.map((x) => [x.promotionId, edgeBahtToSatang(x.discountAmount)]))
 
+        if (noPromotions) expect(q.promotionsApplied).toEqual([]) // spec §4.5: "no promotions" really applies none
+
         if (!q.ok) seen.notOk++
         if (q.ok && lines.some((l) => l.free)) seen.freeOk++
-        if (!q.ok && lines.some((l) => l.free && (l.discountReason === null || l.discountReason.trim() === ''))) seen.freeRefused++
+        // refused BECAUSE of the free cup: a one-line bill whose only line is an unreasoned free cup on a milk it may
+        // have (oat is refused on its own otherwise), and dayo's own free-needs-a-reason warning (ADR-0023) is there
+        const onlyFreeUnreasoned = rows.length === 1 && rows[0]!.free && (rows[0]!.reason === null || rows[0]!.reason.trim() === '') && (rows[0]!.milk !== 'oat-any' || oatOk[rows[0]!.v])
+        if (!q.ok && onlyFreeUnreasoned && q.warnings.some((w) => w.includes('ให้ฟรีต้องมีหมายเหตุ'))) seen.freeRefused++
         if (q.ok && q.lines.some((l) => l.milk === 'oat')) seen.oat++
         if (q.ok && q.billDiscountAmount > 0) seen[bill?.kind === 'percent' ? 'billPercent' : 'billSatang']++
         if (q.ok && lines.some((l) => l.discountSatang !== null && !l.free)) seen.lineBaht++
+        if (q.ok && lines.some((l) => l.discountPercent !== null && !l.free)) seen.linePercent++
+        if (q.ok && paymentCode === 'qr') seen.qr++
+        if (q.ok && promoCode === 'dayo10') seen.promoLowercase++
+        if (q.ok && promoCode === 'NOPE') seen.promoUnknown++
+        if (q.ok && noPromotions) seen.noPromotions++
         if (q.ok) for (const x of q.promotionsApplied) seen.promos.add(x.promotionId)
       },
-    ), { numRuns: 800 })
+    ), { numRuns: 1000 })
 
     // the generator really reached every kind of input (a narrowed generator fails here, not silently)
     expect(seen.freeOk).toBeGreaterThan(0)
@@ -202,6 +216,11 @@ describe('priceCart', () => {
     expect(seen.billSatang).toBeGreaterThan(0)
     expect(seen.billPercent).toBeGreaterThan(0)
     expect(seen.lineBaht).toBeGreaterThan(0)
+    expect(seen.linePercent).toBeGreaterThan(0)
+    expect(seen.qr).toBeGreaterThan(0)
+    expect(seen.promoLowercase).toBeGreaterThan(0)
+    expect(seen.promoUnknown).toBeGreaterThan(0)
+    expect(seen.noPromotions).toBeGreaterThan(0)
     expect([...seen.promos].sort()).toEqual([...promotionIds].sort()) // every promotion of the test catalog, DAYO10 and the matcha hour included
   })
   it.each<[string, CartDraft, CartError['code']]>([
