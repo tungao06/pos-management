@@ -112,4 +112,40 @@ describe('SystemStatusScreen (spec §4.3, §6.7, §10.5, §7 ข้อ 1 · D80 
       }),
     )
   })
+
+  // SECURITY (fix round 2, parked Low): a manager must never even see the section that swaps the shop's key.
+  it('does not show the "ตั้งกุญแจใหม่" section to a manager', async () => {
+    const api = { bootstrap: vi.fn(async () => bootWithSync({})) }
+    renderStatus(api, 'manager')
+    await screen.findByTestId('status-key')
+    expect(screen.queryByTestId('status-replace-key')).toBeNull()
+  })
+
+  // SECURITY (fix round 2, parked Low): a blank or malformed PIN must never reach the API — every failed attempt
+  // burns one of the login-lockout attempts, so this has to be caught before `replace.mutate()` is ever called.
+  it('never calls replaceApiKey with a blank PIN — it is rejected locally first', async () => {
+    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true }))
+    const replaceApiKey = vi.fn(async () => undefined)
+    const api = { bootstrap: vi.fn(async () => bootWithSync({})), probeDayo, replaceApiKey }
+    renderStatus(api, 'owner')
+    fireEvent.change(await screen.findByTestId('setup-api-key'), { target: { value: 'dayo_new_key_0123456789abcdef0123456789abcdef01234567' } })
+    fireEvent.click(screen.getByTestId('setup-probe'))
+    await screen.findByTestId('status-replace-key-pin')
+    fireEvent.click(screen.getByTestId('status-replace-key-save'))
+    expect(await screen.findByRole('alert')).toHaveTextContent(TH.errPinFormat)
+    expect(replaceApiKey).not.toHaveBeenCalled()
+  })
+
+  it('never calls replaceApiKey with a malformed PIN — it is rejected locally first', async () => {
+    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true }))
+    const replaceApiKey = vi.fn(async () => undefined)
+    const api = { bootstrap: vi.fn(async () => bootWithSync({})), probeDayo, replaceApiKey }
+    renderStatus(api, 'owner')
+    fireEvent.change(await screen.findByTestId('setup-api-key'), { target: { value: 'dayo_new_key_0123456789abcdef0123456789abcdef01234567' } })
+    fireEvent.click(screen.getByTestId('setup-probe'))
+    fireEvent.change(await screen.findByTestId('status-replace-key-pin'), { target: { value: 'ab' } })
+    fireEvent.click(screen.getByTestId('status-replace-key-save'))
+    expect(await screen.findByRole('alert')).toHaveTextContent(TH.errPinFormat)
+    expect(replaceApiKey).not.toHaveBeenCalled()
+  })
 })

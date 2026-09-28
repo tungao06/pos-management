@@ -26,7 +26,10 @@ export default defineConfig({
       // security M1 (fix round 1): built with `--mode e2e`, not plain `pnpm build` — `SetupScreen` only reads
       // VITE_DAYO_BASE_URL in that mode, so a normal production build never embeds this address even if the var
       // is left set in someone's shell (test/build-check.test.ts checks this for real).
-      command: 'pnpm exec tsc --noEmit && pnpm exec vite build --mode e2e && pnpm exec vite preview --port 4173 --strictPort',
+      // fix round 2 (parked Low): `--outDir dist-e2e` on both the build and the preview keeps this run from ever
+      // overwriting (or serving stale bytes out of) a real `pnpm build`'s `dist/` — the release build/deploy
+      // (scripts/deploy.mjs, wrangler) never passes `--outDir` and stays on plain `dist`.
+      command: 'pnpm exec tsc --noEmit && pnpm exec vite build --mode e2e --outDir dist-e2e && pnpm exec vite preview --outDir dist-e2e --port 4173 --strictPort',
       url: 'http://localhost:4173',
       env: { VITE_DAYO_BASE_URL: DAYO_MOCK_URL },
       reuseExistingServer: !process.env['CI'],

@@ -1,4 +1,4 @@
-import { useState, type JSX, type ReactNode } from 'react'
+import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { PIN_RE, REASON_MAX_LENGTH, type UserDto } from '../api/types'
 import { TH } from '../ui/th'
 
@@ -39,6 +39,13 @@ export function OwnerApprovalDialog({
   const [pin, setPin] = useState('')
   const [reason, setReason] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
+
+  // SECURITY (fix round 2, parked Low; widened per security review): matches SystemStatusScreen's replace-key
+  // form — any failed attempt (a wrong PIN, or the 5th try landing on PIN_LOCKED instead) must not leave the PIN
+  // sitting in the field. Any error from the caller clears it, not just a PIN_WRONG text match.
+  useEffect(() => {
+    if (error !== null) setPin('')
+  }, [error])
 
   const submit = (): void => {
     if (approverId === null) return setLocalError(TH.errNotOwner)

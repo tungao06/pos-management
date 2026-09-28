@@ -84,6 +84,12 @@ export function SetupScreen(): JSX.Element {
       }
       setPersisted(ok)
       await queryClient.invalidateQueries({ queryKey: bootstrapKey })
+      // SECURITY (fix round 2): the key and every PIN typed on this screen have done their job once dayo has
+      // accepted them — nothing past this point ever reads them again, so they must not keep sitting in memory.
+      setTarget((t) => ({ ...t, apiKey: '' }))
+      setPin('')
+      setPin2('')
+      setLegacyPin('')
       // quality review (fix round 1): stay on this screen so the persist-storage result is actually seen —
       // "setup-continue" (below) is what leaves it.
     },
