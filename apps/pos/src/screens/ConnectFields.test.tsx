@@ -185,6 +185,34 @@ describe('ConnectFields — QR scan (quality review, fix round 1)', () => {
     await screen.findByTestId('setup-scan-video')
   })
 
+  // Under <StrictMode> the camera must stay on while detection keeps retrying — a superseded run of the scan
+  // loop must never stop the stream the live run is still reading from.
+  it('keeps the camera on while detection retries under <StrictMode>', async () => {
+    ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {
+      async detect(): Promise<{ rawValue: string }[]> {
+        return []
+      }
+    }
+    const { track } = stubCamera()
+    const api = {} as unknown as PosApi
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(
+      <StrictMode>
+        <QueryClientProvider client={queryClient}>
+          <ApiProvider api={api}>
+            <Controlled onChange={() => undefined} />
+          </ApiProvider>
+        </QueryClientProvider>
+      </StrictMode>,
+    )
+
+    fireEvent.click(screen.getByTestId('setup-scan'))
+    await screen.findByTestId('setup-scan-video')
+    await new Promise((r) => setTimeout(r, 700)) // several 200 ms retry rounds
+    expect(track.stop).not.toHaveBeenCalled()
+    expect(screen.getByTestId('setup-scan-video')).toBeTruthy()
+  })
+
   it('shows a Thai message, not the raw browser text, when the camera is denied', async () => {
     ;(window as unknown as { BarcodeDetector: unknown }).BarcodeDetector = class {}
     vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia: vi.fn(async () => { throw new Error('Permission denied') }) } })
