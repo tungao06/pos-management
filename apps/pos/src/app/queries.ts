@@ -11,6 +11,8 @@ export const zKey = (shiftId: string) => ['z', shiftId] as const
 export const shiftReportKey = ['shift-report'] as const
 export const stockKey = ['stock'] as const
 export const stockCountKey = ['stock-count'] as const
+export const centralOrdersKey = ['central-orders'] as const
+export const priceDiffsKey = (actorUserId: string) => ['price-diffs', actorUserId] as const
 
 export function useBootstrap() {
   const api = useApi()

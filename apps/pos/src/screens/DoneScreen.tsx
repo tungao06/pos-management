@@ -34,13 +34,13 @@ export function DoneScreen(): JSX.Element {
   const o = order.data
   return (
     <main className="done">
-      <div>{TH.queue}</div>
       <div className="queue-no" data-testid="done-queue">
-        {o.queueNo}
+        {TH.queue} {o.queueNo}
       </div>
       <div>
         {TH.receiptNo} <strong data-testid="done-receipt">{o.receiptNo}</strong>
       </div>
+      <div data-testid="done-sold-by">{TH.doneSoldBy(o.soldByName)}</div>
       {o.changeSatang !== null && (
         <div>
           {TH.change} <span className="big-amount" data-testid="done-change">{formatBaht(o.changeSatang)}</span>

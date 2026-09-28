@@ -24,7 +24,7 @@ test('cash sale: defaults, discount, quick tender, change, queue and receipt; ne
   await expect(page.getByTestId('cash-change')).toHaveText('฿400')
   await page.getByTestId('confirm-cash').click()
 
-  await expect(page.getByTestId('done-queue')).toHaveText('1')
+  await expect(page.getByTestId('done-queue')).toHaveText('คิว 1')
   await expect(page.getByTestId('done-receipt')).toHaveText('A-000001')
   await expect(page.getByTestId('done-change')).toHaveText('฿400')
   await expect(page.getByTestId('done-line-1')).toContainText('22 oz')
@@ -39,7 +39,7 @@ test('cash sale: defaults, discount, quick tender, change, queue and receipt; ne
   await page.getByTestId('tender-exact').click()
   await expect(page.getByTestId('cash-change')).toHaveText('฿0')
   await page.getByTestId('confirm-cash').click()
-  await expect(page.getByTestId('done-queue')).toHaveText('2')
+  await expect(page.getByTestId('done-queue')).toHaveText('คิว 2')
   await expect(page.getByTestId('done-receipt')).toHaveText('A-000002')
   await expect(page).toHaveURL(/\/sell$/, { timeout: 10_000 }) // spec §5: closes by itself after 5 s
 })
