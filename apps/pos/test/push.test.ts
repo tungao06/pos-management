@@ -272,6 +272,19 @@ describe('pushOnce — carried requirements (task 13)', () => {
     expect((await pushOnce(ctx)).stopped).toBe('api_blocked')
     expect(t.mock.requests().length).toBe(before)
   })
+  it('a proxy or WAF 403 without dayo\'s error body is a server failure: backoff and retry, never a stop (task 14 item 3)', async () => {
+    const { t } = await ready()
+    await cocoa(t)
+    let waf = true
+    const f: typeof fetch = async (input, init) => (waf ? new Response('<html>403 Forbidden</html>', { status: 403 }) : t.mock.fetch(input, init))
+    const ctx = { db: t.db, deps: { ...t.deps, fetch: f }, serial: <T>(fn: () => Promise<T>) => fn() }
+    expect((await pushOnce(ctx)).stopped).toBe('server')
+    expect(await readKey(t.db, DAYO_KEYS.apiState)).toBe('ok')
+    expect(await readKey(t.db, DAYO_KEYS.pushBackoffReason)).toBe('failure')
+    waf = false
+    t.clock.advanceMs(60_000)
+    expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
+  })
   it('sale_date = the server\'s tomorrow is deferred CLOCK_AHEAD: no try, not dead, retried after 60 s (R3)', async () => {
     const { t, ctx } = await ready('2026-09-25T17:02:00.000Z') // 00:02 on the 26th in Thailand
     await cocoa(t)

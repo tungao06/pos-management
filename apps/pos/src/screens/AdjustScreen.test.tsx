@@ -8,6 +8,7 @@ import { ApiProvider } from '../app/api-context'
 import { SessionProvider, useSession } from '../app/session'
 import { TH } from '../ui/th'
 import { AdjustScreen } from './AdjustScreen'
+import { HEALTHY_SYNC } from '../test-utils/sync-status'
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
@@ -80,7 +81,7 @@ const DONE: StockAdjustmentDto = {
 }
 
 function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
-  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, dayoBaseUrl: 'https://dayo.example/api/v1', staffNeedingPin: [], ownerRecovery: false, ...overrides }
+  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, dayoBaseUrl: 'https://dayo.example/api/v1', staffNeedingPin: [], ownerRecovery: false, sync: HEALTHY_SYNC, ...overrides }
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

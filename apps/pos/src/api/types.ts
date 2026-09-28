@@ -1,5 +1,7 @@
 import type { AdjustReason, CashMovementKind, MovementKind, UseUnit, UserRole } from '@dayo/contracts'
 import type { Size, Sweetness } from '@dayo/dayo-pricing'
+import type { SyncCycleResult } from '../sync/scheduler'
+import type { ApiState } from '../sync/state'
 import type { CartDraft, CashCountLine, CashInputs, ExpiryState, PosOrderCatalog, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
@@ -31,6 +33,34 @@ export type BootstrapState = {
   staffNeedingPin: StaffOptionDto[]
   /** ruling N2: "เชื่อมใหม่ด้วยคีย์ใหม่" is offered (no active owner with a PIN here, or the key was revoked). */
   ownerRecovery: boolean
+  /** Task 14: the health of the link to dayo (spec 04 §4.3, §6.7, §10.5 · D80). */
+  sync: SyncStatusDto
+}
+/** Task 14 (spec 04 §4.3, §4.4 rule 9, §6.7, §10.5 · D80). Never carries the API key — only its masked form. */
+export type SyncStatusDto = {
+  linked: boolean
+  apiState: ApiState | null
+  maskedKey: string | null
+  baseUrl: string | null
+  /** Server clock minus tablet clock at the last E1/E2 answer (the last one measured — offline keeps it, spec §6.7). */
+  clockSkewMs: number | null
+  /** |skew| > 5 min, or CLOCK_AHEAD seen within the last hour (D80). */
+  clockWarning: boolean
+  pricingMismatch: boolean
+  /** pricing.commit from E1; null = unknown, not a problem (spec §4.4 rule 9 — only the file hashes decide). */
+  pricingCommit: string | null
+  catalogVersion: number | null
+  catalogCheckedAt: string | null
+  catalogError: string | null
+  lastPushAt: string | null
+  pendingBills: number
+  problemBills: number
+  oldestPendingAt: string | null
+  pendingOver24h: boolean
+  /** Bills whose dayo computed_total differs from ours by any amount (spec §4.3). */
+  priceDiffBills: number
+  /** ruling N5: pending bills flagged CLOCK_AHEAD more than 24 h ahead of the server (owner-only banner). */
+  clockFarAheadBills: number
 }
 export type StaffOptionDto = { id: string; displayName: string; role: UserRole }
 export type DayoProbeInput = { baseUrl: string; apiKey: string }
@@ -468,6 +498,9 @@ export interface PosApi {
   setStaffPin(input: SetStaffPinInput): Promise<UserDto>
   replaceApiKey(input: ReplaceApiKeyInput): Promise<void>
   recoverOwner(input: RecoverOwnerInput): Promise<void>
+  /** "ส่งตอนนี้": one sync cycle now (E1 pull, then the push queue). Not in the serial queue — sales keep going. */
+  syncNow(): Promise<SyncCycleResult>
+  syncStatus(): Promise<SyncStatusDto>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -508,6 +541,8 @@ export const POS_API_METHODS = [
   'setStaffPin',
   'replaceApiKey',
   'recoverOwner',
+  'syncNow',
+  'syncStatus',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>

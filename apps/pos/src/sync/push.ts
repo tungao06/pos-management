@@ -26,7 +26,7 @@ type Mark = { createdAt: string; rid: number }
 const KNOWN_SUCCESS = new Set(['accepted', 'duplicate'])
 const utf8 = new TextEncoder()
 const ENVELOPE_BYTES = 80 // {"device_time":"2026-…Z","rows":[]} is 52 bytes; the rest is slack
-const MAX_ROUNDS_PER_CALL = 15 // ≤ 300 rows per call; the scheduler calls again (bounds the time one call can take)
+export const MAX_ROUNDS_PER_CALL = 15 // ≤ 300 rows per call; the scheduler calls again (bounds the time one call can take)
 const rowBytes = (r: Row): number => utf8.encode(JSON.stringify({ key: r.idempotencyKey, kind: r.tableName, data: r.rowJson })).length + 1
 const hashOf = (sup: Supported): string => JSON.stringify(sup)
 /** The longest wait the sender ever sets: the last backoff step + 20 % jitter (a clamped Retry-After, 15 min, fits under it). */
@@ -170,9 +170,8 @@ async function gate(db: RemoteDb, deps: ApiDeps): Promise<{ cfg: { baseUrl: stri
   const cfg = await readDayoConfig(db, deps)
   if (cfg === null) return { cfg, sup: null, blocked: 'not_linked' }
   const now = deps.now()
-  if (await apiBlocked(db, now)) return { cfg, sup: null, blocked: 'api_blocked' } // same gate as E1/E3 (Task 10)
-  // a stored base URL the client refused: only re-linking fixes it (it writes api_state ok) — no request, no backoff retry
-  if ((await readKey(db, DAYO_KEYS.apiState)) === 'bad_base_url') return { cfg, sup: null, blocked: 'api_blocked' }
+  // same gate as E1/E3 (Task 10): a refused key, the API switched off, or a refused base URL (task 14 item 2)
+  if (await apiBlocked(db, now)) return { cfg, sup: null, blocked: 'api_blocked' }
   const until = await readKey(db, DAYO_KEYS.pushBackoffUntil)
   if (until !== null) {
     const left = Date.parse(until) - Date.parse(now)

@@ -67,6 +67,35 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
     const bill = (await t.db.select().from(s.order).where(eq(s.order.id, today.orderId)).get())!
     expect(bill.voidedAt).toBe('2026-09-25T17:10:00.000Z')
   })
+  it('getOrder.voidable follows the same "now" as cancelSale: a set-back clock does not offer yesterday\'s bill', async () => {
+    const t = await openConnectedApi({ now: '2026-09-25T16:50:00.000Z' })
+    const yesterday = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.clock.set('2026-09-25T17:10:00.000Z')
+    const today = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.clock.set('2026-09-25T16:59:00.000Z')
+    expect((await t.api.getOrder(yesterday.orderId)).voidable).toBe(false)
+    expect((await t.api.getOrder(today.orderId)).voidable).toBe(true)
+  })
+  it('a clock set back BEFORE the first sale of the day is caught by the server time dayo last reported (D80, task 14 item 5)', async () => {
+    const t = await openConnectedApi({ now: '2026-09-25T16:50:00.000Z' }) // 23:50 Bangkok, 25 Sep
+    const yesterday = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.setNow('2026-09-25T17:10:00.000Z')  // really 00:10, 26 Sep
+    t.clock.set('2026-09-25T16:55:00.000Z')     // but the tablet was set back to 23:55, 25 Sep — no sale today yet
+    await t.api.syncNow()                       // E1 answers: the server is 15 minutes ahead
+    expect((await t.api.getOrder(yesterday.orderId)).voidable).toBe(false)
+    const before = await t.db.select().from(s.outbox).all()
+    try { await t.api.cancelSale({ orderId: yesterday.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'x', made: false, refundReference: 'K' }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('VOID_NOT_ALLOWED') }
+    expect(await t.db.select().from(s.outbox).all()).toEqual(before)
+  })
+  it('the server time only judges the day: voided_at stays on the tablet clock (spec §6.7)', async () => {
+    const t = await openConnectedApi()
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.setNow('2026-09-25T03:02:00.000Z') // server 2 minutes ahead
+    await t.api.syncNow()
+    t.clock.advanceMs(10_000)
+    await t.api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'x', made: false, refundReference: 'K' })
+    expect((await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())!.voidedAt).toBe('2026-09-25T03:00:10.000Z')
+  })
   it('records "made" in the event for the Z void list and writes no stock row (ruling R6)', async () => {
     const t = await openConnectedApi()
     const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })

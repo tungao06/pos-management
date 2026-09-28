@@ -1,4 +1,4 @@
-import { and, eq, max } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { bangkokDateOf, rowKey, Text200, type UserRole } from '@dayo/contracts'
@@ -11,7 +11,7 @@ import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { getOrder } from './orders'
+import { getOrder, voidInstant } from './orders'
 import { REASON_MAX_LENGTH, type CancelSaleInput, type OrderDetailDto, type ShiftDto, type VoidOrderInput } from './types'
 
 type LegacyVoid = { order: typeof s.order.$inferSelect; shift: ShiftDto; deviceId: string; actorId: string; approverId: string; reason: string; made: boolean; refundReference: string | null }
@@ -95,15 +95,6 @@ function assertMayVoid(role: UserRole, order: typeof s.order.$inferSelect, actor
 }
 
 /**
- * "Now" for a cancellation: the device clock, but never before the latest sale of this device — a clock set back to
- * yesterday must not reopen yesterday's bills (same-day rule, spec §4.7), and a void is never stamped before its sale.
- */
-async function voidInstant(tx: RemoteDb, deviceId: string, deviceNow: string): Promise<string> {
-  const latest = (await tx.select({ v: max(s.order.soldAt) }).from(s.order).where(eq(s.order.deviceId, deviceId)).get())?.v ?? null
-  return latest !== null && Date.parse(latest) > Date.parse(deviceNow) ? latest : deviceNow
-}
-
-/**
  * spec §4.3 + D18/D36/D39: void a paid PLAN-3 order of the open shift with a reason and an owner's PIN.
  * Not made yet → VOID_RETURN of the exact SALE movements (same cost) · made → no movement, waste marker only.
  * Cash → automatic cash_movement VOID_REFUND · PromptPay → the refund transfer reference is recorded.
@@ -157,8 +148,8 @@ export async function cancelSale(db: RemoteDb, deps: ApiDeps, input: CancelSaleI
     if (order.status !== 'paid' || shift === null || order.shiftId !== shift.id || order.deviceId !== device.id) {
       throw new PosError('VOID_NOT_ALLOWED', `order ${order.receiptNo ?? order.id} is ${order.status} or not in the open shift`)
     }
-    const now = await voidInstant(tx, device.id, deps.now())
-    if (order.soldAt !== null && bangkokDateOf(now) !== bangkokDateOf(order.soldAt)) throw new PosError('VOID_NOT_ALLOWED', 'SAME_DAY_ONLY: ยกเลิกได้เฉพาะวันเดียวกับวันขาย')
+    const { stamp: now, judge } = await voidInstant(tx, device.id, deps.now())
+    if (order.soldAt !== null && bangkokDateOf(judge) !== bangkokDateOf(order.soldAt)) throw new PosError('VOID_NOT_ALLOWED', 'SAME_DAY_ONLY: ยกเลิกได้เฉพาะวันเดียวกับวันขาย')
     assertMayVoid(actor.role, order, actor.id)
     if (order.soldAt === null) {
       // a plan-3 bill took stock when it was sold: it goes the stock way (ingredients back unless made) — one API for the screen

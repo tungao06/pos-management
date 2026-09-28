@@ -1,10 +1,10 @@
-import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, max } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { bangkokDateOf, rowKey } from '@dayo/contracts'
 import { centralDiffSatang, type PricedPromotion } from '@dayo/domain'
 import { readCatalog, staffDisplayName } from '../sync/catalog'
-import { decodeLastError } from '../sync/state'
+import { DAYO_KEYS, decodeLastError, readKey } from '../sync/state'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
@@ -95,6 +95,24 @@ function promotionsOf(o: OrderRow): { name: string; discountSatang: number }[] {
   return applied.map((p) => ({ name: p.name, discountSatang: p.discountSatang }))
 }
 
+/**
+ * "Now" for a cancellation (spec §4.7 same-day rule), used by cancelSale AND getOrder.voidable so the screen offers
+ * exactly what cancelSale accepts.
+ * - `stamp` (voided_at and the rest of the void): the device clock, but never before the latest sale of this device —
+ *   a void is never stamped before its sale. Stays on the tablet clock (spec §6.7: dayo trusts the device time).
+ * - `judge` (which Thai day it is): the latest of `stamp` and the device clock corrected by the last skew dayo
+ *   reported (D80, task 14 item 5) — a clock set back to yesterday, even before the first sale of today, does not
+ *   reopen yesterday's bills once the tablet has heard dayo's server_time since. Offline = the last skew measured.
+ */
+export async function voidInstant(db: RemoteDb, deviceId: string, deviceNow: string): Promise<{ stamp: string; judge: string }> {
+  const latest = (await db.select({ v: max(s.order.soldAt) }).from(s.order).where(eq(s.order.deviceId, deviceId)).get())?.v ?? null
+  const stamp = latest !== null && Date.parse(latest) > Date.parse(deviceNow) ? latest : deviceNow
+  const skew = Number(await readKey(db, DAYO_KEYS.clockSkewMs))
+  const server = Number.isFinite(skew) ? Date.parse(deviceNow) + skew : Number.NaN
+  const judge = Number.isFinite(server) && server > Date.parse(stamp) ? new Date(server).toISOString() : stamp
+  return { stamp, judge }
+}
+
 export async function getOrder(db: RemoteDb, deps: Pick<ApiDeps, 'now'>, orderId: string): Promise<OrderDetailDto> {
   const o = await db.select().from(s.order).where(eq(s.order.id, orderId)).get()
   if (!o) throw new PosError('ORDER_NOT_FOUND', orderId)
@@ -111,7 +129,7 @@ export async function getOrder(db: RemoteDb, deps: Pick<ApiDeps, 'now'>, orderId
     : oldLines.map((l) => ({ lineNo: l.lineNo, productName: l.productName, sizeName: l.sizeName, sweetnessName: l.sweetnessName, milk: null, grade: null, qty: l.qty, unitPriceSatang: l.unitPriceSatang, lineTotalSatang: l.lineTotalSatang }))
   const ctx: SummaryContext = { sellerName: await sellerNames(db, [o.createdById]), outbox: await outboxOf(db, [o.id]) }
   // Only paid orders of the open shift can be voided (D47 ข้อ 2 · Q3-13); a block-2 bill only on the Thai day it was sold (spec 04 §4.7)
-  const sameDay = o.soldAt === null || bangkokDateOf(deps.now()) === bangkokDateOf(o.soldAt)
+  const sameDay = o.soldAt === null || bangkokDateOf((await voidInstant(db, device.id, deps.now())).judge) === bangkokDateOf(o.soldAt)
   return {
     ...summarize(o, payments, [...oldLines, ...items], ctx),
     businessDate: o.businessDate,

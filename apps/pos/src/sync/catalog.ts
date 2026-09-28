@@ -96,10 +96,14 @@ async function applyStaff(tx: RemoteDb, deps: ApiDeps, staff: StaffEntry[], at: 
   return 'applied'
 }
 
-/** spec §6.3: 401/403 stop EVERY call to dayo (catalog, push, E3) until a new key; 404 waits for its retry time. */
+/**
+ * spec §6.3: 401/403 stop EVERY call to dayo (catalog, push, E3) until a new key; 404 waits for its retry time.
+ * task 14 item 2: a stored base URL the client refused (`bad_base_url`) is the same kind of stop — no request, no
+ * backoff retry — until re-linking (connectShop / replaceApiKey / recoverOwner) writes api_state ok.
+ */
 export async function apiBlocked(db: RemoteDb, nowIso: string): Promise<boolean> {
   const state = await readKey(db, DAYO_KEYS.apiState)
-  if (state === 'unauthorized' || state === 'forbidden') return true
+  if (state === 'unauthorized' || state === 'forbidden' || state === 'bad_base_url') return true
   return state === 'disabled' && ((await readKey(db, DAYO_KEYS.apiRetryAt)) ?? '') > nowIso
 }
 

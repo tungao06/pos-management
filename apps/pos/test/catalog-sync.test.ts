@@ -2,7 +2,8 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { createMockDayo, MOCK_API_KEY } from '@dayo/dayo-mock'
-import { pullCatalog, readCatalog, staffDisplayName } from '../src/sync/catalog'
+import { apiBlocked, pullCatalog, readCatalog, staffDisplayName } from '../src/sync/catalog'
+import { pushOnce } from '../src/sync/push'
 import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
 import { openTestApi } from './helpers/db'
 
@@ -140,9 +141,29 @@ describe('pullCatalog (spec 04 §4.4, §6.5)', () => {
     expect(r.failure?.kind).toBe('bad_base_url') // not 'network': retrying cannot help, the owner must fix the link
     expect(await readKey(t.db, DAYO_KEYS.apiState)).toBe('bad_base_url')
     expect(mock.requests()).toHaveLength(0)
-    await writeKey(t.db, DAYO_KEYS.baseUrl, 'https://mock/api/v1') // the link is fixed → the next pull works and clears the state
+    await writeKey(t.db, DAYO_KEYS.baseUrl, 'https://mock/api/v1')
+    expect((await pullCatalog(ctx)).outcome).toBe('blocked') // task 14 item 2: only re-linking lifts it, not a retry
+    expect(mock.requests()).toHaveLength(0)
+    await writeKey(t.db, DAYO_KEYS.apiState, 'ok') // what connectShop / replaceApiKey / recoverOwner write (writeCatalogAnswer)
     expect((await pullCatalog(ctx)).outcome).toBe('changed')
     expect(await readKey(t.db, DAYO_KEYS.apiState)).toBe('ok')
+  })
+  it('a refused base URL is one gate for E1 and E2 alike: no request, no backoff (task 14 item 2)', async () => {
+    const { ctx, t, mock } = await linked()
+    await writeKey(t.db, DAYO_KEYS.apiState, 'bad_base_url')
+    expect(await apiBlocked(t.db, t.clock.now())).toBe(true)
+    expect(await pullCatalog(ctx)).toEqual({ outcome: 'blocked' })
+    expect((await pushOnce(ctx)).stopped).toBe('api_blocked')
+    expect(mock.requests()).toHaveLength(0)
+    expect(await readKey(t.db, DAYO_KEYS.pushBackoffUntil)).toBeNull()
+    expect(await readKey(t.db, DAYO_KEYS.pushFailStreak)).toBeNull()
+  })
+  it('a proxy or WAF 403 without dayo\'s error body is a failed pull, not a refused key (task 14 item 3)', async () => {
+    const { ctx, t } = await linked()
+    const waf = { ...ctx, deps: { ...t.deps, fetch: (async () => new Response('<html>403 Forbidden</html>', { status: 403 })) as typeof fetch } }
+    expect(await pullCatalog(waf)).toEqual({ outcome: 'failed', failure: { kind: 'server', status: 403 } })
+    expect(await readKey(t.db, DAYO_KEYS.apiState)).toBeNull()
+    expect((await pullCatalog(ctx)).outcome).toBe('changed') // not blocked
   })
   it('a bad answer is forgotten by the next answer that parses, unchanged included', async () => {
     const { ctx, t } = await linked()
