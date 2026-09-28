@@ -41,6 +41,27 @@ describe('E1 sizes (ADR-0054 · dayo 0048_cup_sizes.sql:33, 1482-1487)', () => {
   })
 })
 
+describe('E1 options with no ingredient (dayo 0002_catalog.sql: menu_options.ingredient_id, multiplier nullable)', () => {
+  it('a milk option and a grade option with null ingredientId/multiplier parse — a null never refuses the whole E1', () => {
+    const rich = structuredClone(loadRichCatalog().catalog) as unknown as { milkOptions: Record<string, unknown>[]; gradeOptions: Record<string, unknown>[] }
+    rich.milkOptions[0]!['ingredientId'] = null
+    rich.gradeOptions[0]!['ingredientId'] = null
+    rich.gradeOptions[0]!['multiplier'] = null
+    const got = PosOrderCatalog.parse(rich)
+    expect(got.milkOptions[0]!.ingredientId).toBeNull()
+    expect(got.gradeOptions[0]).toMatchObject({ ingredientId: null, multiplier: null })
+    const e1 = structuredClone(loadContractFixture('e1-catalog-changed').response.body) as { data: { catalog: typeof rich } }
+    e1.data.catalog.gradeOptions = rich.gradeOptions
+    e1.data.catalog.milkOptions = rich.milkOptions
+    expect(PosCatalogResponse.safeParse(e1).success).toBe(true)
+  })
+  it('a multiplier that is present must still be a finite number', () => {
+    const rich = structuredClone(loadRichCatalog().catalog) as unknown as { gradeOptions: Record<string, unknown>[] }
+    rich.gradeOptions[0]!['multiplier'] = '1'
+    expect(PosOrderCatalog.safeParse(rich).success).toBe(false)
+  })
+})
+
 describe('E1 values dayo sends as-is', () => {
   it('categoryLabel may be null (menu_items.category_label · 0048_cup_sizes.sql:1491)', () => {
     expect(PosOrderCatalog.safeParse(catalog({ variants: [{ ...VARIANT, categoryLabel: null }] })).success).toBe(true)

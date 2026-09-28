@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   Baht, clipCodePoints, fieldsUsed, IsoReceived, isRowSupported, OrderRowData, OrderVoidRowData, PosCatalogUnchanged,
-  PushRequest, PushResponse, ReceivedRowResult, rowKey, Text200,
+  PushEnvelope, PushRequest, PushResponse, ReceivedRowResult, ROW_KEY_RE, rowKey, Text200,
 } from '../src/dayo-api.js'
 import { OutboxStatus, UserRole } from '../src/enums.js'
 
@@ -57,9 +57,57 @@ describe('E2 request (spec §4.5)', () => {
     expect(Text200.safeParse('ก'.repeat(200)).success).toBe(true)
     expect(Text200.safeParse('ก'.repeat(201)).success).toBe(false)
   })
-  it('Baht accepts dayo round2 results and refuses 3 decimals', () => {
-    expect(Baht.safeParse(0.1 + 0.2).success).toBe(true)
+  it('Baht accepts exactly what dayo_pos_is_money accepts on the JSON text (0052)', () => {
+    expect(Baht.safeParse(155).success).toBe(true)
+    expect(Baht.safeParse(0.3).success).toBe(true)
+    expect(Baht.safeParse(12_345 / 100).success).toBe(true)
+    expect(Baht.safeParse(99_999_999.99).success).toBe(true)
+    // JSON.stringify writes "0.30000000000000004" — numeric*100 is not whole, so dayo rejects the row
+    expect(Baht.safeParse(0.1 + 0.2).success).toBe(false)
     expect(Baht.safeParse(36.675).success).toBe(false)
+    expect(Baht.safeParse(1e-7).success).toBe(false)
+  })
+  it('every satang amount divided by 100 passes Baht (what edgeSatangToBaht sends)', () => {
+    for (let s = 0; s <= 100_000; s += 7) expect(Baht.safeParse(s / 100).success, String(s)).toBe(true)
+    expect(Baht.safeParse(9_999_999_999 / 100).success).toBe(true)
+  })
+  it('a garbage sold_at is an answer, never a throw (safeParse must not raise RangeError)', () => {
+    for (const sold_at of ['garbage', '2026-13-45T00:00:00.000Z', '', 42]) {
+      const r = OrderRowData.safeParse({ ...SPEC_ORDER, sold_at })
+      expect(r.success, String(sold_at)).toBe(false)
+    }
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, lines: 'x' }).success).toBe(false)
+  })
+  it('text dayo would refuse is refused before the queue: lone surrogate, blank, control (dayo_pos_is_text)', () => {
+    expect(Text200.safeParse('\ud800').success).toBe(false) // a lone surrogate turns the WHOLE push into DY422
+    expect(Text200.safeParse('a\udc00b').success).toBe(false)
+    expect(Text200.safeParse('😀 ok').success).toBe(true) // a real surrogate pair is one code point
+    expect(Text200.safeParse('   ').success).toBe(false)
+    expect(Text200.safeParse(' ลูกค้าเปลี่ยนใจ ').success).toBe(true)
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, note: 'x\ud800' }).success).toBe(false)
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, channel: ' ' }).success).toBe(false)
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, promo_code: '\udfff' }).success).toBe(false)
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, lines: [{ ...SPEC_ORDER.lines[0], code: 'Thai\u0007Tea' }] }).success).toBe(false)
+  })
+  it('code, channel, payment, grade and promo_code count code points up to 100 like dayo', () => {
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, promo_code: 'ก'.repeat(100) }).success).toBe(true)
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, promo_code: 'ก'.repeat(101) }).success).toBe(false)
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, lines: [{ ...SPEC_ORDER.lines[1], grade: 'g'.repeat(100) }] }).success).toBe(true)
+    expect(OrderRowData.safeParse({ ...SPEC_ORDER, lines: [{ ...SPEC_ORDER.lines[1], grade: 'g'.repeat(101) }] }).success).toBe(false)
+  })
+  it('a row key is <kind>:<lowercase uuid> — an upper-case uuid is refused (ROW_KEY_RE = dayo_pos_push_row)', () => {
+    const upper = SPEC_ORDER.pos_order_id.toUpperCase()
+    expect(ROW_KEY_RE.test(`order:${SPEC_ORDER.pos_order_id}`)).toBe(true)
+    expect(ROW_KEY_RE.test(`order:${upper}`)).toBe(false)
+    expect(ROW_KEY_RE.test(`Order:${SPEC_ORDER.pos_order_id}`)).toBe(false)
+    expect(PushRequest.safeParse({ device_time: '2026-09-25T03:15:03.120Z', rows: [{ ...row(), key: `order:${upper}` }] }).success).toBe(false)
+  })
+  it('the envelope does not need device_time — dayo checks only rows (0052 api_pos_push)', () => {
+    expect(PushEnvelope.safeParse({ rows: [{}] }).success).toBe(true)
+    expect(PushEnvelope.safeParse({ rows: [] }).success).toBe(false)
+    expect(PushEnvelope.safeParse({ device_time: 'x' }).success).toBe(false)
+    // what the tablet sends still carries it
+    expect(PushRequest.safeParse({ rows: [row()] }).success).toBe(false)
   })
 })
 

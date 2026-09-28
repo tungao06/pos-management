@@ -41,9 +41,14 @@ const REPORT: ShiftReportDto = {
 const LATER: ShiftReportDto = { ...REPORT, expectedCashSatang: 53_000, fingerprint: 'fp-2' }
 const TWO_CUPS: CartState = {
   orderId: 'o-1',
-  discount: null,
-  lines: [{ key: 'v16|sw50', variantId: 'v16', sweetnessId: 'sw50', productName: 'ชาไทยเย็น', sizeName: '16 oz', sweetnessName: '50%', unitPriceSatang: 4_500, qty: 2 }],
+  channelCode: 'store',
+  billDiscount: null,
+  promoCode: null,
+  skipPromotionIds: [],
+  noPromotions: false,
+  lines: [{ key: 'Original|16 oz|50%|fresh|', code: 'Original', nameTh: 'ชาไทยเย็น', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 2 }],
 }
+const EMPTY_CART: CartState = { orderId: 'o', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, lines: [] }
 
 function SignedIn(): JSX.Element {
   const { signIn } = useSession()
@@ -65,7 +70,7 @@ function mount(
     <QueryClientProvider client={queryClient}>
       <ApiProvider api={api}>
         <SessionProvider>
-          <CartProvider initial={opts.cart ?? { orderId: 'o', lines: [], discount: null }}>
+          <CartProvider initial={opts.cart ?? EMPTY_CART}>
             <SignedIn />
           </CartProvider>
         </SessionProvider>

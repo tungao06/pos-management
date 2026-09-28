@@ -70,7 +70,7 @@ function mount(overrides: Partial<PosApi> = {}): { api: PosApi; onClose: ReturnT
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const api = {
     bootstrap: vi.fn(async () => BOOT),
-    voidOrder: vi.fn(async (): Promise<OrderDetailDto> => ({ ...ORDER, status: 'voided', voidedAt: '2026-09-17T10:05:00Z', voidable: false })),
+    cancelSale: vi.fn(async (): Promise<OrderDetailDto> => ({ ...ORDER, status: 'voided', voidedAt: '2026-09-17T10:05:00Z', voidable: false })),
     ...overrides,
   } as unknown as PosApi
   render(
@@ -106,7 +106,7 @@ describe('VoidDialog — review m-2: the shift-report cache must be invalidated 
     await submitVoid()
 
     await waitFor(() => expect(onClose).toHaveBeenCalled())
-    expect(api.voidOrder).toHaveBeenCalled()
+    expect(api.cancelSale).toHaveBeenCalled()
     // The only assertion review m-2 needs: without `queryClient.invalidateQueries({ queryKey: shiftReportKey })` in
     // VoidDialog's onSuccess, this call is never made and this test fails — a cash void changes expectedCashSatang,
     // and a stale X report can miss the Q3b-14 over-drawer warning for up to staleTime (5s, main.tsx) afterwards.
