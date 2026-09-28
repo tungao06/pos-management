@@ -15,8 +15,8 @@ export type VendorJson = { repo: 'dayo-shop-system'; commit: string; files: Reco
 
 export const sha256 = (bytes: Uint8Array | string): string => createHash('sha256').update(bytes).digest('hex')
 /**
- * The hash rule dayo uses for E1 `pricing.files_sha256` (block-1 plan Task 7 · interpretation 6): UTF-8 text after
- * CRLF → LF. VENDOR.json MUST use the same rule, or a Windows checkout shows the yellow banner for ever.
+ * The POS hash rule for E1 `pricing.files_sha256` (block-1 plan Task 7 · interpretation 6): UTF-8 text after
+ * CRLF → LF. dayo hashes raw bytes today; the results agree only while dayo's files are LF. VENDOR.json MUST use the same rule, or a Windows checkout shows the yellow banner for ever.
  */
 export const fileSha256 = (bytes: Uint8Array): string => sha256(Buffer.from(bytes).toString('utf8').replace(/\r\n/g, '\n'))
 const localPath = (dayoPath: string): string => join(VENDOR_DIR, dayoPath.split('/').pop()!)

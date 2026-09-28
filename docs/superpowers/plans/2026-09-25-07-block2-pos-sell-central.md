@@ -8,14 +8,16 @@
 
 **Tech Stack:** TypeScript 5.9 · pnpm + turbo · zod 4 · vitest 5 + fast-check 4 · React 19 + TanStack Router/Query · SQLite WASM (OPFS) + drizzle-orm 0.45 · Comlink Worker · Playwright 1.63 · Node 22 (`node:http` สำหรับ mock)
 
-**Spec:** `docs/design/04-สเปกการเชื่อม-POS-กับ-dayo.md` (§3, §4.1–4.7, §4.11, §5, §6, §7, §9 ก้อน 2, §11, §13) · การตัดสินใจ D59–D81 ใน `docs/design/00-บันทึกการตัดสินใจ.md` (สำคัญ: D60 ซ่อนสต็อก · D61 แหล่ง/ผู้บันทึก · D63 สตางค์↔บาท · D72 สำเนาปักรุ่น + sha256 · D80 นาฬิกาเตือนไม่บล็อก) · ร่าง ADR `docs/design/dayo-adr-drafts/P1*.md`, `P2*.md` · ทีมและ workflow `docs/design/05-ทีม-agent-และ-workflow.md` · แผนก้อน 1 (ฝั่ง dayo เขียนขนานกัน): `docs/superpowers/plans/2026-09-25-06-block1-dayo-api.md`
+**Spec:** `docs/design/04-สเปกการเชื่อม-POS-กับ-dayo.md` (§3, §4.1–4.7, §4.11, §5, §6, §7, §9 ก้อน 2, §11, §13) · การตัดสินใจ D59–D81 ใน `docs/design/00-บันทึกการตัดสินใจ.md` (สำคัญ: D60 ซ่อนสต็อก · D61 แหล่ง/ผู้บันทึก · D63 สตางค์↔บาท · D72 สำเนาปักรุ่น + sha256 · D80 นาฬิกาเตือนไม่บล็อก) · ร่าง ADR `docs/design/dayo-adr-drafts/P1*.md`, `P2*.md` · ทีมและ workflow `docs/design/05-ทีม-agent-และ-workflow.md` · แผนก้อน 1 (ฝั่ง dayo เขียนขนานกัน): `docs/superpowers/plans/2026-09-25-06-block1-dayo-api.md` (**ถูกแทนด้วยงานที่ dayo ship เอง** — ก้อน 1A ของ dayo · ใช้อ้างอิงเท่านั้น)
+
+> **ปรับตาม dayo ที่ ship แล้ว (26 ก.ย. 2569)** — dayo ยอมรับ ADR-0048–0059 และ ship ก้อน 1A (migration 0048–0052) ไม่ตรงกับแผนก้อน 1 ของเราทุกจุด · สเปก 04 แก้แล้ว (§13.6 รายการ S1–S27 พร้อม file:line ของ dayo) · งานปรับอยู่ใน **§0.6 (A1–A5)** · Task 1–9 และ 16 ทำเสร็จหรือกำลังทำ — ข้อความเดิมไม่แก้ ส่วนที่ต้องตามให้ดู §0.6 · Task 10–15 และ 17–23 แก้ข้อความแล้ว (ย่อหน้า **"ปรับตาม dayo"** ต้นแต่ละ task **มีผลเหนือโค้ดตัวอย่างข้างล่างที่ขัดกัน**) · **ถ้าโค้ดตัวอย่างในแผนขัดกับ SQL ของ dayo ให้ถือ SQL เป็นความจริง** · จุดที่รอเจ้าของติดป้าย "รอเจ้าของ O1/O2/O3"
 
 ## Global Constraints
 
 - เงินในแท็บเล็ตเป็น **สตางค์จำนวนเต็ม** ทุกจุด · แปลงบาท↔สตางค์ได้เฉพาะ `edgeBahtToSatang` / `edgeSatangToBaht` ใน `packages/domain/src/money-edge.ts` (ชื่อไฟล์และชื่อฟังก์ชันล็อก — spec §4.2) · `apps/pos/**`, `packages/dayo-pricing/src/**`, `packages/domain/src/{price-cart,order-row,order-draft}.ts` **ห้าม** import `bahtToSatang` / `bahtToUsat` (มีเทสต์บังคับ)
 - ขอบเงิน: เพดาน `9_999_999_999` สตางค์ (`numeric(10,2)`) · ขอบสัญญาไม่ปัดทางธุรกิจ · ค่าไม่ใช่เงิน (`priceMarkupPct`, `feePct`, `percent`, `multiplier`, `qty`) ไม่ผ่านตัวแปลง
 - ตัวคิดราคา: สำเนา `packages/shared/src/{money,promotions,cost,fmt,shopSettings,types,time}.ts` ของ dayo **ไม่แก้แม้แต่บรรทัดเดียว** อยู่ที่ `packages/dayo-pricing/src/vendor/` · `packages/dayo-pricing/VENDOR.json` = `{ "repo": "dayo-shop-system", "commit": "<sha 40 ตัว>", "files": { "packages/shared/src/<name>.ts": "<sha256>" } }` · **sha256 คิดจากเนื้อ UTF-8 หลังแปลง CRLF → LF** (กติกาเดียวกับ `scripts/pricing-manifest.ts` ของ dayo — แผนก้อน 1 จุดตีความข้อ 6) · ชื่อแพ็กเกจ `@dayo/dayo-pricing` (ห้ามตั้งชื่อ `@dayo/shared`)
-- fixture สัญญา: ต้นฉบับ dayo `apps/web/test/fixtures/pos-contract/*.json` (รายชื่อ = `CONTRACT_FIXTURE_NAMES` ที่ถอดจากรายการไฟล์ของแผนก้อน 1 Task 6 — วันนี้ 22 ไฟล์ · **ไม่มีเทสต์หรือขั้นตรวจใดนับจำนวนเอง**) + `.gitattributes` (`*.json text eol=lf`) · สำเนา POS `packages/contracts/fixtures/dayo-api/` ชื่อเดียวกัน **เนื้อหาเท่ากัน** เทียบด้วย sha256 **หลังแปลง CRLF → LF** (D82 · `pnpm --filter @dayo/contracts fixtures:hashes`) + `.gitattributes` ไฟล์เดียวกันฝั่ง POS · ห้ามแก้เนื้อหาเพื่อให้เทสต์ POS ผ่าน · แคตตาล็อกทดสอบของ POS แยกอยู่ `packages/contracts/fixtures/pos-test/e1-catalog-rich.json` (ไม่ใช่สัญญา)
+- fixture สัญญา (**คำวินิจฉัย O4 — แทน D82 ชั่วคราว** · สเปก §4.11 ข้อ 2): **POS เป็นเจ้าของ** ต้นฉบับที่ `packages/contracts/fixtures/dayo-api/*.json` + `.gitattributes` (`*.json text eol=lf`) เพราะ dayo ship โดยไม่มีชุด fixture · รายชื่อ = `CONTRACT_FIXTURE_NAMES` (วันนี้ 22 ไฟล์ · **ไม่มีเทสต์หรือขั้นตรวจใดนับจำนวนเอง**) · เนื้อหาสร้างจาก **SQL ของ dayo `main`** แล้วแทนด้วย **คำตอบจริงของ `dayo-test`/Supabase local** ใน Task 23 · sha256 **หลังแปลง CRLF → LF** (`pnpm --filter @dayo/contracts fixtures:hashes`) ใช้เทียบเมื่อ dayo รับชุดนี้ไปเป็นเทสต์ของตัวเอง (ก้อน 1B) · ห้ามแก้เนื้อหาเพื่อให้เทสต์ POS ผ่าน (ต่างจากคำตอบจริง = แก้ fixture ให้ตรงของจริงแล้วแก้โค้ด) · แคตตาล็อกทดสอบของ POS แยกอยู่ `packages/contracts/fixtures/pos-test/e1-catalog-rich.json` (ไม่ใช่สัญญา)
 - สัญญา API (ล็อก §4.1): `Authorization: Bearer <api_key>` · รูปคำตอบ `{ok:true,data}` / `{ok:false,error:{code,message}}` · เวลาที่ส่ง `YYYY-MM-DDTHH:mm:ss.sssZ` · เวลาที่รับ parse ได้ทั้ง `Z` และ `+00:00` · วันขาย = วันที่ไทย (Asia/Bangkok) ของ `sold_at` · id = UUID ตัวเล็ก · ข้อความห้ามมี C0/DEL นับเป็น code point `reason`/`note` ≤ 200 · ฝั่งรับยอมรับฟิลด์/`status`/`reason` ที่ไม่รู้จัก
 - ตัวส่ง (ล็อก §6.2–6.3): ≤ **20** แถวต่อคำขอ · body ≤ **262,144** ไบต์ UTF-8 · timeout **20 วินาที** · backoff **5 วิ → 15 วิ → 1 นาที → 5 นาที → 15 นาที** (ค้างที่ 15 นาที) ±20% · 429 รอ `Retry-After` (อ่านไม่ได้ = 60 วิ) · 401/403 หยุดส่งทั้งหมด · 404 ที่ `/api/v1` = "ระบบกลางปิด API อยู่" ลองทุก 15 นาที · 5xx ติดกัน 3 ครั้งหรือ 422 = ส่งทีละ 1 แถว · deferred ครบ **50** ครั้ง = `STUCK` · Web Lock ชื่อ `dayo-push` · ปลุก: บันทึกเสร็จ (หน่วง 2 วิ) · ทุก 60 วิเมื่อมีของค้าง · event `online` · เปิดแอป · ก่อนปิดกะ · ดึง E1 เมื่อเปิดแอป · ทุก 5 นาที · ก่อนเปิดกะ
 - ก้อน 2: `shift_id` ของแถว `order` **เป็น null เสมอ** · แถว outbox ของกะ/เงินสด/นับเงิน/Z (รวม `VOID_REFUND`) เขียนเป็น `local_only` ไม่ถูกส่งตลอดไป ไม่นับในป้าย "ยังไม่ส่ง" ไม่ขึ้นหน้า "ส่งไม่ผ่าน"
@@ -61,7 +63,7 @@
 
 | # | เรื่องที่สเปกไม่ระบุชัด | ตัดสิน | เหตุผล |
 |---|---|---|---|
-| R1 | ทิศของ fixture สัญญา | **D82** (หัวหน้าบันทึก และแก้สเปก §4.11 เอง — แผนนี้ไม่แก้สเปก): **repo dayo เป็นเจ้าของ** fixture สัญญา (สะท้อนเซิร์ฟเวอร์จริง) ที่ `apps/web/test/fixtures/pos-contract/` · POS เก็บสำเนาที่ `packages/contracts/fixtures/dayo-api/` และตรวจด้วย sha256 หลัง CRLF → LF (`fixtures:hashes`) + `.gitattributes` `*.json text eol=lf` ทั้งสองฝั่ง · Task 6 คัดลอกเนื้อหาตรงตัวจากแผนก้อน 1 ไปก่อน แล้วเจ้าของคัดลอกไฟล์จริงมาทับ (Task 23) | ก้อน 1 กับ 2 ทำขนานกัน · แผนก้อน 1 พิมพ์เนื้อหาเต็มทุกไฟล์ |
+| R1 | ทิศของ fixture สัญญา | **คำวินิจฉัยผู้คุมงาน O4 (26 ก.ย. 2569) — แทน D82 ชั่วคราว รอบันทึกเป็น D ใหม่พร้อมคำตอบ O1–O3** (สเปก §4.11 ข้อ 2 แก้แล้ว): **POS เป็นเจ้าของ fixture สัญญาไปก่อน** ที่ `packages/contracts/fixtures/dayo-api/` (+ `.gitattributes` `*.json text eol=lf`) · Task 6 เขียนจากแผนก้อน 1 แล้ว → **A1 แก้ให้ตรง SQL ของ dayo `main`** (sizes · `categoryLabel:null` · `timeFrom:"HH:MM:SS"` · `commit:null` · E3 `dayo_edit`/`pos_order_id`) → **Task 23 แทนด้วยคำตอบจริงของ `dayo-test`/Supabase local** · ส่งชุดนี้ให้ dayo รับไปเป็นเทสต์ Route Handler ในก้อน 1B · `fixtures:hashes` (sha256 หลัง CRLF → LF) ใช้เทียบเมื่อ dayo มีสำเนา | dayo ship ก้อน 1A โดยไม่มี `apps/web/test/fixtures/pos-contract/` · แท็บเล็ตรอไม่ได้ · ถ้าผิด เสียแค่ขั้นคัดลอกอีกหนึ่งครั้งภายหลัง |
 | R2 | `pos-parity.json` ของจริงมาได้หลังก้อน 1 เท่านั้น | Task 4 สร้าง `pos-parity.seed.json` จากสำเนาตัวคิดราคา (ตรวจตัวห่อ + การแปลง ไม่ใช่ตรวจ SQL) · เทสต์ใช้ไฟล์จริงเมื่อมี · **เกณฑ์ "parity ต่าง 0 สตางค์" ของก้อน 2 ผ่านได้ด้วยไฟล์จริงเท่านั้น (Task 23)** | ไม่ปล่อยให้เทสต์ข้ามเงียบ และไม่อ้างว่าผ่านก่อนมีข้อมูลจริง |
 | R3 | `CLOCK_AHEAD` นับรวมใน 50 ครั้งไหม | **ไม่นับ** (เหมือน `UNSUPPORTED`) · แถบเตือนนาฬิกาเป็นสัญญาณ · แถวยัง `pending` และลองใหม่ทุก 60 วิ **เสมอ** — ไม่ตายเอง ไม่ปิดนอกระบบกลางเอง (**คำตัดสินหัวหน้า N5**) · เวลาในแถวล้ำ `server_time` เกิน 24 ชม. = แถบเตือน **เฉพาะ owner** `banner-clock-far-ahead` "เวลาในบิล <N> รายการล้ำระบบกลางเกิน 24 ชม. — ตั้งนาฬิกาแท็บเล็ตให้ตรง แล้วกด 'ส่งตอนนี้'" และแถวขึ้นหน้า "ส่งไม่ผ่าน" เป็นการ์ด "รอเวลา" ที่มีปุ่ม `EXCLUDE` **ให้ owner กดเองเท่านั้น** (ยืนยันสองชั้น + คำเตือนว่ายอดนี้จะไม่ถึงระบบกลาง) | บิลที่นาฬิกาล้ำเป็นยอดขายจริง — ปิดนอกระบบกลางในก้อน 2 = ยอดหายจากฐานกลาง (ไม่มี `order_excluded` จนก้อน 3) จึงห้ามทำอัตโนมัติ · เวลาในแถวแก้ไม่ได้ (ข้อความเดิมทุกไบต์ §6.1) แถวจึงผ่านเมื่อเวลาเซิร์ฟเวอร์ตามทัน หรือ owner ปิดเอง · สเปก §6.4 ให้ EXCLUDE แค่ INVALID/FORBIDDEN/BAD_KEY — การเพิ่ม CLOCK_AHEAD เป็นข้อยกเว้นตามคำตัดสิน N5 |
 | R4 | ส่งทีละ 1 แถวหลัง 5xx×3/422 นานแค่ไหน | จำ "แถวสุดท้ายของก้อนที่ล้ม" (`dayo.push_single_through`) · ส่งทีละแถวจนแถวในช่วงนั้นถูกตัดสินหมด แล้วกลับเป็น 20 | มีขอบเขตชัด ไม่วนส่งก้อนใหญ่ที่มีแถวเสียซ้ำ |
@@ -75,10 +77,10 @@
 | R11 | Q44 "ยกเลิกบิลตัวเอง" | ตาม Q44 ตรงตัว: **staff และ manager ยกเลิกได้เฉพาะบิลที่ตัวเองขาย** · **owner เท่านั้น** ยกเลิกบิลของคนอื่นได้ (`void_any`) · ทุกกรณียังต้อง PIN owner (D50) · หน้า "ยอดไม่ตรงระบบกลาง" เป็นของ owner (Q44 ไม่ได้ให้ manager) | กฎเหล็กข้อ 1 — ไม่เพิ่มสิทธิ์เกิน Q44 |
 | R12 | แคตตาล็อกที่ตัวคิดราคาไม่รู้จัก (ขนาด/ความหวาน/ชนิดโปรใหม่) | ปฏิเสธเฉพาะส่วน `catalog` เก็บฉบับเดิมไว้ + แถบ "แคตตาล็อกจากระบบกลางอ่านไม่ได้" · **ส่วนอื่นของคำตอบ E1 ยังใช้เสมอ**: `staff` (ปิดพนักงานที่ถูกปลดทันที), `supported_*`, `pricing`, `server_time` · รายชื่อพนักงานที่ไม่มี owner active เลย = ไม่ใช้รายชื่อนั้น (บันทึก `catalogError`) และไม่ปิด owner คนสุดท้ายที่มี PIN ในเครื่องเด็ดขาด | ขายด้วยราคาที่คิดผิดแย่กว่าขายด้วยฉบับเก่า · แต่พนักงานที่ถูกปลดต้องล็อกอินไม่ได้ทันที (ความปลอดภัย) · บั๊กฝั่งรายชื่อต้องไม่ทำให้เครื่องไม่มี owner |
 | R13 | `queue_no` เกิน 9999 ต่อวัน | ปฏิเสธการขาย (`QUEUE_FULL`) | ร้านขาย ~100 บิล/วัน · ห้ามวนเลขเพราะ unique ต่อวัน |
-| R14 | จุดตีความของแผนก้อน 1 ที่กระทบแท็บเล็ต | รับทั้งหมด: `sale_date` > วันนี้ (ข้ามเที่ยงคืนใน 5 นาที) = `deferred CLOCK_AHEAD` → แท็บเล็ตทำเหมือน CLOCK_AHEAD อื่น (R3) · `cancelled_at` = `voided_at` (ไม่มีผลฝั่งแท็บเล็ต) · คีย์ย่อยที่ไม่รู้จักใน `bill_discount`/`totals` = `UNSUPPORTED` (แท็บเล็ตไม่ส่งอยู่แล้ว — schema ของ POS เป็น strict) · (ก0) `pos_excluded_orders` เลื่อนไปก้อน 3 (ตรงกับ R8) · `categoryLabel` = `coalesce(category_label, family)` (แท็บเล็ตใช้ `family` สำรองอยู่แล้ว) · ลำดับตรวจแถว E2 ของ mock = ลำดับในแผนก้อน 1 Task 3 Step 4 | สัญญาเดียวกันสองฝั่ง |
-| R15 | รูปไฟล์ parity | ใช้รูปของแผนก้อน 1 Task 13: `draft` เป็น `OrderDraft` ของ dayo (camelCase มี `saleDate`/`saleTime` ไม่มี `sold_at`) · `expected` เป็น `ParityMoney` · แท็บเล็ตแปลงเคสเป็นตะกร้าด้วยกติกาเดียวกับตอนขาย (`cartFromOrderDraft`) · เคสที่ไม่มี `saleTime` = เทสต์ล้ม (แท็บเล็ตส่งเวลาเสมอ — ขอทีม dayo เติม) | ไม่ต้องมีตัวแปลงสองชุด |
+| R14 | จุดตีความของแผนก้อน 1 ที่กระทบแท็บเล็ต | รับทั้งหมด: `sale_date` > วันนี้ (ข้ามเที่ยงคืนใน 5 นาที) = `deferred CLOCK_AHEAD` → แท็บเล็ตทำเหมือน CLOCK_AHEAD อื่น (R3) · `cancelled_at` = `voided_at` (ไม่มีผลฝั่งแท็บเล็ต) · คีย์ย่อยที่ไม่รู้จักใน `bill_discount`/`totals` = `UNSUPPORTED` (แท็บเล็ตไม่ส่งอยู่แล้ว — schema ของ POS เป็น strict) · (ก0) `pos_excluded_orders` เลื่อนไปก้อน 3 (ตรงกับ R8) · `categoryLabel` — **dayo ship เป็นค่าดิบ null ได้ ไม่ coalesce** (`0048_cup_sizes.sql:1491`) → schema รับ null (A1) แท็บเล็ตใช้ `family` แทน · ลำดับตรวจแถว E2 ของ mock = **ลำดับในโค้ดจริง `0052_pos_push.sql:560-620`** (สเปก §4.5 ข้อ 6 · A3) แทนแผนก้อน 1 Task 3 Step 4 | สัญญาเดียวกันสองฝั่ง |
+| R15 | รูปไฟล์ parity | **รูปที่ dayo ship จริง** (`docs/design/pos-parity.json` · dayo `a0f76e2` · สเปก §5.2): `{dayo_commit, generated_at, pricing_files_sha256, catalog, cases:[{spec, note, draft: OrderDraft, expected: QuoteResult}]}` — **ไม่มี `catalog_version` และ `id`** (ตัวระบุเคส = `spec`) · `expected` เป็น `QuoteResult` เต็ม อ่านเฉพาะฟิลด์เงินแบบ `ParityMoney` (ยอมรับฟิลด์เกิน) · แท็บเล็ตแปลงเคสเป็นตะกร้าด้วยกติกาเดียวกับตอนขาย (`cartFromOrderDraft`) · **เคสที่ไม่มี `saleTime` (20 จาก 25)**: ตัดสินตอน A1 — แนะนำให้เคสที่แคตตาล็อกไม่มีโปรจำกัดเวลาที่เข้าเงื่อนไขใช้ `saleTime` ใดก็ได้ (ผลไม่ขึ้นกับเวลา) ส่วนเคสที่ขึ้นกับเวลาแต่ไม่มี `saleTime` = เทสต์ล้ม + ขอทีม dayo เติม | ไม่ต้องมีตัวแปลงสองชุด · ไม่ทำให้ไฟล์จริงของ dayo ล้มทั้งไฟล์ |
 
-ไม่พบจุดขัดกับ D ของ POS หรือ ADR ของ dayo ที่ต้องหยุดถามเจ้าของ (P1/P2 ครอบคลุมทุกอย่างที่ก้อน 2 ใช้จาก dayo แล้ว)
+~~ไม่พบจุดขัดกับ D ของ POS หรือ ADR ของ dayo ที่ต้องหยุดถามเจ้าของ~~ (**26 ก.ย. — พบแล้ว 3 ข้อ รอเจ้าของ** · ไม่บล็อกโค้ดก้อน 2): **O1** ADR-0050 (owner แก้/ยกเลิกบิล POS บนเว็บ) กับ D76 — ก้อน 2 ทำแค่แสดง `dayo_edit` แบบอ่านอย่างเดียว (Task 15, 19) · **O2** ADR-0051 เลื่อน (สำรองอัตโนมัติ) กับ D64/D67 — กระทบเงื่อนไขเปิด production (Task 23) · **O3** ADR-0055 (ดูกำไรบนเว็บ dayo) กับ D79 — ไม่กระทบก้อน 2
 
 ### 0.4 ตารางงานขนาน (สูงสุด 4 agent · สายละ 1 worktree)
 
@@ -102,13 +104,15 @@ integration branch: `block-2-pos` (แตกจาก `main`) · แต่ละ
 | 2 | T2 | T6 | T8 (รอ T5) | — | 3 |
 | 3 | T3 (รอ T5, T6) | T7 (รอ T6) | — | — | 2 |
 | 4 | T4 (รอ T3) | — | T9 (รอ T7 — เทสต์ใช้ mock) | — | 2 |
-| 5 | — | — | T10 (รอ T8, T9) | — | 1 |
+| 4a | — | **A1** (contracts + fixtures — §0.6) | — | — | 1 (+ architect ทำ A5 ขนาน) |
+| 4b | **A2** (รอ A1) | **A3** (รอ A1) | **A4** (รอ T9 merge) | — | 3 |
+| 5 | — | — | T10 (รอ T8, T9, **A1, A3**) | — | 1 |
 | 6 | — | — | T11 (รอ T10) | — | 1 |
-| 7 | — | — | T12a → T12b (รอ T3, T11) | T17 (รอ T11) | 2 |
-| 8 | — | — | T12c → T12d | T18a (รอ T12b) | 2 |
+| 7 | — | — | T12a → T12b (รอ T3, T11, **A2**) | T17 (รอ T11) | 2 |
+| 8 | — | — | T12c → T12d | T18a (รอ T12b, **A2**) | 2 |
 | 9 | — | — | T13 (รอ T12d) | T18b (รอ T18a) | 2 |
 | 10 | — | — | T14 (รอ T13) | — | 1 |
-| 11 | — | — | T15 (รอ T14) | — | 1 |
+| 11 | — | — | T15 (รอ T14, **A4**) | — | 1 |
 | 12 | — | — | — | T19 (รอ T15 — ใช้ `listPriceDiffs`/`void_local_only` ของ T15 · N3) → T20 (รอ T15) | 1 |
 | 13 | — | — | — | T21 (รอ T7, T20) | 1 |
 | 14 | T22 บน `block-2-pos` → ตรวจทั้งก้อน → merge เข้า `main` | | | | 1 |
@@ -135,6 +139,27 @@ integration branch: `block-2-pos` (แตกจาก `main`) · แต่ละ
 
 ทุก task: implementer → test-runner (haiku) → ผู้ตรวจ → แก้ ≤ 3 รอบกับ agent ตัวเดิม → บันทึก `Task N: complete` ใน `.superpowers/sdd/block-2/progress.md` (ไม่ commit ไฟล์นี้)
 
+### 0.6 งานปรับตาม dayo (A1–A5)
+
+ที่มา: รายงานส่วนต่าง `.superpowers/sdd/2026-09-25-07-block2-pos-sell-central/dayo-adr-delta.md` (M1–M8) · สเปก 04 §13.6 (S1–S27 พร้อม file:line ของ dayo) · **ถือ SQL ของ dayo `main` เป็นความจริง** (ไม่ใช่ `docs/API.md` ของ dayo) · ทุกงาน: `pnpm turbo run typecheck test` ผ่านทั้ง repo · commit ผ่าน `committing-code` · ผู้ตรวจ code-reviewer · ลำดับในตาราง §0.4 แถว 4a–4b
+
+| งาน | ผู้ทำ · สาย · แพ็กเกจ | ทำอะไร | เกณฑ์เสร็จ (ตรวจได้) |
+|---|---|---|---|
+| **A1** สัญญา + fixture (M1–M3) | domain-engineer (opus) · สาย B · `packages/contracts` (`src/dayo-api.ts`, `fixtures/dayo-api/*.json`, `fixtures/pos-test/e1-catalog-rich.json`, เทสต์) | (1) `SizeCode` = regex `^[1-9][0-9]{0,2} oz$` (ใช้ที่ Variant.size · SaleSettings.defaultSize · OrderLineData.size · DraftLine.size) (2) `PosOrderCatalog.sizes` บังคับ `[{code: SizeCode, label, sortOrder: int, isActive: bool}]` (3) `categoryLabel` `.nullable().optional()` (4) `HHMM` รับ `HH:MM` และ `HH:MM:SS` (5) `PricingInfo.commit` `string \| null` (6) `ClientInfo.last_receipt_no` `string \| null` **ไม่ตรวจรูปใน schema** (Task 11 ตรวจตอนตั้งเลข) (7) `CentralOrder` + `dayo_edit` (`{kind: string, edited_at, edited_by_name: string\|null, reason: string\|null, version: int}` แบบ looseObject · null/ไม่มีได้) + `pos_order_id` (Uuid · null/ไม่มีได้) (8) `ParityFile` ตามรูปจริง (R15): `catalog_version` optional · `cases[].spec` เป็นตัวระบุ · `note`/`id` optional · `expected` looseObject (9) fixture ตาม O4 (R1): E1 `changed` มี `sizes` 3 ขนาด (`22 oz` ปิด) · ตัวแปรหนึ่งตัว `categoryLabel: null` · โปรหนึ่งตัว `timeFrom: "17:00:00"` · E1 หนึ่งไฟล์ `pricing.commit: null` · E3 มีบิล POS ของ key นี้ที่มี `dayo_edit` แบบ `edit` หนึ่งใบและ `cancel` หนึ่งใบ (+ `pos_order_id`) · คิด hash ใหม่ (10) แคตตาล็อกทดสอบ `pos-test/e1-catalog-rich.json` มี `sizes` เดียวกัน | `grep -n "'16 oz', '20 oz'" packages/contracts/src` → ไม่มีผล · เทสต์: E1 ที่มี `sizes` 3 ขนาด / `categoryLabel:null` / `timeFrom:"14:00:00"` / `commit:null` / `last_receipt_no:"L260924-014"` ผ่าน schema · ขนาด `"big"` / `"0 oz"` ไม่ผ่าน · E1 ไม่มี `sizes` ไม่ผ่าน · E3 ที่มี `dayo_edit` และไม่มีฟิลด์นี้ผ่านทั้งคู่ · `ParityFile.parse(docs/design/pos-parity.json)` ผ่าน และ `PosOrderCatalog.parse(ไฟล์นั้น.catalog)` ผ่าน · ทุก fixture ผ่าน schema · `fixtures:hashes` ตรงกับไฟล์ |
+| **A2** ตัวห่อราคา (M4 + ส่วนต่อของ T4) | domain-engineer (opus) · สาย A · `packages/domain` (`price-cart.ts`, `order-row.ts`, `order-draft.ts`, `test/parity.test.ts`) · รอ A1 | (1) `size` ในตะกร้าเป็น `string` (`Size` ของตัวที่คัดลอก) · เลิกตัวกัน `rowSize()` ที่บีบเป็นสองค่า · `PosVariant.categoryLabel` เป็น `string \| null` (2) `toPricingCatalog` ส่ง `sizes` ต่อให้ `OrderCatalog` ตรงตัว (3) **`timeFrom`/`timeTo` ส่งผ่านตรงตัว ห้ามแปลง** (4) **ตัวตรวจตะกร้าก่อนเก็บเงิน (`checkCart` ของ T3) ตรวจขนาด**: ไม่อยู่ใน `sizes` ที่ `isActive` หรือเมนู+ความหวานนั้นไม่มีตัวแปร = `CartError` (ไม่ถึงขั้นเก็บเงิน) (5) **ส่วนต่อของ T4**: ตัวอ่านไฟล์ parity รับรูปจริงของ dayo (ใช้ `spec` เป็นชื่อเคส · อ่านเงินจาก `QuoteResult`) · คัดลอก `docs/design/pos-parity.json` ไปที่ `packages/dayo-pricing/fixtures/pos-parity.json` แล้วรันชั้น ค · เคสไม่มี `saleTime` ทำตาม R15 | เทสต์: ตะกร้าขนาด `22 oz` ในแคตตาล็อกที่ `22 oz` active และมีตัวแปร = คิดราคาได้ · `22 oz` ที่ปิด / ไม่มีตัวแปร = `CartError` ก่อนเก็บเงิน · แคตตาล็อกที่ `timeFrom:"17:00:00"` ได้ผลเท่ากับเรียก `computeOrder` ของสำเนาโดยตรงด้วยแคตตาล็อกเดียวกัน (พิสูจน์ว่าไม่แปลง) · `grep -rn "rowSize\|'20 oz'" packages/domain/src` → ไม่มีตัวกันสองค่าเหลือ · parity ชั้น ค กับไฟล์ dayo `a0f76e2`: ทุกเคสที่รันได้ต่าง 0 สตางค์ (เคสที่ข้ามต้องมีเหตุผลเขียนในเทสต์) · property test เดิมผ่าน |
+| **A3** mock (M5) | sync-engineer (opus) · สาย B · `packages/dayo-mock` · รอ A1 | (1) แคตตาล็อกมี `sizes` (จาก fixture) (2) E3 คืน `dayo_edit` และ `pos_order_id` (บิล POS ของ key นี้เท่านั้น) + ตัวควบคุมให้เทสต์ตั้ง `dayo_edit` ของบิลที่รับแล้ว (`mock.editPosOrder(posOrderId, {kind, reason, …})`) (3) ขนาด/ความหวานที่ไม่มีตัวแปร = `rejected UNKNOWN_CODE` (4) `order_void` ที่ `voided_at` เก่ากว่าเวลา mock − 60 วัน = `rejected INVALID` (5) `sale_date` > วันนี้ของ mock = `deferred CLOCK_AHEAD` (6) key ไม่มี `orders:write` = **HTTP 403 ทั้งคำขอ** (ไม่ใช่ `FORBIDDEN` ต่อแถว) (7) โปรที่ปิดก่อน `sold_at` ไม่ถูกใช้ตอนคิด `computed_total` (mock รับตารางเวลาปิดโปรของตัวเอง `mock.closePromotion(id, at)`) (8) `judgeRow` เรียงขั้นตาม `0052_pos_push.sql:560-620` (สเปก §4.5 ข้อ 6) (9) ค้างจาก T7: ครอบ `judgeRow` ด้วย try/catch ต่อแถว → `deferred SERVER_ERROR` (10) ทางควบคุม HTTP สำหรับ e2e: `/__mock/edit-pos-order` (= `editPosOrder`) · `/__mock/bump-catalog` แก้ `sizes` ได้ | เทสต์หนึ่งข้อต่อข้อ (3)–(9) · เทสต์ลำดับ: แถวที่ผิดสองอย่างพร้อมกันได้เหตุผลของขั้นที่มาก่อนตามโค้ดจริง (เช่น ฟิลด์ไม่รู้จัก + ไม่มีสิทธิ์ = `UNSUPPORTED`) · บิลที่ขายด้วยโปรที่ปิดก่อน `sold_at` ได้ `accepted` และ `computed_total ≠ total` · fixture ทุกไฟล์ยังเล่นซ้ำได้ครบ |
+| **A4** ฐานในเครื่อง (M6) | sync-engineer (opus) · สาย C · `packages/db-schema` · รอ T9 merge | migration ใหม่ `0005_order_central_dayo_edit.sql` เพิ่ม `order.central_dayo_edit_json` (json · null ได้ · ไม่มีค่าเริ่มต้น) + `centralDayoEditJson` ใน `src/sqlite/sales.ts` + `sqlite-migrations.gen.ts` + รายการยกเว้นของ `test/parity.test.ts` · ไม่แตะ append-only trigger ของบิล (คอลัมน์ `central_*` อัปเดตได้แบบเดียวกับ `central_order_no`) | เทสต์ migrate: ฐานที่มีบิลก่อน 0005 → จำนวนแถวเท่าเดิม · คอลัมน์ใหม่เป็น null · อัปเดต `central_dayo_edit_json` ของบิลที่จ่ายแล้วได้ (trigger ไม่ raise) · `foreign_key_check` ว่าง |
+| **A5** สเปก + แผน (M7–M8) | architect · `docs/` เท่านั้น | แก้สเปก 04 (§13.6) และแผนนี้ (ย่อหน้า "ปรับตาม dayo" ของ Task 10–15, 17–23 · §0.3 R1/R14/R15 · §7) | **เสร็จแล้ว 26 ก.ย. 2569** |
+
+**T18 รอ A2** (ปุ่มขนาดและการตรวจขนาดก่อนเก็บเงินใช้ของ A2) · T12b รอ A2 ด้วย (`sell-catalog.ts` ใช้ `sizes`) · T10 รอ A1 + A3 (เทสต์ดึง E1 จาก mock ที่มี `sizes`) · T15 รอ A4 (เก็บ `dayo_edit`)
+
+**รอเจ้าของ (ไม่บล็อกโค้ดก้อน 2 · ห้ามเลือกข้างในโค้ด)**: **O1** ADR-0050 กับ D76 — ก้อน 2 ทำแค่ **แสดง `dayo_edit` แบบอ่านอย่างเดียว** (dayo ส่งมาแน่แล้ว — A1, A3, A4, T15, T19) ไม่มีปุ่มแก้บิล ไม่ปรับยอดในเครื่อง · **O2** ADR-0051 เลื่อน กับ D64/D67 — เงื่อนไขเปิด production ใน Task 23 · **O3** ADR-0055 กับ D79 — ไม่มีงานในก้อน 2
+
+**แก้หลังรีวิว A3 (26 ก.ย. 2569 — ทับข้อความเดิมที่ขัด):**
+- **R14 ข้อ "คีย์ย่อยที่ไม่รู้จักใน `bill_discount`/`totals`" แก้เป็น `rejected INVALID`** (ไม่ใช่ `deferred UNSUPPORTED`) ตาม SQL ของ dayo `0052_pos_push.sql:316,339` — ตัวตรวจรายชื่อฟิลด์ของ dayo ดูแค่ฟิลด์ชั้นบนกับ `lines.*` (`0052:587-591`) · เทสต์ใน Task 12/13 ที่คาด UNSUPPORTED สำหรับกรณีนี้ต้องคาด INVALID · แท็บเล็ตไม่ส่งคีย์แบบนี้อยู่แล้ว (schema ขาส่งเป็น strict)
+- **จำนวน fixture ไม่ตายตัว** — รายชื่อคือ `CONTRACT_FIXTURE_NAMES` (วันนี้ 27 ไฟล์ หลัง A3) · ข้อความ "22 ไฟล์" ในแผนนี้หมายถึงชุดเริ่มต้นเท่านั้น
+- **`ReceivedRowResult.key` เป็น `null` ได้** (dayo `0052:748` เมื่อ key ที่ส่งไม่ใช่ข้อความ — A6) · ตัวส่ง (Task 13) ถือแถวคำตอบที่ key เป็น null ว่า "จับคู่ไม่ได้ → ยัง pending ลองใหม่" ไม่นับครั้ง
+
 ---
 
 ## 1. File Structure
@@ -158,7 +183,7 @@ integration branch: `block-2-pos` (แตกจาก `main`) · แต่ละ
 | `packages/contracts/src/dayo-api.ts` | zod ของ E1/E2/E3/ข้อผิดพลาด/parity + `fieldsUsed` · `isRowSupported` · `rowKey` · `clipCodePoints` |
 | `packages/contracts/src/dayo-fixture.ts` | zod ของรูป fixture สัญญา (`PosContractFixture`) + `CONTRACT_FIXTURE_NAMES` (ถอดจากแผนก้อน 1 — 22 ชื่อ) |
 | `packages/contracts/src/dayo-fixture-files.ts` | อ่านไฟล์ fixture (Node เท่านั้น — subpath `./fixture-files`) |
-| `packages/contracts/fixtures/dayo-api/*.json` + `.gitattributes` | สำเนา fixture สัญญาจาก dayo ตาม `CONTRACT_FIXTURE_NAMES` (§4.11 · D82) · `scripts/fixture-hashes.ts` เทียบ sha256 หลัง CRLF → LF |
+| `packages/contracts/fixtures/dayo-api/*.json` + `.gitattributes` | fixture สัญญาตาม `CONTRACT_FIXTURE_NAMES` — **ต้นฉบับของ POS ชั่วคราว (§4.11 · O4 แทน D82)** · ข้อความ "D82 / dayo เป็นเจ้าของ" ใน Task 6 (ทำเสร็จแล้ว) ให้อ่านตาม R1 · `scripts/fixture-hashes.ts` เทียบ sha256 หลัง CRLF → LF |
 | `packages/contracts/fixtures/pos-test/e1-catalog-rich.json` | แคตตาล็อกทดสอบของ POS (22 ตัวแปร 3 ช่องทาง 5 โปร 6 พนักงาน) |
 | `packages/contracts/test/{dayo-api,dayo-fixtures}.test.ts` | เทสต์ |
 | `packages/dayo-mock/{package.json,tsconfig.json,vitest.config.ts}` · `src/{index,state,judge,handler,server}.ts` · `test/*.test.ts` | mock server ตามสัญญา |
@@ -3132,7 +3157,14 @@ git commit -m "feat(pos): talk to dayo's api and keep the device key out of the 
 
 ### Task 10: ดึงแคตตาล็อกและพนักงาน (E1)
 
-ผู้ทำ: sync-engineer (opus) · สเปก §3, §4.3, §4.4, §6.5, §6.7, §7 ข้อ 6 · รอ Task 8, 9
+ผู้ทำ: sync-engineer (opus) · สเปก §3, §4.3, §4.4, §6.5, §6.7, §7 ข้อ 6 · รอ Task 8, 9, **A1, A3**
+
+**ปรับตาม dayo (มีผลเหนือโค้ดข้างล่าง · สเปก §4.4 ข้อ 2, 6, 9, 12, 13 · §13.6 S1–S6)**:
+- แคตตาล็อกทดสอบมี `sizes` 3 ขนาด (`22 oz` ปิด) · เทสต์ "keeps the old catalog when the new one cannot be priced" เปลี่ยนตัวกระตุ้นจาก `'24 oz'` (ตอนนี้เป็นขนาดที่ **ถูกรูป** schema รับ) เป็นขนาดผิดรูป `'big'` (หรือแคตตาล็อกไม่มี `sizes`) — ผลที่คาดคงเดิม (`catalog_rejected` · staff ยังถูกใช้)
+- เพิ่มเทสต์: ร้านเปิดขนาดใหม่ `22 oz` (bump แคตตาล็อก: `sizes[2].isActive = true` + ตัวแปร `22 oz`) → `changed` (**ไม่ใช่** `catalog_rejected`) · `readCatalog().catalog.sizes` มี 3 ตัว
+- เพิ่มเทสต์: E1 ที่ `categoryLabel: null` · `timeFrom: "17:00:00"` → `changed` และค่าที่เก็บ **ตรงตัว** (ไม่ตัดวินาที)
+- `pricing.commit` เป็น `null` ได้ → เก็บใน `pricingJson` ตามที่ได้ · `pricingMismatch` เทียบ `files_sha256` เท่านั้น (เพิ่มเทสต์ `commit:null` + sha ตรง = `'0'`)
+- `client.last_receipt_no` ไม่ตรวจรูปใน schema แล้ว (A1) — Task 10 เก็บค่าตามที่ได้ · การตรวจรูปอยู่ที่ Task 11/12
 
 **Files:**
 - Create: `apps/pos/src/sync/catalog.ts`
@@ -3235,7 +3267,7 @@ describe('pullCatalog (spec 04 §4.4, §6.5)', () => {
       { id: '1b2c3d4e-5f60-4172-8394-a5b6c7d8e9f0', displayName: 'Mint', role: 'staff', pinHash: PIN, isActive: true, createdAt: at, updatedAt: at, version: 1 },
     ])
     mock.bumpCatalog((c) => {
-      (c.catalog.variants[0] as { size: string }).size = '24 oz'                                   // unknown size: the pricing code cannot read it
+      (c.catalog.variants[0] as { size: string }).size = 'big'                                     // malformed size (not "<n> oz"): the schema refuses the catalog (ADR-0054 — '24 oz' would be a valid new size)
       c.staff = c.staff.map((x) => (x.display_name === 'Mint' ? { ...x, active: false } : x))   // …and Mint is removed the same day
     })
     expect((await pullCatalog(ctx)).outcome).toBe('catalog_rejected')
@@ -3480,6 +3512,8 @@ git commit -m "feat(pos): pull dayo's catalog and staff into the tablet"
 ### Task 11: ตั้งเครื่องด้วย API key · เชื่อมเครื่องเดิม · ตั้ง PIN พนักงาน
 
 ผู้ทำ: sync-engineer (opus) · ผู้ตรวจเพิ่ม: **security-reviewer** · สเปก §6.5, §6.6, §6.9, §7 ข้อ 1/2/5/6, §12 Q44 · ruling R7, R10 · รอ Task 7, 10
+
+**ปรับตาม dayo (มีผลเหนือโค้ดข้างล่าง · สเปก §4.4 ข้อ 6 · §6.6 · §13.6 S6)**: `client.last_receipt_no` เป็น `external_ref` ดิบของ dayo — schema ไม่ตรวจรูปแล้ว (A1) · ทุกจุดที่เรียก `parseReceiptNo(last)` (`probeDayo`, `connectShop`, `replaceApiKey`, `recoverOwner` — ทุกที่ที่อ่าน `v.client.last_receipt_no`) ต้องตรวจรูป `^[A-Z]{1,3}-\d{6}$` ก่อน: ผิดรูป = `PosError('DAYO_RECEIPT_NO_INVALID')` (เพิ่มใน `api/errors.ts` · ข้อความไทยใน `ui/th.ts` เป็นงานของ Task 17) · **ไม่เขียน** `dayo.last_receipt_no` และไม่ตั้ง prefix เอง · เพิ่มเทสต์ `last_receipt_no: 'L260924-014'` → error นี้ และไม่มีแถวใน `sync_state` · `probe.pricingMatches` เทียบ `files_sha256` เท่านั้น (`pricing.commit` null ได้)
 
 **Files:**
 - Create: `apps/pos/src/api/connect.ts`, `apps/pos/src/api/staff.ts`
@@ -4020,7 +4054,13 @@ git commit -m "feat(pos): set up the tablet with a dayo key and give dayo staff 
 
 ### Task 12 (12a–12d): ขายและยกเลิกบิลด้วยแคตตาล็อกกลาง + outbox รูป E2
 
-ผู้ทำ: sync-engineer (opus) · สเปก §4.5, §4.7, §5.1, §6.1, §6.6, §7 ข้อ 6, D50 Q3-20/Q3-26/Q3-27, D61 · ruling R5, R6, R11, R13 · รอ Task 3, 11
+ผู้ทำ: sync-engineer (opus) · สเปก §4.5, §4.7, §5.1, §6.1, §6.6, §7 ข้อ 6, D50 Q3-20/Q3-26/Q3-27, D61 · ruling R5, R6, R11, R13 · รอ Task 3, 11, **A2**
+
+**ปรับตาม dayo (มีผลเหนือโค้ดข้างล่าง · สเปก §4.1, §4.4 ข้อ 2/12, §5.1 · §13.6 S1–S3)**:
+- `Size` เป็น `string` (ขนาดตั้งได้) ทุกที่ใน `SellMenuDto`/`RecordSaleInput`/`sellCode` · `SellCatalogDto` เพิ่ม `sizes: { code: string; label: string }[]` = ขนาดใน `catalog.sizes` ที่ `isActive` เรียง `sortOrder`
+- `sell-catalog.ts` (12b): `SellMenuDto.sizes` = ขนาดใน `catalog.sizes` ที่ `isActive` **และ** เมนูมีตัวแปร เรียงตาม `sortOrder` ของ `sizes` (**ไม่เรียง `16 oz`, `20 oz` ตายตัว**) · ค่าเริ่มต้น `settings.defaultSize` ถ้าเมนูมี ไม่งั้นขนาดแรกตามลำดับนั้น · `categoryLabel` null → `family`
+- `recordSale` (12b): ตัวตรวจขนาดของ A2 ทำงานก่อนเขียนอะไร — ขนาดไม่อยู่ใน `sizes` ที่ active / ไม่มีตัวแปร = error (`CartError` → `BAD_INPUT` ตามการแปลงเดิม) ไม่มีแถวใน `order`/`outbox`
+- เพิ่มเทสต์ (`sell-catalog.test.ts`): แคตตาล็อกที่เปิด `22 oz` (sortOrder 2) ให้ Pink Milk → `pink.sizes` = `['16 oz', '20 oz', '22 oz']` · ขนาดที่ปิดไม่ขึ้น · `record-sale.test.ts`: ขาย `22 oz` ที่ปิดอยู่ = error และไม่มีแถว
 
 **แบ่งเป็น 4 งานย่อยตามลำดับ** (review item 16 — แต่ละงานย่อยผ่าน test-runner + code-reviewer และ commit แยก · Interfaces ข้างล่างเป็นของทั้งกลุ่ม):
 
@@ -4052,7 +4092,7 @@ export const PAYMENT_CODE = { CASH: 'cash', PROMPTPAY: 'qr' } as const
 export type RecordSaleInput = { orderId: string; actorUserId: string; cart: Omit<CartDraft, 'paymentCode'>; payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' }; expectedTotalSatang: number }
 export type CancelSaleInput = { orderId: string; actorUserId: string; approverUserId: string; approverPin: string; reason: string; made: boolean; refundReference: string | null }
 export type SellMenuDto = { code: string; nameTh: string; categoryLabel: string; sortOrder: number; isMatcha: boolean; sizes: Size[]; sweetnessBySize: Partial<Record<Size, Sweetness[]>>; defaultSize: Size; defaultSweetness: Sweetness }
-export type SellCatalogDto = { catalogVersion: number; catalog: PosOrderCatalog; menus: SellMenuDto[]; categories: string[]; channels: { code: string; name: string }[]; defaultChannelCode: string; payments: { cash: boolean; qr: boolean }; maxQtyPerLine: number; bestSellerCodes: string[] }
+export type SellCatalogDto = { catalogVersion: number; catalog: PosOrderCatalog; sizes: { code: string; label: string }[]; menus: SellMenuDto[]; categories: string[]; channels: { code: string; name: string }[]; defaultChannelCode: string; payments: { cash: boolean; qr: boolean }; maxQtyPerLine: number; bestSellerCodes: string[] }
 export type CentralStateDto = { state: 'legacy' | 'pending' | 'sent' | 'problem' | 'excluded'; orderNo: string | null; computedTotalSatang: number | null; diffSatang: number | null; duplicateOf: string[]; reason: string | null
   voidState: 'none' | 'pending' | 'sent' | 'problem' | 'local_only' } // review item 23: 'local_only' on a voided bill whose order WAS sent = dayo still counts it as a sale
 // OrderSummaryDto gains: soldById: string · soldByName: string · central: CentralStateDto
@@ -4463,7 +4503,7 @@ export async function cancelSale(db: RemoteDb, deps: ApiDeps, input: CancelSaleI
 
 - [ ] **Step 6: `loadSellCatalog` + `orders.ts`**
 
-`apps/pos/src/api/sell-catalog.ts` — อ่าน `readCatalog`; ไม่มี = `NO_CATALOG` · จัดกลุ่ม `variants` ตาม `menuCode` เรียง `menuSortOrder` แล้วชื่อ · `categories` = `categoryLabel` ไม่ซ้ำตามลำดับเมนู (ไม่มี `categoryLabel` = `family`) · `sizes` เรียง `16 oz`, `20 oz` · `sweetnessBySize` เรียง 0→100 · ค่าเริ่มต้น: `settings.defaultSize` ถ้าเมนูมี ไม่งั้นขนาดแรก · ความหวาน `settings.defaultSweetness` ถ้าขนาดนั้นมี ไม่งั้นค่าแรก · `payments = { cash: มี 'cash', qr: มี 'qr' }` · `maxQtyPerLine = min(settings.maxQtyPerLine ?? 99, 999)` · `bestSellerCodes` = `select menu_code, sum(qty) from order_item join order … where status='paid' and business_date >= วันเปิดกะ − 6 วัน group by menu_code order by 2 desc limit 8` กรองให้เหลือรหัสที่อยู่ในแคตตาล็อก (D48 Q3-9, D50 Q3-25)
+`apps/pos/src/api/sell-catalog.ts` — อ่าน `readCatalog`; ไม่มี = `NO_CATALOG` · จัดกลุ่ม `variants` ตาม `menuCode` เรียง `menuSortOrder` แล้วชื่อ · `categories` = `categoryLabel` ไม่ซ้ำตามลำดับเมนู (`categoryLabel` null/ไม่มี = `family`) · `sizes` = ขนาดใน `catalog.sizes` ที่ `isActive` และเมนูมีตัวแปร เรียง `sortOrder` (ADR-0054 — ไม่ตายตัว) · `sweetnessBySize` เรียง 0→100 · ค่าเริ่มต้น: `settings.defaultSize` ถ้าเมนูมี ไม่งั้นขนาดแรก · ความหวาน `settings.defaultSweetness` ถ้าขนาดนั้นมี ไม่งั้นค่าแรก · `payments = { cash: มี 'cash', qr: มี 'qr' }` · `maxQtyPerLine = min(settings.maxQtyPerLine ?? 99, 999)` · `bestSellerCodes` = `select menu_code, sum(qty) from order_item join order … where status='paid' and business_date >= วันเปิดกะ − 6 วัน group by menu_code order by 2 desc limit 8` กรองให้เหลือรหัสที่อยู่ในแคตตาล็อก (D48 Q3-9, D50 Q3-25)
 
 `orders.ts` (12d): `summarize()` เติม `soldById` (= `createdById`), `soldByName` (ชื่อจาก `user`; ไม่พบใช้ `staffDisplayName` จากแคตตาล็อก) · **`cups` รวมจาก `order_item` ด้วย** (review item 19 — `listOrders` อ่าน `order_item` ของบิลในหน้าเดียวกันแบบ `inArray` แล้วรวมกับ `order_line`) · `central` จากแถว outbox `order:<id>` / `order_void:<id>` + คอลัมน์ `central*` ของ `order`:
 
@@ -4557,6 +4597,8 @@ git commit -m "feat(pos): show who sold each bill and how dayo recorded it"
 ### Task 13: ตัวส่ง outbox → `POST /v1/pos/push` (คำตัดสินรายแถว)
 
 ผู้ทำ: sync-engineer (opus) · ผู้ตรวจเพิ่ม: **security-reviewer** · สเปก §4.5 (คำตอบ), §6.2, §6.3, §6.7 · ruling R3, R4 · รอ Task 12
+
+**ปรับตาม dayo (สเปก §4.5 · §13.6 S10–S15 · ใช้ mock ของ A3)** — ไม่มีการเปลี่ยนโค้ดตัวส่ง มีแต่เทสต์ที่ต้องเพิ่มให้ครอบพฤติกรรมจริง: (1) key ไม่มี `orders:write` = **403 ทั้งคำขอ** → `apiState = 'forbidden'` หยุดส่งทั้งหมด (ไม่ใช่แถว `FORBIDDEN`) (2) `sale_date` วันพรุ่งนี้ของเซิร์ฟเวอร์ = `deferred CLOCK_AHEAD` → ทำตาม R3 (ไม่นับครั้ง ไม่ตาย) (3) `order_void` เก่ากว่า 60 วัน = `rejected INVALID` → หน้า "ส่งไม่ผ่าน" (4) บิลที่ใช้โปรที่ dayo ปิดก่อน `sold_at` = `accepted` แต่ `central_computed_total_satang ≠ total_satang` → ขึ้นใน `listPriceDiffs` (Task 15) ไม่ใช่ความผิดของตัวส่ง
 
 **Files:**
 - Create: `apps/pos/src/sync/push.ts`
@@ -5113,6 +5155,8 @@ git commit -m "feat(pos): push queued bills to dayo and act on every row's verdi
 
 ผู้ทำ: sync-engineer (opus) · สเปก §6.2 (ปลุกเมื่อ …), §6.5, §6.7, §10.5 (ของค้าง > 24 ชม.), D80 · รอ Task 13
 
+**ปรับตาม dayo (สเปก §4.4 ข้อ 9 · §4.6 · §13.6 S5, S17)**: `SyncStatusDto` เพิ่ม `pricingCommit: string | null` (จาก `pricingJson` · null = "ไม่ทราบ" ไม่ใช่ปัญหา) · ตัวตั้งเวลา **ไม่** ดึง E3 เอง — การดึง `dayo_edit` ของบิลตัวเองอยู่ใน Task 15 (ดึงเมื่อเปิดหน้าประวัติบิล/หน้าบิลบอท-เว็บ และทุก 5 นาทีระหว่างหน้าเปิด — จังหวะเดียวกับ E3 ในสเปก §4.6)
+
 **Files:**
 - Create: `apps/pos/src/sync/scheduler.ts`
 - Modify: `apps/pos/src/api/pos-api.ts`, `apps/pos/src/api/bootstrap.ts`, `apps/pos/src/api/types.ts`, `apps/pos/src/api/shift.ts`, `apps/pos/src/api/close.ts` (ปลุกก่อนเปิด/ปิดกะ), `apps/pos/src/db/worker.ts`
@@ -5452,7 +5496,16 @@ git commit -m "feat(pos): wake the dayo sender on saves, timers and reconnects a
 
 ### Task 15: ทางแก้ของ owner (หน้า "ส่งไม่ผ่าน") + บิลบอท/เว็บวันนี้ (E3) + รายการยอดไม่ตรง
 
-ผู้ทำ: sync-engineer (opus) · ผู้ตรวจเพิ่ม: **security-reviewer** (PIN owner, ข้อมูลที่ส่งออก) · สเปก §4.3 (ส่วนต่าง), §4.6, §4.7, §4.8, §6.1 (ข้อยกเว้นทางแก้), §6.4 · ruling R8 · รอ Task 14
+ผู้ทำ: sync-engineer (opus) · ผู้ตรวจเพิ่ม: **security-reviewer** (PIN owner, ข้อมูลที่ส่งออก) · สเปก §4.3 (ส่วนต่าง), §4.6, §4.7, §4.8, §6.1 (ข้อยกเว้นทางแก้), §6.4 · ruling R8 · รอ Task 14, **A4**
+
+**ปรับตาม dayo — `dayo_edit` แบบอ่านอย่างเดียว (มีผลเหนือโค้ดข้างล่าง · สเปก §4.6, §4.7 · §13.6 S17–S20 · รอเจ้าของ O1 เฉพาะเรื่องเงิน)**: dayo ship ให้ owner แก้/ยกเลิกบิล POS บนเว็บแล้ว และ E3 ส่ง `dayo_edit` + `pos_order_id` มาแน่ ก้อน 2 จึง **อ่านและแสดง** โดยไม่ตัดสิน O1:
+- **E3 ไม่กรองบิล POS ทิ้งทั้งหมดอีกแล้ว**: `listCentralOrdersToday` ยังคืนเฉพาะ `source ≠ 'pos'` สำหรับหน้า "บิลบอท/เว็บวันนี้" (ตามเดิม) แต่ก่อนคืน ส่งแถวที่ `pos_order_id` ไม่ว่างเข้า `applyDayoEdits` ด้วย
+- ใหม่ `refreshDayoEdits(ctx): Promise<{ updated: number }>` (PosApi · ทุกบทบาท · network นอก serial): `GET /v1/orders?from=<วันนี้ − 60>&to=<วันนี้>&updated_since=<dayo.dayo_edits_since>` (ค่าเริ่มต้น = เวลาตั้งเครื่อง) → `applyDayoEdits` → เก็บ `dayo.dayo_edits_since` = `updated_at` มากสุดที่เห็น · ได้ครบ 500 แถว (เพดานของ dayo `0052_pos_push.sql:840`) = เขียน `catalogError`-แบบเตือน "บิลที่ระบบกลางแก้มีมากเกินดึงครั้งเดียว" (ไม่เดา) · 401/403/404 ทำแบบเดียวกับ `listCentralOrdersToday` (ไม่เรียกเมื่อ `apiBlocked`)
+- `applyDayoEdits(tx, deps, rows)` (ไม่มีธุรกรรมของตัวเอง): จับคู่ `pos_order_id` กับ `order.id` ในเครื่อง · เขียน `order.central_dayo_edit_json` (คอลัมน์ของ A4) = `dayo_edit` ตามที่ได้ (รวม null — owner อาจไม่เคยแก้) เฉพาะเมื่อค่าเปลี่ยน · `audit_log` `entity:'order'`, `action:'dayo_edit_seen'` · **ไม่แตะ** `total_satang`, `payment`, สถานะบิล, outbox, โซ่แฮช, กะ/Z — ใบเสร็จและยอดในเครื่อง = เงินที่เก็บจริง (สเปก §4.6) · `pos_order_id` ที่ไม่มีในเครื่อง = ข้าม
+- `OrderDetailDto`/`OrderSummaryDto` (แก้ `api/orders.ts`) เพิ่ม `dayoEdit: { kind: 'edit' | 'cancel' | string; editedAt: string; editedByName: string | null; reason: string | null; version: number } | null` · `voidable` = `false` เมื่อ `dayoEdit.kind === 'cancel'` (ยกเลิกซ้ำไม่ได้ — ตัวส่งจะได้ `duplicate` อยู่แล้วแต่ไม่ควรให้กด)
+- เทสต์ใหม่ใน `central-orders.test.ts`: (1) ขาย+ส่ง → `mock.editPosOrder(id, {kind:'edit', reason:'ลูกค้าเปลี่ยนเมนู'})` → `refreshDayoEdits` → `getOrder(id).dayoEdit` มีเหตุผล และ `totalSatang` **เท่าเดิม** (2) `kind:'cancel'` → `voidable=false` · สถานะบิลในเครื่องยัง `paid` (3) key ไม่มี `staff:read` → `editedByName`/`reason` เป็น null แสดงได้ (4) บิล POS ของ key อื่น (`pos_order_id: null`) ไม่ถูกแตะ (5) เทสต์เดิม "without POS bills" ยังผ่าน
+- ส่วนที่ **รอเจ้าของ O1** (ไม่ทำในก้อน 2): ปรับยอดกะ/ลิ้นชักตามยอดใหม่ของ dayo · รายการ "ยอดไม่ตรงระบบกลาง" ชนิดใหม่สำหรับบิลที่ owner แก้ (ตอนนี้ `listPriceDiffs` ยังเทียบ `computed_total` ของ E2 ตามเดิม)
+- Files เพิ่ม: `apps/pos/src/api/orders.ts` · Interfaces เพิ่ม: `refreshDayoEdits`, `applyDayoEdits`, `DAYO_KEYS.dayoEditsSince`
 
 **Files:**
 - Create: `apps/pos/src/api/sync-problems.ts`, `apps/pos/src/api/central-orders.ts`
@@ -5874,6 +5927,7 @@ export async function listCentralOrdersToday(ctx: SyncContext): Promise<CentralO
     if (e instanceof DayoError) { await ctx.serial(() => recordDayoFailure(ctx.db, ctx.deps, e.failure)); throw new PosError('OFFLINE', e.failure.kind) }
     throw e
   }
+  await ctx.serial(() => ctx.db.transaction((tx) => applyDayoEdits(tx, ctx.deps, rows.filter((o) => o.pos_order_id != null)))) // own POS bills: dayo_edit, read-only (spec §4.6 · O1 pending)
   return rows
     .filter((o) => o.source !== 'pos')
     .map((o) => ({ orderNo: o.order_no, source: o.source, sourceLabel: o.source === 'line' ? 'บอท' : o.source === 'web' ? 'เว็บ' : o.source,
@@ -5959,6 +6013,8 @@ git commit -m "feat(pos): hide the stock screens and add the role permission tab
 ### Task 17: ตั้งเครื่องด้วยกุญแจ · เชื่อมเครื่องเดิม · ล็อกอิน · ตั้ง PIN พนักงาน
 
 ผู้ทำ: pos-ui-developer (sonnet) · ผู้ตรวจเพิ่ม: **security-reviewer** · สเปก §6.5, §6.6, §6.9, §7 ข้อ 1/5 · รอ Task 11 (+ Task 16)
+
+**ปรับตาม dayo (สเปก §4.4 ข้อ 6 · §6.6)**: ข้อความไทยของ `DAYO_RECEIPT_NO_INVALID` (Task 11) ใน `ui/th.ts`/`ui/errors.ts`: "เลขใบเสร็จล่าสุดที่ระบบกลางจำไว้ (<ค่า>) ไม่ใช่รูปแบบของแท็บเล็ต — ให้เจ้าของตรวจกุญแจเครื่องบนเว็บ dayo" · หน้าตั้งเครื่องหยุดที่ขั้นทดสอบกุญแจ (ไม่ให้เลือก prefix เอง) · เพิ่มเทสต์หนึ่งข้อ
 
 **Files:**
 - Modify: `apps/pos/src/screens/SetupScreen.tsx` (เขียนใหม่), `apps/pos/src/screens/LoginScreen.tsx`, `apps/pos/src/screens/IndexRedirect.tsx`, `apps/pos/src/ui/th.ts`
@@ -6080,7 +6136,14 @@ git commit -m "feat(pos): set the tablet up with a dayo key and let owners give 
 
 ### Task 18 (18a–18b): หน้าขายด้วยแคตตาล็อกกลาง (ตัวเลือก นมโอ๊ต/เกรด · โปร · ช่องทาง)
 
-ผู้ทำ: pos-ui-developer (sonnet) · สเปก §4.4, §5.1, §6.5 (ฉบับเปลี่ยนระหว่างตะกร้า), §9 ก้อน 2 · D50 Q3-7/Q3-8/Q3-9/Q3-20/Q3-27 · รอ Task 12b
+ผู้ทำ: pos-ui-developer (sonnet) · สเปก §4.4, §5.1, §6.5 (ฉบับเปลี่ยนระหว่างตะกร้า), §9 ก้อน 2 · D50 Q3-7/Q3-8/Q3-9/Q3-20/Q3-27 · รอ Task 12b · **รอ A2** (ห้ามเริ่มก่อน A2 merge)
+
+**ปรับตาม dayo (มีผลเหนือโค้ดข้างล่าง · สเปก §4.4 ข้อ 12 · §5.1 · §13.6 S1–S3)**:
+- **ปุ่มขนาดสร้างจาก `SellMenuDto.sizes`** (= `catalog.sizes` ที่ active และเมนูมีตัวแปร เรียง `sortOrder` — Task 12b) · ป้ายปุ่ม = `label` ของขนาด · **ห้ามเขียน `'16 oz'`/`'20 oz'` ตายตัวในหน้าจอ/สถานะตะกร้า** (`grep -rn "'20 oz'" apps/pos/src/screens apps/pos/src/state apps/pos/src/app` → มีได้เฉพาะในเทสต์) · `CartLine.size: string`
+- ค่าเริ่มต้นของ `ItemDialog` = `menu.defaultSize` (ไม่ใช่ "16 oz ถ้ามี")
+- ก่อนชำระ ตัวตรวจขนาดของ A2 ทำงานใน `usePricedCart`/`useCommitSale` — บรรทัดที่ขนาดถูกปิดหลังแคตตาล็อกใหม่มาถึง (ระหว่างมีตะกร้า) แสดงเป็นบรรทัดผิด "ขนาดนี้ปิดขายแล้ว" และปุ่มชำระกดไม่ได้จนลบ/แก้บรรทัด (ใช้กลไก `PRICE_CHANGED` เดิมไม่ได้ เพราะคิดราคาไม่ได้)
+- `categoryLabel` null → ใช้ `family` (มาจาก DTO แล้ว)
+- เพิ่มเทสต์: `ItemDialog` กับเมนูที่มี 3 ขนาด (`16 oz`, `20 oz`, `22 oz`) แสดง 3 ปุ่มเรียงตาม `sortOrder` · ขนาดที่ปิดไม่แสดง · ตะกร้าที่มีขนาดที่ถูกปิดทำให้ `pay-cash`/`pay-qr` ถูกปิด
 
 **แบ่งเป็น 2 งานย่อย** (review item 16 — ตรวจและ commit แยก):
 
@@ -6219,12 +6282,14 @@ export function testSellCatalog(): SellCatalogDto {
   return {
     catalogVersion: d.catalog_version, catalog, categories: ['ชา', 'มัตฉะ', 'โกโก้', 'นม'], channels: catalog.channels.map((c) => ({ code: c.code, name: c.name })),
     defaultChannelCode: 'store', payments: { cash: true, qr: true }, maxQtyPerLine: 99, bestSellerCodes: [],
+    sizes: catalog.sizes.filter((z) => z.isActive).sort((a, b) => a.sortOrder - b.sortOrder).map((z) => ({ code: z.code, label: z.label })),
     menus: codes.map((code, i) => {
       const vs = catalog.variants.filter((v) => v.menuCode === code)
-      const sizes = [...new Set(vs.map((v) => v.size))]
+      // ADR-0054: sizes come from catalog.sizes (active, sortOrder), never a fixed '16 oz'/'20 oz' list
+      const sizes = catalog.sizes.filter((z) => z.isActive && vs.some((v) => v.size === z.code)).sort((a, b) => a.sortOrder - b.sortOrder).map((z) => z.code)
       return { code, nameTh: vs[0]!.menuNameTh, categoryLabel: vs[0]!.categoryLabel ?? vs[0]!.family, sortOrder: vs[0]!.menuSortOrder ?? i, isMatcha: vs[0]!.isMatcha, sizes,
         sweetnessBySize: Object.fromEntries(sizes.map((z) => [z, vs.filter((v) => v.size === z).map((v) => v.sweetness)])),
-        defaultSize: sizes.includes('16 oz') ? '16 oz' : sizes[0]!, defaultSweetness: vs.some((v) => v.sweetness === '100%') ? '100%' : vs[0]!.sweetness }
+        defaultSize: sizes.includes(catalog.settings.defaultSize) ? catalog.settings.defaultSize : sizes[0]!, defaultSweetness: vs.some((v) => v.sweetness === '100%') ? '100%' : vs[0]!.sweetness }
     }),
   }
 }
@@ -6255,6 +6320,13 @@ git commit -m "feat(pos): sell with dayo's menu, options, promotions and channel
 ### Task 19: ใบเสร็จ · ประวัติบิล · รายละเอียดบิล · บิลบอท/เว็บวันนี้ · ยอดไม่ตรงระบบกลาง
 
 ผู้ทำ: pos-ui-developer (sonnet) · สเปก §4.3 (ส่วนต่างทุกขนาด), §4.6, §4.7, §4.8, §6.4 (ป้าย "ยังไม่ถึงระบบกลาง"), §9 ก้อน 2 (ใบเสร็จ + คิว) · D61 · รอ Task 15 (+ Task 18)
+
+**ปรับตาม dayo — แสดง `dayo_edit` แบบอ่านอย่างเดียว (สเปก §4.6, §4.7 · §13.6 S17, S20 · O1 รอเจ้าของเฉพาะเรื่องเงิน)**:
+- `OrderDetailScreen`: เมื่อ `dayoEdit` ไม่ null แสดงป้าย `order-dayo-edit` — `kind:'edit'` = "เจ้าของแก้บิลนี้บนเว็บ · <เวลาไทย> · <ชื่อ> · เหตุผล: <reason>" · `kind:'cancel'` = "เจ้าของยกเลิกบิลนี้บนเว็บ · <เวลาไทย> · <ชื่อ> · เหตุผล: <reason>" · ชื่อ/เหตุผลเป็น null = ไม่แสดงส่วนนั้น · ค่า `kind` อื่น = "ระบบกลางเปลี่ยนบิลนี้" · ใต้ป้ายเขียน "ยอดในเครื่องคือเงินที่เก็บจริง" (ไม่แสดงยอดใหม่ของ dayo — รอ O1)
+- **ซ่อนปุ่มยกเลิก** (`order-void`) เมื่อ `dayoEdit.kind === 'cancel'` (DTO ตั้ง `voidable=false` แล้ว — หน้าจอเช็กซ้ำ)
+- `OrdersScreen`: ชิปเล็ก `order-dayo-edit-chip` "แก้บนเว็บ"/"ยกเลิกบนเว็บ" · ใบเสร็จ (`DoneScreen`) ไม่เปลี่ยน
+- หน้าประวัติบิลและ `/central-orders` เรียก `refreshDayoEdits` (Task 15) ตอนเปิดหน้า และทุก 5 นาทีระหว่างเปิด · ออฟไลน์ = แสดงค่าที่เก็บไว้ล่าสุด ไม่ขึ้น error
+- ไม่มีปุ่มแก้บิลบนแท็บเล็ต (ADR-0050: API แก้บิลไม่ได้) · เพิ่มเทสต์ 3 ข้อ: ป้าย edit พร้อมเหตุผล · ป้าย cancel + ไม่มี `order-void` · ป้ายที่ชื่อ/เหตุผลเป็น null
 
 **Files:**
 - Modify: `apps/pos/src/screens/{DoneScreen,OrdersScreen,OrderDetailScreen,VoidDialog}.tsx` (+ tests), `apps/pos/src/router.tsx`, `apps/pos/src/ui/th.ts`
@@ -6337,6 +6409,8 @@ git commit -m "feat(pos): show where every bill was recorded, by whom, and how d
 ### Task 20: แถบเตือน · หน้าสถานะระบบ · หน้า "ส่งไม่ผ่าน" ของ owner
 
 ผู้ทำ: pos-ui-developer (sonnet) · ผู้ตรวจเพิ่ม: **security-reviewer** · สเปก §4.4 ข้อ 9, §6.3, §6.4, §6.7, §10.5 · D80 · ruling R8 · รอ Task 15 (+ Task 17)
+
+**ปรับตาม dayo (สเปก §4.4 ข้อ 9 · §4.5 · §13.6 S5, S10)**: หน้า `/status` บรรทัดตัวคิดราคาแสดง `pricingCommit` ของ E1 — null = "ไม่ทราบ (ระบบกลางไม่ได้ระบุรุ่น)" **ไม่ขึ้นแถบเตือน** (แถบ `banner-pricing` ขึ้นจาก `files_sha256` ต่างเท่านั้น) · `banner-key-forbidden` คือกรณี dayo ตอบ 403 ทั้งคำขอเมื่อกุญแจไม่มี `orders:write` (ไม่มีการ์ด `FORBIDDEN` รายแถวจากกรณีนี้) · หน้า "ส่งไม่ผ่าน" แสดง `INVALID` ของ `order_void` เก่ากว่า 60 วันตามปกติ · `remedy-remap-code` เลือกขนาดจาก `catalog.sizes` ที่ active (ไม่ตายตัว) · เพิ่มเทสต์: `pricingCommit: null` แสดง "ไม่ทราบ" และไม่มี `banner-pricing`
 
 **Files:**
 - Create: `apps/pos/src/screens/StatusBanners.tsx`, `apps/pos/src/screens/SystemStatusScreen.tsx`, `apps/pos/src/screens/SyncProblemsScreen.tsx`, `apps/pos/src/screens/OwnerApprovalDialog.tsx` (+ tests)
@@ -6426,7 +6500,9 @@ git commit -m "feat(pos): warn about key, clock and pricing problems and let the
 
 ### Task 21: e2e ก้อน 2 กับ mock server (เกณฑ์เสร็จ §9 ก้อน 2 ส่วน mock)
 
-ผู้ทำ: pos-ui-developer (sonnet) · สเปก §9 ก้อน 2 · รอ Task 7, 20
+ผู้ทำ: pos-ui-developer (sonnet) · สเปก §9 ก้อน 2 · รอ Task 7, 20, **A3**
+
+**ปรับตาม dayo (สเปก §4.4 ข้อ 12 · §4.6 · §9 ก้อน 2)**: mock server ของ A3 (มี `sizes` · `dayo_edit` · 403 ทั้งคำขอ · `sale_date` พรุ่งนี้ = `CLOCK_AHEAD`) · `mock()` เพิ่ม path `'edit-pos-order'` (ควบคุม `dayo_edit`) · เพิ่ม spec `block2-dayo-edit` และขยาย `block2-sell-options` ตามตาราง (spec รวม 9 ไฟล์)
 
 **Files:**
 - Modify: `apps/pos/playwright.config.ts` (webServer สองตัว), `apps/pos/e2e/helpers.ts` (เขียนใหม่), e2e เดิมที่ยังรัน (`first-run`, `sell-cash`, `sell-qr-void`, `offline`, `close-shift`, `shift-x`) ให้ใช้ตัวช่วยใหม่และ testid ใหม่ของหน้าขาย, `apps/pos/package.json` (devDependency `@dayo/dayo-mock` มีแล้วจาก Task 9)
@@ -6441,7 +6517,7 @@ export const DAYO_BASE = 'http://localhost:8787/api/v1'
 export const MOCK_KEY = `dayo_${'0123456789abcdef'.repeat(4)}`
 export const OWNER = { name: 'TungAo', pin: '1111' } as const
 export const OTHER = { name: 'DCm', pin: '2222' } as const
-export async function mock(request: APIRequestContext, path: 'reset' | 'mode' | 'now' | 'override' | 'bump-catalog' | 'seed-orders', body?: unknown): Promise<void>
+export async function mock(request: APIRequestContext, path: 'reset' | 'mode' | 'now' | 'override' | 'bump-catalog' | 'seed-orders' | 'edit-pos-order', body?: unknown): Promise<void>
 export async function mockState(request: APIRequestContext): Promise<{ orders: { receiptNo: string; orderNo: string; status: string }[]; requests: { path: string; rows: number }[] }>
 export async function setupDevice(page: Page): Promise<void>      // base URL + key → probe → owner TungAo → prefix A → PIN 1111 → PromptPay → save
 export async function setOtherPin(page: Page): Promise<void>      // DCm gets PIN 2222 approved by TungAo
@@ -6473,9 +6549,10 @@ webServer: [
 | `block2-conflict-renumber` | override `CONFLICT` 1 ครั้งให้ `A-000001` → ขาย → ส่ง → `/sync-problems` → "ออกเลขใบเสร็จใหม่" (PIN 1111 + เหตุผล) → ส่ง | `mockState().orders` มีใบเสร็จ `A-000002` · รายละเอียดบิลแสดงเลขใหม่และชิป "ระบบกลาง L…" |
 | `block2-clock-banner` | `/__mock/now` = เวลาจริง + 7 นาที → รีโหลด → ขาย | `banner-clock` ขึ้น · ขายสำเร็จ (ไม่บล็อก — D80) |
 | `block2-central-orders` | seed บิลบอท `total 45` เวลา = ตอนนี้ − 2 นาที → ขาย Cocoa 16 oz ด้วยเงินสด → ส่ง → เปิดรายละเอียดบิล → เปิด `/central-orders` | รายละเอียดบิล: `order-dup` "อาจซ้ำกับบิลบอท L…" · หน้าบิลบอท/เว็บ: แถว "บอท · …" |
-| `block2-sell-options` | ขาย Thai Tea นมโอ๊ต 1 + Matcha Latte Premium 1 · Thai Tea ×3 (โปร 2 แถม 1) · ช่องทาง Grab | ยอดบนจอตรงกับ `priceCart` (70.00 สำหรับ ×3 · 59.00 สำหรับ Thai Tea 20 oz บน Grab) · ใบเสร็จแสดงเลขใบเสร็จ + คิว |
+| `block2-sell-options` | ขาย Thai Tea นมโอ๊ต 1 + Matcha Latte Premium 1 · Thai Tea ×3 (โปร 2 แถม 1) · ช่องทาง Grab · **bump แคตตาล็อกเปิด `22 oz` (+ ตัวแปร) → รีโหลด → ขาย 22 oz** | ยอดบนจอตรงกับ `priceCart` (70.00 สำหรับ ×3 · 59.00 สำหรับ Thai Tea 20 oz บน Grab) · ใบเสร็จแสดงเลขใบเสร็จ + คิว · **ปุ่มขนาดขึ้น 3 ปุ่มเรียงตาม `sortOrder` และบิล 22 oz ถึงระบบกลาง** (ADR-0054) |
+| `block2-dayo-edit` | ขาย → ส่ง → `mock('edit-pos-order', {kind:'cancel', reason:'ลูกค้ายกเลิก'})` → เปิดรายละเอียดบิล | ป้าย `order-dayo-edit` "เจ้าของยกเลิกบิลนี้บนเว็บ … เหตุผล: ลูกค้ายกเลิก" · ไม่มี `order-void` · ยอดบิลในเครื่องเท่าเดิม (O1 รอเจ้าของ — ก้อน 2 อ่านอย่างเดียว) |
 
-- [ ] **Step 1: เขียน helpers + spec ทั้ง 8** (ตามตาราง · ใช้ `expect.poll` รอ mock แทน `waitForTimeout`)
+- [ ] **Step 1: เขียน helpers + spec ทั้ง 9** (ตามตาราง · commit ใน Step 4 เพิ่ม `apps/pos/e2e/block2-dayo-edit.spec.ts` · ใช้ `expect.poll` รอ mock แทน `waitForTimeout`)
 - [ ] **Step 2: รัน** — `pnpm --filter @dayo/pos e2e` · ที่ยังไม่ผ่าน = บั๊กของหน้าจอ/ตัวส่ง → แก้ใน task เดิมของสายนั้น (หัวหน้าส่งกลับ) ไม่ใช่ปิดเทสต์
 - [ ] **Step 3: รันให้ผ่านทั้งหมด** — `pnpm --filter @dayo/pos e2e` → PASS ทุก spec (ไม่นับ `hidden-stock`) · `pnpm turbo run typecheck test` → ผ่าน
 - [ ] **Step 4: Commit**
@@ -6492,6 +6569,8 @@ git commit -m "test(pos): cover offline selling, pushing and owner fixes end to 
 ### Task 22: ลบของเก่าที่ก้อน 2 แทนแล้ว
 
 ผู้ทำ: sync-engineer (sonnet) · สเปก §11 · รอ Task 21 · ทำบน `block-2-pos` หลังทุกสาย merge
+
+**ปรับตาม dayo (ADR-0054)**: Step 2 ตรวจเพิ่ม `grep -rnE "'16 oz' \| '20 oz'|z\.enum\(\['16 oz'|rowSize" apps packages --include=*.ts --include=*.tsx` → ไม่มีชนิด/ตัวกันที่บีบขนาดเป็นสองค่าเหลือในโค้ดขายและสัญญา (โค้ดสต็อกที่ซ่อนและเทสต์ยกเว้น)
 
 **Files:**
 - Delete: `packages/domain/src/pricing.ts`, `packages/domain/src/sale.ts`, `packages/domain/test/pricing.test.ts`, `packages/domain/test/sale.test.ts` · `apps/pos/src/api/menu.ts`, `apps/pos/test/menu.test.ts`, `apps/pos/test/sale.test.ts`, `apps/pos/test/void.test.ts`
@@ -6516,15 +6595,23 @@ git commit -m "refactor: drop the plan-3 pricing and sale path replaced by dayo'
 
 ### Task 23: เชื่อมจริงกับ dayo local + ปิดเกณฑ์ parity + แท็บเล็ต (เลื่อนตาม D51)
 
-ผู้ทำ: หัวหน้า + sync-engineer (opus) + **เจ้าของ** (ถือกุญแจและรันฝั่ง dayo) · ผู้ตรวจ: code-reviewer + security-reviewer · สเปก §4.11 ข้อ 3, §5.2 ชั้น ข–ค, §9 ก้อน 2 (ส่วนเชื่อมจริง) · **รอ: ก้อน 1 ของ dayo merge แล้ว** (แผนก้อน 1 ขั้นส่งมอบ "⛔ ส่งของให้ทีม POS") · agent ไม่อ่าน `.env*`/`.dev.vars` และไม่เห็นกุญแจจริง
+ผู้ทำ: หัวหน้า + sync-engineer (opus) + **เจ้าของ** (ถือกุญแจและรันฝั่ง dayo) · ผู้ตรวจ: code-reviewer + security-reviewer · สเปก §4.11 ข้อ 2–3, §5.2 ชั้น ข–ค, §9 ก้อน 2 (ส่วนเชื่อมจริง) · **รอ: ก้อน 1 ของ dayo merge แล้ว** — ✅ dayo ship ก้อน 1A แล้ว (main `232bf57` · prod/test · API ยังปิด) · agent ไม่อ่าน `.env*`/`.dev.vars` และไม่เห็นกุญแจจริง
+
+**ปรับตาม dayo (มีผลเหนือขั้นข้างล่าง · สเปก §4.11 · §5.2 · §8 · §13.6)**:
+- **Step 1 (fixture — O4 แทน D82)**: dayo ไม่มีชุด fixture จึง **ไม่มีอะไรให้คัดลอกมาทับ** · แทนด้วย: เจ้าของเปิด dayo local/`dayo-test` (Step 4) แล้วเก็บ **คำตอบจริง** ของทุกสถานการณ์ใน `CONTRACT_FIXTURE_NAMES` (E1 changed/unchanged · E2 ทุกคำตัดสิน · E3 · 401/404/429 + หัว CORS) ลง `packages/contracts/fixtures/dayo-api/` (ตัดค่าลับ/กุญแจออก) · ต่างจาก fixture ของ A1 = แก้ fixture ให้ตรงของจริงแล้วแก้โค้ด (ห้ามแก้ของจริงให้ตรง fixture) · `fixtures:hashes` บันทึกลงไฟล์ผล · ส่งโฟลเดอร์นี้ให้ dayo (ก้อน 1B)
+- **Step 2**: `pricing.commit` อาจเป็น `null` บน local → ใช้ `git rev-parse HEAD` ของ repo dayo ที่รันอยู่ (อ่านอย่างเดียว) · ไฟล์ที่คัดลอกยังเทียบด้วย `files_sha256`
+- **Step 3 (parity)**: สคริปต์ของ dayo ยังเป็น **แคตตาล็อกประกอบเอง + `computeOrder`** ไม่ใช่ชั้น ข จริง (สเปก §5.2) · ไฟล์ที่ได้ (รูปตาม R15 — ไม่มี `--expect-commit` และ `catalog_version`) ใช้ปิดเกณฑ์ "ตัวห่อ+การแปลงต่าง 0 สตางค์" ได้ แต่ **เกณฑ์ SQL = แท็บเล็ต** ปิดด้วย Step 6–7 (ขาย 20 บิลกับ dayo local แล้ว `computed_total − total = 0`) เท่านั้น · บันทึกว่าชั้น ข ยังค้างฝั่ง dayo
+- **Step 6 เพิ่มบิล**: 21 = ขายขนาดที่ 3 (เจ้าของเปิด `22 oz` + ตัวแปรบน dayo local ก่อน · §5.3 ข้อ 16) · 22 = เจ้าของปิดโปรบนเว็บ **ก่อน** แท็บเล็ตที่ออฟไลน์ขายด้วยโปรนั้น → คาดว่า `computed_total ≠ total` และขึ้นหน้า "ยอดไม่ตรงระบบกลาง" (§5.3 ข้อ 14 — **ไม่นับเป็นบิลที่ต้องต่าง 0**) · บิล 11–12/18 (โปรจำกัดเวลา): ถ้า dayo ยังส่ง `timeFrom` เป็น `HH:MM:SS` บิลที่ขายในนาทีแรกของช่วงจะต่าง (สเปก §4.4 ข้อ 13) → บันทึกเป็นปัญหาของ dayo ไม่ใช่บั๊กแท็บเล็ต
+- **Step 7**: "แก้/ยกเลิกไม่ได้บนเว็บ" → **รอเจ้าของ O1** (dayo ship ให้ owner แก้ได้พร้อมเหตุผล) · ตรวจแทนว่า: owner แก้บิล 1 ใบบนเว็บ → แท็บเล็ตแสดงป้าย `order-dayo-edit` พร้อมเหตุผล และยอดในเครื่องไม่เปลี่ยน
+- **Step 10 (เปิด production)**: เงื่อนไขตาม ADR-0048 ข้อ 8 ฉบับที่ dayo แก้ = ผ่าน Step 6–7 + ตั้ง `POS_ORIGINS` เป็น origin production ของแท็บเล็ต (`https://` ตรงตัว ไม่ใช่ preview) + สร้างกุญแจ + **เจ้าของกดสำรองภายใน 24 ชม. และซ้อมกู้ลง `dayo-test` สำเร็จ 1 ครั้ง** (แทน "สำรองอัตโนมัติ 3 คืน") — **รอเจ้าของ O2** ยืนยันว่ายอมรับการเลื่อนสำรองอัตโนมัติ ก่อนเปิดจริง
 
 **Files:**
-- Replace (เจ้าของคัดลอก): `packages/contracts/fixtures/dayo-api/*.json` จาก dayo `apps/web/test/fixtures/pos-contract/`
+- Replace: `packages/contracts/fixtures/dayo-api/*.json` ด้วยคำตอบจริงของ dayo local/`dayo-test` (O4 — dayo ไม่มีโฟลเดอร์ `pos-contract/`)
 - Create (เจ้าของคัดลอก): `packages/dayo-pricing/fixtures/pos-parity.json` จาก `npm run export-pos-parity` ของ dayo
 - Modify (ถ้า dayo เปลี่ยนตัวคิดราคา): `packages/dayo-pricing/VENDOR.json`, `packages/dayo-pricing/src/vendor/*.ts` (ผ่าน `vendor:update` เท่านั้น)
 - Create: `docs/superpowers/plans/2026-09-25-07-บันทึกเชื่อมจริงก้อน2.md` (บันทึกผล — ตาม memory "docs in project")
 
-- [ ] **Step 1: fixture สัญญาตรงกัน (D82)** — เจ้าของคัดลอกโฟลเดอร์ (รวม `.gitattributes`) · รัน `pnpm --filter @dayo/contracts fixtures:hashes > pos.txt` และ `pnpm --filter @dayo/contracts fixtures:hashes D:/TungAo-Project/line-bot/dayo-shop-system/apps/web/test/fixtures/pos-contract > dayo.txt` (อ่าน repo dayo อย่างเดียว · sha256 หลัง CRLF → LF) → `diff pos.txt dayo.txt` ว่าง และไม่มี `MISSING` · ไฟล์ `.json` ใน dayo ที่ไม่อยู่ใน `CONTRACT_FIXTURE_NAMES` (`ls` เทียบกับรายชื่อ) = แผนก้อน 1 เปลี่ยน → แก้รายชื่อ แล้วรันซ้ำ · `pnpm --filter @dayo/contracts test` และ `pnpm --filter @dayo/dayo-mock test` ผ่านกับไฟล์จริง (ไม่ผ่าน = สัญญาไม่ตรงกัน → หยุด แจ้งเจ้าของ ห้ามแก้ fixture)
+- [ ] **Step 1: fixture สัญญาตรงกัน (~~D82~~ — ใช้ย่อหน้า "ปรับตาม dayo" ข้างบนแทน · O4)** — ข้อความเดิม: เจ้าของคัดลอกโฟลเดอร์ (รวม `.gitattributes`) · รัน `pnpm --filter @dayo/contracts fixtures:hashes > pos.txt` และ `pnpm --filter @dayo/contracts fixtures:hashes D:/TungAo-Project/line-bot/dayo-shop-system/apps/web/test/fixtures/pos-contract > dayo.txt` (อ่าน repo dayo อย่างเดียว · sha256 หลัง CRLF → LF) → `diff pos.txt dayo.txt` ว่าง และไม่มี `MISSING` · ไฟล์ `.json` ใน dayo ที่ไม่อยู่ใน `CONTRACT_FIXTURE_NAMES` (`ls` เทียบกับรายชื่อ) = แผนก้อน 1 เปลี่ยน → แก้รายชื่อ แล้วรันซ้ำ · `pnpm --filter @dayo/contracts test` และ `pnpm --filter @dayo/dayo-mock test` ผ่านกับไฟล์จริง (ไม่ผ่าน = สัญญาไม่ตรงกัน → หยุด แจ้งเจ้าของ ห้ามแก้ fixture)
 - [ ] **Step 2: ตัวคิดราคาตรง commit ที่จะ deploy** — อ่าน `pricing.commit` จาก E1 ของ dayo dev (หรือ `npm run version:print` ของ dayo) → `pnpm --filter @dayo/dayo-pricing vendor:update D:/TungAo-Project/line-bot/dayo-shop-system <commit>` → `vendor:check` ผ่าน · ถ้า `src/vendor` เปลี่ยน: `pnpm turbo run typecheck test` ต้องผ่านโดยไม่แก้ไฟล์สำเนา (ไม่ผ่าน = หยุด แจ้งหัวหน้า)
 - [ ] **Step 3: parity ชั้น ค ด้วยไฟล์จริง** — เจ้าของรันบน commit เดียวกัน `npm run db:reset && npm run export-pos-parity -- --expect-commit <commit>` แล้ววาง `pos-parity.json` ที่ `packages/dayo-pricing/fixtures/` → `pnpm --filter @dayo/domain test -- parity` → หัว describe ต้องขึ้น `dayo export` และ **ทุกเคสต่าง 0 สตางค์** · เคสที่ล้มเพราะไม่มี `saleTime` → ขอทีม dayo เติม (R15) · เคสที่แท็บเล็ตสร้างไม่ได้จริง (เช่น qty เกินเพดาน) → ใส่ใน `TABLET_UNREACHABLE` พร้อมเหตุผลและให้หัวหน้าอนุมัติ · เคสอื่นที่ต่าง = บั๊ก ห้ามแก้เคส
 - [ ] **Step 4: เปิด dayo local** (เจ้าของ) — Supabase local + `npm run dev:web` ของ dayo ด้วย `API_V1_ENABLED=1` และ `POS_ORIGINS=http://localhost:4173` เฉพาะเครื่อง dev · เจ้าของสร้างกุญแจ "แท็บเล็ตขาย 1" ที่ `/settings/api-clients` (scope `catalog:read staff:read orders:read orders:write`) · นำเข้าแคตตาล็อกจริงของร้าน
@@ -6563,17 +6650,22 @@ git commit -m "refactor: drop the plan-3 pricing and sale path replaced by dayo'
 
 ## 7. ความสอดคล้องกับแผนก้อน 1 (`2026-09-25-06-block1-dayo-api.md`)
 
+**26 ก.ย. 2569: แผนก้อน 1 ถูกแทนด้วยงานที่ dayo ship เอง** (ก้อน 1A · main `232bf57`) · คอลัมน์ "แผนก้อน 1" ข้างล่างอ่านเป็น "ที่ dayo ship จริง" ตามแถวที่แก้ · ที่มา file:line อยู่ในสเปก 04 §13.6
+
 | เรื่อง | แผนก้อน 1 | แผนนี้ |
 |---|---|---|
 | endpoint | `GET /api/v1/pos/catalog?known_version=` · `POST /api/v1/pos/push` · `GET /api/v1/orders?from=&to=` | `createDayoClient` (Task 9) เรียกสามเส้นทางนี้ตรงตัว |
-| fixture สัญญา | ต้นฉบับ `apps/web/test/fixtures/pos-contract/` 22 ไฟล์ + `.gitattributes` รูป `PosContractFixture` · dayo เป็นเจ้าของ (D82) | สำเนา `packages/contracts/fixtures/dayo-api/` ชื่อเดียวกัน · schema `PosContractFixture` เดียวกัน (Task 6) · mock เล่นซ้ำทุกไฟล์ (Task 7) |
-| ลำดับตรวจแถว E2 | Task 3 Step 4 (a)(b)(c)(d)(e)(1)(f)(g)(2) | `judgeRow` ของ mock ตามลำดับเดียวกัน (ยกเว้น (c) scope ต่อชนิด — mock มีกุญแจเดียวสิทธิ์ครบ) |
+| fixture สัญญา | ~~ต้นฉบับ dayo `apps/web/test/fixtures/pos-contract/` (D82)~~ **dayo ไม่มีชุด fixture** → **POS เป็นเจ้าของชั่วคราว (O4)** | ต้นฉบับ `packages/contracts/fixtures/dayo-api/` (Task 6 → A1 ตาม SQL ของ dayo → Task 23 แทนด้วยคำตอบจริง) · schema `PosContractFixture` · mock เล่นซ้ำทุกไฟล์ (Task 7, A3) · ส่งให้ dayo ในก้อน 1B |
+| ลำดับตรวจแถว E2 | **ที่ ship: `0052_pos_push.sql:560-620`** (สเปก §4.5 ข้อ 6) · key ไม่มี `orders:write` = 403 ทั้งคำขอ (`:725-726`) | `judgeRow` ของ mock ตามโค้ดจริง (A3) · 403 ทั้งคำขอ (A3) |
 | ข้อความ `detail`/`message` | ใน fixture | mock ใช้ข้อความเดียวกันตรงตัว · แท็บเล็ตแสดง `detail` ตามที่ได้รับ ไม่ตีความข้อความ |
 | sha256 ตัวคิดราคา | หลัง CRLF → LF | `fileSha256` ใน `vendor-lib.ts` (Task 2) |
-| `pos-parity.json` | `{dayo_commit, pricing_files_sha256, generated_at, catalog_version, catalog, cases:[{id, spec, draft: OrderDraft, expected: ParityMoney}]}` | `ParityFile` (Task 5) · `cartFromOrderDraft` (Task 4) |
+| `pos-parity.json` | **ที่ ship**: `{dayo_commit, generated_at, pricing_files_sha256, catalog, cases:[{spec, note, draft: OrderDraft, expected: QuoteResult}]}` — ไม่มี `catalog_version`/`id` · ยังไม่ใช่ชั้น ข จริง (`scripts/export-pos-parity.ts:5-11`) · ไฟล์แรก `docs/design/pos-parity.json` | `ParityFile` (A1) · ตัวอ่านชั้น ค (A2 ส่วนต่อของ T4) · R15 |
 | `supported_fields` | รายการตามสเปก §4.4 | แท็บเล็ตเทียบด้วย `fieldsUsed` (ชื่อซ้อนแบบจุดเฉพาะอาร์เรย์) — ตรงกับที่ mock/dayo ใช้ตัดสิน `UNSUPPORTED` |
-| E3 `updated_at` | อาจเป็น `null` | `CentralOrder.updated_at` nullable (Task 5) |
-| บิล POS ใน E3 | มี (`source:'pos'`) | แท็บเล็ตกรองออกจากหน้า "บิลบอท/เว็บวันนี้" (Task 15) |
+| E3 `updated_at` | **ที่ ship**: ไม่เป็น null (`coalesce`) | `CentralOrder.updated_at` ยัง nullable (Task 5 — ไม่ต้องแก้) |
+| E3 `dayo_edit` · `pos_order_id` | **ใหม่** (ADR-0050 · `0052_pos_push.sql:826-831`) | `CentralOrder` (A1) · mock (A3) · `order.central_dayo_edit_json` (A4) · `refreshDayoEdits`/`applyDayoEdits` (Task 15) · ป้ายอ่านอย่างเดียว (Task 19) · O1 รอเจ้าของเรื่องเงิน |
+| ขนาดแก้ว | **ตั้งได้** · `catalog.sizes` (ADR-0054 · `0048_cup_sizes.sql:1470-1482`) | `SizeCode` regex + `sizes` (A1) · `priceCart`/`checkCart` (A2) · `sell-catalog.ts` (Task 12b) · ปุ่มขนาด (Task 18) |
+| E1 ค่าที่ต่างจากแผนก้อน 1 | `categoryLabel` null ได้ · `timeFrom` `HH:MM:SS` · `pricing.commit` null ได้ · `last_receipt_no` ดิบ | A1 · Task 10, 11, 20 |
+| บิล POS ใน E3 | มี (`source:'pos'`) + `pos_order_id` เฉพาะของ key นี้ | กรองออกจากหน้า "บิลบอท/เว็บวันนี้" (Task 15) แต่ **บิลของตัวเองใช้อ่าน `dayo_edit`** (Task 15) |
 | จุดตีความ 13 ข้อ | ท้ายแผนก้อน 1 | ข้อที่กระทบแท็บเล็ตรับทั้งหมด (R14) · ข้อ 7 (ธงซ้ำหลุดเมื่อบอทไม่ระบุเกรดมัตฉะ) ไม่มีงานฝั่งแท็บเล็ต · ข้อ 11–13 ไม่กระทบแท็บเล็ต |
 
 ## 8. ตรวจแผนเทียบสเปก (self-review)
@@ -6586,7 +6678,9 @@ git commit -m "refactor: drop the plan-3 pricing and sale path replaced by dayo'
 | §4.3 `catalog_version` เทียบเท่ากัน/ไม่เท่า · ส่วนต่างทุกขนาดเห็นได้ | 10, 13 (`central_*`), 14 (`priceDiffBills`), 19 (หน้า + ส่วนต่างในรายละเอียดบิล) |
 | §4.4 E1 ทุกข้อ (1–10) · ชื่อว่าง → "พนักงาน xxxx" · `last_receipt_no` · `pricing` · `supported_*` | 5, 10, 11, 12 (`lastReceiptNoOverall`), 20 (แถบ) |
 | §4.5 E2 แถว `order`/`order_void` · ผลตอบ · ตารางเหตุผล · กันซ้ำ | 3 (`buildOrderRowData`), 5, 7, 12, 13 |
-| §4.6 E3 | 9, 15, 19 |
+| §4.6 E3 (+ `dayo_edit`/`pos_order_id` อ่านอย่างเดียว — O1) | 9, A1, A3, A4, 15, 19, 21 |
+| §4.4 ข้อ 12–13 ขนาดตั้งได้ · เวลาโปร `HH:MM:SS` · §4.4 ข้อ 2/6/9 ค่า null | A1, A2, 10, 11, 12, 18, 20 |
+| §13.6 S1–S27 (ปรับตาม dayo) | §0.6 A1–A5 + ย่อหน้า "ปรับตาม dayo" ของ Task 10–15, 17–23 |
 | §4.7 แหล่ง/ผู้บันทึก · ยกเลิกวันเดียวกันที่แท็บเล็ต | 12, 19 |
 | §4.8 ป้าย "อาจซ้ำ" ในรายละเอียดบิล (ไม่เด้งกลางการขาย) | 13 (`central_duplicate_of_json`), 19 |
 | §4.11 zod + fixture + mock | 5, 6, 7, 23 |
@@ -6619,7 +6713,7 @@ git commit -m "refactor: drop the plan-3 pricing and sale path replaced by dayo'
 | id ในเทสต์ | `sequentialIds` เป็น UUID ตัวเล็ก (Task 10) |
 | `voided_at` | `max(now, sold_at)` (Task 12) |
 | บทบาท (R11 · Q44) | manager = บิลตัวเอง + ดูรายงานกะ · `void_any`/`price_diffs`/`sync_problems` owner เท่านั้น (Task 12, 15, 16, 19, 20) · ไม่มีแถว `['manager','void_any',true]` เหลือในแผน |
-| fixture สัญญา (D82) | repo dayo เป็นเจ้าของ · POS mirror + sha256 (Task 6) — สเปก §4.11 ผู้ประสานงานแก้เอง |
+| fixture สัญญา (~~D82~~ → O4) | **POS เป็นเจ้าของชั่วคราว** (dayo ไม่มีชุด fixture) · สเปก §4.11 แก้แล้ว (A5) · sha256 หลัง CRLF → LF ใช้เทียบเมื่อ dayo รับไป |
 | migration บนเครื่องที่มีบิลจริง | Task 8: บิลครบชุด + VOID_REFUND ก่อน 0003 · จำนวนแถวเท่าเดิม · `foreign_key_check` ว่าง · CHECK ช่องทาง |
 | API ฝั่ง owner รับผู้กระทำ | `listSyncProblems(actorUserId)`, `exportSyncRow({actorUserId,outboxId})`, `listPriceDiffs(actorUserId)` — ไม่มีรูปไม่มีอาร์กิวเมนต์เหลือ |
 | งานใหญ่แตกย่อย | Task 12 → 12a–12d · Task 18 → 18a/18b · แต่ละงานย่อย commit แยก |
