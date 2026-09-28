@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import type { JSX } from 'react'
-import type { PosRole } from '../app/permissions'
+import { can, type PosRole } from '../app/permissions'
 import { useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import type { SyncStatusDto } from '../api/types'
@@ -30,7 +30,10 @@ export function StatusBannersView({
   onGoStatus: () => void
   onGoProblems: () => void
 }): JSX.Element {
-  const isOwner = role === 'owner'
+  // fix round 2 (parked Low): the permission table, not a raw role string, is what actually gates /sync-problems —
+  // `sync_problems` is owner-only there too, so this stays byte-for-byte the same decision, just sourced from one
+  // place instead of re-deriving "owner" by hand here.
+  const isOwner = can(role, 'sync_problems')
   return (
     <div className="status-banners">
       {sync.apiState === 'unauthorized' && (
