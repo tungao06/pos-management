@@ -87,6 +87,16 @@ describe('OrderDetailScreen — dayo central state, diff and duplicate (spec §4
     expect(screen.getByTestId('order-dup')).toHaveTextContent('อาจซ้ำกับบิลบอท L260925-013')
   })
 
+  it('shows the discount reason only when there is one — never empty brackets (mobile audit row 21)', async () => {
+    renderDetail(fakeOrderApi({ subtotalSatang: 16_500, discountSatang: 1_000, discountReason: null }))
+    const line = await screen.findByTestId('order-discount')
+    expect(line).toHaveTextContent('ส่วนลด −฿10')
+    expect(line.textContent).not.toContain('(')
+    cleanup()
+    renderDetail(fakeOrderApi({ subtotalSatang: 16_500, discountSatang: 1_000, discountReason: 'ลูกค้าประจำ' }))
+    expect(await screen.findByTestId('order-discount')).toHaveTextContent('ส่วนลด (ลูกค้าประจำ) −฿10')
+  })
+
   it('a staff member sees the cancel button only on their own bill (Q44)', async () => {
     renderDetail(fakeOrderApi({ soldById: 'someone-else', voidable: true }), { id: 'mint', displayName: 'มิ้นท์', role: 'staff' })
     await screen.findByTestId('central-state')
