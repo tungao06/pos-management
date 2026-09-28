@@ -37,12 +37,20 @@ export type MilkChoice = { code: MilkCode; priceAddSatang: number }
 export type GradeChoice = { code: string; priceAddSatang: number; isDefault: boolean }
 
 export type CartErrorCode = 'EMPTY_CART' | 'CART_TOO_LARGE' | 'QTY_OUT_OF_RANGE' | 'UNKNOWN_VARIANT' | 'GRADE_RULE' | 'BAD_DISCOUNT'
+/**
+ * Why a `CartErrorCode` of `UNKNOWN_VARIANT` happened — a structured field a caller switches on (review round 2 item
+ * 6), never the free-text `detail`/`message` (which can be reworded later without warning). `null` for every other
+ * code, which needs no sub-reason.
+ */
+export type CartErrorReason = 'no_such_menu' | 'size_closed'
 export class CartError extends Error {
   readonly code: CartErrorCode
-  constructor(code: CartErrorCode, detail: string) {
+  readonly reason: CartErrorReason | null
+  constructor(code: CartErrorCode, detail: string, reason: CartErrorReason | null = null) {
     super(`${code}: ${detail}`)
     this.name = 'CartError'
     this.code = code
+    this.reason = reason
   }
 }
 
@@ -60,15 +68,17 @@ export function withZeroCosts(c: PosOrderCatalog): OrderCatalog {
 /**
  * The variant a line may be sold as: its size must be an ACTIVE entry of catalog.sizes (ADR-0054 — dayo stops selling a
  * closed size even if a stale variant row were still around) and the variant must exist. Exported (review I5) so a
- * caller can tell a closed size (the menu still exists, `SIZE_CLOSED` in the detail) from a menu dayo removed
- * entirely (`NO_SUCH_MENU`) — `checkLine`/the sell screen use this to pick the right Thai message per bad line.
+ * caller can tell a closed size (the menu still exists, `reason: 'size_closed'`) from a menu dayo removed entirely
+ * (`reason: 'no_such_menu'`) — `checkLine`/the sell screen switch on `CartError.reason`, never on the message text
+ * (review round 2 item 6 — a later reword of the detail must not silently break that check).
  */
 export function findSellableVariant(c: PosOrderCatalog, code: string, size: string, sweetness: string): PosVariant {
-  if (!c.sizes.some((s) => s.code === size && s.isActive)) throw new CartError('UNKNOWN_VARIANT', `SIZE_CLOSED ${code} ${size} ${sweetness}: ${size} is not an active size of the shop`)
+  if (!c.sizes.some((s) => s.code === size && s.isActive)) throw new CartError('UNKNOWN_VARIANT', `${code} ${size} ${sweetness}: ${size} is not an active size of the shop`, 'size_closed')
   const v = c.variants.find((x) => x.menuCode === code && x.size === size && x.sweetness === sweetness)
   if (v === undefined) {
     const menuExists = c.variants.some((x) => x.menuCode === code)
-    throw new CartError('UNKNOWN_VARIANT', menuExists ? `SIZE_CLOSED ${code} ${size} ${sweetness}: this size/sweetness is no longer sold` : `NO_SUCH_MENU ${code}: this menu is no longer sold`)
+    if (menuExists) throw new CartError('UNKNOWN_VARIANT', `${code} ${size} ${sweetness}: this size/sweetness is no longer sold`, 'size_closed')
+    throw new CartError('UNKNOWN_VARIANT', `${code}: this menu is no longer sold`, 'no_such_menu')
   }
   return v
 }

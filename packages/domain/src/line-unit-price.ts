@@ -32,3 +32,22 @@ export function lineUnitPriceSatang(
   if (!applied.ok) return null
   return edgeBahtToSatang(channelPrice(variant.price + applied.priceAdd, channel))
 }
+
+/**
+ * The "+฿"/"-฿" a screen shows on an option button — `lineUnitPriceSatang(to) - lineUnitPriceSatang(from)`, computed
+ * entirely here so no subtraction (or any other money arithmetic) ever runs in a screen (review round 2 item 5).
+ * `null` when either side cannot be priced (closed size, unknown channel, option not offered).
+ */
+export function optionDeltaSatang(
+  catalog: PosOrderCatalog,
+  code: string,
+  size: string,
+  sweetness: string,
+  channelCode: string,
+  from: { milk: MilkCode; grade: string | null },
+  to: { milk: MilkCode; grade: string | null },
+): number | null {
+  const a = lineUnitPriceSatang(catalog, code, size, sweetness, from.milk, from.grade, channelCode)
+  const b = lineUnitPriceSatang(catalog, code, size, sweetness, to.milk, to.grade, channelCode)
+  return a === null || b === null ? null : b - a
+}

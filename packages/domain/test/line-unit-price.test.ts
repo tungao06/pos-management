@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { priceCart, type CartDraft, type CartLineDraft } from '../src/price-cart.js'
-import { lineUnitPriceSatang } from '../src/line-unit-price.js'
+import { lineUnitPriceSatang, optionDeltaSatang } from '../src/line-unit-price.js'
 import { POS_CATALOG } from './fixtures/pos-catalog.js'
 
 const line = (over: Partial<CartLineDraft> = {}): CartLineDraft => ({
@@ -36,9 +36,39 @@ describe('lineUnitPriceSatang (review I1) — the exact number ItemDialog shows,
     expect(lineUnitPriceSatang(POS_CATALOG, 'Nope', '16 oz', '50%', 'fresh', null, 'store')).toBeNull()
   })
 
+  it('matches priceCart on a channel with a flat priceAddBaht AND an active promotion — LINE MAN, Matcha Latte 16 oz grade Premium, inside the 14:00–16:00 promo window (review round 2 item 3)', () => {
+    const DURING_PROMO = '2026-09-25T07:30:00.000Z' // Friday 14:30 Bangkok — inside มัตฉะบ่าย ลด 15%'s window
+    const priced = priceCart(cart([line({ code: 'Matcha Latte', sweetness: '50%', grade: 'Premium' })], { channelCode: 'lineman', paymentCode: 'qr' }), POS_CATALOG, DURING_PROMO)
+    expect(priced.promotionsApplied.length).toBeGreaterThan(0) // sanity: the promo really fired for this line
+    const one = lineUnitPriceSatang(POS_CATALOG, 'Matcha Latte', '16 oz', '50%', 'fresh', 'Premium', 'lineman')
+    // lineUnitPriceSatang is the pre-promotion unit price (like priced.lines[0].unitPriceSatang) — a promotion
+    // changes discountPerCupSatang/lineTotalSatang, never unitPriceSatang, so this must still match exactly.
+    expect(one).toBe(priced.lines[0]!.unitPriceSatang)
+  })
+
   it('the +฿ label of an option button is the difference of two calls, never a hand-added satang delta', () => {
     const withoutOat = lineUnitPriceSatang(POS_CATALOG, 'Thai Tea', '16 oz', '50%', 'fresh', null, 'store')!
     const withOat = lineUnitPriceSatang(POS_CATALOG, 'Thai Tea', '16 oz', '50%', 'oat', null, 'store')!
     expect(withOat - withoutOat).toBe(1_500) // oat priceAdd 15 baht on a channel with no markup
+  })
+})
+
+describe('optionDeltaSatang (review round 2 item 5) — no subtraction ever runs in a screen', () => {
+  it('equals lineUnitPriceSatang(to) − lineUnitPriceSatang(from)', () => {
+    const delta = optionDeltaSatang(POS_CATALOG, 'Thai Tea', '16 oz', '50%', 'store', { milk: 'fresh', grade: null }, { milk: 'oat', grade: null })
+    const from = lineUnitPriceSatang(POS_CATALOG, 'Thai Tea', '16 oz', '50%', 'fresh', null, 'store')!
+    const to = lineUnitPriceSatang(POS_CATALOG, 'Thai Tea', '16 oz', '50%', 'oat', null, 'store')!
+    expect(delta).toBe(to - from)
+    expect(delta).toBe(1_500)
+  })
+
+  it('a cheaper grade than the reference gives a negative delta (never hidden as 0)', () => {
+    // Excellent (priceAdd 0) is cheaper than Premium (priceAdd 20) — from Premium to Excellent must be negative.
+    const delta = optionDeltaSatang(POS_CATALOG, 'Matcha Latte', '16 oz', '50%', 'store', { milk: 'fresh', grade: 'Premium' }, { milk: 'fresh', grade: 'Excellent' })
+    expect(delta).toBeLessThan(0)
+  })
+
+  it('null when either side cannot be priced', () => {
+    expect(optionDeltaSatang(POS_CATALOG, 'Thai Tea', '16 oz', '50%', 'nope', { milk: 'fresh', grade: null }, { milk: 'oat', grade: null })).toBeNull()
   })
 })
