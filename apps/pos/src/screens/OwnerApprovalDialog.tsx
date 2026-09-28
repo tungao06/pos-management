@@ -40,10 +40,11 @@ export function OwnerApprovalDialog({
   const [reason, setReason] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
 
-  // SECURITY (fix round 2, parked Low): matches SystemStatusScreen's replace-key form — a wrong PIN must not sit
-  // in the field for a second try to (mis-)reuse or leave lying around; the person retypes it.
+  // SECURITY (fix round 2, parked Low; widened per security review): matches SystemStatusScreen's replace-key
+  // form — any failed attempt (a wrong PIN, or the 5th try landing on PIN_LOCKED instead) must not leave the PIN
+  // sitting in the field. Any error from the caller clears it, not just a PIN_WRONG text match.
   useEffect(() => {
-    if (error === TH.errPinWrong) setPin('')
+    if (error !== null) setPin('')
   }, [error])
 
   const submit = (): void => {
