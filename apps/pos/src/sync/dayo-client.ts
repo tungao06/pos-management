@@ -3,6 +3,8 @@ import { normalizeBaseUrl } from './base-url'
 
 export type DayoFailure =
   | { kind: 'network'; message: string }
+  /** task 13 m1: the 20-second budget ran out (headers or body) — dayo was reached or is hanging, not an offline tablet. */
+  | { kind: 'timeout' }
   | { kind: 'unauthorized' }
   | { kind: 'forbidden' }
   | { kind: 'api_disabled' }
@@ -26,12 +28,16 @@ export type Timed<T> = { value: T; sentAtMs: number; receivedAtMs: number }
 export type DayoClient = {
   getCatalog(knownVersion: number): Promise<Timed<PosCatalogLooseData>>
   push(body: PushRequest): Promise<Timed<PushResponseData>>
-  listOrders(q: { from: string; to: string }): Promise<Timed<CentralOrder[]>>
+  /** E3 · `updatedSince` = dayo's `updated_since` (coalesce(updated_at, created_at) > it — 0052_pos_push.sql:840). */
+  listOrders(q: { from: string; to: string; updatedSince?: string }): Promise<Timed<CentralOrder[]>>
 }
 
 /** plan 5 transport (fix M-4): setTimeout + AbortController, not AbortSignal.timeout, so tests can use fake timers. */
 export const FETCH_TIMEOUT_MS = 20_000
 const RATE_LIMIT_DEFAULT_MS = 60_000
+/** security review I1 (task 13): a hostile or broken Retry-After can neither stall the queue for days nor make it spin. */
+export const RETRY_AFTER_MIN_MS = 1_000
+export const RETRY_AFTER_MAX_MS = 15 * 60_000
 
 export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: typeof fetch; nowMs: () => number }): DayoClient {
   const base = normalizeBaseUrl(cfg.baseUrl) // throws BAD_BASE_URL before any fetch (security review item 1)
@@ -55,7 +61,9 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
       // pushOnce (and with it every later scheduler wake) for ever.
       text = await res.text()
     } catch (e) {
-      // offline, DNS, timeout (headers or body) — and in a browser also a response without CORS headers (spec §4.1)
+      // our own 20-second abort (headers or body) = timeout (m1) · anything else: offline, DNS, and in a browser also a
+      // response without CORS headers (spec §4.1)
+      if (controller.signal.aborted) throw new DayoError({ kind: 'timeout' })
       throw new DayoError({ kind: 'network', message: e instanceof Error ? e.message : String(e) })
     } finally {
       clearTimeout(timer)
@@ -66,12 +74,15 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
     let body: unknown = null
     try { body = text === '' ? null : JSON.parse(text) } catch { body = null }
     if (res.status === 401) throw new DayoError({ kind: 'unauthorized' })
-    if (res.status === 403) throw new DayoError({ kind: 'forbidden' })
+    // task 14 item 3: only dayo's own error body means "this key lacks a scope" — a proxy / WAF 403 in front of dayo is a
+    // server failure (backoff and retry), never a stop of every call until a new key
+    if (res.status === 403) throw new DayoError(ApiErrorBody.safeParse(body).success ? { kind: 'forbidden' } : { kind: 'server', status: 403 })
     if (res.status === 404) throw new DayoError({ kind: 'api_disabled' }) // any 404 under /api/v1 = API switched off (spec §4.1)
     if (res.status === 422) throw new DayoError({ kind: 'bad_envelope', message: ApiErrorBody.safeParse(body).data?.error.message ?? 'DY422' })
     if (res.status === 429) {
       const sec = Number(res.headers.get('retry-after'))
-      throw new DayoError({ kind: 'rate_limited', retryAfterMs: Number.isFinite(sec) && sec > 0 ? sec * 1000 : RATE_LIMIT_DEFAULT_MS })
+      const ms = Number.isFinite(sec) && sec > 0 ? Math.min(RETRY_AFTER_MAX_MS, Math.max(RETRY_AFTER_MIN_MS, Math.round(sec * 1000))) : RATE_LIMIT_DEFAULT_MS
+      throw new DayoError({ kind: 'rate_limited', retryAfterMs: ms })
     }
     if (res.status !== 200) throw new DayoError({ kind: 'server', status: res.status })
     try {
@@ -83,6 +94,6 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
   return {
     getCatalog: (known) => call(`/pos/catalog?known_version=${Math.max(0, Math.trunc(known))}`, { method: 'GET' }, (b) => PosCatalogLooseResponse.parse(b).data), // `catalog` checked by the caller (R12)
     push: (body) => call('/pos/push', { method: 'POST', body: JSON.stringify(body) }, (b) => PushResponse.parse(b).data),
-    listOrders: (q) => call(`/orders?from=${encodeURIComponent(q.from)}&to=${encodeURIComponent(q.to)}`, { method: 'GET' }, (b) => OrdersListResponse.parse(b).data),
+    listOrders: (q) => call(`/orders?from=${encodeURIComponent(q.from)}&to=${encodeURIComponent(q.to)}${q.updatedSince === undefined ? '' : `&updated_since=${encodeURIComponent(q.updatedSince)}`}`, { method: 'GET' }, (b) => OrdersListResponse.parse(b).data),
   }
 }

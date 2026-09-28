@@ -32,6 +32,22 @@ describe('mock dayo', () => {
     const huge = JSON.stringify({ device_time: '2026-09-25T03:15:03.120Z', rows: [{ pad: 'ก'.repeat(90_000) }] }) // 270,000 bytes in UTF-8
     expect((await m.fetch('http://mock/api/v1/pos/push', { method: 'POST', headers: auth, body: huge })).status).toBe(422)
   })
+  it('a lone surrogate or NUL anywhere in the body is a 422 of the WHOLE request, like dayo\'s p_body::jsonb (0052:735-739)', async () => {
+    const m = createMockDayo({ now: '2026-09-25T03:15:04.010Z' })
+    const withText = (edit: (d: Record<string, unknown>) => void): string => {
+      const b = JSON.parse(acceptedBody()) as { rows: { data: Record<string, unknown> }[] }
+      edit(b.rows[0]!.data)
+      return JSON.stringify(b) // JSON.stringify escapes a lone surrogate as \ud800 — still valid JSON, refused by jsonb
+    }
+    for (const body of [withText((d) => { d['note'] = 'ok\ud800' }), withText((d) => { d['note'] = 'a\u0000b' }), withText((d) => { d['x\udc00'] = 1 })]) {
+      const r = await m.fetch('http://mock/api/v1/pos/push', { method: 'POST', headers: auth, body })
+      expect(r.status).toBe(422)
+      expect(await r.json()).toMatchObject({ ok: false, error: { code: 'DY422' } })
+    }
+    // a real surrogate pair is one code point and is stored fine — the row is judged as usual
+    const fine = await m.fetch('http://mock/api/v1/pos/push', { method: 'POST', headers: auth, body: withText((d) => { d['note'] = 'ขอบคุณ 😀' }) })
+    expect(fine.status).toBe(200)
+  })
   it('a sale_date after today (crossing midnight inside the 5-minute grace) is deferred CLOCK_AHEAD (block-1 interpretation 3)', async () => {
     const m = createMockDayo({ now: '2026-09-25T16:58:00.000Z' }) // 23:58 Bangkok
     const b = JSON.parse(acceptedBody()) as { rows: { data: Record<string, unknown> }[] }

@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { MAX_ZNO_LIST_LENGTH, zReportHash } from '@dayo/domain'
+import { closeShift } from '../src/api/close'
 import type { CloseShiftInput } from '../src/api/types'
 import { hashPin } from '../src/lib/pin'
 import { openReadyApi, PINS, sellSku, TEST_PIN_COST, type ReadyApi } from './helpers/db'
@@ -170,6 +171,16 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     await expect(t.api.closeShift(await closeInput(t, { approverPin: '9999' }))).rejects.toThrow(/^PIN_WRONG: /)
     await expect(t.api.closeShift(await closeInput(t, { approverUserId: 'staff-1', approverPin: '3333' }))).rejects.toThrow(/^NOT_OWNER: /)
     expect(counts(t)).toEqual(before)
+  })
+  it('wakes the sender (before_close) only after the input and the PIN passed (task 14 fix round 1 item 4)', async () => {
+    const t = await openReadyApi()
+    const woken: string[] = []
+    const hooks = { validated: () => { woken.push('before_close') } }
+    await expect(closeShift(t.db, t.deps, await closeInput(t, { approverPin: '9999' }), hooks)).rejects.toThrow(/^PIN_WRONG: /)
+    await expect(closeShift(t.db, t.deps, await closeInput(t, { countLines: [{ denominationSatang: 100, count: -1 }] }), hooks)).rejects.toThrow(/^BAD_INPUT: /)
+    expect(woken).toEqual([])
+    await closeShift(t.db, t.deps, await closeInput(t), hooks)
+    expect(woken).toEqual(['before_close'])
   })
 
   it('a PromptPay sale made after the screen showed the report still triggers SHIFT_CHANGED, even though cash is untouched (m-1 · Q3b-17 · D54)', async () => {

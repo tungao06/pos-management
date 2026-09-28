@@ -198,7 +198,10 @@ function orderForLenientRecompute(rows: readonly ZRawRow[]): ZRawRow[] {
  * from a lenient recompute that never throws (`recomputeZChainLenient`); either way it carries `chainWarning` for
  * good (naming what it can), and an audit row records the acknowledgement.
  */
-export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftInput): Promise<ZReportDto> {
+/** task 14 fix round 1 item 4: `validated` runs once the input and the owner PIN passed, just before the transaction. */
+export type CloseShiftHooks = { validated?: () => void }
+
+export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftInput, hooks: CloseShiftHooks = {}): Promise<ZReportDto> {
   let tally: ReturnType<typeof tallyCashCount>
   try {
     tally = tallyCashCount(input.countLines)
@@ -216,6 +219,7 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
   // argon2 is slow — check the PIN before opening the transaction (same as voidOrder).
   const approver = await requireOwnerPin(db, deps, input.approverUserId, input.approverPin)
   const device = await requireDevice(db)
+  hooks.validated?.()
 
   return db.transaction(async (tx) => {
     const shift = await currentOpenShift(tx, device.id)

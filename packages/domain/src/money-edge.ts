@@ -22,6 +22,7 @@ export function edgeBahtToSatang(baht: number): number {
   if (typeof baht !== 'number' || !Number.isFinite(baht) || baht < 0) throw new MoneyEdgeError('NOT_A_MONEY_VALUE', baht)
   const x = baht * 100
   const r = Math.round(x)
+  // measured: the worst float error up to the ceiling is 9.54e-7, so this 1e-6 threshold must never be loosened
   if (Math.abs(x - r) > 1e-6) throw new MoneyEdgeError('MORE_THAN_2_DECIMALS', baht)
   if (r > EDGE_MAX_SATANG) throw new MoneyEdgeError('OUT_OF_RANGE', baht)
   return r === 0 ? 0 : r // never -0

@@ -57,10 +57,18 @@ describe('edgeBahtToSatang', () => {
       expect((e as MoneyEdgeError).code).toBe(code)
     }
   })
+  it('rejects a value that is not a number at all (JSON from dayo is untyped)', () => {
+    try { edgeBahtToSatang('35' as unknown as number); expect.unreachable() } catch (e) {
+      expect((e as MoneyEdgeError).code).toBe('NOT_A_MONEY_VALUE')
+    }
+  })
 })
 
 describe('edgeSatangToBaht', () => {
   it.each([[1.5, 'NOT_A_MONEY_VALUE'], [Number.NaN, 'NOT_A_MONEY_VALUE'], [-1, 'OUT_OF_RANGE'], [EDGE_MAX_SATANG + 1, 'OUT_OF_RANGE']])('%s throws %s', (s, code) => {
     try { edgeSatangToBaht(s); expect.unreachable() } catch (e) { expect((e as MoneyEdgeError).code).toBe(code) }
+  })
+  it('never returns -0', () => {
+    expect(Object.is(edgeSatangToBaht(-0), 0)).toBe(true)
   })
 })

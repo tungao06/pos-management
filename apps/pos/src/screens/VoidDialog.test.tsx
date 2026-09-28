@@ -7,6 +7,7 @@ import type { BootstrapState, OrderDetailDto, PosApi, UserDto } from '../api/typ
 import { ApiProvider } from '../app/api-context'
 import { shiftReportKey, stockKey } from '../app/queries'
 import { SessionProvider, useSession } from '../app/session'
+import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { VoidDialog } from './VoidDialog'
 
 afterEach(() => cleanup())
@@ -25,6 +26,7 @@ const ORDER: OrderDetailDto = {
   soldById: 'u1',
   soldByName: 'TungAo',
   central: { state: 'legacy', orderNo: null, computedTotalSatang: null, diffSatang: null, duplicateOf: [], reason: null, voidState: 'none' },
+  dayoEdit: null,
   businessDate: '2026-09-17',
   shiftId: 's1',
   subtotalSatang: 4_500,
@@ -55,6 +57,7 @@ const BOOT: BootstrapState = {
   dayoBaseUrl: 'https://dayo.example/api/v1',
   staffNeedingPin: [],
   ownerRecovery: false,
+  sync: HEALTHY_SYNC,
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

@@ -108,13 +108,20 @@ describe('dayo client (spec 04 §4.1, §6.3)', () => {
       expect(await failureOf(c.getCatalog(0))).toEqual({ kind: 'server', status })
     }
   })
-  it('a hung request becomes a network failure after 20 seconds', async () => {
+  it('403 means "forbidden" only with dayo\'s own error body — a proxy or WAF 403 is a server failure (task 14 review item 3)', async () => {
+    const failure = (body: string) => failureOf(createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: async () => new Response(body, { status: 403 }), nowMs: () => 0 }).getCatalog(0))
+    expect(await failure('<html><body>403 Forbidden</body></html>')).toEqual({ kind: 'server', status: 403 })
+    expect(await failure('')).toEqual({ kind: 'server', status: 403 })
+    expect(await failure(JSON.stringify({ message: 'Request blocked' }))).toEqual({ kind: 'server', status: 403 })
+    expect(await failure(JSON.stringify({ ok: false, error: { code: 'DY403', message: 'forbidden: API key ไม่มีสิทธิ์ orders:write' } }))).toEqual({ kind: 'forbidden' })
+  })
+  it('a hung request becomes a timeout failure after 20 seconds', async () => {
     vi.useFakeTimers()
     const { mock, c } = client()
     mock.setMode('hang')
     const p = failureOf(c.getCatalog(0))
     await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS)
-    expect((await p)?.kind).toBe('network')
+    expect(await p).toEqual({ kind: 'timeout' }) // task 13 m1: a timeout is not an offline network error
   })
   it('a 200 whose body breaks the contract is bad_response, not a crash', async () => {
     const fetchBad: typeof fetch = async () => new Response(JSON.stringify({ ok: true, data: { changed: true } }), { status: 200 })
@@ -139,6 +146,17 @@ describe('dayo client (spec 04 §4.1, §6.3)', () => {
     const c = createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: f, nowMs: () => 0 })
     const p = failureOf(c.getCatalog(0))
     await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS)
-    expect((await p)?.kind).toBe('network')
+    expect(await p).toEqual({ kind: 'timeout' })
+  })
+})
+
+describe('Retry-After is clamped to 1 s … 15 min (task 13 security I1)', () => {
+  const answer429 = (value: string): typeof fetch => async () => new Response(JSON.stringify({ ok: false, error: { code: 'DY429', message: 'rate_limited' } }), { status: 429, headers: { 'Retry-After': value } })
+  const clientWith = (f: typeof fetch) => createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: f, nowMs: () => Date.parse('2026-09-25T02:00:00.000Z') })
+  it.each([
+    ['1e9', 900_000], ['1e20', 900_000], ['1000000000', 900_000], ['Infinity', 60_000], ['0.2', 1_000], ['-5', 60_000], ['0', 60_000],
+    ['Wed, 21 Oct 2099 07:28:00 GMT', 60_000], ['', 60_000], ['30', 30_000],
+  ])('Retry-After %s → %i ms', async (value, ms) => {
+    expect(await failureOf(clientWith(answer429(value)).getCatalog(0))).toEqual({ kind: 'rate_limited', retryAfterMs: ms })
   })
 })

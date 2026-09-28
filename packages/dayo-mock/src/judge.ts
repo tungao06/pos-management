@@ -17,6 +17,31 @@ const TS_RE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0001-\u001f\u007f]/
 const RECEIPT_RE = /^[A-Z]{1,3}-[0-9]{6}$/
+/** Text Postgres jsonb cannot hold: a lone UTF-16 surrogate or U+0000 (both fail `p_body::jsonb`). */
+// eslint-disable-next-line no-control-regex
+const JSONB_UNSTORABLE_RE = /[\ud800-\udfff\u0000]/u
+
+/**
+ * api_pos_push casts the whole body to jsonb before it looks at any row (0052:735-739), so ONE lone surrogate or NUL in
+ * any string or key anywhere in the body is a DY422 of the whole request — never a row verdict. The mock mirrors that.
+ */
+export function bodyJsonbRefuses(body: unknown): boolean {
+  const stack: unknown[] = [body]
+  while (stack.length > 0) {
+    const v = stack.pop()
+    if (typeof v === 'string') {
+      if (JSONB_UNSTORABLE_RE.test(v)) return true
+    } else if (Array.isArray(v)) {
+      stack.push(...v)
+    } else if (v !== null && typeof v === 'object') {
+      for (const [k, x] of Object.entries(v)) {
+        if (JSONB_UNSTORABLE_RE.test(k)) return true
+        stack.push(x)
+      }
+    }
+  }
+  return false
+}
 
 /** A verdict other than accepted/duplicate (dayo_pos_verdict). */
 class Verdict extends Error {

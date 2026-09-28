@@ -1,6 +1,6 @@
 import { applyOptions, channelPrice, type MilkCode } from '@dayo/dayo-pricing'
 import { edgeBahtToSatang } from './money-edge.js'
-import { findSellableVariant, type PosOrderCatalog } from './price-cart.js'
+import { dayoOptions, findSellableVariant, type PosOrderCatalog } from './price-cart.js'
 
 /**
  * The unit price of one size+sweetness+milk+grade combo on one channel, priced the exact way dayo's own
@@ -28,7 +28,7 @@ export function lineUnitPriceSatang(
   } catch {
     return null
   }
-  const applied = applyOptions(variant, { milk, grade }, catalog)
+  const applied = applyOptions(variant, { milk, grade }, dayoOptions(catalog))
   if (!applied.ok) return null
   return edgeBahtToSatang(channelPrice(variant.price + applied.priceAdd, channel))
 }

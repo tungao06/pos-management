@@ -1,7 +1,9 @@
-// Q44 role table (spec §11, §12 Q44 · D60 · controller ruling R11).
-// `UserRole` in @dayo/contracts does not have 'manager' yet (Task 5 adds it in a parallel stream) — this stays
-// local until a later task switches it to the contracts enum.
-export type PosRole = 'staff' | 'manager' | 'owner'
+// Q44 role table (spec §11, §12 Q44 · D60 · ruling R11).
+import type { UserRole } from '@dayo/contracts'
+
+// The roles are the contracts enum (dayo staff.role, spec 04 §7 item 6): a role added or renamed there stops
+// TABLE below from compiling instead of drifting silently.
+export type PosRole = UserRole
 
 export type Action =
   | 'sell'

@@ -1,14 +1,14 @@
-import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, max } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { bangkokDateOf, rowKey } from '@dayo/contracts'
 import { centralDiffSatang, type PricedPromotion } from '@dayo/domain'
 import { readCatalog, staffDisplayName } from '../sync/catalog'
-import { decodeLastError } from '../sync/state'
+import { DAYO_KEYS, decodeLastError, readKey, SKEW_FRESH_MS } from '../sync/state'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import type { CentralStateDto, OrderDetailDto, OrderLineDto, OrderSummaryDto } from './types'
+import type { CentralStateDto, DayoEditDto, OrderDetailDto, OrderLineDto, OrderSummaryDto } from './types'
 
 type OrderRow = typeof s.order.$inferSelect
 type OutboxRow = typeof s.outbox.$inferSelect
@@ -53,7 +53,15 @@ function summarize(o: OrderRow, payments: readonly { method: string }[], cupRows
     soldById: o.createdById,
     soldByName: ctx.sellerName(o.createdById),
     central: centralState(o, ctx.outbox.get(rowKey('order', o.id)), ctx.outbox.get(rowKey('order_void', o.id))),
+    dayoEdit: dayoEditOf(o),
   }
+}
+
+/** order.central_dayo_edit_json (written only by applyDayoEdits, already bounded there) → the DTO; display only. */
+function dayoEditOf(o: OrderRow): DayoEditDto | null {
+  const e = o.centralDayoEditJson
+  if (e === null || e === undefined) return null
+  return { kind: e.kind, editedAt: e.edited_at, editedByName: e.edited_by_name ?? null, reason: e.reason ?? null, version: e.version ?? null }
 }
 
 /** D61: the name of the user on this tablet, else dayo's staff list (spec §4.4 rule 5), else "พนักงาน" + the id's tail. */
@@ -95,6 +103,34 @@ function promotionsOf(o: OrderRow): { name: string; discountSatang: number }[] {
   return applied.map((p) => ({ name: p.name, discountSatang: p.discountSatang }))
 }
 
+/**
+ * "Now" for a cancellation (spec §4.7 same-day rule), used by cancelSale AND getOrder.voidable so the screen offers
+ * exactly what cancelSale accepts.
+ * - `stamp` (voided_at and the rest of the void): the device clock, but never before the latest sale of this device —
+ *   a void is never stamped before its sale. Stays on the tablet clock (spec §6.7: dayo trusts the device time).
+ * - `judge` (which Thai day it is): the latest of `stamp` and the device clock corrected by the last skew dayo
+ *   reported (D80, task 14 item 5) — a clock set back to yesterday, even before the first sale of today, does not
+ *   reopen yesterday's bills once the tablet has heard dayo's server_time since.
+ * D106: the skew counts only while fresh — measured at most SKEW_FRESH_MS (15 min) before the device's now; an older
+ * one is ignored (judge = stamp, the original rule), so a stale skew can never block a legitimate same-day cancel.
+ * A NEGATIVE age means the clock was set back after the measurement (final review I1): the device's now is then not
+ * trusted at all — the estimate is frozen at the server time of the measurement (measured_at + skew), which real time
+ * can only have passed. So rolling the clock back to last night, offline, does not reopen last night's bills.
+ */
+export async function voidInstant(db: RemoteDb, deviceId: string, deviceNow: string): Promise<{ stamp: string; judge: string }> {
+  const latest = (await db.select({ v: max(s.order.soldAt) }).from(s.order).where(eq(s.order.deviceId, deviceId)).get())?.v ?? null
+  const stamp = latest !== null && Date.parse(latest) > Date.parse(deviceNow) ? latest : deviceNow
+  const skewRaw = await readKey(db, DAYO_KEYS.clockSkewMs)
+  const skew = skewRaw === null ? Number.NaN : Number(skewRaw)
+  const measuredAt = Date.parse((await readKey(db, DAYO_KEYS.clockMeasuredAt)) ?? '')
+  const age = Date.parse(deviceNow) - measuredAt
+  const server = !Number.isFinite(skew) || !Number.isFinite(age) || age > SKEW_FRESH_MS ? Number.NaN
+    : age < 0 ? measuredAt + skew // the clock went back since: never move the estimate back with it
+      : Date.parse(deviceNow) + skew
+  const judge = Number.isFinite(server) && server > Date.parse(stamp) ? new Date(server).toISOString() : stamp
+  return { stamp, judge }
+}
+
 export async function getOrder(db: RemoteDb, deps: Pick<ApiDeps, 'now'>, orderId: string): Promise<OrderDetailDto> {
   const o = await db.select().from(s.order).where(eq(s.order.id, orderId)).get()
   if (!o) throw new PosError('ORDER_NOT_FOUND', orderId)
@@ -111,7 +147,7 @@ export async function getOrder(db: RemoteDb, deps: Pick<ApiDeps, 'now'>, orderId
     : oldLines.map((l) => ({ lineNo: l.lineNo, productName: l.productName, sizeName: l.sizeName, sweetnessName: l.sweetnessName, milk: null, grade: null, qty: l.qty, unitPriceSatang: l.unitPriceSatang, lineTotalSatang: l.lineTotalSatang }))
   const ctx: SummaryContext = { sellerName: await sellerNames(db, [o.createdById]), outbox: await outboxOf(db, [o.id]) }
   // Only paid orders of the open shift can be voided (D47 ข้อ 2 · Q3-13); a block-2 bill only on the Thai day it was sold (spec 04 §4.7)
-  const sameDay = o.soldAt === null || bangkokDateOf(deps.now()) === bangkokDateOf(o.soldAt)
+  const sameDay = o.soldAt === null || bangkokDateOf((await voidInstant(db, device.id, deps.now())).judge) === bangkokDateOf(o.soldAt)
   return {
     ...summarize(o, payments, [...oldLines, ...items], ctx),
     businessDate: o.businessDate,
@@ -128,6 +164,7 @@ export async function getOrder(db: RemoteDb, deps: Pick<ApiDeps, 'now'>, orderId
     promotions: promotionsOf(o),
     lines,
     events: events.map((e) => ({ seq: e.seq, type: e.type, at: e.at, actorId: e.actorId, payload: e.payloadJson })),
-    voidable: o.status === 'paid' && shift !== null && o.shiftId === shift.id && o.deviceId === device.id && sameDay,
+    // a bill dayo reports cancelled on its web is not offered again (it would only earn a duplicate) — spec §4.6, Task 15
+    voidable: o.status === 'paid' && shift !== null && o.shiftId === shift.id && o.deviceId === device.id && sameDay && o.centralDayoEditJson?.kind !== 'cancel',
   }
 }

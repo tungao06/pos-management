@@ -19,9 +19,23 @@ export const DAYO_KEYS = {
   catalogError: 'dayo.catalog_error',
   pushFailStreak: 'dayo.push_fail_streak',
   pushBackoffUntil: 'dayo.push_backoff_until',
-  pushBackoffReason: 'dayo.push_backoff_reason', // 'failure' (network/5xx — cleared by online/manual/open/before_close wakes) | 'rate_limited' (kept)
-  pushSingleThrough: 'dayo.push_single_through',
+  // 'network' (offline — an online wake may forget it) | 'failure' (timeout / 5xx / unreadable 200 — only a manual, open or
+  // before_close wake, at most once per 30 s) | 'rate_limited' (a 429 from E1 or E2 — per key, never cleared: it runs out)
+  pushBackoffReason: 'dayo.push_backoff_reason',
+  pushSingleThrough: 'dayo.push_single_through', // R4: {ids} of the rows of the batch that failed (task 13 fix round 1)
+  pushServerStreak: 'dayo.push_server_streak',   // consecutive 5xx / unreadable 200 — enters R4; network failures do not count (m3)
+  // E1's own failure backoff (fix round 1 item 3) — a 429 on E1 goes to push_backoff_* ('rate_limited'), shared per key
+  catalogAttemptAt: 'dayo.catalog_attempt_at',     // the last E1 request, answered or not (catalog_checked_at = the last good one)
+  catalogFailStreak: 'dayo.catalog_fail_streak',
+  catalogBackoffUntil: 'dayo.catalog_backoff_until',
+  catalogBackoffReason: 'dayo.catalog_backoff_reason', // 'network' | 'failure', as push_backoff_reason
+  manualClearAt: 'dayo.manual_clear_at',           // N4: the last time a wake cleared a failure backoff (survives a reload)
+  requestWindow: 'dayo.request_window',            // the wall times of the dayo requests of the last 60 s (survives a reload)
   lastPushAt: 'dayo.last_push_at',
+  // Task 15: refreshDayoEdits' mark — E3 updated_since (absent = the device's setup time) — and its backward walk over
+  // full pages, kept between refreshes (fix round 1 item 1)
+  dayoEditsSince: 'dayo.dayo_edits_since',
+  dayoEditsWalk: 'dayo.dayo_edits_walk',
 } as const
 export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled' | 'bad_base_url'
 
@@ -31,6 +45,10 @@ export const STUCK_AFTER_ATTEMPTS = 50
 export const API_DISABLED_RETRY_MS = 15 * 60_000
 export const RATE_LIMIT_DEFAULT_MS = 60_000
 export const NO_ANSWER_RETRY_MS = 60_000
+/** D106: a measured clock skew is used for the same-day void rule only this long after it was measured. */
+export const SKEW_FRESH_MS = 15 * 60_000
+/** The longest wait a stored backoff may still have: the last step + 20 % jitter. Anything longer is not trusted. */
+export const MAX_BACKOFF_WAIT_MS = Math.round(BACKOFF_MS[BACKOFF_MS.length - 1]! * 1.2)
 
 export async function readKey(db: RemoteDb, key: string): Promise<string | null> {
   return (await db.select().from(s.syncState).where(eq(s.syncState.key, key)).get())?.value ?? null
@@ -40,6 +58,16 @@ export async function writeKey(db: RemoteDb, key: string, value: string): Promis
 }
 export async function deleteKey(db: RemoteDb, key: string): Promise<void> {
   await db.delete(s.syncState).where(eq(s.syncState.key, key))
+}
+
+/**
+ * A 429 of the key (E1 or E2): the shared backoff becomes 'rate_limited' — until the LATER of the one already set and
+ * this one, so a short Retry-After never shortens a longer wait (final review M1).
+ */
+export async function extendRateLimit(db: RemoteDb, untilIso: string): Promise<void> {
+  const current = Date.parse((await readKey(db, DAYO_KEYS.pushBackoffUntil)) ?? '')
+  if (!(Number.isFinite(current) && current > Date.parse(untilIso))) await writeKey(db, DAYO_KEYS.pushBackoffUntil, untilIso)
+  await writeKey(db, DAYO_KEYS.pushBackoffReason, 'rate_limited')
 }
 
 /** attempt 1 → 5 s … attempt ≥ 5 → 15 min, ±20 % (spec §6.3). `random` in [0, 1). */
@@ -58,16 +86,25 @@ export async function recordServerTime(db: RemoteDb, serverTimeIso: string, sent
 }
 
 /** outbox.last_error is JSON (plan 5 I-12); the detail is clipped by code points so the JSON stays whole. */
-export function encodeLastError(reason: string, detail: string, extra: { supportedHash?: string; farAhead?: true } = {}): string {
+/**
+ * requestFailed: the row was part of a request that failed (a provisional charge or its refund) — not a trusted probe.
+ * ownFailures: requests that carried only this row and failed (5xx / unknown 4xx / timeout / unreadable 200), counted
+ * whatever happened to its charge — at most once per OWN_FAILURE_EVERY_MS (ownFailedAt = the last counted one); STUCK at
+ * STUCK_AFTER_ATTEMPTS. Any verdict from dayo (a 200) starts it again.
+ */
+export type LastErrorExtra = { supportedHash?: string; farAhead?: true; noVerdict?: number; requestFailed?: true; ownFailures?: number; ownFailedAt?: string }
+/** final review I2: however often a wake clears the backoff, a row's own failures count at most once per 5 minutes. */
+export const OWN_FAILURE_EVERY_MS = 5 * 60_000
+export function encodeLastError(reason: string, detail: string, extra: LastErrorExtra = {}): string {
   return JSON.stringify({ reason: clipCodePoints(reason, 60), detail: clipCodePoints(detail, 500), ...extra })
 }
-export function decodeLastError(raw: string | null): { reason: string; detail: string; supportedHash?: string; farAhead?: true } {
+export function decodeLastError(raw: string | null): { reason: string; detail: string } & LastErrorExtra {
   if (raw === null) return { reason: '', detail: '' }
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { reason: '', detail: raw }
-    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown }
-    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}) }
+    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown; noVerdict?: unknown; requestFailed?: unknown; ownFailures?: unknown; ownFailedAt?: unknown }
+    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}), ...(typeof p.noVerdict === 'number' && Number.isSafeInteger(p.noVerdict) && p.noVerdict > 0 ? { noVerdict: p.noVerdict } : {}), ...(p.requestFailed === true ? { requestFailed: true as const } : {}), ...(typeof p.ownFailures === 'number' && Number.isSafeInteger(p.ownFailures) && p.ownFailures > 0 ? { ownFailures: p.ownFailures } : {}), ...(typeof p.ownFailedAt === 'string' && Number.isFinite(Date.parse(p.ownFailedAt)) ? { ownFailedAt: p.ownFailedAt } : {}) }
   } catch {
     return { reason: '', detail: raw }
   }

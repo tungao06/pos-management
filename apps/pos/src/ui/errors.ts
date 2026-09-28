@@ -50,6 +50,9 @@ export const MESSAGES: Record<PosErrorCode, string> = {
   PRICE_NOT_OK: 'ระบบกลางคิดราคาบิลนี้ไม่ได้ — ลบหรือแก้บรรทัดที่ขึ้นเตือนในตะกร้าก่อนชำระ',
   NO_PAYMENT_METHOD: 'ระบบกลางไม่ได้เปิดใช้วิธีชำระเงินนี้ — เลือกวิธีอื่น',
   QUEUE_FULL: 'เลขคิววันนี้ครบ 9999 แล้ว — ต้องเปิดกะใหม่จึงขายต่อได้',
+  // Task 15: owner remedies on "ส่งไม่ผ่าน" and the online-only E3 lists
+  REMEDY_NOT_ALLOWED: 'ใช้ทางแก้นี้กับรายการนี้ไม่ได้ — โหลดหน้า "ส่งไม่ผ่าน" ใหม่แล้วเลือกปุ่มที่มีให้',
+  OFFLINE: 'ต่อระบบกลางไม่ได้ตอนนี้ — ต้องออนไลน์จึงดูรายการนี้ได้ ลองใหม่อีกครั้ง',
 }
 
 /** dayo's `CartError` code → Thai. `UNKNOWN_VARIANT` is refined by `CartError.reason` below (never by parsing the
