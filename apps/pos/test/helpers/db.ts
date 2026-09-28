@@ -11,7 +11,7 @@ import type { ApiDeps } from '../../src/api/deps'
 import { PosError } from '../../src/api/errors'
 import { createPosApi } from '../../src/api/pos-api'
 import { PROMPTPAY_SETTING_KEY } from '../../src/api/setup'
-import { PAYMENT_CODE, REASON_MAX_LENGTH, type CommitSaleResult, type DeviceDto, type PosApi, type RecordSaleInput, type ShiftDto, type UserDto } from '../../src/api/types'
+import { PAYMENT_CODE, REASON_MAX_LENGTH, type DeviceDto, type PosApi, type RecordSaleInput, type RecordSaleResult, type ShiftDto, type UserDto } from '../../src/api/types'
 import { appendOrderEvents, type NewEvent } from '../../src/db/events'
 import { initDatabase } from '../../src/db/init'
 import { insertMovements, loadCostStates, makeCostOf } from '../../src/db/stock'
@@ -137,7 +137,7 @@ export async function sellCode(
   lines: { code: string; size?: Size; sweetness?: Sweetness; milk?: MilkCode; grade?: string | null; qty: number }[],
   payment: RecordSaleInput['payment'],
   extra: { billDiscountSatang?: number; reason?: string; channelCode?: string; actorUserId?: string; orderId?: string } = {},
-): Promise<CommitSaleResult> {
+): Promise<RecordSaleResult> {
   const cat = await t.api.loadSellCatalog()
   const cart: RecordSaleInput['cart'] = {
     channelCode: extra.channelCode ?? cat.defaultChannelCode, promoCode: null, skipPromotionIds: [], noPromotions: false,
@@ -180,7 +180,7 @@ export async function legacySale(
   qty: number,
   payment: { method: 'CASH'; tenderedSatang: number } | { method: 'PROMPTPAY' },
   discount: { amountSatang: number; reason: string } | null = null,
-): Promise<CommitSaleResult> {
+): Promise<RecordSaleResult> {
   const cleanDiscount = discount === null ? null : { amountSatang: discount.amountSatang, reason: discount.reason.trim() }
   if (cleanDiscount !== null && cleanDiscount.reason.length > REASON_MAX_LENGTH) throw new PosError('BAD_INPUT', `a reason is at most ${REASON_MAX_LENGTH} characters`)
 

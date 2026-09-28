@@ -1,7 +1,7 @@
-import type { CommitSaleResult } from '../../src/api/types'
+import type { RecordSaleResult } from '../../src/api/types'
 import { PINS, sellCode, type ReadyApi } from './db'
 
-export type Scenario = { cashVoided: CommitSaleResult; qrVoided: CommitSaleResult; cashKept: CommitSaleResult }
+export type Scenario = { cashVoided: RecordSaleResult; qrVoided: RecordSaleResult; cashKept: RecordSaleResult }
 
 /**
  * One shift of every kind of row (float ฿500 from openReadyApi), priced with the POS test catalog (e1-catalog-rich):
