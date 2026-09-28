@@ -252,7 +252,7 @@ async function existingCentralResult(db: RemoteDb, orderId: string, cart: CartDr
  * Highest receipt of this device's prefix seen here or by dayo for this key (spec §6.6: a reinstalled app never reuses
  * a number). A value of another prefix or shape counts as none — it must never stop selling.
  */
-async function lastReceiptNoOverall(db: RemoteDb, device: DeviceDto): Promise<string | null> {
+export async function lastReceiptNoOverall(db: RemoteDb, device: DeviceDto): Promise<string | null> {
   const counter = (r: string | null): number => (r !== null && RECEIPT_NO_RE.test(r) && parseReceiptNo(r).prefix === device.receiptPrefix ? parseReceiptNo(r).counter : 0)
   const local = await lastReceiptNo(db, device.id)
   const central = await readKey(db, DAYO_KEYS.lastReceiptNo)

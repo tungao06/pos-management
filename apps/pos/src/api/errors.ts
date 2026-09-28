@@ -40,6 +40,9 @@ export type PosErrorCode =
   | 'PRICE_NOT_OK' // dayo's pricing code refused the cart (unknown channel/code, closed promotion…) — detail = its warnings
   | 'NO_PAYMENT_METHOD' // the catalog from dayo does not offer this payment method (cash / qr)
   | 'QUEUE_FULL' // queue number 9999 was reached on this business day (ruling R13)
+  // block 2 Task 15 — owner remedies and E3 (spec 04 §4.6, §6.4)
+  | 'REMEDY_NOT_ALLOWED' // the row is not on the "ส่งไม่ผ่าน" page, or this fix does not fit its reason
+  | 'OFFLINE' // E3 (bot/web bills, dayo edits) needs dayo now: offline, refused key, API off, rate limit — detail = why
 
 /** Comlink forwards only name/message/stack, so the code travels as a "CODE: " message prefix. */
 export class PosError extends Error {

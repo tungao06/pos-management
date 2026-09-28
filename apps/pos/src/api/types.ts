@@ -187,7 +187,14 @@ export type OrderSummaryDto = {
   soldById: string
   soldByName: string
   central: CentralStateDto
+  /** The owner's latest edit/cancel of this bill on the dayo web (E3 dayo_edit), display only (spec 04 §4.6 · O1 pending). */
+  dayoEdit: DayoEditDto | null
 }
+/**
+ * What dayo reported in E3 `dayo_edit`. Display only: the bill's total, payment and status here stay what was collected
+ * (spec 04 §4.6). `editedByName` and `reason` are null for a key without staff:read; `version` may be null (contract).
+ */
+export type DayoEditDto = { kind: 'edit' | 'cancel' | string; editedAt: string; editedByName: string | null; reason: string | null; version: number | null }
 export type OrderLineDto = {
   lineNo: number
   productName: string
@@ -218,8 +225,27 @@ export type OrderDetailDto = OrderSummaryDto & {
   promotions: { name: string; discountSatang: number }[]
   lines: OrderLineDto[]
   events: OrderEventDto[]
+  /** false also when dayo reports the bill cancelled on its web (dayoEdit.kind 'cancel' — it cannot be cancelled twice). */
   voidable: boolean
 }
+
+// ---- ก้อน 2 Task 15: ทางแก้ของ owner (หน้า "ส่งไม่ผ่าน") · บิลบอท/เว็บวันนี้ (E3) · ยอดไม่ตรงระบบกลาง ----
+
+/** spec 04 §6.4: the owner's fixes of a row dayo refused (or of a far-ahead row, ruling N5 — EXCLUDE only). */
+export type Remedy = 'RETRY' | 'RENUMBER' | 'REMAP_CODE' | 'REMAP_STAFF' | 'EXCLUDE'
+/** One row of the "ส่งไม่ผ่าน" page. `children` = rows waiting on it (PARENT_REJECTED) — they come back with it. */
+export type SyncProblemDto = { outboxId: string; key: string; kind: 'order' | 'order_void'; orderId: string; receiptNo: string | null; at: string; reason: string; detail: string; remedies: Remedy[]; children: SyncProblemDto[] }
+/** Every remedy = an owner's PIN + a reason (spec §6.4). */
+export type OwnerApproval = { approverUserId: string; approverPin: string; reason: string }
+export type RemapCodeInput = OwnerApproval & { outboxId: string; target: { field: 'line'; lineIndex: number; code: string; size: Size; sweetness: Sweetness } | { field: 'channel'; code: string } | { field: 'payment'; code: string } }
+/** A bot / web bill of today from E3 (spec §4.6 — shown against double entry, Q44). */
+export type CentralOrderDto = { orderNo: string; source: 'line' | 'web' | string; sourceLabel: string; createdByName: string | null; soldAt: string | null; totalSatang: number; payment: string | null; status: string; duplicateSuspect: boolean }
+/**
+ * spec §4.3 "ยอดไม่ตรงระบบกลาง" (owner, R11). 'amount' = dayo's computed_total differs by any satang. 'void_local_only'
+ * (review item 23) = the bill reached dayo but its cancellation never will (EXCLUDE on the void row) — dayo still counts
+ * it as a sale; block 3 handles the money.
+ */
+export type PriceDiffDto = { kind: 'amount' | 'void_local_only'; orderId: string; receiptNo: string; soldAt: string; totalSatang: number; computedTotalSatang: number | null; diffSatang: number | null; catalogVersion: number | null; amountMismatch: boolean }
 
 export type VoidOrderInput = {
   orderId: string
@@ -501,6 +527,22 @@ export interface PosApi {
   /** "ส่งตอนนี้": one sync cycle now (E1 pull, then the push queue). Not in the serial queue — sales keep going. */
   syncNow(): Promise<SyncCycleResult>
   syncStatus(): Promise<SyncStatusDto>
+  // Task 15 (spec 04 §4.3, §4.6, §6.4). Owner-only reads check the role here too, not only in the UI (review item 22).
+  /** dead rows + far-ahead pending rows (N5), children under their parent · owner. */
+  listSyncProblems(actorUserId: string): Promise<SyncProblemDto[]>
+  retrySyncRow(input: OwnerApproval & { outboxId: string }): Promise<void>
+  renumberReceipt(input: OwnerApproval & { outboxId: string }): Promise<{ oldReceiptNo: string; newReceiptNo: string }>
+  remapCode(input: RemapCodeInput): Promise<void>
+  remapStaff(input: OwnerApproval & { outboxId: string; newStaffId: string }): Promise<void>
+  excludeFromSync(input: OwnerApproval & { outboxId: string }): Promise<void>
+  /** owner · pretty JSON of {key, kind, data, lastError, createdAt} — no API key, no PIN, no sync_state. */
+  exportSyncRow(input: { actorUserId: string; outboxId: string }): Promise<string>
+  /** every role (Q44) · online only (E3) — OFFLINE otherwise · the network wait is outside the serial queue. */
+  listCentralOrdersToday(): Promise<CentralOrderDto[]>
+  /** every role · E3 with updated_since: records dayo_edit of this tablet's bills (display only) · OFFLINE when it cannot. */
+  refreshDayoEdits(): Promise<{ updated: number }>
+  /** owner (R11). */
+  listPriceDiffs(actorUserId: string): Promise<PriceDiffDto[]>
 }
 
 /** Method names exposed through Comlink — must list every PosApi method (checked below). */
@@ -543,6 +585,16 @@ export const POS_API_METHODS = [
   'recoverOwner',
   'syncNow',
   'syncStatus',
+  'listSyncProblems',
+  'retrySyncRow',
+  'renumberReceipt',
+  'remapCode',
+  'remapStaff',
+  'excludeFromSync',
+  'exportSyncRow',
+  'listCentralOrdersToday',
+  'refreshDayoEdits',
+  'listPriceDiffs',
 ] as const
 
 type MissingMethods = Exclude<keyof PosApi, (typeof POS_API_METHODS)[number]>
