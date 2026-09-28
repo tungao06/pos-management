@@ -15,11 +15,7 @@ import { loadFixture } from './workbook.js'
 const GOLDEN_TOLERANCE_SATANG = 1
 
 describe('golden: 360 recipe costs vs Excel', () => {
-  it('matches every recipe exactly (rounding once over the BigInt sum reproduces Excel to the satang)', { timeout: 60_000 }, async () => {
-    // 60s, not the 5s default: this is the first test in the file to pay for parsing the ~360-recipe xlsx
-    // fixture (loadFixture() memoizes it for the other two tests below) — plenty fast locally (~2.4s for the
-    // whole file), but timed out on Cloudflare Workers Builds' CI machine (D107, the same file took 45.5s
-    // there). The assertion itself stays exact, never loosened (spec §8).
+  it('matches every recipe exactly (rounding once over the BigInt sum reproduces Excel to the satang)', async () => {
     const seed = buildSeed(await loadFixture())
     const catalog = seedCatalog(seed)
     const costOf = (itemCode: string) => standardUnitCostUsat(itemCode, catalog)
