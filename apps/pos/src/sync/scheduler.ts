@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import * as s from '@dayo/db-schema/sqlite'
 import { PUSH_KINDS } from '@dayo/contracts'
 import { pullCatalog, type CatalogPullResult, type SyncContext } from './catalog'
-import { clearFailureBackoff, MAX_ROUNDS_PER_CALL, pushOnce, type PushOutcome } from './push'
+import { clearFailureBackoff, hasClearableBackoff, MAX_ROUNDS_PER_CALL, pushOnce, type PushOutcome } from './push'
 import { DAYO_KEYS, readKey, writeKey } from './state'
 
 export type WakeReason = 'open' | 'write' | 'online' | 'timer' | 'manual' | 'before_shift' | 'before_close'
@@ -135,7 +135,8 @@ export function createSyncScheduler(ctx: SyncContext & { timers?: Timers; locks?
   }
   /** 'online' forgets only an offline tablet's backoff (item 4); manual / open / before_close any failure backoff, under N4. */
   async function clearBackoffFor(reasons: ReadonlySet<WakeReason>): Promise<void> {
-    if ([...reasons].some((r) => CLEARS_WITH_N4.has(r)) && (await takeClearToken())) {
+    // final review M3: the 30 s window is used only when there is a failure backoff to clear
+    if ([...reasons].some((r) => CLEARS_WITH_N4.has(r)) && (await ctx.serial(() => hasClearableBackoff(ctx.db))) && (await takeClearToken())) {
       await ctx.serial(() => clearFailureBackoff(ctx.db))
       return
     }

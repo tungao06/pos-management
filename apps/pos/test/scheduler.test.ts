@@ -62,14 +62,16 @@ describe('sync scheduler (spec 04 §6.2)', () => {
     t.mock.setMode('server_down')
     // fix round 1 item 5: the 30 s window runs on a monotonic clock; here it moves with the test clock
     const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
+    await pushOnce({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+    expect(pushes(t)).toBe(1)                // 5xx → a failure backoff to clear
     await sch.runNow()
-    expect(pushes(t)).toBe(1)                // cleared (nothing to clear), tried, 5xx → backoff
+    expect(pushes(t)).toBe(2)                // cleared, tried, 5xx → backoff again
     t.clock.advanceMs(1_000)
     await sch.runNow()
-    expect(pushes(t)).toBe(1)                // pressed again 1 s later: the backoff holds, dayo is not hit
+    expect(pushes(t)).toBe(2)                // pressed again 1 s later: the backoff holds, dayo is not hit
     t.clock.advanceMs(MANUAL_CLEAR_GAP_MS)
     await sch.runNow()
-    expect(pushes(t)).toBe(2)                // 30 s after the last clear it may clear again
+    expect(pushes(t)).toBe(3)                // 30 s after the last clear it may clear again
   })
   it('online wakes it at once; a second wake during a cycle runs one more cycle, never two in parallel', async () => {
     const t = await openConnectedApi()
@@ -237,6 +239,7 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     const t = await openConnectedApi()
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     t.mock.setMode('server_down')
+    await failureBackoff(t, 'failure')
     await createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() }).runNow() // clears, tries, fails
     t.mock.setMode('normal')
     await failureBackoff(t, 'failure')
@@ -254,13 +257,28 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     let mono = 0
     const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => mono })
     t.mock.setMode('server_down')
-    await sch.runNow()
+    await failureBackoff(t, 'failure')
+    await sch.runNow() // clears, tries, fails
     t.mock.setMode('normal')
     await failureBackoff(t, 'failure')
     t.clock.advanceMs(60_000) // the wall clock jumps; no real time passed
     await sch.runNow()
     expect(pushes(t)).toBe(1)
     mono += MANUAL_CLEAR_GAP_MS
+    await sch.runNow()
+    expect(pushes(t)).toBe(2)
+  })
+  it('a press with nothing to clear does not use up the 30 s window (final review M3)', async () => {
+    const t = await openConnectedApi()
+    await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.setMode('server_down')
+    const sch = createSyncScheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
+    await sch.runNow() // no backoff yet: nothing cleared, tried, 5xx
+    expect(pushes(t)).toBe(1)
+    t.clock.advanceMs(1_000)
+    await sch.runNow() // the window was not used: this press clears the new backoff
+    expect(pushes(t)).toBe(2)
+    t.clock.advanceMs(1_000)
     await sch.runNow()
     expect(pushes(t)).toBe(2)
   })

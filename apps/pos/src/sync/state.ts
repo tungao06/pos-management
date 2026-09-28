@@ -56,6 +56,16 @@ export async function deleteKey(db: RemoteDb, key: string): Promise<void> {
   await db.delete(s.syncState).where(eq(s.syncState.key, key))
 }
 
+/**
+ * A 429 of the key (E1 or E2): the shared backoff becomes 'rate_limited' — until the LATER of the one already set and
+ * this one, so a short Retry-After never shortens a longer wait (final review M1).
+ */
+export async function extendRateLimit(db: RemoteDb, untilIso: string): Promise<void> {
+  const current = Date.parse((await readKey(db, DAYO_KEYS.pushBackoffUntil)) ?? '')
+  if (!(Number.isFinite(current) && current > Date.parse(untilIso))) await writeKey(db, DAYO_KEYS.pushBackoffUntil, untilIso)
+  await writeKey(db, DAYO_KEYS.pushBackoffReason, 'rate_limited')
+}
+
 /** attempt 1 → 5 s … attempt ≥ 5 → 15 min, ±20 % (spec §6.3). `random` in [0, 1). */
 export function backoffMs(attempt: number, random: () => number): number {
   const base = BACKOFF_MS[Math.min(Math.max(attempt, 1), BACKOFF_MS.length) - 1]!
@@ -75,9 +85,12 @@ export async function recordServerTime(db: RemoteDb, serverTimeIso: string, sent
 /**
  * requestFailed: the row was part of a request that failed (a provisional charge or its refund) — not a trusted probe.
  * ownFailures: requests that carried only this row and failed (5xx / unknown 4xx / timeout / unreadable 200), counted
- * whatever happened to its charge; STUCK at STUCK_AFTER_ATTEMPTS. Any verdict from dayo (a 200) starts it again.
+ * whatever happened to its charge — at most once per OWN_FAILURE_EVERY_MS (ownFailedAt = the last counted one); STUCK at
+ * STUCK_AFTER_ATTEMPTS. Any verdict from dayo (a 200) starts it again.
  */
-export type LastErrorExtra = { supportedHash?: string; farAhead?: true; noVerdict?: number; requestFailed?: true; ownFailures?: number }
+export type LastErrorExtra = { supportedHash?: string; farAhead?: true; noVerdict?: number; requestFailed?: true; ownFailures?: number; ownFailedAt?: string }
+/** final review I2: however often a wake clears the backoff, a row's own failures count at most once per 5 minutes. */
+export const OWN_FAILURE_EVERY_MS = 5 * 60_000
 export function encodeLastError(reason: string, detail: string, extra: LastErrorExtra = {}): string {
   return JSON.stringify({ reason: clipCodePoints(reason, 60), detail: clipCodePoints(detail, 500), ...extra })
 }
@@ -86,8 +99,8 @@ export function decodeLastError(raw: string | null): { reason: string; detail: s
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { reason: '', detail: raw }
-    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown; noVerdict?: unknown; requestFailed?: unknown; ownFailures?: unknown }
-    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}), ...(typeof p.noVerdict === 'number' && Number.isSafeInteger(p.noVerdict) && p.noVerdict > 0 ? { noVerdict: p.noVerdict } : {}), ...(p.requestFailed === true ? { requestFailed: true as const } : {}), ...(typeof p.ownFailures === 'number' && Number.isSafeInteger(p.ownFailures) && p.ownFailures > 0 ? { ownFailures: p.ownFailures } : {}) }
+    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown; noVerdict?: unknown; requestFailed?: unknown; ownFailures?: unknown; ownFailedAt?: unknown }
+    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}), ...(typeof p.noVerdict === 'number' && Number.isSafeInteger(p.noVerdict) && p.noVerdict > 0 ? { noVerdict: p.noVerdict } : {}), ...(p.requestFailed === true ? { requestFailed: true as const } : {}), ...(typeof p.ownFailures === 'number' && Number.isSafeInteger(p.ownFailures) && p.ownFailures > 0 ? { ownFailures: p.ownFailures } : {}), ...(typeof p.ownFailedAt === 'string' && Number.isFinite(Date.parse(p.ownFailedAt)) ? { ownFailedAt: p.ownFailedAt } : {}) }
   } catch {
     return { reason: '', detail: raw }
   }

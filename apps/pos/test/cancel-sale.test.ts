@@ -107,6 +107,19 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
     t.clock.set('2026-09-25T16:54:00.000Z') // and is then set back one more minute
     expect((await t.api.getOrder(yesterday.orderId)).voidable).toBe(false)
   })
+  it('a clock rolled back a day after a skew of 0 was measured, then offline, cannot reopen yesterday\'s bill (final review I1)', async () => {
+    const t = await openConnectedApi({ now: '2026-09-24T16:50:00.000Z' }) // 23:50 Bangkok, 24 Sep
+    const yesterday = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.clock.set('2026-09-25T02:00:00.000Z') // 09:00, 25 Sep, same open shift, no sale yet today
+    t.mock.setNow('2026-09-25T02:00:00.000Z')
+    await t.api.syncNow() // skew 0, measured this morning
+    t.mock.setMode('hang')
+    t.clock.set('2026-09-24T16:55:00.000Z') // staff roll the clock back to last night and stay offline
+    expect((await t.api.getOrder(yesterday.orderId)).voidable).toBe(false)
+    const before = await t.db.select().from(s.outbox).all()
+    try { await t.api.cancelSale({ orderId: yesterday.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'x', made: false, refundReference: 'K' }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('VOID_NOT_ALLOWED') }
+    expect(await t.db.select().from(s.outbox).all()).toEqual(before)
+  })
   it('the server time only judges the day: voided_at stays on the tablet clock (spec §6.7)', async () => {
     const t = await openConnectedApi()
     const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })

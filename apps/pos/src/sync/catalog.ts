@@ -6,7 +6,7 @@ import { toPricingCatalog, type PosOrderCatalog } from '@dayo/domain'
 import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 import type { ApiDeps } from '../api/deps'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from './dayo-client'
-import { API_DISABLED_RETRY_MS, backoffMs, DAYO_KEYS, deleteKey, MAX_BACKOFF_WAIT_MS, RATE_LIMIT_DEFAULT_MS, readKey, recordServerTime, writeKey } from './state'
+import { API_DISABLED_RETRY_MS, backoffMs, DAYO_KEYS, deleteKey, extendRateLimit, MAX_BACKOFF_WAIT_MS, RATE_LIMIT_DEFAULT_MS, readKey, recordServerTime, writeKey } from './state'
 
 export type SyncContext = { db: RemoteDb; deps: ApiDeps; serial: <T>(fn: () => Promise<T>) => Promise<T> }
 export type StoredCatalog = { catalogVersion: number; catalog: PosOrderCatalog; staff: StaffEntry[]; client: { name: string; last_receipt_no: string | null } | null; fetchedAt: string }
@@ -181,8 +181,7 @@ export async function rateLimitLeft(db: RemoteDb, nowIso: string): Promise<numbe
 async function recordCatalogBackoff(db: RemoteDb, deps: ApiDeps, f: DayoFailure): Promise<void> {
   const now = deps.now()
   if (f.kind === 'rate_limited') {
-    await writeKey(db, DAYO_KEYS.pushBackoffUntil, new Date(Date.parse(now) + Math.min(f.retryAfterMs, MAX_BACKOFF_WAIT_MS)).toISOString())
-    await writeKey(db, DAYO_KEYS.pushBackoffReason, 'rate_limited')
+    await extendRateLimit(db, new Date(Date.parse(now) + Math.min(f.retryAfterMs, MAX_BACKOFF_WAIT_MS)).toISOString()) // never shortens (M1)
     return
   }
   if (f.kind !== 'network' && f.kind !== 'timeout' && f.kind !== 'server' && f.kind !== 'bad_response') return // refusals: apiBlocked

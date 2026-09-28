@@ -693,6 +693,58 @@ describe('pushOnce — a failed row is charged only when dayo shows it is up', (
     await pushOnce(ctx)
     expect(sent.slice(before, before + 2)).toEqual([[poison!.idempotencyKey], [fresh!.idempotencyKey]]) // the probe skips the legacy row
   })
+  it('a row\'s own failures count at most once per 5 minutes, however often the backoff is cleared (final review I2)', async () => {
+    const { t } = await ready()
+    await cocoa(t)
+    const ctx = withFetch(t, poisonFetch(t, ['A-000001']))
+    const own = async () => JSON.parse((await outbox(t))[0]!.lastError!).ownFailures as number
+    await pushOnce(ctx)
+    expect(await own()).toBe(1)
+    for (let i = 0; i < 10; i++) { // "ส่งตอนนี้" / reopening the app over and over: every press clears the backoff
+      t.clock.advanceMs(20_000)
+      await clearFailureBackoff(t.db)
+      expect(await pushOnce(ctx)).toMatchObject({ requests: 1, stopped: 'server' })
+    }
+    expect(await own()).toBe(1) // 200 s of failures = still one
+    t.clock.advanceMs(100_000) // 5 minutes since the counted one
+    await clearFailureBackoff(t.db)
+    await pushOnce(ctx)
+    expect(await own()).toBe(2)
+  })
+  describe('only the row\'s own kind of failure counts, and any verdict from dayo starts the count again (final review M2)', () => {
+    const withOwn = async (t: Awaited<ReturnType<typeof ready>>['t'], n: number) => {
+      const row = (await outbox(t))[0]!
+      await t.db.update(s.outbox).set({ lastError: encodeLastError(REQUEST_FAILED, 'HTTP 500', { requestFailed: true, ownFailures: n, ownFailedAt: '2026-09-25T02:00:00.000Z' }) }).where(eq(s.outbox.id, row.id))
+    }
+    const dayoError = (status: number, code: string): typeof fetch => async () => new Response(JSON.stringify({ ok: false, error: { code, message: 'x' } }), { status })
+    it.each([
+      ['offline', (async () => { throw new TypeError('Failed to fetch') }) as typeof fetch, 'network'],
+      ['429', answer429('30'), 'rate_limited'],
+      ['401', dayoError(401, 'DY401'), 'unauthorized'],
+      ['404', dayoError(404, 'DY404'), 'api_disabled'],
+    ] as const)('a solo row that meets %s keeps its own count', async (_, f, stopped) => {
+      const { t } = await ready()
+      await cocoa(t)
+      await withOwn(t, 3)
+      expect((await pushOnce(withFetch(t, f))).stopped).toBe(stopped)
+      expect(JSON.parse((await outbox(t))[0]!.lastError!)).toMatchObject({ ownFailures: 3 })
+    })
+    it('a deferred verdict clears it', async () => {
+      const { t, ctx } = await ready()
+      const r = await cocoa(t)
+      await withOwn(t, 3)
+      t.mock.override({ match: { receiptNo: r.receiptNo }, verdict: { status: 'deferred', reason: 'SERVER_ERROR', detail: 'x' }, times: 1 })
+      expect(await pushOnce(ctx)).toMatchObject({ deferred: 1 })
+      expect(JSON.parse((await outbox(t))[0]!.lastError!).ownFailures).toBeUndefined()
+    })
+    it('an answer with no verdict for it clears it', async () => {
+      const { t } = await ready()
+      await cocoa(t)
+      await withOwn(t, 3)
+      expect(await pushOnce(withFetch(t, rewriting(t, (rs) => { rs.length = 0 })))).toMatchObject({ noAnswer: 1 })
+      expect(JSON.parse((await outbox(t))[0]!.lastError!).ownFailures).toBeUndefined()
+    })
+  })
 })
 
 describe('pushOnce — good rows pass a run of failing rows', () => {

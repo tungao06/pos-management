@@ -193,6 +193,16 @@ describe('pullCatalog (spec 04 §4.4, §6.5)', () => {
     t.clock.advanceMs(1)
     expect((await pullCatalog(ctx)).outcome).toBe('changed')
   })
+  it('a 429 on E1 never shortens a longer backoff already set for the key (final review M1)', async () => {
+    const { ctx, t, mock } = await linked()
+    const longer = new Date(Date.parse(t.clock.now()) + 600_000).toISOString()
+    await writeKey(t.db, DAYO_KEYS.pushBackoffUntil, longer)
+    await writeKey(t.db, DAYO_KEYS.pushBackoffReason, 'failure')
+    mock.setMode('rate_limited') // Retry-After: 30
+    expect((await pullCatalog(ctx)).failure?.kind).toBe('rate_limited')
+    expect(await readKey(t.db, DAYO_KEYS.pushBackoffUntil)).toBe(longer)
+    expect(await readKey(t.db, DAYO_KEYS.pushBackoffReason)).toBe('rate_limited') // and no wake may clear it now
+  })
   it('a proxy or WAF 403 without dayo\'s error body is a failed pull, not a refused key (task 14 item 3)', async () => {
     const { ctx, t } = await linked()
     const waf = { ...ctx, deps: { ...t.deps, fetch: (async () => new Response('<html>403 Forbidden</html>', { status: 403 })) as typeof fetch } }
