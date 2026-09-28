@@ -4,9 +4,10 @@ import * as s from '@dayo/db-schema/sqlite'
 import { OrderVoidRowData } from '@dayo/contracts'
 import { verifyChain } from '@dayo/domain'
 import { posErrorCode } from '../src/api/errors'
+import type { CancelSaleInput } from '../src/api/types'
 import { loadDeviceChain } from '../src/db/events'
 import { openConnectedApi, STAFF } from './helpers/dayo'
-import { openReadyApi, sellCode, legacySale } from './helpers/db'
+import { openReadyApi, PINS, sellCode, legacySale, type ReadyApi } from './helpers/db'
 
 const approve = { approverUserId: STAFF.DCm, approverPin: '2222' }
 
@@ -193,6 +194,69 @@ describe('cancelSale (spec 04 §4.5 order_void, §4.7, D36)', () => {
     expect((await t.db.select().from(s.order).where(eq(s.order.id, legacy.orderId)).get())?.status).toBe('paid')
     expect(await t.db.select().from(s.stockMovement).where(eq(s.stockMovement.kind, 'VOID_RETURN')).all()).toEqual([])
   })
+  describe('a plan-3 bill (no sold_at) — the voidWithStock path', () => {
+    const legacyInput = (t: ReadyApi, orderId: string, patch: Partial<CancelSaleInput> = {}): CancelSaleInput => ({
+      orderId, actorUserId: t.owner.id, approverUserId: t.other.id, approverPin: PINS.DCm, reason: 'กดผิดเมนู', made: false, refundReference: null, ...patch,
+    })
+    const counts = (t: ReadyApi): Record<string, number> => {
+      const out: Record<string, number> = {}
+      for (const table of ['order', 'stock_movement', 'item_cost_state', 'cash_movement', 'order_event', 'outbox']) {
+        out[table] = (t.raw.prepare(`select count(*) as c from "${table}"`).get() as { c: number }).c
+      }
+      return out
+    }
+    const voidReturns = async (t: ReadyApi, orderId: string) => t.db.select().from(s.stockMovement).where(and(eq(s.stockMovement.refId, orderId), eq(s.stockMovement.kind, 'VOID_RETURN'))).all()
+
+    // Every refusal in cancelSale is thrown before the first write, so "nothing changed" after one of them would pass
+    // even without a transaction. Force a failure after the order update, the VOID_RETURN movements, the cost cache,
+    // the cash refund, its local_only queue row and the VOIDED event are all written, and prove it all rolls back.
+    it('a failure after rows are written rolls back everything, including item_cost_state and the order status', async () => {
+      const t = await openReadyApi()
+      const sale = await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 })
+      const before = counts(t)
+      const ics = t.raw.prepare('select * from item_cost_state order by item_id').all()
+      const bill = t.raw.prepare('select * from "order" where id = ?').get(sale.orderId)
+      t.raw.exec("CREATE TRIGGER boom BEFORE INSERT ON order_event WHEN new.type = 'STOCK_RETURNED' BEGIN SELECT RAISE(ABORT, 'boom'); END;")
+      // drizzle's sqlite-proxy wraps the driver error as DrizzleQueryError and keeps the original ("boom") on .cause
+      const err: unknown = await t.api.cancelSale(legacyInput(t, sale.orderId)).catch((e: unknown) => e)
+      expect(err).toBeInstanceOf(Error)
+      expect((err as Error & { cause?: unknown }).cause).toMatchObject({ message: expect.stringContaining('boom') })
+      expect(counts(t)).toEqual(before)
+      expect(t.raw.prepare('select * from item_cost_state order by item_id').all()).toEqual(ics)
+      expect(t.raw.prepare('select * from "order" where id = ?').get(sale.orderId)).toEqual(bill)
+      t.raw.exec('DROP TRIGGER boom')
+      expect((await t.api.cancelSale(legacyInput(t, sale.orderId))).status).toBe('voided')
+      expect(verifyChain(await loadDeviceChain(t.db, t.device.id))).toEqual({ ok: true })
+    })
+
+    it('a concurrent double cancel voids once: one refund, one VOID_RETURN set, one VOIDED event', async () => {
+      const t = await openReadyApi()
+      const sale = await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 })
+      const saleRows = (await t.db.select().from(s.stockMovement).where(and(eq(s.stockMovement.refId, sale.orderId), eq(s.stockMovement.kind, 'SALE'))).all()).length
+      expect(saleRows).toBeGreaterThan(0)
+      const results = await Promise.allSettled([t.api.cancelSale(legacyInput(t, sale.orderId)), t.api.cancelSale(legacyInput(t, sale.orderId))])
+      expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected'])
+      expect(posErrorCode((results[1] as PromiseRejectedResult).reason)).toBe('VOID_NOT_ALLOWED')
+      expect((await t.db.select().from(s.cashMovement).all()).map((c) => [c.kind, c.amountSatang])).toEqual([['VOID_REFUND', 4_500]])
+      expect(await voidReturns(t, sale.orderId)).toHaveLength(saleRows) // every SALE row comes back once, not twice
+      expect((await t.db.select().from(s.orderEvent).where(and(eq(s.orderEvent.orderId, sale.orderId), eq(s.orderEvent.type, 'VOIDED'))).all())).toHaveLength(1)
+      expect(verifyChain(await loadDeviceChain(t.db, t.device.id))).toEqual({ ok: true })
+    })
+
+    // PIN_LOCKED itself is covered for requireOwnerPin in setup-auth.test.ts — this guards the wiring on this path.
+    it('returns PIN_LOCKED once the approver PIN lockout trips, and writes nothing', async () => {
+      const t = await openReadyApi()
+      const sale = await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4_500 })
+      for (let i = 0; i < 4; i++) await expect(t.api.cancelSale(legacyInput(t, sale.orderId, { approverPin: '9999' }))).rejects.toThrow(/^PIN_WRONG: /)
+      const before = counts(t)
+      await expect(t.api.cancelSale(legacyInput(t, sale.orderId, { approverPin: '9999' }))).rejects.toThrow(/^PIN_LOCKED: 30$/)
+      await expect(t.api.cancelSale(legacyInput(t, sale.orderId))).rejects.toThrow(/^PIN_LOCKED: 30$/) // even the right PIN, while locked
+      expect(counts(t)).toEqual(before)
+      expect((await t.db.select().from(s.order).where(eq(s.order.id, sale.orderId)).get())?.status).toBe('paid')
+      expect(await voidReturns(t, sale.orderId)).toEqual([])
+    })
+  })
+
   it('a bill closed as outside dayo queues no order_void', async () => {
     const t = await openConnectedApi()
     const excluded = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
