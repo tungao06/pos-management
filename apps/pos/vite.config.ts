@@ -25,9 +25,11 @@ function readShortCommit(): string {
   const ci = process.env['WORKERS_CI_COMMIT_SHA']?.trim()
   if (ci) return ci.slice(0, 7)
   try {
-    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: APP_DIR, stdio: ['ignore', 'pipe', 'ignore'] })
+    // full hash sliced to 7, exactly like scripts/deploy.mjs — `--short` may grow past 7 in a bigger repo
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: APP_DIR, stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
       .trim()
+      .slice(0, 7)
   } catch {
     return 'dev'
   }
