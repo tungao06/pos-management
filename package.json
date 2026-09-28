@@ -11,7 +11,8 @@
     "typecheck": "turbo run typecheck",
     "build": "turbo run build",
     "release:build": "node scripts/deploy.mjs build",
-    "release:deploy": "node scripts/deploy.mjs deploy"
+    "release:deploy": "node scripts/deploy.mjs deploy",
+    "release:version": "node scripts/release-version.mjs"
   },
   "devDependencies": {
     "turbo": "^2.10.0",

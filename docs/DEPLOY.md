@@ -36,6 +36,16 @@
 6. ⛔ ทำ dayo `docs/SETUP.md` **ส่วน 17** (สร้าง API key พร้อม QR · เงื่อนไขก่อนตั้ง `API_V1_ENABLED=1`)
 7. บนแท็บเล็ต: เปิด origin ของ POS ใน Chrome → เมนู ⋮ → **ติดตั้งแอป** → เปิดจากไอคอน → หน้าตั้งค่า ใส่ที่อยู่ dayo + สแกน QR คีย์
 
+## ตรวจว่ากำลังใช้ version ไหน
+- ในแอป: มุมขวาบนของแถบแบรนด์ (ทุกจอ) โชว์ย่อ `vX.Y.Z · commit` · หน้า **สถานะระบบ** (`/status`) โชว์เต็ม (version, commit, เวลา build)
+- จาก URL (ไม่ต้องเปิดแอป): `https://<origin ของ POS>/version.json` — ไม่ถูกแคช อัปเดตทุก deploy
+- **commit ระบุ deploy ที่แน่นอนเสมอ แม้ไม่ได้ขึ้น version ใหม่** — สอง deploy ที่ version เดียวกัน (เช่นแก้บั๊กเล็กแล้ว push โดยไม่ bump) จะแยกกันได้ด้วย commit เท่านั้น
+
+## ขึ้น version ใหม่ก่อน release
+1. ⛔/ปกติ ที่ root: `pnpm release:version patch|minor|major` (patch = แก้บั๊ก, minor = ฟีเจอร์ใหม่ที่เข้ากันได้, major = เปลี่ยนที่กระทบผู้ใช้มาก) → แก้แค่ `apps/pos/package.json` เท่านั้น ไม่แตะ git
+2. ตรวจ diff แล้ว commit ตามปกติ (กฎเหล็กข้อ 9) → push/merge เข้า `main` ตามขั้นตอนเดิม
+3. ไม่ bump ก็ deploy ได้เหมือนกัน — commit hash ยังบอกได้ว่าเป็นรุ่นไหน แค่ตัวเลข version จะซ้ำกับรุ่นก่อน
+
 ## ทุกครั้งหลังจากนี้
 - merge เข้า `main` (กฎเหล็กข้อ 10) → Cloudflare build + deploy เอง → ห้อง `#dayo-ระบบ` ได้ 🚀 **DEPLOY · POS v…** หรือ ❌ **DEPLOY FAILED** + @here (ระบบยังรันรุ่นเดิม ไม่กระทบร้าน)
 - แท็บเล็ตได้รุ่นใหม่เองตอนเปิดแอปครั้งถัดไปที่มีเน็ต (service worker `autoUpdate`) · ไม่ต้องติดตั้งใหม่ · ข้อมูลในเครื่องไม่หาย
