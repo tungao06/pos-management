@@ -73,7 +73,9 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
     let body: unknown = null
     try { body = text === '' ? null : JSON.parse(text) } catch { body = null }
     if (res.status === 401) throw new DayoError({ kind: 'unauthorized' })
-    if (res.status === 403) throw new DayoError({ kind: 'forbidden' })
+    // task 14 item 3: only dayo's own error body means "this key lacks a scope" — a proxy / WAF 403 in front of dayo is a
+    // server failure (backoff and retry), never a stop of every call until a new key
+    if (res.status === 403) throw new DayoError(ApiErrorBody.safeParse(body).success ? { kind: 'forbidden' } : { kind: 'server', status: 403 })
     if (res.status === 404) throw new DayoError({ kind: 'api_disabled' }) // any 404 under /api/v1 = API switched off (spec §4.1)
     if (res.status === 422) throw new DayoError({ kind: 'bad_envelope', message: ApiErrorBody.safeParse(body).data?.error.message ?? 'DY422' })
     if (res.status === 429) {

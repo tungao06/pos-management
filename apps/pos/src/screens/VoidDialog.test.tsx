@@ -7,6 +7,7 @@ import type { BootstrapState, OrderDetailDto, PosApi, UserDto } from '../api/typ
 import { ApiProvider } from '../app/api-context'
 import { shiftReportKey, stockKey } from '../app/queries'
 import { SessionProvider, useSession } from '../app/session'
+import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { VoidDialog } from './VoidDialog'
 
 afterEach(() => cleanup())
@@ -55,6 +56,7 @@ const BOOT: BootstrapState = {
   dayoBaseUrl: 'https://dayo.example/api/v1',
   staffNeedingPin: [],
   ownerRecovery: false,
+  sync: HEALTHY_SYNC,
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

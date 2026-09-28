@@ -7,6 +7,7 @@ import type { BootstrapState, MenuDto, PosApi, StockOverviewDto, UserDto } from 
 import { ApiProvider } from '../app/api-context'
 import { CartProvider } from '../app/cart-context'
 import { SessionProvider, useSession } from '../app/session'
+import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { TH } from '../ui/th'
 import { SellScreen } from './SellScreen'
 
@@ -44,6 +45,7 @@ function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
     dayoBaseUrl: 'https://dayo.example/api/v1',
     staffNeedingPin: [],
     ownerRecovery: false,
+    sync: HEALTHY_SYNC,
     ...overrides,
   }
 }

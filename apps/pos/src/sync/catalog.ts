@@ -6,11 +6,12 @@ import { toPricingCatalog, type PosOrderCatalog } from '@dayo/domain'
 import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 import type { ApiDeps } from '../api/deps'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from './dayo-client'
-import { API_DISABLED_RETRY_MS, DAYO_KEYS, deleteKey, readKey, recordServerTime, writeKey } from './state'
+import { API_DISABLED_RETRY_MS, backoffMs, DAYO_KEYS, deleteKey, extendRateLimit, MAX_BACKOFF_WAIT_MS, RATE_LIMIT_DEFAULT_MS, readKey, recordServerTime, writeKey } from './state'
 
 export type SyncContext = { db: RemoteDb; deps: ApiDeps; serial: <T>(fn: () => Promise<T>) => Promise<T> }
 export type StoredCatalog = { catalogVersion: number; catalog: PosOrderCatalog; staff: StaffEntry[]; client: { name: string; last_receipt_no: string | null } | null; fetchedAt: string }
-export type CatalogPullResult = { outcome: 'changed' | 'unchanged' | 'catalog_rejected' | 'not_linked' | 'blocked' | 'failed'; failure?: DayoFailure }
+/** 'backoff' (fix round 1 item 3): E1's own failure backoff, or a 429 Retry-After of this key, is still running — no request. */
+export type CatalogPullResult = { outcome: 'changed' | 'unchanged' | 'catalog_rejected' | 'not_linked' | 'blocked' | 'backoff' | 'failed'; failure?: DayoFailure }
 
 export async function readDayoConfig(db: RemoteDb, deps: ApiDeps): Promise<{ baseUrl: string; apiKey: string } | null> {
   const baseUrl = await readKey(db, DAYO_KEYS.baseUrl)
@@ -96,10 +97,14 @@ async function applyStaff(tx: RemoteDb, deps: ApiDeps, staff: StaffEntry[], at: 
   return 'applied'
 }
 
-/** spec §6.3: 401/403 stop EVERY call to dayo (catalog, push, E3) until a new key; 404 waits for its retry time. */
+/**
+ * spec §6.3: 401/403 stop EVERY call to dayo (catalog, push, E3) until a new key; 404 waits for its retry time.
+ * task 14 item 2: a stored base URL the client refused (`bad_base_url`) is the same kind of stop — no request, no
+ * backoff retry — until re-linking (connectShop / replaceApiKey / recoverOwner) writes api_state ok.
+ */
 export async function apiBlocked(db: RemoteDb, nowIso: string): Promise<boolean> {
   const state = await readKey(db, DAYO_KEYS.apiState)
-  if (state === 'unauthorized' || state === 'forbidden') return true
+  if (state === 'unauthorized' || state === 'forbidden' || state === 'bad_base_url') return true
   return state === 'disabled' && ((await readKey(db, DAYO_KEYS.apiRetryAt)) ?? '') > nowIso
 }
 
@@ -119,6 +124,9 @@ export async function writeCatalogAnswer(tx: RemoteDb, deps: ApiDeps, data: PosC
   await writeKey(tx, DAYO_KEYS.apiState, 'ok')
   await deleteKey(tx, DAYO_KEYS.apiRetryAt)
   await writeKey(tx, DAYO_KEYS.catalogCheckedAt, at)
+  await deleteKey(tx, DAYO_KEYS.catalogFailStreak) // a 200 ends E1's failure backoff (not a 429's Retry-After — that runs out)
+  await deleteKey(tx, DAYO_KEYS.catalogBackoffUntil)
+  await deleteKey(tx, DAYO_KEYS.catalogBackoffReason)
   if (!data.changed) {
     if ((await readKey(tx, DAYO_KEYS.catalogError))?.startsWith(BAD_RESPONSE) === true) await deleteKey(tx, DAYO_KEYS.catalogError)
     return 'unchanged'
@@ -150,13 +158,51 @@ export async function recordDayoFailure(db: RemoteDb, deps: ApiDeps, f: DayoFail
     await writeKey(db, DAYO_KEYS.apiRetryAt, new Date(Date.parse(deps.now()) + API_DISABLED_RETRY_MS).toISOString())
   } else if (f.kind === 'bad_base_url') await writeKey(db, DAYO_KEYS.apiState, 'bad_base_url')
   else if (f.kind === 'bad_response') await writeKey(db, DAYO_KEYS.catalogError, `${BAD_RESPONSE}: ${f.message}`)
-  // network / server / rate_limited: nothing to remember here — the scheduler backs off (Task 14)
+  // network / timeout / server / rate_limited: E1's backoff is recorded by pullCatalog (recordCatalogBackoff); E2 has its own
+}
+
+/** The time left on a stored backoff; an unreadable or out-of-range value (a restored backup) waits the default 60 s. */
+async function backoffLeft(db: RemoteDb, key: string, nowIso: string): Promise<number> {
+  const until = await readKey(db, key)
+  if (until === null) return 0
+  const left = Date.parse(until) - Date.parse(nowIso)
+  if (Number.isFinite(left) && left <= MAX_BACKOFF_WAIT_MS) return left
+  await writeKey(db, key, new Date(Date.parse(nowIso) + RATE_LIMIT_DEFAULT_MS).toISOString())
+  return RATE_LIMIT_DEFAULT_MS
+}
+
+/** A 429 from E1 or E2 is for the whole key (dayo counts every route together): it holds E1, E2 and E3 alike. */
+export async function rateLimitLeft(db: RemoteDb, nowIso: string): Promise<number> {
+  if ((await readKey(db, DAYO_KEYS.pushBackoffReason)) !== 'rate_limited') return 0
+  return backoffLeft(db, DAYO_KEYS.pushBackoffUntil, nowIso)
+}
+
+/** fix round 1 item 3: E1 backs off on its own failures (5 s … 15 min, like spec §6.3) and on a 429 of the key. */
+async function recordCatalogBackoff(db: RemoteDb, deps: ApiDeps, f: DayoFailure): Promise<void> {
+  const now = deps.now()
+  if (f.kind === 'rate_limited') {
+    await extendRateLimit(db, new Date(Date.parse(now) + Math.min(f.retryAfterMs, MAX_BACKOFF_WAIT_MS)).toISOString()) // never shortens (M1)
+    return
+  }
+  if (f.kind !== 'network' && f.kind !== 'timeout' && f.kind !== 'server' && f.kind !== 'bad_response') return // refusals: apiBlocked
+  const streak = Number((await readKey(db, DAYO_KEYS.catalogFailStreak)) ?? '0') + 1
+  await writeKey(db, DAYO_KEYS.catalogFailStreak, String(streak))
+  await writeKey(db, DAYO_KEYS.catalogBackoffUntil, new Date(Date.parse(now) + backoffMs(streak, deps.random)).toISOString())
+  await writeKey(db, DAYO_KEYS.catalogBackoffReason, f.kind === 'network' ? 'network' : 'failure')
 }
 
 export async function pullCatalog(ctx: SyncContext): Promise<CatalogPullResult> {
   const cfg = await ctx.serial(() => readDayoConfig(ctx.db, ctx.deps))
   if (cfg === null) return { outcome: 'not_linked' }
   if (await ctx.serial(() => apiBlocked(ctx.db, ctx.deps.now()))) return { outcome: 'blocked' } // review item 14
+  // fix round 1 item 3: a 429 of this key, or E1's own failure backoff, holds every caller — "ส่งตอนนี้" included
+  const waiting = await ctx.serial(async () => {
+    const now = ctx.deps.now()
+    if ((await rateLimitLeft(ctx.db, now)) > 0 || (await backoffLeft(ctx.db, DAYO_KEYS.catalogBackoffUntil, now)) > 0) return true
+    await writeKey(ctx.db, DAYO_KEYS.catalogAttemptAt, now) // the scheduler's 5-minute rhythm counts from the attempt
+    return false
+  })
+  if (waiting) return { outcome: 'backoff' }
   // the version alone, straight from the row: a stored catalog this build can no longer parse must not stop the pull
   const known = await ctx.serial(async () => (await ctx.db.select({ v: s.dayoCatalog.catalogVersion }).from(s.dayoCatalog).where(eq(s.dayoCatalog.id, 'current')).get())?.v ?? 0)
   let client: DayoClient
@@ -175,7 +221,7 @@ export async function pullCatalog(ctx: SyncContext): Promise<CatalogPullResult> 
     return { outcome: await ctx.serial(() => ctx.db.transaction((tx) => writeCatalogAnswer(tx, ctx.deps, r.value, r))) }
   } catch (e) {
     if (!(e instanceof DayoError)) throw e
-    await ctx.serial(() => recordDayoFailure(ctx.db, ctx.deps, e.failure))
+    await ctx.serial(async () => { await recordDayoFailure(ctx.db, ctx.deps, e.failure); await recordCatalogBackoff(ctx.db, ctx.deps, e.failure) })
     return { outcome: 'failed', failure: e.failure }
   }
 }

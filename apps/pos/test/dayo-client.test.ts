@@ -108,6 +108,13 @@ describe('dayo client (spec 04 §4.1, §6.3)', () => {
       expect(await failureOf(c.getCatalog(0))).toEqual({ kind: 'server', status })
     }
   })
+  it('403 means "forbidden" only with dayo\'s own error body — a proxy or WAF 403 is a server failure (task 14 review item 3)', async () => {
+    const failure = (body: string) => failureOf(createDayoClient({ baseUrl: BASE, apiKey: MOCK_API_KEY, fetch: async () => new Response(body, { status: 403 }), nowMs: () => 0 }).getCatalog(0))
+    expect(await failure('<html><body>403 Forbidden</body></html>')).toEqual({ kind: 'server', status: 403 })
+    expect(await failure('')).toEqual({ kind: 'server', status: 403 })
+    expect(await failure(JSON.stringify({ message: 'Request blocked' }))).toEqual({ kind: 'server', status: 403 })
+    expect(await failure(JSON.stringify({ ok: false, error: { code: 'DY403', message: 'forbidden: API key ไม่มีสิทธิ์ orders:write' } }))).toEqual({ kind: 'forbidden' })
+  })
   it('a hung request becomes a timeout failure after 20 seconds', async () => {
     vi.useFakeTimers()
     const { mock, c } = client()

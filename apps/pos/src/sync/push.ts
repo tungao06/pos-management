@@ -6,7 +6,7 @@ import { edgeBahtToSatang } from '@dayo/domain'
 import type { ApiDeps } from '../api/deps'
 import { apiBlocked, readDayoConfig, readSupported, recordDayoFailure, type SyncContext } from './catalog'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure, type Timed } from './dayo-client'
-import { BACKOFF_MS, backoffMs, DAYO_KEYS, decodeLastError, deleteKey, encodeLastError, NO_ANSWER_RETRY_MS, RATE_LIMIT_DEFAULT_MS, readKey, recordServerTime, STUCK_AFTER_ATTEMPTS, writeKey } from './state'
+import { BACKOFF_MS, backoffMs, DAYO_KEYS, decodeLastError, deleteKey, encodeLastError, extendRateLimit, NO_ANSWER_RETRY_MS, OWN_FAILURE_EVERY_MS, RATE_LIMIT_DEFAULT_MS, readKey, recordServerTime, STUCK_AFTER_ATTEMPTS, writeKey, type LastErrorExtra } from './state'
 
 export type PushOutcome = { requests: number; sent: number; rejected: number; deferred: number; held: number; noAnswer: number; stopped: null | 'not_linked' | 'no_supported_list' | 'api_blocked' | 'backoff' | DayoFailure['kind'] }
 
@@ -15,9 +15,9 @@ export type PushOutcome = { requests: number; sent: number; rejected: number; de
  * bill's (the void time clamped to sold_at), and UUIDv7 ids inside one millisecond are not ordered, so only the rowid —
  * assigned in insertion order — keeps a bill ahead of its void when the timestamps tie.
  *
- * The outbox has no INTEGER PRIMARY KEY, so a plain `VACUUM` of the live database may renumber its rowids. Do not run
- * VACUUM on the live database without reviewing this ordering first (`VACUUM INTO`, used by the backup, writes a copy
- * and leaves the live rowids alone).
+ * The outbox has no INTEGER PRIMARY KEY, so a plain `VACUUM` of the live database may renumber its rowids. Nothing runs
+ * VACUUM on the tablet: the backup is opfs-sahpool's `exportFile` (a byte copy of the file, rowids included), and
+ * `VACUUM INTO` appears only in the tests' stand-in for it. Review this ordering before adding any VACUUM.
  */
 type Row = typeof s.outbox.$inferSelect & { rid: number }
 type Mark = { createdAt: string; rid: number }
@@ -26,7 +26,7 @@ type Mark = { createdAt: string; rid: number }
 const KNOWN_SUCCESS = new Set(['accepted', 'duplicate'])
 const utf8 = new TextEncoder()
 const ENVELOPE_BYTES = 80 // {"device_time":"2026-…Z","rows":[]} is 52 bytes; the rest is slack
-const MAX_ROUNDS_PER_CALL = 15 // ≤ 300 rows per call; the scheduler calls again (bounds the time one call can take)
+export const MAX_ROUNDS_PER_CALL = 15 // ≤ 300 rows per call; the scheduler calls again (bounds the time one call can take)
 const rowBytes = (r: Row): number => utf8.encode(JSON.stringify({ key: r.idempotencyKey, kind: r.tableName, data: r.rowJson })).length + 1
 const hashOf = (sup: Supported): string => JSON.stringify(sup)
 /** The longest wait the sender ever sets: the last backoff step + 20 % jitter (a clamped Retry-After, 15 min, fits under it). */
@@ -130,8 +130,14 @@ async function* pendingRows(db: RemoteDb, nowIso: string, rotate: boolean): Asyn
   }
 }
 
-/** A row that has never been part of a failed request (no REQUEST_FAILED) — the best probe after a failure. */
-const isTrusted = (r: Row): boolean => decodeLastError(r.lastError).reason !== REQUEST_FAILED
+/**
+ * A row not marked as part of a failed request — the best probe after a failure. fix round 1 item 9: a row an older
+ * build charged or refunded carries reason REQUEST_FAILED without the requestFailed flag; it is not trusted either.
+ */
+const isTrusted = (r: Row): boolean => {
+  const d = decodeLastError(r.lastError)
+  return d.requestFailed !== true && d.reason !== REQUEST_FAILED
+}
 
 /**
  * `probe` (one-row mode, after a failure in this call): the first sendable row that has never been part of a failed
@@ -170,9 +176,8 @@ async function gate(db: RemoteDb, deps: ApiDeps): Promise<{ cfg: { baseUrl: stri
   const cfg = await readDayoConfig(db, deps)
   if (cfg === null) return { cfg, sup: null, blocked: 'not_linked' }
   const now = deps.now()
-  if (await apiBlocked(db, now)) return { cfg, sup: null, blocked: 'api_blocked' } // same gate as E1/E3 (Task 10)
-  // a stored base URL the client refused: only re-linking fixes it (it writes api_state ok) — no request, no backoff retry
-  if ((await readKey(db, DAYO_KEYS.apiState)) === 'bad_base_url') return { cfg, sup: null, blocked: 'api_blocked' }
+  // same gate as E1/E3 (Task 10): a refused key, the API switched off, or a refused base URL (task 14 item 2)
+  if (await apiBlocked(db, now)) return { cfg, sup: null, blocked: 'api_blocked' }
   const until = await readKey(db, DAYO_KEYS.pushBackoffUntil)
   if (until !== null) {
     const left = Date.parse(until) - Date.parse(now)
@@ -185,20 +190,64 @@ async function gate(db: RemoteDb, deps: ApiDeps): Promise<{ cfg: { baseUrl: stri
 }
 
 /**
+ * Two separate questions (task 14 fix round 2 ruling):
+ * 1. "Has this row itself failed again and again?" — an operational signal. Every request that carried ONLY this row
+ *    and failed with 5xx / an unknown 4xx / an unreadable 200 / a timeout adds 1 to its own count (lastError.ownFailures)
+ *    at once, whatever any other row of the call got and whatever happens to its charge — but at most once per
+ *    OWN_FAILURE_EVERY_MS (5 min, final review I2), so wakes that clear the backoff again and again cannot rush it; the
+ *    50th ends it STUCK ("ส่งไม่ผ่าน"). Any verdict from dayo for the row starts the count again (a dead row keeps no
+ *    extras, so "ลองใหม่" starts from 0 too). A lone poison row thus reaches STUCK on its own after ≥ 50 × 5 min of
+ *    failing — and so does a row only unlucky enough to be tried alone through an outage that long (in practice
+ *    longer: the backoff reaches 15 min; its data stays, "ลองใหม่" sends it).
+ * 2. "Is a try charged?" — the conservative money decision below (`attempts`, the row's own backoff).
+ *
  * security I2 + fix rounds 2–3 (controller rulings): in one-row mode a request that failed with 5xx / an unknown 4xx /
  * an unreadable 200 / a timeout is charged to its row PROVISIONALLY, and the call goes on to the next row (a probe).
  * - A 200 (or a 422 verdict on a row) = dayo is up: every provisional charge of the call is confirmed.
  * - K = SINGLE_FAILURES_PER_CALL failures in a row, or a failure that cannot be charged (offline, 401/403/404, 429) =
  *   dayo is down: every provisional charge is refunded (refundCharges), the call stops, the whole-request backoff holds.
- * - The queue runs out of sendable rows before K failures: the charges are kept (a queue whose only sendable rows are
- *   poison rows — fewer than K of them).
+ * - The queue runs out of sendable rows before K failures: every provisional charge is refunded, always (task 14 fix
+ *   round 1, Path A). Nothing in the call showed dayo was up. So a charge is kept only when a later row of the SAME call
+ *   gets a 200. (Reaching STUCK does not wait for that any more — see 1. above.)
  */
-type Provisional = { row: Row; chargedAt: string }
-async function chargeRow(db: RemoteDb, deps: ApiDeps, r: Row, f: DayoFailure, at: string): Promise<void> {
+/** The owner banner (farAhead), the M5 count (noVerdict) and the row's own failure count outlive a charge or a refund (item 7). */
+/** The row's own failure count and when it was last counted (fix round 2 · final review I2). */
+type Own = { ownFailures: number; ownFailedAt: string | null }
+function keptExtras(lastError: string | null, own: Own): LastErrorExtra {
+  const d = decodeLastError(lastError)
+  return {
+    ...(d.farAhead === true ? { farAhead: true as const } : {}), ...(d.noVerdict !== undefined ? { noVerdict: d.noVerdict } : {}), requestFailed: true,
+    ...(own.ownFailures > 0 ? { ownFailures: own.ownFailures } : {}), ...(own.ownFailedAt !== null ? { ownFailedAt: own.ownFailedAt } : {}),
+  }
+}
+/** This failure counted or not: once per OWN_FAILURE_EVERY_MS; a clock that moved back by more than that counts again. */
+function nextOwn(r: Row, nowIso: string): Own & { counted: boolean } {
+  const d = decodeLastError(r.lastError)
+  const n = d.ownFailures ?? 0
+  const last = Date.parse(d.ownFailedAt ?? '')
+  if (Number.isFinite(last) && Math.abs(Date.parse(nowIso) - last) < OWN_FAILURE_EVERY_MS) return { ownFailures: n, ownFailedAt: d.ownFailedAt ?? null, counted: false }
+  return { ownFailures: n + 1, ownFailedAt: nowIso, counted: true }
+}
+const failureDetail = (f: DayoFailure): string => (f.kind === 'server' ? `HTTP ${f.status}` : f.kind)
+type Provisional = { row: Row; chargedAt: string; own: Own }
+/**
+ * Fix round 2: the row's own failure, recorded at once and never refunded. Returns true when it ended the row STUCK
+ * (then there is nothing left to charge).
+ */
+async function recordOwnFailure(db: RemoteDb, deps: ApiDeps, r: Row, f: DayoFailure, own: Own & { counted: boolean }, charge: boolean): Promise<boolean> {
+  const at = deps.now()
+  if (own.counted && own.ownFailures >= STUCK_AFTER_ATTEMPTS) {
+    await markDead(db, r, at, 'STUCK', `${REQUEST_FAILED}: ${failureDetail(f)} ×${own.ownFailures}`, Math.max(r.attempts, own.ownFailures))
+    return true
+  }
+  if (!charge) await db.update(s.outbox).set({ lastError: encodeLastError(REQUEST_FAILED, failureDetail(f), keptExtras(r.lastError, own)) }).where(pendingRow(r.id))
+  return false
+}
+async function chargeRow(db: RemoteDb, deps: ApiDeps, r: Row, f: DayoFailure, at: string, own: Own): Promise<void> {
   const attempts = r.attempts + 1
-  const detail = f.kind === 'server' ? `HTTP ${f.status}` : f.kind
+  const detail = failureDetail(f)
   if (attempts >= STUCK_AFTER_ATTEMPTS) { await markDead(db, r, at, 'STUCK', `${REQUEST_FAILED}: ${detail}`, attempts); return }
-  await db.update(s.outbox).set({ attempts, lastError: encodeLastError(REQUEST_FAILED, detail), nextAttemptAt: later(at, backoffMs(attempts, deps.random)) }).where(pendingRow(r.id))
+  await db.update(s.outbox).set({ attempts, lastError: encodeLastError(REQUEST_FAILED, detail, keptExtras(r.lastError, own)), nextAttemptAt: later(at, backoffMs(attempts, deps.random)) }).where(pendingRow(r.id))
 }
 
 /**
@@ -207,38 +256,45 @@ async function chargeRow(db: RemoteDb, deps: ApiDeps, r: Row, f: DayoFailure, at
  * the charge wrote. Rotation (fix round 3): next_attempt_at = the refund time, so one-row mode tries the other rows first.
  */
 async function refundCharges(db: RemoteDb, list: Provisional[], at: string): Promise<void> {
-  for (const { row: r, chargedAt } of list) {
-    await db.update(s.outbox)
-      .set({ status: 'pending', attempts: r.attempts, deadAt: r.deadAt, nextAttemptAt: at, lastError: encodeLastError(REQUEST_FAILED, 'ส่งไม่ผ่านติดกันหลายแถว — ถือว่าระบบกลางล่ม ไม่นับครั้ง') })
+  for (const { row: r, chargedAt, own } of list) {
+    await db.update(s.outbox) // the charge goes back; the row's own failure count stays (fix round 2)
+      .set({ status: 'pending', attempts: r.attempts, deadAt: r.deadAt, nextAttemptAt: at, lastError: encodeLastError(REQUEST_FAILED, 'ส่งไม่ผ่านติดกันหลายแถว — ถือว่าระบบกลางล่ม ไม่นับครั้ง', keptExtras(r.lastError, own)) })
       .where(and(eq(s.outbox.id, r.id), eq(s.outbox.attempts, r.attempts + 1),
         or(eq(s.outbox.status, 'pending'), and(eq(s.outbox.status, 'dead'), eq(s.outbox.deadAt, chargedAt)))))
   }
 }
 
-/** Records a failed request. Returns true when the failure may be charged to the single row of a one-row request (the caller decides). */
-async function onRequestFailure(db: RemoteDb, deps: ApiDeps, f: DayoFailure, batch: Row[], single: boolean): Promise<boolean> {
+/**
+ * Records a failed request. `own`: the request carried only this row and failed in a way that can be the row's own
+ * doing — it counts toward the row's STUCK (fix round 2). `chargeable`: in R4 one-row mode it may also be charged
+ * provisionally (the caller decides).
+ */
+type FailureVerdict = { own: boolean; chargeable: boolean }
+const NOT_THE_ROWS: FailureVerdict = { own: false, chargeable: false }
+async function onRequestFailure(db: RemoteDb, deps: ApiDeps, f: DayoFailure, batch: Row[], single: boolean): Promise<FailureVerdict> {
   const now = deps.now()
   switch (f.kind) {
     case 'unauthorized': case 'forbidden': case 'api_disabled': case 'bad_base_url':
       // 403 here is the whole request (the key lacks orders:write) — never a row's FORBIDDEN (spec §4.5 · §6.3)
-      await recordDayoFailure(db, deps, f); return false
+      await recordDayoFailure(db, deps, f); return NOT_THE_ROWS
     case 'rate_limited':
-      await writeKey(db, DAYO_KEYS.pushBackoffUntil, later(now, f.retryAfterMs))
-      await writeKey(db, DAYO_KEYS.pushBackoffReason, 'rate_limited'); return false
+      await extendRateLimit(db, later(now, f.retryAfterMs)); return NOT_THE_ROWS // never shortens a longer backoff (M1)
     case 'bad_envelope':
       if (batch.length > 1) await startSingle(db, batch)
       else { await markDead(db, batch[0]!, now, 'ENVELOPE', f.message); await forgetSingle(db, [batch[0]!.id]) } // the queue moves on (spec §6.3 row 422)
-      return false
+      return NOT_THE_ROWS
     default: { // network, timeout, server (5xx and unknown 4xx), bad_response: whole-request retry with backoff (spec §6.3 row 1)
       const streak = Number(await readKey(db, DAYO_KEYS.pushFailStreak) ?? '0') + 1
       await writeKey(db, DAYO_KEYS.pushFailStreak, String(streak))
       await writeKey(db, DAYO_KEYS.pushBackoffUntil, later(now, backoffMs(streak, deps.random)))
-      await writeKey(db, DAYO_KEYS.pushBackoffReason, 'failure')
-      if (f.kind === 'network') return false // offline: not the rows' fault, and not part of the 5xx streak (m3) — a timeout is (m1)
+      // fix round 1 item 4: only an offline tablet's backoff may be forgotten by the 'online' event
+      await writeKey(db, DAYO_KEYS.pushBackoffReason, f.kind === 'network' ? 'network' : 'failure')
+      if (f.kind === 'network') return NOT_THE_ROWS // offline: not the rows' fault, and not part of the 5xx streak (m3) — a timeout is (m1)
       const serverStreak = Number(await readKey(db, DAYO_KEYS.pushServerStreak) ?? '0') + 1
       await writeKey(db, DAYO_KEYS.pushServerStreak, String(serverStreak))
       if (serverStreak >= SERVER_STREAK_FOR_SINGLE && batch.length > 1) await startSingle(db, batch)
-      return single && batch.length === 1
+      const own = batch.length === 1 // a lone row fails the same way in batch mode too — it never enters R4 on its own
+      return { own, chargeable: own && single }
     }
   }
 }
@@ -351,6 +407,20 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
   })
 }
 
+/**
+ * One call of the sender (item 8 — the states it moves through):
+ *
+ * | state                         | how it is entered                                   | how it ends                                            |
+ * |-------------------------------|-----------------------------------------------------|--------------------------------------------------------|
+ * | gated (no request)            | not linked · apiBlocked · backoff running · no list | the owner re-links · the backoff runs out · E1 answers |
+ * | batch mode (≤ 20 rows)        | push_single_through absent                          | 3 × 5xx/timeout/bad 200 in a row, or a 422 → one-row   |
+ * | one-row mode                  | push_single_through = ids of the failed batch       | every one of those rows decided (a 200, or ENVELOPE)   |
+ * | provisional charges (one-row) | a request that carried only this row failed         | a 200 of a later row (kept) · K in a row, a failure    |
+ * |                               |                                                     | no row is blamed for, the queue running out, or the    |
+ * |                               |                                                     | round cap (all refunded)                               |
+ * | whole-request backoff         | network / timeout / 5xx / bad 200 (5 s … 15 min)    | a 200 · 'online' wake (network cause only) · manual /  |
+ * |                               | · a 429 of E1 or E2 (Retry-After)                   | open / before_close wake ≤ once per 30 s (never 429's) |
+ */
 export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
   const out: PushOutcome = { requests: 0, sent: 0, rejected: 0, deferred: 0, held: 0, noAnswer: 0, stopped: null }
   const g = await ctx.serial(() => gate(ctx.db, ctx.deps))
@@ -368,6 +438,7 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
   }
   const decided = new Set<string>() // plan 5 fix H-1: judged once per call
   let provisional: Provisional[] = [] // fix round 3: charged rows of this call waiting for a 200 (confirm) or K failures (refund)
+  let failuresInRow = 0 // one-row requests failing in a row in this call (K) — a row that died STUCK counts too
   const refundAll = async (): Promise<void> => {
     const list = provisional
     provisional = []
@@ -381,7 +452,7 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
       return { ...(await pickBatch(ctx.db, nowIso, sup, size, decided, { rotate: size === 1, probe: size === 1 && probe })), single: size === 1 }
     })
     out.held = held
-    if (batch.length === 0) return out // the queue ran out before K failures: provisional charges are kept
+    if (batch.length === 0) { await refundAll(); return out } // the queue ran out before K failures: refund, always (Path A)
     for (const r of batch) decided.add(r.id)
     const body = { device_time: nowIso, rows: batch.map((r) => ({ key: r.idempotencyKey, kind: r.tableName, data: r.rowJson })) } as PushRequest
     let answer: Timed<{ server_time: string; results: ReceivedRowResult[] }>
@@ -391,20 +462,28 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
       if (!(e instanceof DayoError)) throw e
       out.requests++
       const f = e.failure
-      const chargeable = await ctx.serial(() => onRequestFailure(ctx.db, ctx.deps, f, batch, single))
+      const verdict = await ctx.serial(() => onRequestFailure(ctx.db, ctx.deps, f, batch, single))
+      const chargeable = verdict.chargeable
       out.stopped = f.kind
       if (f.kind === 'bad_envelope') { provisional = []; return out } // dayo judged the request = it is up: the charges stand
-      if (chargeable) {
+      if (verdict.own) {
         const row = batch[0]!
-        const chargedAt = ctx.deps.now()
-        await ctx.serial(() => chargeRow(ctx.db, ctx.deps, row, f, chargedAt))
-        provisional.push({ row, chargedAt })
-        if (provisional.length < SINGLE_FAILURES_PER_CALL) continue // probe the next row
+        const own = nextOwn(row, ctx.deps.now())
+        const stuck = await ctx.serial(() => recordOwnFailure(ctx.db, ctx.deps, row, f, own, chargeable))
+        if (chargeable) {
+          if (!stuck) {
+            const chargedAt = ctx.deps.now()
+            await ctx.serial(() => chargeRow(ctx.db, ctx.deps, row, f, chargedAt, own))
+            provisional.push({ row, chargedAt, own })
+          }
+          if (++failuresInRow < SINGLE_FAILURES_PER_CALL) continue // probe the next row
+        }
       }
       await refundAll() // K in a row, or a failure no row can be blamed for: dayo is down — the whole-request backoff holds
       return out
     }
     provisional = [] // confirmed by this 200
+    failuresInRow = 0
     out.stopped = null
     out.requests++
     const t = await ctx.serial(() => applyVerdicts(ctx.db, ctx.deps, batch, answer, sup))
@@ -414,18 +493,38 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
   return out
 }
 
-/** Task 14: a wake that means "the network may be back" forgets the network/5xx backoff — never 429's Retry-After (review item 2). */
-export async function clearFailureBackoff(db: RemoteDb): Promise<void> {
-  if ((await readKey(db, DAYO_KEYS.pushBackoffReason)) === 'rate_limited') return
-  await deleteKey(db, DAYO_KEYS.pushBackoffUntil)
-  await deleteKey(db, DAYO_KEYS.pushFailStreak)
-  await deleteKey(db, DAYO_KEYS.pushBackoffReason)
+/**
+ * Task 14: a wake that means "the network may be back" forgets the failure backoff of E2 and E1 — never a 429's
+ * Retry-After (review item 2). `onlyNetwork` (fix round 1 item 4, the 'online' event): only a backoff an offline tablet
+ * caused; a 5xx / timeout one must run out (or be cleared by a manual / open / before_close wake, ≤ once per 30 s).
+ * It leaves push_server_streak alone ON PURPOSE: that count says dayo itself kept answering 5xx / unreadable 200s,
+ * which a reconnect does not change — only dayo's next 200 clears it (and with it the way into R4 one-row mode).
+ */
+/** final review M3: is there a failure backoff a wake could clear (not a 429's — that one only runs out)? */
+export async function hasClearableBackoff(db: RemoteDb, opts: { onlyNetwork?: boolean } = {}): Promise<boolean> {
+  const may = (reason: string | null): boolean => reason !== null && reason !== 'rate_limited' && (opts.onlyNetwork !== true || reason === 'network')
+  return may(await readKey(db, DAYO_KEYS.pushBackoffReason)) || may(await readKey(db, DAYO_KEYS.catalogBackoffReason))
+}
+
+export async function clearFailureBackoff(db: RemoteDb, opts: { onlyNetwork?: boolean } = {}): Promise<void> {
+  const may = (reason: string | null): boolean => reason !== 'rate_limited' && (opts.onlyNetwork !== true || reason === 'network')
+  if (may(await readKey(db, DAYO_KEYS.pushBackoffReason))) {
+    await deleteKey(db, DAYO_KEYS.pushBackoffUntil)
+    await deleteKey(db, DAYO_KEYS.pushFailStreak)
+    await deleteKey(db, DAYO_KEYS.pushBackoffReason)
+  }
+  if (may(await readKey(db, DAYO_KEYS.catalogBackoffReason))) {
+    await deleteKey(db, DAYO_KEYS.catalogBackoffUntil)
+    await deleteKey(db, DAYO_KEYS.catalogFailStreak)
+    await deleteKey(db, DAYO_KEYS.catalogBackoffReason)
+  }
 }
 
 /** Owner's "ลองใหม่" (spec §6.4): dead → pending with a fresh budget; children parked as PARENT_REJECTED come back too. */
 export async function retryRow(db: RemoteDb, outboxId: string): Promise<void> {
   const r = await db.select().from(s.outbox).where(eq(s.outbox.id, outboxId)).get()
   if (r === undefined || r.status !== 'dead') return
+  // a dead row carries no ownFailures (markDead writes no extras), so its own count starts again from 0 as well
   await db.update(s.outbox).set({ status: 'pending', attempts: 0, deadAt: null, nextAttemptAt: null }).where(eq(s.outbox.id, r.id))
   const kids = await db.select().from(s.outbox).where(and(eq(s.outbox.parentKey, r.idempotencyKey), eq(s.outbox.status, 'dead'))).all()
   for (const k of kids) if (decodeLastError(k.lastError).reason === 'PARENT_REJECTED') await db.update(s.outbox).set({ status: 'pending', attempts: 0, deadAt: null, nextAttemptAt: null }).where(eq(s.outbox.id, k.id))

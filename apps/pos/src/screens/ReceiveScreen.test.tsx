@@ -13,6 +13,7 @@ import { SessionProvider, useSession } from '../app/session'
 import { formatBaht } from '../ui/format'
 import { TH } from '../ui/th'
 import { ReceiveScreen } from './ReceiveScreen'
+import { HEALTHY_SYNC } from '../test-utils/sync-status'
 
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
@@ -91,7 +92,7 @@ const REPORT: ShiftReportDto = {
 }
 
 function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
-  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, dayoBaseUrl: 'https://dayo.example/api/v1', staffNeedingPin: [], ownerRecovery: false, ...overrides }
+  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, dayoBaseUrl: 'https://dayo.example/api/v1', staffNeedingPin: [], ownerRecovery: false, sync: HEALTHY_SYNC, ...overrides }
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {
