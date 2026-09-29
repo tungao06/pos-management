@@ -1,9 +1,12 @@
 // packages/dayo-mock/src/handler.ts — the mock dayo /api/v1 as a fetch handler. No node:* imports.
 // Route order as dayo main ships it (apps/web/src/app/api/v1/*/route.ts + lib/api/auth.ts + api_authenticate 0049:187-225):
 // Content-Length > 256 KB (push only) → 401 key → 403 scope → 429 → the route.
-import { MAX_PUSH_BODY_BYTES, type CentralOrder, type DayoEdit, type ReceivedRowResult } from '@dayo/contracts'
+import { BLOCK3_PHASE1_KINDS, BLOCK3_PHASE1_SUPPORTED_FIELDS, BLOCK3_PHASE2_KINDS, BLOCK3_PHASE2_SUPPORTED_FIELDS, MAX_PUSH_BODY_BYTES, type CentralOrder, type DayoEdit, type ReceivedRowResult } from '@dayo/contracts'
 import { bodyJsonbRefuses, judgeRow } from './judge.js'
-import { ALL_SCOPES, emptyKnown, freshCatalog, learnCatalog, type MockDayo, type MockOptions, type MockState, type StoredOrder } from './state.js'
+import { highestGoodZ, highestZNo } from './judge-shift.js'
+import { utcMs } from './judge-util.js'
+import { shiftCashAnswer } from './shift-cash.js'
+import { ALL_SCOPES, BLOCK3_SCOPES, emptyKnown, freshCatalog, learnCatalog, type MockDayo, type MockOptions, type MockState, type StoredOrder } from './state.js'
 
 export const MOCK_API_KEY = `dayo_${'0123456789abcdef'.repeat(4)}`
 const utf8 = new TextEncoder()
@@ -16,17 +19,40 @@ export function pgTimestamp(t: number): string {
   return `${iso.slice(0, 19)}${frac === '' ? '' : `.${frac}`}+00:00`
 }
 
+/**
+ * dayo_pos_supported() of dayo main 12885fe (0066:588-608 · preflight P3): phase 1 = the four shift kinds + their fields ·
+ * phase 2 (not shipped) = + order_off_catalog. `scopes`: a phase-1 key gains shift:write, leaving phase 1 drops it.
+ */
+function setPhases(s: MockState, phase1: boolean, phase2: boolean, scopes: boolean): void {
+  const p1: readonly string[] = BLOCK3_PHASE1_KINDS
+  const p2: readonly string[] = BLOCK3_PHASE2_KINDS
+  const fields: Record<string, readonly string[]> = { ...BLOCK3_PHASE1_SUPPORTED_FIELDS, ...BLOCK3_PHASE2_SUPPORTED_FIELDS }
+  const want = [...(phase1 ? p1 : []), ...(phase2 ? p2 : [])]
+  const c = s.catalog
+  c.supported_kinds = [...c.supported_kinds.filter((k) => !p1.includes(k) && !p2.includes(k)), ...want]
+  for (const k of [...p1, ...p2]) delete c.supported_fields[k]
+  for (const k of want) c.supported_fields[k] = [...fields[k]!]
+  s.block3 = phase1
+  s.block3Phase2 = phase2
+  if (scopes) s.scopes = phase1 ? [...new Set([...s.scopes, 'shift:write'])] : s.scopes.filter((x) => x !== 'shift:write')
+}
+
 export function createMockDayo(opts: MockOptions = {}): MockDayo {
   const init = (): MockState => {
     const catalog = opts.catalog ? structuredClone(opts.catalog) : freshCatalog()
     const known = emptyKnown()
     learnCatalog(known, catalog)
-    return {
+    const phase2 = opts.block3Phase2 === true
+    const phase1 = phase2 || opts.block3 === true
+    const s: MockState = {
       apiKey: opts.apiKey ?? MOCK_API_KEY, origins: opts.origins ?? ['http://localhost:4173'], fixedNow: opts.now ? Date.parse(opts.now) : null,
       mode: opts.mode ?? 'normal', retryAfterSec: opts.retryAfterSec ?? 30, forbiddenMessage: opts.forbiddenMessage ?? 'forbidden: API key ไม่มีสิทธิ์ staff:read',
-      scopes: [...(opts.scopes ?? ALL_SCOPES)], catalog, pricing: opts.pricing ?? null, known, closedPromotions: new Map(),
+      scopes: [...(opts.scopes ?? (phase1 ? BLOCK3_SCOPES : ALL_SCOPES))], catalog, pricing: opts.pricing ?? null, known, closedPromotions: new Map(),
       orders: new Map(), receipts: new Map(), keys: new Map(), seq: new Map(), overrides: [], seedOrders: [...(opts.seedOrders ?? [])], log: [],
+      block3: false, block3Phase2: false, shifts: new Map(), movements: new Map(), counts: new Map(), zReports: new Map(), preloadedZ: null, conflicts: [], block3LiveFrom: null,
     }
+    if (phase1) setPhases(s, phase1, phase2, false) // no bump · explicit opts.scopes win (the default block 3 key has shift:write)
+    return s
   }
   let s = init()
   const now = (): number => s.fixedNow ?? Date.now()
@@ -40,6 +66,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
 
   /** Every /api/v1 request is logged WITH its status — refused ones too (review item 14: a revoked key must stay silent). */
   async function handle(req: Request): Promise<Response> {
+    if (s.mode === 'offline') throw new TypeError('Failed to fetch') // a real network failure: never reaches dayo, not logged
     const url = new URL(req.url)
     let rows = 0
     if (req.method === 'POST') {
@@ -76,8 +103,10 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     const tooBig = 'invalid: body ต้องเป็น JSON ไม่เกิน 256 KB'
     if (isPush && Number(req.headers.get('content-length') ?? '0') > MAX_PUSH_BODY_BYTES) return err(422, 'DY422', tooBig, h) // before the key (push route.ts)
     if (s.mode === 'unauthorized' || req.headers.get('authorization') !== `Bearer ${s.apiKey}`) return err(401, 'DY401', 'invalid_key: API key ไม่ถูกต้องหรือถูกปิดใช้งาน', h)
+    // E4 exists only on a block 3 dayo (0067): the block-2 mock keeps answering its path 404 like block-2 dayo (err-404-unknown-path)
+    const isShiftCash = s.block3 && req.method === 'GET' && url.pathname === '/api/v1/pos/shift-cash'
     const required = req.method === 'GET' && url.pathname === '/api/v1/pos/catalog' ? E1_SCOPES
-      : isPush ? ['orders:write'] : req.method === 'GET' && url.pathname === '/api/v1/orders' ? ['orders:read'] : []
+      : isPush ? ['orders:write'] : (req.method === 'GET' && url.pathname === '/api/v1/orders') || isShiftCash ? ['orders:read'] : []
     const denied = scopeError(required, h)
     if (denied !== null) return denied
     if (s.mode === 'forbidden') return err(403, 'DY403', s.forbiddenMessage, h) // legacy 403 mode before 429 (dayo order: 403 before 429)
@@ -87,11 +116,25 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       const c = s.catalog
       const common = { pricing: s.pricing ?? c.pricing, catalog_version: c.catalog_version, server_time: serverTime(), supported_kinds: c.supported_kinds, supported_fields: c.supported_fields }
       const known = Number(url.searchParams.get('known_version') ?? '0')
-      return json(200, { ok: true, data: known === c.catalog_version ? { ...common, changed: false } : { ...c, ...common, changed: true } }, { ...h, 'Cache-Control': 'no-store' })
+      return json(200, { ok: true, data: known === c.catalog_version ? { ...common, changed: false } : { ...c, ...common, client: clientOf(c.client), changed: true } }, { ...h, 'Cache-Control': 'no-store' })
     }
     if (isPush) return push(req, h)
     if (req.method === 'GET' && url.pathname === '/api/v1/orders') return listOrders(url, h)
+    if (isShiftCash) { const r = shiftCashAnswer(s, url); return json(r.status, r.body, h) } // E4 (0067:31-75)
     return err(404, 'DY404', 'not_found', h)
+  }
+
+  /**
+   * E1 client.last_z_* (0067:134-155 · spec 04 R5-3): last_z_no = the highest z_no of every Z (quarantined included) ·
+   * last_z_hash / last_z_until = of the highest NON-quarantined Z, until in dayo's `…mmm+00:00` form (preflight P7/D8). They
+   * override the catalog's client ONLY when a Z exists — without one, whatever bumpCatalog set stays (review item 3); a
+   * block 3 mock then still names all three (null), as dayo does.
+   */
+  function clientOf(client: MockState['catalog']['client']): MockState['catalog']['client'] {
+    const maxAll = highestZNo(s)
+    if (maxAll === undefined) return s.block3 ? { last_z_no: null, last_z_hash: null, last_z_until: null, ...client } : client
+    const good = highestGoodZ(s)
+    return { ...client, last_z_no: maxAll, last_z_hash: good?.hash ?? null, last_z_until: good === undefined ? null : utcMs(good.until) }
   }
 
   /** api_pos_push (0052:694-775): envelope errors = 422 of the request; each row judged on its own. */
@@ -189,5 +232,13 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     orders: () => [...s.orders.values()].map((o) => ({ posOrderId: o.posOrderId, orderNo: o.orderNo, receiptNo: o.receiptNo, status: o.status, total: o.total })),
     requests: () => [...s.log],
     reset: () => { s = init() },
+    setBlock3: (on) => { setPhases(s, on, on && s.block3Phase2, true); return bump() },
+    setBlock3Phase2: (on) => { setPhases(s, on || s.block3, on, true); return bump() },
+    shifts: () => [...s.shifts.values()].map((x) => ({ ...x })),
+    movements: () => [...s.movements.values()].map((x) => ({ ...x })),
+    counts: () => [...s.counts.values()].map((x) => ({ ...x })),
+    zReports: () => [...s.zReports.values()], // live objects on purpose — tests only (see MockDayo.zReports)
+    preloadZ: (z) => { s.preloadedZ = { zNo: z.zNo, hash: z.hash, countedAt: Date.parse(z.countedAt) } },
+    conflicts: () => [...s.conflicts],
   }
 }

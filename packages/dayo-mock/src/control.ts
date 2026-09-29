@@ -41,7 +41,14 @@ export async function mockControl(mock: MockDayo, path: string, body: unknown): 
       return ok
     }
     case '/__mock/seed-orders': mock.seedCentralOrders(body as CentralOrder[]); return ok
-    case '/__mock/state': return { status: 200, body: { orders: mock.orders(), requests: mock.requests() } }
+    case '/__mock/block3': { // {on, phase2?}: phase 1 on/off · phase2 true/false switches dayo phase 2 too (preflight P3)
+      const b = body as { on: boolean; phase2?: boolean }
+      let version = mock.setBlock3(b.on)
+      if (b.phase2 !== undefined) version = mock.setBlock3Phase2(b.phase2)
+      return { status: 200, body: { catalog_version: version } }
+    }
+    case '/__mock/preload-z': mock.preloadZ(body as { zNo: number; hash: string; countedAt: string }); return ok
+    case '/__mock/state': return { status: 200, body: { orders: mock.orders(), requests: mock.requests(), shifts: mock.shifts(), zReports: mock.zReports(), conflicts: mock.conflicts() } }
     default: return { status: 404, body: { ok: false } }
   }
 }
