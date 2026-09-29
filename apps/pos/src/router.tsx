@@ -1,6 +1,7 @@
-import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet, useParams } from '@tanstack/react-router'
 import type { JSX } from 'react'
 import { RequireSession } from './app/guards'
+import { useBootstrap } from './app/queries'
 import { useSyncCycleSignal } from './app/useSyncCycleSignal'
 import { BackupScreen } from './screens/BackupScreen'
 import { CashPayScreen } from './screens/CashPayScreen'
@@ -8,6 +9,7 @@ import { CentralOrdersScreen } from './screens/CentralOrdersScreen'
 import { CloseShiftScreen } from './screens/CloseShiftScreen'
 import { DoneScreen } from './screens/DoneScreen'
 import { IndexRedirect } from './screens/IndexRedirect'
+import { IssueZScreen } from './screens/IssueZScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { OpenShiftScreen } from './screens/OpenShiftScreen'
 import { OrderDetailScreen } from './screens/OrderDetailScreen'
@@ -24,6 +26,7 @@ import { SystemStatusScreen } from './screens/SystemStatusScreen'
 import { ZListScreen } from './screens/ZListScreen'
 import { ZReportScreen } from './screens/ZReportScreen'
 import { BrandBar } from './ui/BrandBar'
+import { TH } from './ui/th'
 
 // Root layout: the brand bar (D44), then every warning of spec §4.4 ข้อ 9 / §6.3 / §6.4 / §6.7 / §10.5 (Task 20,
 // D80) on every screen after login, above whatever the route itself renders. Task 21 hotfix 2: the root also listens,
@@ -174,12 +177,36 @@ const zListRoute = createRoute({
     </RequireSession>
   ),
 })
+function ZReportRoute(): JSX.Element {
+  const { shiftId } = useParams({ from: '/z/$shiftId' })
+  return <ZReportScreen shiftId={shiftId} />
+}
 const zReportRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/z/$shiftId',
   component: () => (
     <RequireSession>
-      <ZReportScreen />
+      <ZReportRoute />
+    </RequireSession>
+  ),
+})
+
+/** D101 step 3 (spec §6.8): `/shift/z/$shiftId` issues the Z of a shift already counted and waiting (D68's
+ * `zWaiting` bar) — `countedSatang` is that shift's own saved count, read off `bootstrap().zWaiting`, never re-typed. */
+function IssueZRoute(): JSX.Element {
+  const { shiftId } = useParams({ from: '/shift/z/$shiftId' })
+  const boot = useBootstrap()
+  const waiting = boot.data?.zWaiting.find((w) => w.shiftId === shiftId) ?? null
+  if (boot.data === undefined) return <main className="page">{TH.loading}</main>
+  if (waiting === null) return <main className="page">{TH.errZNotFound}</main>
+  return <IssueZScreen shiftId={shiftId} countedSatang={waiting.countedSatang} />
+}
+const issueZRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/shift/z/$shiftId',
+  component: () => (
+    <RequireSession>
+      <IssueZRoute />
     </RequireSession>
   ),
 })
@@ -224,6 +251,7 @@ export const routeTree = rootRoute.addChildren([
   zReportRoute,
   shiftRoute,
   closeShiftRoute,
+  issueZRoute,
 ])
 
 export const router = createRouter({ routeTree })

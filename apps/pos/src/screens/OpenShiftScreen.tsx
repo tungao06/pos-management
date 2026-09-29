@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useState, type FormEvent, type JSX } from 'react'
+import { posErrorCode } from '../api/errors'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
@@ -34,6 +35,9 @@ export function OpenShiftScreen(): JSX.Element {
   })
 
   if (boot.data?.openShift) return <Navigate to="/sell" />
+  // ladder item 5 (D101): a shift of this device stopped at "นับเสร็จ" but its count is not confirmed yet — go
+  // straight to the review, never let a new shift open on top of it (the API itself refuses with COUNT_PENDING).
+  if (boot.data?.countingShift) return <Navigate to="/shift/close" />
 
   const submit = (ev: FormEvent): void => {
     ev.preventDefault()
@@ -61,6 +65,11 @@ export function OpenShiftScreen(): JSX.Element {
           <p role="alert" className="error">
             {error}
           </p>
+        )}
+        {(posErrorCode(open.error) === 'COUNT_PENDING' || posErrorCode(quick.error) === 'COUNT_PENDING') && (
+          <button type="button" data-testid="nav-count-pending" onClick={() => void navigate({ to: '/shift/close' })}>
+            {TH.countPendingGo}
+          </button>
         )}
         <button type="submit" className="primary" data-testid="shift-open" disabled={open.isPending || quick.isPending}>
           {TH.shiftOpen}

@@ -3,7 +3,8 @@ import type { JSX } from 'react'
 import { can, type PosRole } from '../app/permissions'
 import { useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
-import type { SyncStatusDto } from '../api/types'
+import type { SyncStatusDto, WaitingZDto } from '../api/types'
+import { formatThaiDate } from '../ui/format'
 import { TH } from '../ui/th'
 
 /** Server clock minus device clock, in whole minutes, always positive — the exact sign never matters on screen. */
@@ -22,13 +23,19 @@ function skewMinutes(clockSkewMs: number | null): number {
 export function StatusBannersView({
   sync,
   role,
+  zWaiting,
   onGoStatus,
   onGoProblems,
+  onGoIssueZ,
 }: {
   sync: SyncStatusDto
   role: PosRole
+  /** D68 · spec §6.8: counted shifts of this device still waiting for their Z, oldest first (ruling R7 — that
+   * oldest one is the one that must go out next; `IssueZScreen` refuses any other with Z_NOT_READY). */
+  zWaiting: readonly WaitingZDto[]
   onGoStatus: () => void
   onGoProblems: () => void
+  onGoIssueZ: (shiftId: string) => void
 }): JSX.Element {
   // fix round 2 (parked Low): the permission table, not a raw role string, is what actually gates /sync-problems —
   // `sync_problems` is owner-only there too, so this stays byte-for-byte the same decision, just sourced from one
@@ -92,6 +99,14 @@ export function StatusBannersView({
           {TH.pendingSync(sync.pendingBills)}
         </span>
       )}
+      {zWaiting.length > 0 && (
+        <p role="alert" className="banner error" data-testid="banner-z-waiting">
+          {TH.zWaitingBanner(formatThaiDate(zWaiting[0]!.businessDate))}
+          <button type="button" data-testid="z-issue" onClick={() => onGoIssueZ(zWaiting[0]!.shiftId)}>
+            {TH.zIssue}
+          </button>
+        </p>
+      )}
     </div>
   )
 }
@@ -108,8 +123,10 @@ export function StatusBanners(): JSX.Element | null {
     <StatusBannersView
       sync={boot.data.sync}
       role={user.role}
+      zWaiting={boot.data.zWaiting}
       onGoStatus={() => void navigate({ to: '/status' })}
       onGoProblems={() => void navigate({ to: '/sync-problems' })}
+      onGoIssueZ={(shiftId) => void navigate({ to: '/shift/z/$shiftId', params: { shiftId } })}
     />
   )
 }

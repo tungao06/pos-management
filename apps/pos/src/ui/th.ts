@@ -202,6 +202,24 @@ export const TH = {
   errCountFormat: 'จำนวนต้องเป็นตัวเลขจำนวนเต็ม 0–99999',
   errCountFirst: 'กด "นับเสร็จ" ก่อน',
 
+  // Task 15 — หน้านับเงินใหม่ (D101 · D102 · §6.8): นับเสร็จ → ทบทวน → PIN → ใบปิดกะ (ทันทีหรือรอออนไลน์)
+  countFinish: 'นับเสร็จ',
+  countExpected: 'เงินสดที่ควรมี',
+  countNoBotCash: 'ยังไม่รวมบิลเงินสดจากบอท',
+  countBotCash: (n: number): string => `บิลเงินสดจากบอท/เว็บ ${n} ใบ`,
+  countFrozen: 'กะนี้หยุดรับขายแล้ว — ขายต่อต้องเปิดกะใหม่',
+  countConfirmOnline: 'ยืนยันและออกใบปิดกะ',
+  countConfirmOffline: 'ยืนยันการนับ (ใบปิดกะออกเมื่อออนไลน์)',
+  countSavedOffline: 'บันทึกการนับแล้ว — ใบปิดกะจะออกเมื่อเชื่อมต่อได้',
+  zWaitingBanner: (date: string): string => `ใบปิดกะ ${date} รอออนไลน์`,
+  zIssue: 'ออกใบปิดกะ',
+  zBotWindow: (after: string, until: string): string => `บิลบอทช่วง ${after} – ${until}`,
+  zChainCentral: (n: number): string => `ใบปิดกะใบแรกหลังตั้งเครื่องใหม่ จะต่อเลขจาก Z ${n} ในระบบกลาง — เจ้าของกรอก PIN อีกครั้งเพื่อรับทราบ`,
+  zLocalOnly: 'ใบปิดกะนี้เก็บในเครื่องเท่านั้น',
+  zCentralContinued: (n: number): string => `ต่อเลขจาก Z ${n} ในระบบกลาง`,
+  countPendingGo: 'ไปหน้าทบทวนการนับ',
+  zBlockedGo: 'ไปออกใบปิดกะของกะก่อนหน้า',
+
   // แผน 4
   errPriceJump: 'ราคาบางรายการต่างจากราคาที่รับครั้งก่อนเกิน 10% — ตรวจราคาอีกครั้ง แล้วกด "ยืนยันราคานี้"',
   errCartTooLarge: 'ตะกร้ามีรายการหรือจำนวนแก้วมากเกินไป — ตัดบางรายการออกก่อน',

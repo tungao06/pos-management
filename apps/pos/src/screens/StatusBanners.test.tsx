@@ -7,8 +7,11 @@ import type { BootstrapState, PosApi, SyncStatusDto, UserDto } from '../api/type
 import { ApiProvider } from '../app/api-context'
 import { CartProvider } from '../app/cart-context'
 import { SessionProvider, useSession } from '../app/session'
+import { render as renderBlock3 } from '../test-utils'
 import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { testSellCatalog } from '../test-utils/sell-catalog'
+import { TH } from '../ui/th'
+import { fakeApi, OWNERS } from './block3-test-fixtures'
 import { SellScreen } from './SellScreen'
 import { StatusBanners } from './StatusBanners'
 
@@ -143,5 +146,14 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
     renderBanners({ ...BASE_SYNC, problemBills: 1 }, 'owner')
     const btn = await screen.findByTestId('banner-problems')
     fireEvent.click(btn) // just proves it is clickable — navigation itself is mocked in this suite
+  })
+
+  it('a Z waiting to go online shows the red bar with the Thai date and the issue button (§6.8)', async () => {
+    renderBlock3(<StatusBanners />, {
+      api: fakeApi({ bootstrap: vi.fn(async () => ({ users: OWNERS, countingShift: null, centralLastZNo: null, sync: BASE_SYNC, zWaiting: [{ shiftId: 's1', businessDate: '2026-09-25', countedAt: '2026-09-25T05:00:00.000Z', syncMode: 'central', countedSatang: 59_500 }] })) }),
+      session: { userId: 'u1', role: 'staff' },
+    })
+    expect(await screen.findByTestId('banner-z-waiting')).toHaveTextContent(TH.zWaitingBanner('25 ก.ย. 2569'))
+    expect(screen.getByTestId('z-issue')).toBeVisible()
   })
 })
