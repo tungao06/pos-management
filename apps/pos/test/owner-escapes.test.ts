@@ -111,7 +111,7 @@ describe('fix round 1 item 2 — a row closed local while its request is on the 
     await sync
     expect(await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, `shift_open:${t.shift!.id}`)).get()).toMatchObject({ status: 'sent', resultJson: { shift_id: t.shift!.id } })
     expect(t.mock.shifts().map((x) => x.id)).toEqual([t.shift!.id])
-    expect(await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, SENT_AFTER_LOCAL_ACTION)).all()).toEqual([expect.objectContaining({ entityId: `shift_open:${t.shift!.id}`, afterJson: { status: 'sent', verdict: 'accepted' } })])
+    expect(await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, SENT_AFTER_LOCAL_ACTION)).all()).toEqual([expect.objectContaining({ entityId: `shift_open:${t.shift!.id}`, beforeJson: { status: 'local_only', excludedAt: null }, afterJson: { status: 'sent', verdict: 'accepted', restoredChildren: [] } })])
     expect((await t.db.select().from(s.shift).where(eq(s.shift.id, t.shift!.id)).get())?.syncMode).toBe('local_only') // the owner's choice stands for the rows after it
   })
   it('EXCLUDE of a far-ahead bill during its push, dayo accepts: the bill is shown as in dayo, never "outside dayo"', async () => {
@@ -131,6 +131,87 @@ describe('fix round 1 item 2 — a row closed local while its request is on the 
     expect(await t.db.select().from(s.outbox).where(eq(s.outbox.id, p!.outboxId)).get()).toMatchObject({ status: 'sent' })
     expect((await t.api.getOrder(r.orderId)).central).toMatchObject({ state: 'sent' })
     expect(t.mock.orders()).toEqual([expect.objectContaining({ posOrderId: r.orderId, status: 'ok' })])
+  })
+})
+
+describe('fix round 2 — a bill EXCLUDEd while on the wire that dayo stores: its void is not left behind', () => {
+  function onTheWire(t: Awaited<ReturnType<typeof openConnectedApi>>) {
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    let onWire!: () => void
+    const wire = new Promise<void>((r) => { onWire = r })
+    let first = true
+    const gated: typeof fetch = async (input, init) => {
+      if (String(input).endsWith('/pos/push') && first) { first = false; onWire(); await gate }
+      return t.mock.fetch(input, init)
+    }
+    const api = createPosApi(t.db, { ...t.deps, fetch: gated })
+    return { api, sync: api.syncNow(), wire, release }
+  }
+  async function farAheadBill() {
+    const t = await openConnectedApi({ now: '2026-09-27T03:00:00.000Z' })
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
+    t.mock.setNow('2026-09-25T03:00:00.000Z')
+    return { t, ctx, r }
+  }
+  type Api = ReturnType<typeof createPosApi>
+  const cancel = (api: Api, orderId: string) =>
+    api.cancelSale({ orderId, actorUserId: STAFF.TungAo, approverUserId: STAFF.DCm, approverPin: '2222', reason: 'ลูกค้ายกเลิก', made: false, refundReference: null })
+  const status = async (t: Awaited<ReturnType<typeof openConnectedApi>>, key: string) => (await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get())?.status
+
+  it('the void was queued after the request left (a later batch): it comes back to the queue and dayo ends with the bill cancelled', async () => {
+    const { t, ctx, r } = await farAheadBill()
+    await pushOnce(ctx) // CLOCK_AHEAD, far ahead: a clock card
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    t.clock.advanceMs(120_000)
+    const { api, sync, wire, release } = onTheWire(t)
+    await wire                                                        // the order row alone is on the wire
+    t.mock.setNow(t.clock.now())                                      // dayo will accept it
+    await cancel(api, r.orderId)                                      // staff cancel the bill meanwhile
+    await api.excludeFromSync({ ...owner, outboxId: p!.outboxId })    // the owner closes the bill locally — the void goes along
+    expect(await status(t, `order_void:${r.orderId}`)).toBe('local_only')
+    release()
+    await sync
+    expect(await status(t, `order:${r.orderId}`)).toBe('sent')
+    expect(await status(t, `order_void:${r.orderId}`)).not.toBe('local_only')
+    expect(await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, SENT_AFTER_LOCAL_ACTION)).all()).toEqual([expect.objectContaining({
+      beforeJson: { status: 'local_only', excludedAt: expect.any(String) }, afterJson: { status: 'sent', verdict: 'accepted', restoredChildren: [`order_void:${r.orderId}`] },
+    })])
+    await pushOnce(ctx)
+    expect(await status(t, `order_void:${r.orderId}`)).toBe('sent')
+    expect(t.mock.orders()).toEqual([expect.objectContaining({ posOrderId: r.orderId, status: 'cancelled' })])
+    expect((await t.api.getOrder(r.orderId)).central).toMatchObject({ state: 'sent', voidState: 'sent' })
+  })
+  it('the void was in the same request: dayo stored both, both end sent — the bill is cancelled in dayo', async () => {
+    const { t, ctx, r } = await farAheadBill()
+    await cancel(t.api, r.orderId)
+    await pushOnce(ctx) // both CLOCK_AHEAD, far ahead
+    const p = (await t.api.listSyncProblems(STAFF.TungAo)).find((x) => x.key === `order:${r.orderId}`)!
+    t.clock.advanceMs(120_000)
+    const { api, sync, wire, release } = onTheWire(t)
+    await wire                                                        // order and void on the wire together
+    t.mock.setNow(t.clock.now())
+    await api.excludeFromSync({ ...owner, outboxId: p.outboxId })
+    release()
+    await sync
+    expect([await status(t, `order:${r.orderId}`), await status(t, `order_void:${r.orderId}`)]).toEqual(['sent', 'sent'])
+    expect(t.mock.orders()).toEqual([expect.objectContaining({ posOrderId: r.orderId, status: 'cancelled' })])
+  })
+  it('a void the owner closed on its own stays closed when its bill later reaches dayo', async () => {
+    const { t, ctx, r } = await farAheadBill()
+    await cancel(t.api, r.orderId)
+    await pushOnce(ctx)
+    const problems = await t.api.listSyncProblems(STAFF.TungAo)
+    await t.api.excludeFromSync({ ...owner, outboxId: problems.find((x) => x.key === `order_void:${r.orderId}`)!.outboxId })
+    t.clock.advanceMs(120_000)
+    const { api, sync, wire, release } = onTheWire(t)
+    await wire
+    t.mock.setNow(t.clock.now())
+    await api.excludeFromSync({ ...owner, outboxId: problems.find((x) => x.key === `order:${r.orderId}`)!.outboxId })
+    release()
+    await sync
+    expect([await status(t, `order:${r.orderId}`), await status(t, `order_void:${r.orderId}`)]).toEqual(['sent', 'local_only'])
   })
 })
 

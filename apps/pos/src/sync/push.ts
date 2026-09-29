@@ -1,4 +1,4 @@
-import { and, asc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import {
@@ -521,8 +521,15 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
         // or the owner may enter it again on the web. The row becomes sent (dayo's data kept as usual), an audit_log row
         // records that it reached dayo after the close, and a bill closed "ปิดไว้ในเครื่อง" is no longer shown as outside dayo.
         await markSent(tx, r, v, at, 'local_only')
-        if (r.tableName === 'order' || r.tableName === 'order_off_catalog') await tx.update(s.order).set({ excludedAt: null }).where(eq(s.order.id, String((r.rowJson as { pos_order_id: string }).pos_order_id)))
-        await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'sync_row', entityId: r.idempotencyKey, action: SENT_AFTER_LOCAL_ACTION, beforeJson: { status: 'local_only' }, afterJson: { status: 'sent', verdict: v.status }, actorUserId: null, at })
+        let previousExcludedAt: string | null = null
+        let restored: string[] = []
+        if (r.tableName === 'order' || r.tableName === 'order_off_catalog') {
+          const orderId = String((r.rowJson as { pos_order_id: string }).pos_order_id)
+          previousExcludedAt = (await tx.select({ x: s.order.excludedAt }).from(s.order).where(eq(s.order.id, orderId)).get())?.x ?? null
+          await tx.update(s.order).set({ excludedAt: null }).where(eq(s.order.id, orderId))
+          restored = await restoreExcludedChildren(tx, r, orderId) // fix round 2: its void must reach dayo too
+        }
+        await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'sync_row', entityId: r.idempotencyKey, action: SENT_AFTER_LOCAL_ACTION, beforeJson: { status: 'local_only', excludedAt: previousExcludedAt }, afterJson: { status: 'sent', verdict: v.status, restoredChildren: restored }, actorUserId: null, at })
         t.sent++
         continue
       }
@@ -551,6 +558,27 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
     const released = await releaseChildIds(tx, sentKeys)
     return { ...t, released }
   })
+}
+
+/**
+ * Task 14 fix round 2: dayo stored a bill the owner had just closed "ปิดไว้ในเครื่อง" — the children that close took along
+ * (listed in the EXCLUDED_FROM_SYNC event of this very row) come back to the queue: its void must reach dayo too, or dayo
+ * counts a cancelled bill as a sale. Only those still local_only and still waiting on THIS row — a void the owner closed on
+ * its own, or one moved to another parent, stays as it is (enqueuePush's parent rules are untouched). Shift-lane rows are
+ * never restored: a shift kept local stays local (keepShiftLocal · R19). Returns their keys.
+ */
+async function restoreExcludedChildren(tx: RemoteDb, r: Row, orderId: string): Promise<string[]> {
+  const events = await tx.select({ payload: s.orderEvent.payloadJson }).from(s.orderEvent)
+    .where(and(eq(s.orderEvent.orderId, orderId), eq(s.orderEvent.type, 'EXCLUDED_FROM_SYNC'))).orderBy(desc(s.orderEvent.seq)).all()
+  const ev = events.map((e) => e.payload as { key?: unknown; children?: unknown }).find((p) => p.key === r.idempotencyKey)
+  const listed = Array.isArray(ev?.children) ? ev.children.filter((k): k is string => typeof k === 'string') : []
+  if (listed.length === 0) return []
+  const kids = await tx.select({ id: s.outbox.id, key: s.outbox.idempotencyKey }).from(s.outbox)
+    .where(and(inArray(s.outbox.idempotencyKey, listed), eq(s.outbox.tableName, 'order_void'), eq(s.outbox.parentKey, r.idempotencyKey), eq(s.outbox.status, 'local_only'))).all()
+  if (kids.length === 0) return []
+  await tx.update(s.outbox).set({ status: 'pending', attempts: 0, deadAt: null, nextAttemptAt: null, lastError: null })
+    .where(and(inArray(s.outbox.id, kids.map((k) => k.id)), eq(s.outbox.status, 'local_only')))
+  return kids.map((k) => k.key)
 }
 
 /**
