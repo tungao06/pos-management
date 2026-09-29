@@ -1,0 +1,80 @@
+{
+  "name": "e2-shift-rows-accepted",
+  "spec": "04 §4.10 แถวกะ: shift_open + cash_movement PAID_OUT (มีเหตุผล · pos_order_id null) + VOID_REFUND (มี pos_order_id · reason null) · accepted · data = {id ของชนิด} เท่านั้น ไม่มีเงินติดลบ (dayo 0066:58-226 · 114, 225)",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": {
+      "ok": true,
+      "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c",
+      "shop_id": "11111111-2222-4333-8444-555555555555",
+      "name": "แท็บเล็ตขาย 1",
+      "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write", "shift:write"]
+    },
+    "api_pos_push": "@data"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/pos/push",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" },
+    "body": {
+      "device_time": "2026-09-25T12:10:00.000Z",
+      "rows": [
+        {
+          "key": "shift_open:5a5a5a5a-0000-4000-8000-000000000001",
+          "kind": "shift_open",
+          "data": {
+            "shift_id": "5a5a5a5a-0000-4000-8000-000000000001",
+            "business_date": "2026-09-25",
+            "opened_at": "2026-09-25T02:00:00.000Z",
+            "opened_by": "7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f",
+            "opening_float": 500,
+            "quick_open": false
+          }
+        },
+        {
+          "key": "cash_movement:6b6b6b6b-0000-4000-8000-000000000001",
+          "kind": "cash_movement",
+          "data": {
+            "movement_id": "6b6b6b6b-0000-4000-8000-000000000001",
+            "shift_id": "5a5a5a5a-0000-4000-8000-000000000001",
+            "kind": "PAID_OUT",
+            "amount": 20,
+            "pos_order_id": null,
+            "reason": "ซื้อน้ำแข็ง",
+            "created_by": "7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f",
+            "created_at": "2026-09-25T04:00:00.000Z"
+          }
+        },
+        {
+          "key": "cash_movement:6b6b6b6b-0000-4000-8000-000000000002",
+          "kind": "cash_movement",
+          "data": {
+            "movement_id": "6b6b6b6b-0000-4000-8000-000000000002",
+            "shift_id": "5a5a5a5a-0000-4000-8000-000000000001",
+            "kind": "VOID_REFUND",
+            "amount": 45,
+            "pos_order_id": "0b6c1e2a-4f3d-4c1b-9a8e-7d6c5b4a3f21",
+            "reason": null,
+            "created_by": "7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f",
+            "created_at": "2026-09-25T05:00:00.000Z"
+          }
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": {
+      "ok": true,
+      "data": {
+        "server_time": "2026-09-25T12:10:00.410+00:00",
+        "results": [
+          { "key": "shift_open:5a5a5a5a-0000-4000-8000-000000000001", "status": "accepted", "data": { "shift_id": "5a5a5a5a-0000-4000-8000-000000000001" } },
+          { "key": "cash_movement:6b6b6b6b-0000-4000-8000-000000000001", "status": "accepted", "data": { "movement_id": "6b6b6b6b-0000-4000-8000-000000000001" } },
+          { "key": "cash_movement:6b6b6b6b-0000-4000-8000-000000000002", "status": "accepted", "data": { "movement_id": "6b6b6b6b-0000-4000-8000-000000000002" } }
+        ]
+      }
+    }
+  }
+}

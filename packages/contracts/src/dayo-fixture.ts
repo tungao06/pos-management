@@ -19,12 +19,31 @@ export type PosContractFixture = z.infer<typeof PosContractFixture>
  * dayo main's SQL and handed to dayo. Adding or dropping one = change this list.
  */
 export const CONTRACT_FIXTURE_NAMES = [
-  'e1-catalog-changed', 'e1-catalog-unchanged', 'e1-missing-staff-scope', 'e2-envelope-invalid', 'e2-key-reused-different-content',
-  'e2-missing-orders-write-scope', 'e2-order-accepted', 'e2-order-and-void-same-batch', 'e2-order-duplicate', 'e2-order-promo-closed-before-sale',
-  'e2-order-sale-date-tomorrow', 'e2-receipt-conflict', 'e2-row-server-error', 'e2-unknown-code-other-row-ok', 'e2-unknown-size',
-  'e2-unsupported-kind-and-field', 'e2-void-clock-ahead', 'e2-void-cross-day', 'e2-void-too-old', 'e3-orders-today', 'err-401-invalid-key',
-  'err-404-api-disabled', 'err-404-unknown-path', 'err-429-rate-limited', 'err-500-rpc-unreachable', 'preflight-allowed-api-off', 'preflight-disallowed-origin',
+  'e1-catalog-changed', 'e1-catalog-changed-block3', 'e1-catalog-unchanged', 'e1-missing-staff-scope', 'e2-cash-count-counted-conflict',
+  'e2-envelope-invalid', 'e2-key-reused-different-content', 'e2-missing-orders-write-scope', 'e2-order-accepted', 'e2-order-and-void-same-batch',
+  'e2-order-duplicate', 'e2-order-off-catalog-accepted', 'e2-order-off-catalog-exists', 'e2-order-off-catalog-exists-order',
+  'e2-order-off-catalog-rule', 'e2-order-promo-closed-before-sale', 'e2-order-sale-date-tomorrow', 'e2-receipt-conflict', 'e2-row-server-error',
+  'e2-shift-close-accepted', 'e2-shift-close-z-no-taken', 'e2-shift-rows-accepted', 'e2-shift-scope-forbidden', 'e2-unknown-code-other-row-ok',
+  'e2-unknown-size', 'e2-unsupported-kind-and-field', 'e2-void-clock-ahead', 'e2-void-cross-day', 'e2-void-too-old', 'e3-orders-today',
+  'e4-shift-cash', 'err-401-invalid-key', 'err-404-api-disabled', 'err-404-unknown-path', 'err-429-rate-limited', 'err-500-rpc-unreachable',
+  'preflight-allowed-api-off', 'preflight-disallowed-origin',
 ] as const
+
+/**
+ * Block 3 (plan 09 Task 7 · spec 04 §4.11 rule 2 · D84): the fixtures of the shift kinds, E1 last_z_*, E4 and the off-catalog
+ * bill — a subset of CONTRACT_FIXTURE_NAMES, replayed on a block 3 mock (dayo-mock test/fixtures-replay.test.ts).
+ */
+export const BLOCK3_FIXTURE_NAMES = [
+  'e1-catalog-changed-block3', 'e2-cash-count-counted-conflict', 'e2-order-off-catalog-accepted', 'e2-order-off-catalog-exists', 'e2-order-off-catalog-exists-order',
+  'e2-order-off-catalog-rule', 'e2-shift-close-accepted', 'e2-shift-close-z-no-taken', 'e2-shift-rows-accepted', 'e2-shift-scope-forbidden', 'e4-shift-cash',
+] as const satisfies readonly (typeof CONTRACT_FIXTURE_NAMES)[number][]
+/**
+ * Preflight P3/D1: the block 3 fixtures that need dayo ADR-0069 PHASE 2 (order_off_catalog · detail prefixes on order rows) —
+ * not shipped at dayo 12885fe, so dayo cannot replay them yet; each says "ระยะ 2" in its `spec`. Task 19a leaves them as they are.
+ */
+export const BLOCK3_PHASE2_FIXTURE_NAMES = [
+  'e2-order-off-catalog-accepted', 'e2-order-off-catalog-exists', 'e2-order-off-catalog-exists-order', 'e2-order-off-catalog-rule',
+] as const satisfies readonly (typeof BLOCK3_FIXTURE_NAMES)[number][]
 
 /** Header lookup ignoring case — the fixtures write `Access-Control-Allow-Origin`, fetch lower-cases. */
 export function header(h: Record<string, string> | undefined, name: string): string | undefined {

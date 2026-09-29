@@ -1,0 +1,70 @@
+{
+  "name": "e2-order-off-catalog-rule",
+  "spec": "ระยะ 2 — เล่นซ้ำบน dayo ไม่ได้จนกว่า ADR-0069 ระยะ 2 (dayo 12885fe ยังไม่มี order_off_catalog · preflight P3/D1) · 04 §4.10: ยอดบิลนอกแคตตาล็อกเกินเพดาน → rejected FORBIDDEN \"rule:\" · เพดานเริ่มต้น shop_settings.off_catalog_max_total = ฿3,000 (D103 · ADR-0056) · บิลนี้ ฿3,000.01",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": {
+      "ok": true,
+      "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c",
+      "shop_id": "11111111-2222-4333-8444-555555555555",
+      "name": "แท็บเล็ตขาย 1",
+      "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write", "shift:write"]
+    },
+    "api_pos_push": "@data"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/pos/push",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" },
+    "body": {
+      "device_time": "2026-09-25T12:10:00.000Z",
+      "rows": [
+        {
+          "key": "order_off_catalog:0b0b0b0b-0000-4000-8000-000000000004",
+          "kind": "order_off_catalog",
+          "data": {
+            "pos_order_id": "0b0b0b0b-0000-4000-8000-000000000004",
+            "receipt_no": "A-000004",
+            "queue_no": 4,
+            "sale_date": "2026-09-25",
+            "sold_at": "2026-09-25T06:00:00.000Z",
+            "channel": "store",
+            "payment": "cash",
+            "staff_id": "7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f",
+            "catalog_version": 42,
+            "shift_id": "5a5a5a5a-0000-4000-8000-000000000001",
+            "note": null,
+            "lines": [
+              {
+                "code": null,
+                "name": "ชุดเครื่องดื่มจัดเลี้ยง",
+                "size": null,
+                "sweetness": null,
+                "qty": 1,
+                "unit_price": 3000.01,
+                "discount_per_cup": 0,
+                "line_total": 3000.01
+              }
+            ],
+            "totals": { "items_subtotal": 3000.01, "items_discount": 0, "bill_discount": 0, "total": 3000.01 },
+            "closed_by": "7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f",
+            "closed_at": "2026-09-25T12:05:00.000Z",
+            "reason": "เมนูถูกลบ",
+            "original_reason": "UNKNOWN_CODE"
+          }
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": {
+      "ok": true,
+      "data": {
+        "server_time": "2026-09-25T12:10:00.410+00:00",
+        "results": [{ "key": "order_off_catalog:0b0b0b0b-0000-4000-8000-000000000004", "status": "rejected", "reason": "FORBIDDEN", "detail": "rule: ยอดเกินเพดานบิลนอกแคตตาล็อก" }]
+      }
+    }
+  }
+}
