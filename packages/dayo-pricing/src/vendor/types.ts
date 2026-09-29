@@ -79,7 +79,8 @@ export interface RecipeLineEntry {
 
 export interface MenuOptionMilkEntry {
   code: MilkCode;
-  ingredientId: string;
+  /** menu_options.ingredient_id — nullable ในฐาน (ตัวเลือกที่ยังไม่ผูกวัตถุดิบ) ต้องถือว่า "ไม่พบ" เหมือน SQL quote_order */
+  ingredientId: string | null;
   priceAdd: number;
   /** คำที่พนักงานพิมพ์แทนตัวเลือกนี้ (menu_options.aliases) — ADR-0038 */
   aliases: string[];
@@ -87,7 +88,8 @@ export interface MenuOptionMilkEntry {
 
 export interface MenuOptionGradeEntry {
   code: MatchaGradeCode;
-  ingredientId: string;
+  /** menu_options.ingredient_id — nullable ในฐาน (ตัวเลือกที่ยังไม่ผูกวัตถุดิบ) ต้องถือว่า "ไม่พบ" เหมือน SQL quote_order */
+  ingredientId: string | null;
   multiplier: number;
   priceAdd: number;
   isDefault: boolean;

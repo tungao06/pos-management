@@ -51,7 +51,9 @@ export function applyOptions(
   if (choice.milk === "oat") {
     const freshOpt = catalog.milkOptions.find((o) => o.code === "fresh");
     const oatOpt = catalog.milkOptions.find((o) => o.code === "oat");
-    const freshLineIdx = freshOpt ? lines.findIndex((l) => l.ingredientId === freshOpt.ingredientId) : -1;
+    // freshOpt.ingredientId เป็น null ได้ (menu_options.ingredient_id nullable) — ต้องนับเป็น "ไม่พบ" เหมือน SQL quote_order
+    // (`o_fresh.ingredient_id is not null then array_position(...)`) ไม่งั้น null จะจับคู่กับบรรทัดสูตรที่อ้างเบส (ingredientId ก็ null) ผิด ๆ
+    const freshLineIdx = freshOpt?.ingredientId != null ? lines.findIndex((l) => l.ingredientId === freshOpt.ingredientId) : -1;
     if (!variant.allowOatMilk || !oatOpt || freshLineIdx === -1) {
       warnings.push(`⚠ ${variant.menuNameTh} ไม่มีตัวเลือกนมโอ๊ต`);
       ok = false;
@@ -70,7 +72,8 @@ export function applyOptions(
     } else {
       const gradeOpt = catalog.gradeOptions.find((o) => o.code === choice.grade);
       const defaultOpt = catalog.gradeOptions.find((o) => o.isDefault);
-      const powderLineIdx = defaultOpt ? lines.findIndex((l) => l.ingredientId === defaultOpt.ingredientId) : -1;
+      // เหมือนข้างบน: defaultOpt.ingredientId เป็น null ได้ → ต้องนับเป็น "ไม่พบ" (SQL: `o_def.ingredient_id is not null then array_position(...)`)
+      const powderLineIdx = defaultOpt?.ingredientId != null ? lines.findIndex((l) => l.ingredientId === defaultOpt.ingredientId) : -1;
       if (!gradeOpt || powderLineIdx === -1) {
         warnings.push(`⚠ ไม่พบตัวเลือกเกรด ${choice.grade}`);
         ok = false;
