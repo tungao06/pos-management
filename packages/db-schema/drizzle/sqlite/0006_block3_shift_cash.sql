@@ -20,7 +20,15 @@ CREATE TRIGGER `cash_count_no_delete` BEFORE DELETE ON `cash_count` BEGIN SELECT
 CREATE TRIGGER `shift_status_forward_only` BEFORE UPDATE OF `status` ON `shift`
 WHEN NEW.`status` NOT IN ('open', 'counting', 'counted', 'closed')
   OR (CASE NEW.`status` WHEN 'open' THEN 0 WHEN 'counting' THEN 1 WHEN 'counted' THEN 2 ELSE 3 END) < (CASE OLD.`status` WHEN 'open' THEN 0 WHEN 'counting' THEN 1 WHEN 'counted' THEN 2 ELSE 3 END)
-BEGIN SELECT RAISE(ABORT, 'shift.status only moves forward: open → counting → counted → closed (D101)'); END;
+  OR (NEW.`status` IN ('counting', 'counted') AND NEW.`counted_at` IS NULL)
+BEGIN SELECT RAISE(ABORT, 'shift.status only moves forward: open → counting → counted → closed; counting and counted need counted_at (D101)'); END;
+--> statement-breakpoint
+CREATE TRIGGER `shift_sync_mode_one_way` BEFORE UPDATE OF `sync_mode` ON `shift`
+WHEN NEW.`sync_mode` NOT IN ('central','local_only') OR (OLD.`sync_mode` = 'local_only' AND NEW.`sync_mode` <> 'local_only')
+BEGIN SELECT RAISE(ABORT, 'shift.sync_mode only moves central → local_only (R1 · R19)'); END;
+--> statement-breakpoint
+CREATE TRIGGER `shift_sync_mode_valid` BEFORE INSERT ON `shift` WHEN NEW.`sync_mode` NOT IN ('central','local_only')
+BEGIN SELECT RAISE(ABORT, 'shift.sync_mode must be central or local_only (R1)'); END;
 --> statement-breakpoint
 CREATE TRIGGER `shift_counted_at_once` BEFORE UPDATE OF `counted_at` ON `shift` WHEN OLD.`counted_at` IS NOT NULL AND NEW.`counted_at` IS NOT OLD.`counted_at`
 BEGIN SELECT RAISE(ABORT, 'shift.counted_at is set once (D101)'); END;

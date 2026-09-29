@@ -143,7 +143,7 @@ describe('block 3 migration (D101 · spec §4.10 ข้อ 4)', () => {
     expect(objectsAfter.filter((o) => !objectsBefore.some((b) => b[1] === o[1])).map((o) => `${String(o[0])} ${String(o[1])}`).sort()).toEqual([
       'index cash_count_shift_uq', 'index shift_counting_uq',
       'trigger cash_count_no_delete', 'trigger cash_count_no_update', 'trigger cash_movement_open_shift_only', 'trigger order_open_shift_only',
-      'trigger shift_counted_at_once', 'trigger shift_status_forward_only',
+      'trigger shift_counted_at_once', 'trigger shift_status_forward_only', 'trigger shift_sync_mode_one_way', 'trigger shift_sync_mode_valid',
     ])
     expect(one(raw, `select name, sql from sqlite_master where type = 'table' and name not in ('shift', 'cash_count', 'order') order by name`)).toEqual(tableSqlBefore)
     expect(one(raw, `PRAGMA foreign_key_check`)).toEqual([])
@@ -260,6 +260,33 @@ describe('block 3 freeze rules on the tablet (D101 · R2 · R5)', () => {
     const mismatch: CentralMismatch = { orderNo: 'D260925-001', reportedTotalSatang: 4000, paymentIsCash: false, localTotalSatang: 4500, localPaymentIsCash: true }
     d.update(s.order).set({ centralMismatchJson: mismatch, offCatalogAt: NOW }).where(eq(s.order.id, bill)).run()
     expect(d.select({ m: s.order.centralMismatchJson, at: s.order.offCatalogAt }).from(s.order).where(eq(s.order.id, bill)).get()).toEqual({ m: mismatch, at: NOW })
+  })
+  it('counting and counted need counted_at (D101) — the block-2 open → closed step does not', async () => {
+    const db = await migratedAll(); await seedOpenShift(db, { shiftId: 's' })
+    await expect(db.run(`update shift set status='counting' where id='s'`)).rejects.toThrow(/counted_at/)
+    await expect(db.run(`update shift set status='counted' where id='s'`)).rejects.toThrow(/counted_at/)
+    expect(await db.all(`select status, counted_at from shift`)).toEqual([{ status: 'open', counted_at: null }])
+    await db.run(`update shift set status='closed', closed_by='u1', closed_at='${NOW}' where id='s'`)
+    expect(await db.all(`select status, counted_at from shift`)).toEqual([{ status: 'closed', counted_at: null }])
+  })
+  it('sync_mode moves central → local_only only (R1 · R19); a value outside the two is refused on insert and update', async () => {
+    const db = await migratedAll(); await seedDeviceAndUser(db)
+    const insertShift = (id: string, status: string, mode: string) => db.run(`insert into shift (id, device_id, business_date, status, opened_by, opened_at, opening_float_satang, sync_mode)
+      values ('${id}', 'dev-1', '2026-09-25', '${status}', 'u1', '${NOW}', 0, '${mode}')`)
+    await expect(insertShift('bad', 'closed', 'Central')).rejects.toThrow(/sync_mode must be/)
+    await expect(insertShift('bad', 'closed', '')).rejects.toThrow(/sync_mode must be/)
+    await insertShift('loc', 'closed', 'local_only')
+    await insertShift('cen', 'open', 'central')
+    await expect(db.run(`update shift set sync_mode='central' where id='loc'`)).rejects.toThrow(/only moves central → local_only/)
+    await expect(db.run(`update shift set sync_mode='other' where id='cen'`)).rejects.toThrow(/only moves central → local_only/)
+    await db.run(`update shift set sync_mode='central' where id='cen'`) // same value: no move
+    await db.run(`update shift set sync_mode='local_only' where id='cen'`) // R19: the owner keeps a stuck shift on the tablet
+    await expect(db.run(`update shift set sync_mode='central' where id='cen'`)).rejects.toThrow(/only moves central → local_only/)
+    await db.run(`update shift set status='closed' where id='cen'`) // one open shift per device: close it before the next
+    await seedOpenShift(db, { shiftId: 'dflt' }) // no sync_mode given: the default passes the insert guard
+    expect(await db.all(`select id, sync_mode from shift order by id`)).toEqual([
+      { id: 'cen', sync_mode: 'local_only' }, { id: 'dflt', sync_mode: 'local_only' }, { id: 'loc', sync_mode: 'local_only' },
+    ])
   })
   it('foreign_key_check stays empty', async () => { const db = await migratedAll(); expect(await db.all('pragma foreign_key_check')).toEqual([]) })
 })

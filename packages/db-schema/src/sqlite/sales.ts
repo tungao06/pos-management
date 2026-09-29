@@ -18,7 +18,8 @@ export const shift = sqliteTable('shift', {
   // trigger shift_status_forward_only). A shift that is not open takes no bill and no cash movement (D101 · triggers
   // order_open_shift_only / cash_movement_open_shift_only).
   countedAt: text('counted_at'),                   // D101: when the count started — set once (trigger shift_counted_at_once)
-  // ruling R1: 'central' = the shift and its cash rows go to dayo · 'local_only' = never sent (every pre-block-3 shift)
+  // ruling R1: 'central' = the shift and its cash rows go to dayo · 'local_only' = never sent (every pre-block-3 shift).
+  // One way only: central → local_only (R19), never back (triggers shift_sync_mode_one_way / shift_sync_mode_valid).
   syncMode: textEnum('sync_mode', ShiftSyncMode).notNull().default('local_only'),
 }, (t) => [
   // D47 item 6: at most one open shift per device.
