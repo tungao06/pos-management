@@ -59,6 +59,8 @@ export function recompute(s: MockState, z: MockZ): void {
   const found = botCashBills(s, Date.parse(w.bot_window.after), Date.parse(w.bot_window.until))          // rule 4 (dayo runs E4's query itself — S2)
   const names = (xs: { order_no: string }[]): string => JSON.stringify(xs.map((b) => b.order_no).sort())
   if (names(found) !== names(w.bot_bills)) diff.push('ชุดบิลบอทไม่ตรง')
+  // spec 04 §4.10 การคิดซ้ำ ข้อ 4 "order_no แต่ละใบต้องไม่อยู่ใน Z อื่น": read literally, so a bot bill listed by two Zs makes BOTH
+  // mismatch (the spec does not say which Z counted it first) — noted for dayo (Task 8 fix round 1).
   const otherZs = [...s.zReports.values()].filter((x) => x.shiftId !== z.shiftId && !x.quarantined)     // a quarantined Z is nobody's reference (R5-3)
   for (const b of w.bot_bills) {
     const f = found.find((x) => x.order_no === b.order_no)

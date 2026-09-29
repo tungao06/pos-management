@@ -1,8 +1,8 @@
 // order_off_catalog on the mock (spec 04 §4.10 rules 0–3 · D91 · D97 · R3-C · R4-2) — dayo ADR-0069 PHASE 2, so a
 // `block3Phase2` mock (preflight P3/D1). pos_push_rejections is dayo phase 1 already (0066:993-1002).
 import { describe, expect, it } from 'vitest'
-import { MOCK_API_KEY, mockControl } from '../src/index'
-import { at, cashCount, cid, newMock, newMockPhase1, offCatalogRow, oid, orderRow, posBill, push, rejectOrder, row, shiftClose, shiftOpen, sid, STAFF_ONLY, voidRow } from './helpers-block3'
+import { createMockDayo, MOCK_API_KEY, mockControl } from '../src/index'
+import { at, cashCount, cid, NOW, newMock, newMockPhase1, offCatalogRow, oid, orderRow, posBill, push, rejectOrder, row, shiftClose, shiftOpen, sid, STAFF_ONLY, voidRow } from './helpers-block3'
 
 const ready = () => { const mock = newMock(); mock.setBlock3LiveFrom('2026-09-01'); return mock }
 const offCat = (mock: ReturnType<typeof newMock>, o: Parameters<typeof offCatalogRow>[1] = {}) => push(mock, [row('order_off_catalog', oid(1), offCatalogRow(1, o))])
@@ -133,6 +133,29 @@ describe('order_off_catalog: the rest of the dayo rules (spec 04 §4.10 rule 0 �
     const res = await mock.fetch('http://localhost:8787/api/v1/orders', { headers: { authorization: `Bearer ${MOCK_API_KEY}` } })
     const rows = ((await res.json()) as { data: { pos_order_id?: string; totals: { total: number }; source: string }[] }).data
     expect(rows).toEqual([expect.objectContaining({ pos_order_id: oid(1), source: 'pos', totals: expect.objectContaining({ total: 35 }) })])
+  })
+  it('pos_push_rejections guards (0066:993-1002): kind from the row not the key · uuid pos_order_id · A–Z/_ reason · none on a block-2 dayo', async () => {
+    const mock = ready()
+    const r1 = await push(mock, [{ key: `order:${oid(2)}`, kind: 'order_void', data: orderRow(2, { shiftId: null }) }])   // key says order, row says order_void
+    const r2 = await push(mock, [{ key: `order_void:${oid(3)}`, kind: 'order', data: orderRow(3, { shiftId: null }) }])   // key says order_void, row says order
+    expect([r1[0], r2[0]]).toMatchObject([{ status: 'rejected', reason: 'BAD_KEY' }, { status: 'rejected', reason: 'BAD_KEY' }])
+    const r3 = await push(mock, [row('order', oid(4), { ...orderRow(4, { shiftId: null }), pos_order_id: 'not-a-uuid' })])
+    expect(r3[0]).toMatchObject({ status: 'rejected', reason: 'INVALID' })
+    mock.override({ match: { key: `order:${oid(5)}` }, verdict: { status: 'rejected', reason: 'unknown_code', detail: 'x' }, times: 1 })
+    expect((await push(mock, [row('order', oid(5), orderRow(5, { shiftId: null }))]))[0]).toMatchObject({ status: 'rejected', reason: 'unknown_code' })
+    expect(mock.rejections()).toEqual([{ posOrderId: oid(3), reasons: ['BAD_KEY'] }])
+    const block2 = createMockDayo({ now: NOW })
+    const r4 = await push(block2, [row('order', oid(6), { ...orderRow(6, { shiftId: null }), lines: [{ code: 'Retired Tea', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 }] })])
+    expect(r4[0]).toMatchObject({ status: 'rejected', reason: 'UNKNOWN_CODE' })
+    expect(block2.rejections()).toEqual([])
+  })
+  it('phase 2 switched off: an order row of an off-catalog bill gets the block-2 answer (duplicate, no off_catalog_exists:)', async () => {
+    const mock = ready()
+    await rejectOrder(mock, 1); await offCat(mock)
+    mock.setBlock3Phase2(false)
+    const [r] = await push(mock, [row('order', oid(1), orderRow(1, { shiftId: null }))])
+    expect(r).toMatchObject({ status: 'duplicate' })
+    expect(r!.detail).toBeUndefined()
   })
   it('phase 1 (dayo main 12885fe): order_off_catalog stays deferred UNSUPPORTED, but a rejected order row is recorded (0066:993-1002)', async () => {
     const mock = newMockPhase1()

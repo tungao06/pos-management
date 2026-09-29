@@ -197,8 +197,9 @@ function judgeOrder(s: MockState, key: string, d: J, now: number): ReceivedRowRe
 
   // ── de-duplication (2): same pos_order_id = duplicate · same receipt, other pos_order_id = CONFLICT ──
   const existing = s.orders.get(o.pos_order_id)
-  // phase 2 (§4.10 order_off_catalog rule 2): the bill is an off-catalog bill now → never a duplicate of this order row
-  if (existing?.offCatalog === true) reject('CONFLICT', `off_catalog_exists: ${existing.orderNo}`, existsData(existing))
+  // phase 2 (§4.10 order_off_catalog rule 2): the bill is an off-catalog bill now → never a duplicate of this order row ·
+  // phase 1 keeps the block-2 answer (same pos_order_id = duplicate), like its other bill-row texts (preflight D3)
+  if (s.block3Phase2 && existing?.offCatalog === true) reject('CONFLICT', `off_catalog_exists: ${existing.orderNo}`, existsData(existing))
   if (existing !== undefined) return { key, status: 'duplicate', data: orderData(s, existing, []) }
   // the receipt_taken: prefix of a bill row is dayo phase 2 (0066:5 · preflight D3) — phase 1 keeps the block-2 text
   if (s.receipts.has(o.receipt_no)) reject('CONFLICT', `${s.block3Phase2 ? 'receipt_taken: ' : ''}เลขใบเสร็จ ${o.receipt_no} ถูกใช้กับบิลอื่นของเครื่องนี้แล้ว`)
