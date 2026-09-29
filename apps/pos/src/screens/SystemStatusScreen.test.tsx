@@ -33,6 +33,8 @@ function bootWithSync(sync: Partial<SyncStatusDto>, overrides: Partial<Bootstrap
     staffNeedingPin: [],
     ownerRecovery: false,
     sync: { ...HEALTHY_SYNC, ...sync },
+    countingShift: null,
+    zWaiting: [],
     ...overrides,
   }
 }

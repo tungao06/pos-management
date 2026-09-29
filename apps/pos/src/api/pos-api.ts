@@ -3,11 +3,13 @@ import { adjustStock, discardBase } from './adjust'
 import { login } from './auth'
 import { confirmBackupSaved, exportBackup } from './backup'
 import { pullCatalog } from '../sync/catalog'
-import { createDayoPacer, createSyncScheduler, RATE_WINDOW_MS, SYNC_BUDGET_PER_MIN, type DayoPacer, type Scheduler } from '../sync/scheduler'
+import { createDayoPacer, createSyncScheduler, DAYO_REQUESTS_PER_MIN, RATE_WINDOW_MS, SYNC_BUDGET_PER_MIN, type DayoPacer, type Scheduler } from '../sync/scheduler'
 import { bootstrap, syncStatus } from './bootstrap'
 import { recordCashMovement } from './cash'
 import { listCentralOrdersToday, refreshDayoEdits } from './central-orders'
-import { closeShift, getZReport, listZReports } from './close'
+import { fetchBotCash } from './bot-cash'
+import { getZReport, listZReports } from './close'
+import { closeShift, confirmCount, countSummary, finishCount, issueZ } from './count'
 import { connectShop, isDayoLinked, probeDayo, recoverOwner, replaceApiKey } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
@@ -78,6 +80,11 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
   const pacer = opts.pacer ?? createDayoPacer(undefined, () => Date.parse(baseDeps.now()))
   const setupCall = createLimiter(SETUP_CALLS_PER_MIN, () => new PosError('DAYO_UNREACHABLE', `SETUP_RATE_LIMITED: at most ${SETUP_CALLS_PER_MIN} tries a minute — wait a minute`))
   const e3Call = createLimiter(E3_CALLS_PER_MIN, () => new PosError('OFFLINE', `E3_RATE_LIMITED: at most ${E3_CALLS_PER_MIN} a minute — wait a minute`))
+  // E4 (Task 12): a user action, once per Z — refused only when dayo's own 60/min for the key is already used up in the
+  // window (every request of this PosApi is in the pacer), so it can never be the request that earns a 429
+  const e4Call = (): void => {
+    if (pacer.waitFor(1, DAYO_REQUESTS_PER_MIN) > 0) throw new PosError('DAYO_UNREACHABLE', `E4_RATE_LIMITED: dayo takes ${DAYO_REQUESTS_PER_MIN} requests a minute — wait a minute`)
+  }
   let scheduler: Scheduler | null = null
   // reads through to baseDeps on every use (the Worker never swaps them; fault-injection tests do), plus the counted
   // fetch and the write wake
@@ -126,6 +133,13 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     // writes queue behind this closeShift in the serial queue, so the send itself happens AFTER the close commits —
     // no effect in block 2 (the Z does not count unsent bills yet); block 3 must revisit this (fix round 1 item 11).
     closeShift: (input) => serial(() => closeShift(db, deps, input, { validated: () => wake('before_close') })),
+    // block 3 count and Z (D101): each write wakes the sender (deps.afterWrite → kick('write'))
+    finishCount: (input) => serial(() => finishCount(db, deps, input)),
+    countSummary: (shiftId) => serial(() => countSummary(db, shiftId)),
+    // E4: network OUTSIDE the serial queue (its reads and writes are inside), like syncNow / E3
+    fetchBotCash: (shiftId) => fetchBotCash({ db, deps, serial }, shiftId, { beforeRequest: e4Call }),
+    confirmCount: (input) => serial(() => confirmCount(db, deps, input)),
+    issueZ: (input) => serial(() => issueZ(db, deps, input)),
     listZReports: () => serial(() => listZReports(db)),
     getZReport: (shiftId) => serial(() => getZReport(db, shiftId)),
     exportBackup: (actorUserId) => serial(() => exportBackup(db, deps, actorUserId)),

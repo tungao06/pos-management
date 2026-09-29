@@ -37,6 +37,8 @@ function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
     staffNeedingPin: [],
     ownerRecovery: false,
     sync: HEALTHY_SYNC,
+    countingShift: null,
+    zWaiting: [],
     ...overrides,
   }
 }

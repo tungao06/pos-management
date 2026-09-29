@@ -64,7 +64,8 @@ export function QrTable({ sales, p, bank }: { sales: SalesSummary; p: string; ba
  * D36: expected = opening + cash sales − void refunds + paid in − paid out − drops. `hideExpected` (the X report of an
  * open shift) leaves the expected line out so the drawer is counted blind at close (Q3b-3 · D52 · review I-2).
  */
-export function DrawerTable({ cash, expectedSatang, p, hideExpected = false }: { cash: CashInputs; expectedSatang: number; p: string; hideExpected?: boolean }): JSX.Element {
+/** `cash` may be a pre-block-3 Z's (no drawerExpensesSatang/botCashSatang — StoredZSnapshot): only the block-2 lines are read here. */
+export function DrawerTable({ cash, expectedSatang, p, hideExpected = false }: { cash: Omit<CashInputs, 'drawerExpensesSatang' | 'botCashSatang'>; expectedSatang: number; p: string; hideExpected?: boolean }): JSX.Element {
   return (
     <section>
       <h2>{TH.drawerTitle}</h2>
