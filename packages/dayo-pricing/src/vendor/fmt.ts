@@ -7,6 +7,11 @@
  */
 export function round2(n: number): number {
   if (!Number.isFinite(n)) return n;
+  // ทางลัด: ค่าที่เป็นทศนิยม ≤ 2 ตำแหน่งอยู่แล้ว (ส่วนใหญ่ของเงินในระบบ) — k/100 ปัดแบบถูกต้องเท่าทางปกติทุกบิต
+  // (ทางปกติคืน Number(`${k}e-2`) ซึ่งก็คือ k/100 ที่ปัดถูกต้อง) · ไม่ใกล้จำนวนเต็มพอ = ทางปกติ
+  const x = n * 100;
+  const k = Math.round(x);
+  if (Math.abs(x - k) < 1e-7 && Math.abs(k) < 1e13) return k / 100 + 0;
   const abs = Math.abs(Number(n.toPrecision(12)));
   const s = String(abs);
   const r = s.includes("e") ? Math.round(abs * 100) / 100 : Number(Math.round(Number(`${s}e2`)) + "e-2");

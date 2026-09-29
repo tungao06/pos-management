@@ -11,7 +11,7 @@ import { sellCode } from './helpers/db'
 
 type Line = RecordSaleInput['cart']['lines'][number]
 const line = (patch: Partial<Line> & { code: string }): Line => ({ size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1, free: false, discountSatang: null, discountPercent: null, discountReason: null, ...patch })
-const cartOf = (lines: Line[]): RecordSaleInput['cart'] => ({ channelCode: 'store', lines, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false })
+const cartOf = (lines: Line[]): RecordSaleInput['cart'] => ({ channelCode: 'store', lines, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: null })
 const matchaCart = (): RecordSaleInput['cart'] => cartOf([line({ code: 'Matcha Latte', grade: 'Excellent' })])
 
 describe('recordSale (spec 04 §4.5, §5.1, §6.1)', () => {
@@ -37,11 +37,11 @@ describe('recordSale (spec 04 §4.5, §5.1, §6.1)', () => {
     const t = await openConnectedApi({ now: '2026-09-25T06:59:30.000Z' }) // 13:59:30 Bangkok, Friday
     const sell = (expectedTotalSatang: number) => t.api.recordSale({ orderId: t.deps.newId(), actorUserId: STAFF.TungAo, cart: matchaCart(), payment: { method: 'PROMPTPAY' }, expectedTotalSatang })
     expect(await sell(8_500)).toMatchObject({ totalSatang: 8_500 }) // before the 15% afternoon promotion (timeFrom '14:00:00')
-    // 14:00:30 is still ฿85: dayo's shared code compares bkkTime 'HH:MM' with the stored 'HH:MM:SS' as text, so
-    // '14:00' < '14:00:00' and the promotion only starts at 14:01 — the tablet runs the same code and agrees with dayo.
-    t.clock.set('2026-09-25T07:00:30.000Z')
+    t.clock.set('2026-09-25T06:59:59.000Z') // 13:59:59 — still ฿85
     expect(await sell(8_500)).toMatchObject({ totalSatang: 8_500 })
-    t.clock.set('2026-09-25T07:01:00.000Z') // 14:01 — the promotion started after the screen showed ฿85
+    // 14:00:00 — dayo's engine (f4cda56) reads the window from HH:MM inclusive (the stored '14:00:00' is cut to '14:00'),
+    // so the promotion starts at 14:00 sharp; the tablet runs the same code and agrees with dayo (plan 10 T1 ruling)
+    t.clock.set('2026-09-25T07:00:00.000Z')
     try { await sell(8_500); expect.unreachable() } catch (e) {
       expect(posErrorCode(e)).toBe('PRICE_CHANGED')
       expect((e as Error).message).toContain('shown 8500, now 7225')

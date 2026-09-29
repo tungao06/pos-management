@@ -8,7 +8,7 @@ const line = (over: Partial<CartLineDraft> = {}): CartLineDraft => ({
   discountSatang: null, discountPercent: null, discountReason: null, ...over,
 })
 const cart = (lines: CartLineDraft[], over: Partial<CartDraft> = {}): CartDraft => ({
-  channelCode: 'store', paymentCode: 'cash', lines, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, ...over,
+  channelCode: 'store', paymentCode: 'cash', lines, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: null, ...over,
 })
 const FRI_1030 = '2026-09-25T03:30:00.000Z' // Friday 10:30 Bangkok, before Matcha's 14:00–16:00 promo window
 

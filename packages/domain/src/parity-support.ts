@@ -8,8 +8,11 @@ import { pricedFromQuote } from './priced-from-quote.js'
  * PARITY ONLY — not re-exported from the package index; the sale path never imports it (a test guards that).
  * `allowMissingSaleTime` is for dayo's real parity export: dayo priced some cases with no saleTime, so they are priced
  * the same way instead of inventing a time. Without it a missing saleTime stays an error (ruling R15).
+ * `dayoOnlyExhausted` is for dayo's usage cases (rules-usage.json · plan 10 ruling R3): dayo counts uses and hands the
+ * engine `exhaustedPromotions`; the tablet cannot (it sells offline), so the sale path never sends it. With the option the
+ * case's list reaches the engine, to prove the engine still agrees; without it the list is ignored, as on a sale.
  */
-export type ParityCaseOptions = { allowMissingSaleTime?: boolean }
+export type ParityCaseOptions = { allowMissingSaleTime?: boolean; dayoOnlyExhausted?: boolean }
 
 /** A case of pos-parity.json priced exactly as the tablet prices a sale, except that an absent saleTime stays absent. */
 export function priceParityCase(draft: ParityDraft, catalog: PosOrderCatalog, opts: ParityCaseOptions = {}): PricedCart {
@@ -19,6 +22,8 @@ export function priceParityCase(draft: ParityDraft, catalog: PosOrderCatalog, op
   checkCart(cart, catalog)
   const full = toOrderDraft(cart, catalog, soldAt)
   const { saleTime: _dropped, ...noTime } = full
-  const orderDraft = omitSaleTime ? noTime : full
-  return pricedFromQuote(computeOrder(orderDraft, withZeroCosts(catalog)), orderDraft, soldAt)
+  const timed = omitSaleTime ? noTime : full
+  const exhausted = opts.dayoOnlyExhausted === true && draft.exhaustedPromotions !== undefined ? draft.exhaustedPromotions : null
+  const orderDraft = exhausted === null ? timed : { ...timed, exhaustedPromotions: exhausted.map((e) => ({ id: e.id, scope: e.scope })) }
+  return pricedFromQuote(computeOrder(orderDraft, withZeroCosts(catalog)), orderDraft, soldAt, catalog)
 }

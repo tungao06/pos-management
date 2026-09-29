@@ -9,6 +9,7 @@ import { cartFromOrderDraft } from '../src/order-draft.js'
 import { priceCart, toOrderDraft, withZeroCosts } from '../src/price-cart.js'
 import { edgeBahtToSatang } from '../src/money-edge.js'
 import { POS_CATALOG } from './fixtures/pos-catalog.js'
+import { PROMO, promoRulesCatalog } from './fixtures/promo-rules-catalog.js'
 
 const MATCHA_NO_TIME = { saleDate: '2026-09-25', channelCode: 'store', lines: [{ code: 'Matcha Latte', qty: 1 }] }
 
@@ -42,7 +43,7 @@ describe('the sale API cannot skip the sale time', () => {
     expect(scanned.length).toBeGreaterThan(10)
     const offenders = scanned
       .filter((p) => !p.endsWith(join('packages', 'domain', 'src', 'parity-support.ts')))
-      .filter((p) => /omitSaleTime|allowMissingSaleTime/.test(readFileSync(p, 'utf8')))
+      .filter((p) => /omitSaleTime|allowMissingSaleTime|dayoOnlyExhausted|exhaustedPromotions/.test(readFileSync(p, 'utf8')))
       .map((p) => relative(root, p))
     expect(offenders).toEqual([])
   })
@@ -52,5 +53,21 @@ describe('the sale API cannot skip the sale time', () => {
   })
   it('priceCart takes exactly cart, catalog and sold_at', () => {
     expect(priceCart.length).toBe(3)
+  })
+})
+
+describe('priceParityCase dayoOnlyExhausted (ruling R3): dayo\'s usage cases only — the sale path never counts uses', () => {
+  const CAT = promoRulesCatalog()
+  const draft = { saleDate: '2026-09-25', saleTime: '10:30', channelCode: 'store', lines: [{ code: 'Thai Tea', size: '16 oz', sweetness: '50%' as const, qty: 1 }], manualPromotionIds: [PROMO.M_5], exhaustedPromotions: [{ id: PROMO.M_5, scope: 'total' as const }] }
+  it('without the option the exhausted list is ignored, exactly as a sale', () => {
+    const p = priceParityCase(draft, CAT)
+    expect(p.totalSatang).toBe(3_000)
+    expect('exhaustedPromotions' in p.draft).toBe(false)
+  })
+  it('with it the engine sees the list and refuses the promotion as dayo does', () => {
+    const p = priceParityCase(draft, CAT, { dayoOnlyExhausted: true })
+    expect(p.totalSatang).toBe(3_500)
+    expect(p.draft.exhaustedPromotions).toEqual([{ id: PROMO.M_5, scope: 'total' }])
+    expect(p.warnings.join('\n')).toContain('ครบจำนวนครั้งแล้ว')
   })
 })

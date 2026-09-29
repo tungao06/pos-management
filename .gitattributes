@@ -1,4 +1,6 @@
 # spec 04 §5.1 · D72: keep the vendored dayo pricing files byte-identical to dayo's commit (the sha256 rule normalises CRLF anyway)
 packages/dayo-pricing/src/vendor/** -text
+# dayo's golden promo-rule cases + load.ts (plan 10 R1), pinned in VENDOR.json.fixtures the same way
+packages/dayo-pricing/golden/test/fixtures/promo-rules/** -text
 # dayo's pos:parity export, copied verbatim (the block-2 parity gate) — never convert its line endings
 packages/dayo-pricing/fixtures/pos-parity.json -text

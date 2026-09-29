@@ -145,7 +145,7 @@ export async function sellCode(
 ): Promise<RecordSaleResult> {
   const cat = await t.api.loadSellCatalog()
   const cart: RecordSaleInput['cart'] = {
-    channelCode: extra.channelCode ?? cat.defaultChannelCode, promoCode: null, skipPromotionIds: [], noPromotions: false,
+    channelCode: extra.channelCode ?? cat.defaultChannelCode, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: null,
     billDiscount: extra.billDiscountSatang === undefined ? null : { kind: 'satang', satang: extra.billDiscountSatang, reason: extra.reason ?? 'ทดสอบ' },
     lines: lines.map((l) => ({ code: l.code, size: l.size ?? '16 oz', sweetness: l.sweetness ?? '50%', milk: l.milk ?? 'fresh', grade: l.grade ?? (l.code === 'Matcha Latte' ? 'Excellent' : null), qty: l.qty, free: false, discountSatang: null, discountPercent: null, discountReason: null })),
   }
