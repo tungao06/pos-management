@@ -96,5 +96,5 @@ function paritySuite(file: string, isReal: boolean, expectedCases: number): void
 it('the block-2 gate runs on dayo\'s own export, not only the seed', () => {
   expect(existsSync(REAL), 'packages/dayo-pricing/fixtures/pos-parity.json (dayo pos:parity output) is missing').toBe(true)
 })
-paritySuite(REAL, true, 25)
+paritySuite(REAL, true, 27)
 paritySuite(SEED, false, 30)
