@@ -201,9 +201,15 @@ export function lineOptions(catalog: PosOrderCatalog, code: string, size: Size, 
  * The E1 catalog after zod validation (contracts `PosOrderCatalog`) as the pricing code's type — no cast: the schema
  * infers optional keys without `| undefined` (zod exactOptional) and requires every key dayo's interfaces require, so a
  * field the schema stops checking fails to compile here (a type test pins it).
+ *
+ * PLAN 10 BRIDGE (T2 → T3): the contract now also reads dayo's rule-only promotions (no `kind`), which the vendored
+ * types of 4f35932 cannot hold, so this one cast stands until T1's f4cda56 vendor lands; T3 removes it (the parsed type
+ * assigns to f4cda56's OrderCatalog without a cast). Safe meanwhile: this build never sends promo_rule_version, and dayo
+ * then answers version 0 — only promotions that still have `kind`, rule fields stripped (dayo apps/web/src/lib/api/pos.ts:12,
+ * 0074:188-202) — so the old pricing code never sees a rule-only promotion.
  */
 export function toPricingCatalog(parsed: PosOrderCatalogParsed): PosOrderCatalog {
-  return parsed
+  return parsed as PosOrderCatalog
 }
 
 /** Unit price on a channel before options and promotions — for the menu grid only (dayo channelPrice, then the edge). */

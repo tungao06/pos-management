@@ -1,0 +1,160 @@
+{
+  "name": "e1-catalog-unchanged-promo-rules",
+  "spec": "04 §4.4 (changed:false) · แผน 10 §0.2 · dayo f4cda56: คำตอบสั้นก็มี supported_fields.promotion_rule_versions [1, 2] (0073:1715 · docs/API.md:92-94) — F2: รูปนี้ต้อง parse ผ่าน",
+  "env": {
+    "API_V1_ENABLED": "1",
+    "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173",
+    "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555",
+    "DAYO_PRICING_MANIFEST": {
+      "commit": "3f2a9c1e5b7d9f0a2c4e6a8b0d1f3a5c7e9b1d3f",
+      "files_sha256": {
+        "packages/shared/src/cost.ts": "1a2b3c4d5e6f70811a2b3c4d5e6f70811a2b3c4d5e6f70811a2b3c4d5e6f7081",
+        "packages/shared/src/fmt.ts": "2b3c4d5e6f7081922b3c4d5e6f7081922b3c4d5e6f7081922b3c4d5e6f708192",
+        "packages/shared/src/money.ts": "9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b",
+        "packages/shared/src/promotions.ts": "c47d2e8f1a3b5c6dc47d2e8f1a3b5c6dc47d2e8f1a3b5c6dc47d2e8f1a3b5c6d",
+        "packages/shared/src/shopSettings.ts": "3c4d5e6f708192033c4d5e6f708192033c4d5e6f708192033c4d5e6f70819203",
+        "packages/shared/src/time.ts": "4d5e6f70819203144d5e6f70819203144d5e6f70819203144d5e6f7081920314",
+        "packages/shared/src/types.ts": "5e6f7081920314255e6f7081920314255e6f7081920314255e6f708192031425"
+      }
+    }
+  },
+  "rpc": {
+    "api_authenticate": {
+      "ok": true,
+      "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c",
+      "shop_id": "11111111-2222-4333-8444-555555555555",
+      "name": "แท็บเล็ตขาย 1",
+      "scopes": [
+        "catalog:read",
+        "staff:read",
+        "orders:read",
+        "orders:write"
+      ]
+    },
+    "api_pos_catalog": "@data"
+  },
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/pos/catalog?known_version=43&promo_rule_version=2",
+    "headers": {
+      "Origin": "https://pos.dayo.test",
+      "Authorization": "Bearer dayo_fixture_key_0001"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Access-Control-Allow-Origin": "https://pos.dayo.test",
+      "Vary": "Origin",
+      "Access-Control-Expose-Headers": "Retry-After"
+    },
+    "body": {
+      "ok": true,
+      "data": {
+        "pricing": {
+          "commit": "3f2a9c1e5b7d9f0a2c4e6a8b0d1f3a5c7e9b1d3f",
+          "files_sha256": {
+            "packages/shared/src/cost.ts": "1a2b3c4d5e6f70811a2b3c4d5e6f70811a2b3c4d5e6f70811a2b3c4d5e6f7081",
+            "packages/shared/src/fmt.ts": "2b3c4d5e6f7081922b3c4d5e6f7081922b3c4d5e6f7081922b3c4d5e6f708192",
+            "packages/shared/src/money.ts": "9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b9b1e0c3a5d7f9e1b",
+            "packages/shared/src/promotions.ts": "c47d2e8f1a3b5c6dc47d2e8f1a3b5c6dc47d2e8f1a3b5c6dc47d2e8f1a3b5c6d",
+            "packages/shared/src/shopSettings.ts": "3c4d5e6f708192033c4d5e6f708192033c4d5e6f708192033c4d5e6f70819203",
+            "packages/shared/src/time.ts": "4d5e6f70819203144d5e6f70819203144d5e6f70819203144d5e6f7081920314",
+            "packages/shared/src/types.ts": "5e6f7081920314255e6f7081920314255e6f7081920314255e6f708192031425"
+          }
+        },
+        "changed": false,
+        "catalog_version": 43,
+        "server_time": "2026-09-25T02:00:00.120+00:00",
+        "supported_kinds": [
+          "order",
+          "order_void",
+          "shift_open",
+          "cash_movement",
+          "cash_count",
+          "shift_close"
+        ],
+        "supported_fields": {
+          "order": [
+            "pos_order_id",
+            "receipt_no",
+            "queue_no",
+            "sale_date",
+            "sold_at",
+            "channel",
+            "payment",
+            "staff_id",
+            "catalog_version",
+            "shift_id",
+            "lines",
+            "lines.code",
+            "lines.size",
+            "lines.sweetness",
+            "lines.milk",
+            "lines.grade",
+            "lines.qty",
+            "lines.free",
+            "lines.discount_baht",
+            "lines.discount_percent",
+            "lines.discount_reason",
+            "bill_discount",
+            "promo_code",
+            "skip_promotion_ids",
+            "no_promotions",
+            "totals",
+            "note",
+            "manual_promotion_ids",
+            "manual_promotion_reason"
+          ],
+          "order_void": [
+            "pos_order_id",
+            "voided_at",
+            "staff_id",
+            "approved_by",
+            "reason"
+          ],
+          "shift_open": [
+            "shift_id",
+            "business_date",
+            "opened_at",
+            "opened_by",
+            "opening_float",
+            "quick_open"
+          ],
+          "cash_movement": [
+            "movement_id",
+            "shift_id",
+            "kind",
+            "amount",
+            "pos_order_id",
+            "reason",
+            "created_by",
+            "created_at"
+          ],
+          "cash_count": [
+            "count_id",
+            "shift_id",
+            "lines",
+            "lines.denomination",
+            "lines.count",
+            "counted",
+            "counted_by",
+            "counted_at"
+          ],
+          "shift_close": [
+            "shift_id",
+            "count_id",
+            "closed_by",
+            "closed_at",
+            "variance_reason",
+            "z_report"
+          ],
+          "promotion_rule_versions": [
+            1,
+            2
+          ]
+        }
+      }
+    }
+  }
+}
