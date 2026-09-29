@@ -160,4 +160,34 @@ describe('SystemStatusScreen (spec §4.3, §6.7, §10.5, §7 ข้อ 1 · D80 
     expect(await screen.findByRole('alert')).toHaveTextContent(TH.errPinFormat)
     expect(replaceApiKey).not.toHaveBeenCalled()
   })
+
+  // fix round 1 item 2 (ruling): every shift stuck waiting for its count or its Z, oldest first — reachable from
+  // OwnerRecoveryScreen (deviation 5), not only the single oldest zWaiting the status banner points at.
+  it('lists a counting shift and every Z-waiting shift, oldest first, each linking to its own screen', async () => {
+    const api = {
+      bootstrap: vi.fn(async () =>
+        bootWithSync(
+          {},
+          {
+            countingShift: { shiftId: 'sc', countedAt: '2026-09-25T05:00:00.000Z' },
+            zWaiting: [
+              { shiftId: 's1', businessDate: '2026-09-23', countedAt: '2026-09-23T05:00:00.000Z', syncMode: 'central', countedSatang: 50_000 },
+              { shiftId: 's2', businessDate: '2026-09-24', countedAt: '2026-09-24T05:00:00.000Z', syncMode: 'central', countedSatang: 51_000 },
+            ],
+          },
+        ),
+      ),
+    }
+    renderStatus(api, 'owner')
+    expect(await screen.findByTestId('status-stuck-counting')).toBeVisible()
+    expect(screen.getByTestId('status-stuck-z-0')).toHaveTextContent('23 ก.ย. 2569')
+    expect(screen.getByTestId('status-stuck-z-1')).toHaveTextContent('24 ก.ย. 2569')
+  })
+
+  it('shows no stuck-shifts section when nothing is waiting', async () => {
+    const api = { bootstrap: vi.fn(async () => bootWithSync({})) }
+    renderStatus(api, 'owner')
+    await screen.findByTestId('status-key')
+    expect(screen.queryByTestId('status-stuck-shifts')).toBeNull()
+  })
 })

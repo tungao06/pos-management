@@ -77,3 +77,17 @@ export function posErrorCode(e: unknown): PosErrorCode | null {
 export function isClockAheadCountError(e: unknown): boolean {
   return posErrorCode(e) === 'BAD_INPUT' && e instanceof Error && e.message.startsWith('BAD_INPUT: CLOCK_AHEAD:')
 }
+
+/**
+ * Task 14 · carried item 9a fix round 1 (item 1a): every reason a CENTRAL shift's Z can refuse for good — dayo
+ * answered something this tablet cannot use (`DAYO_BAD_RESPONSE`), the Z is too large for E2 (`Z_TOO_LARGE`), the
+ * count is before dayo's own last Z (`BAD_INPUT COUNT_BEFORE_CENTRAL_Z:`), or the snapshot itself could not be
+ * built (`BAD_INPUT` from a `RangeError` in `buildZReport` — close.ts, no structured prefix of its own). `CLOCK_AHEAD`
+ * is excluded on purpose: it already has its own remedy (`skipCountFloor`), never this one.
+ */
+export function isCentralZBlockedError(e: unknown): boolean {
+  const code = posErrorCode(e)
+  if (code === 'DAYO_BAD_RESPONSE' || code === 'Z_TOO_LARGE') return true
+  if (code !== 'BAD_INPUT') return false
+  return !isClockAheadCountError(e)
+}

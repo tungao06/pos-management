@@ -1,14 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
-import { posErrorCode } from '../api/errors'
-import type { CountSummaryDto, IssueZInput, OwnerApproval } from '../api/types'
+import { isCentralZBlockedError, isClockAheadCountError, posErrorCode } from '../api/errors'
+import type { CountSummaryDto, IssueZInput, SkipCountFloorResult } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, issueZKey, useBootstrap, zKey, zListKey } from '../app/queries'
 import { errorMessage } from '../ui/errors'
 import { TH } from '../ui/th'
 import { CountReview } from './CountReview'
-import { OwnerApprovalDialog } from './OwnerApprovalDialog'
+import { KeepShiftLocalControl, SkipCountFloorControl } from './OwnerEscapeControls'
 
 /**
  * D101 step 3 (spec §6.8): once online again, a counted shift's Z is issued from its already-saved count —
@@ -28,9 +28,11 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
   const [chainBroken, setChainBroken] = useState(false)
   const [chainCentralZNo, setChainCentralZNo] = useState<number | null>(null)
   const [botCashError, setBotCashError] = useState<string | null>(null)
-  // Task 14 · carried item 9a (Task 16): a central shift whose Z can never be issued with dayo (E4 keeps failing
-  // here, BOT_CASH_REQUIRED) — the owner keeps it on the tablet for good so R7 stops holding every later Z.
-  const [keepDialogOpen, setKeepDialogOpen] = useState(false)
+  // fix round 1 items 1a/3: issueZ refused for a reason this device's own retry can never fix — the owner keeps
+  // the shift on the tablet for good (9a) or, for CLOCK_AHEAD specifically, skips the far-ahead count (9b).
+  const [zBlockedPermanently, setZBlockedPermanently] = useState(false)
+  const [zClockAheadBlocked, setZClockAheadBlocked] = useState(false)
+  const [skipResult, setSkipResult] = useState<SkipCountFloorResult | null>(null)
 
   const load = useQuery({
     queryKey: issueZKey(shiftId),
@@ -47,19 +49,13 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
     },
   })
 
-  const keepShiftLocal = useMutation({
-    mutationFn: (approval: OwnerApproval) => api.keepShiftLocal({ ...approval, shiftId }),
-    onSuccess: async () => {
-      setKeepDialogOpen(false)
-      await Promise.all([queryClient.invalidateQueries({ queryKey: bootstrapKey }), queryClient.invalidateQueries({ queryKey: issueZKey(shiftId) })])
-    },
-  })
-
   const issueZ = useMutation({
     mutationFn: (input: IssueZInput) => api.issueZ(input),
     onSuccess: async () => {
       setIssued(true)
       setChainBroken(false)
+      setZBlockedPermanently(false)
+      setZClockAheadBlocked(false)
       await Promise.all([queryClient.invalidateQueries({ queryKey: bootstrapKey }), queryClient.invalidateQueries({ queryKey: zListKey }), queryClient.invalidateQueries({ queryKey: zKey(shiftId) })])
     },
     onError: (e) => {
@@ -72,13 +68,26 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
         setChainBroken(true)
         setChainCentralZNo(detail === 'central' && centralLastZNo != null ? centralLastZNo : null)
         setError(null)
+        setZBlockedPermanently(false)
+        setZClockAheadBlocked(false)
         return
       }
       setChainBroken(false)
       setError(errorMessage(e))
+      // fix round 1 item 1a: DAYO_BAD_RESPONSE, Z_TOO_LARGE, COUNT_BEFORE_CENTRAL_Z, a builder refusal — none of
+      // this device's own retries can fix them; item 3: CLOCK_AHEAD gets skipCountFloor instead, same as CloseShiftScreen.
+      setZBlockedPermanently(isCentralZBlockedError(e))
+      setZClockAheadBlocked(isClockAheadCountError(e))
       if (code === 'SHIFT_CHANGED') void queryClient.invalidateQueries({ queryKey: issueZKey(shiftId) })
     },
   })
+
+  const clearBlocked = (): void => {
+    setZBlockedPermanently(false)
+    setZClockAheadBlocked(false)
+    setError(null)
+    void queryClient.invalidateQueries({ queryKey: issueZKey(shiftId) })
+  }
 
   if (load.isError) {
     return (
@@ -140,26 +149,9 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
         <button type="button" data-testid="z-retry" onClick={() => void load.refetch()}>
           {TH.retry}
         </button>
-        {/* Task 14 · carried item 9a (Task 16): shown prominently right where BOT_CASH_REQUIRED is stuck. */}
-        <button type="button" className="banner error" data-testid="keep-shift-local-open" onClick={() => setKeepDialogOpen(true)}>
-          {TH.keepShiftLocalButton}
-        </button>
-        {keepDialogOpen && (
-          <OwnerApprovalDialog
-            title={TH.keepShiftLocalButton}
-            owners={owners}
-            defaultApproverId={null}
-            busy={keepShiftLocal.isPending}
-            error={keepShiftLocal.isError ? errorMessage(keepShiftLocal.error) : null}
-            extra={
-              <p role="alert" className="error">
-                {TH.keepShiftLocalWarning}
-              </p>
-            }
-            onSubmit={(approval) => keepShiftLocal.mutate(approval)}
-            onClose={() => setKeepDialogOpen(false)}
-          />
-        )}
+        {/* fix round 1 item 1a/1b: prominent once E4 has actually answered with a real refusal (`botCashError`) —
+            a plain OFFLINE (still no answer, network may come back) gets the small secondary link only. */}
+        <KeepShiftLocalControl shiftId={shiftId} owners={owners} prominent={botCashError !== null} onDone={() => void load.refetch()} />
       </main>
     )
   }
@@ -170,6 +162,22 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
       {botCashError !== null && (
         <p role="alert" className="error" data-testid="count-bot-cash-error">
           {botCashError}
+        </p>
+      )}
+      {/* fix round 1 items 1a/3: issueZ itself refused for good — the same two escapes, right next to the error. */}
+      {zBlockedPermanently && <KeepShiftLocalControl shiftId={shiftId} owners={owners} prominent onDone={clearBlocked} />}
+      {zClockAheadBlocked && (
+        <SkipCountFloorControl
+          owners={owners}
+          onDone={(r) => {
+            setSkipResult(r)
+            clearBlocked()
+          }}
+        />
+      )}
+      {skipResult !== null && (
+        <p className="badge" data-testid="skip-count-floor-done">
+          {TH.skipCountFloorDone(skipResult.skipped.length)} ({skipResult.skipped.map((s) => s.countedAt).join(', ')})
         </p>
       )}
       <CountReview

@@ -10,7 +10,9 @@ import './styles.css'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { networkMode: 'always', retry: false, staleTime: 5_000 },
-    mutations: { networkMode: 'always', retry: false },
+    // fix round 1 item 4 (security): a PIN passed through `useMutation`'s `variables` must not sit in the mutation
+    // cache after it settles — paired with every PIN-carrying mutation's own `onSettled: () => mutation.reset()`.
+    mutations: { networkMode: 'always', retry: false, gcTime: 0 },
   },
 })
 

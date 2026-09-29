@@ -30,10 +30,11 @@ describe('IssueZScreen (D101 step 3)', () => {
     expect(screen.getByText(TH.errBotCashRequired)).toBeVisible()
   })
 
-  // Task 14 · carried item 9a (Task 16): E4 stuck (BOT_CASH_REQUIRED) offers "เก็บกะนี้ไว้ในเครื่อง" prominently.
-  it('BOT_CASH_REQUIRED offers keepShiftLocal with the exact warning, then reloads as local-only', async () => {
+  // fix round 1 item 1a/1b: E4 actually answered with a refusal (not a plain OFFLINE) — "เก็บกะนี้ไว้ในเครื่อง" is
+  // the prominent banner button; irreversible is in the warning text (item 1c).
+  it('BOT_CASH_REQUIRED with a real E4 refusal offers keepShiftLocal prominently, then reloads as local-only', async () => {
     const api = fakeApi({
-      fetchBotCash: vi.fn(async () => { throw new Error('OFFLINE: network') }),
+      fetchBotCash: vi.fn(async () => { throw new Error('DAYO_BAD_RESPONSE: unreadable') }),
       countSummary: vi
         .fn(async () => summary({ includesBotCash: false, bot: null }))
         .mockResolvedValueOnce(summary({ includesBotCash: false, bot: null }))
@@ -42,12 +43,59 @@ describe('IssueZScreen (D101 step 3)', () => {
     render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
     await user.click(await screen.findByTestId('keep-shift-local-open'))
     expect(screen.getByText(TH.keepShiftLocalWarning)).toBeVisible()
+    expect(screen.getByText(TH.keepShiftLocalWarning)).toHaveTextContent('ย้อนกลับไม่ได้')
     await user.click(screen.getByTestId('approval-owner-TungAo'))
     await user.type(screen.getByTestId('approval-pin'), '1111')
     await user.type(screen.getByTestId('approval-reason'), 'E4 ล่มถาวร')
     await user.click(screen.getByTestId('approval-ok'))
     await waitFor(() => expect(api.keepShiftLocal).toHaveBeenCalledWith({ approverUserId: 'u1', approverPin: '1111', reason: 'E4 ล่มถาวร', shiftId: 's1' }))
     expect(await screen.findByTestId('count-expected')).toBeVisible() // local_only now — the count review opens
+  })
+
+  // fix round 1 item 1b/1d: a plain OFFLINE (no answer yet, network may still come back) gets only the small
+  // secondary link, with the "wait for the network first" hint — never the prominent banner button.
+  it('BOT_CASH_REQUIRED from a plain OFFLINE shows only the secondary keepShiftLocal link', async () => {
+    const api = fakeApi({ fetchBotCash: vi.fn(async () => { throw new Error('OFFLINE: network') }), countSummary: vi.fn(async () => summary({ includesBotCash: false, bot: null })) })
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    expect(await screen.findByTestId('keep-shift-local-link')).toHaveTextContent(TH.keepShiftLocalSecondaryLink)
+    expect(screen.getByTestId('keep-shift-local-offline-hint')).toHaveTextContent(TH.keepShiftLocalOfflineHint)
+    expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+  })
+
+  // fix round 1 item 1a: every other reason issueZ itself refused for good also offers keepShiftLocal, prominently.
+  it.each([
+    ['DAYO_BAD_RESPONSE', 'unreadable'],
+    ['Z_TOO_LARGE', 'too many rows'],
+    ['BAD_INPUT', 'COUNT_BEFORE_CENTRAL_Z: การนับนี้เกิดก่อน Z ล่าสุด'],
+    ['BAD_INPUT', 'closedAt must be after countedAt'],
+  ] as const)('issueZ refused %s shows keepShiftLocal prominently', async (code, detail) => {
+    const issueZ = vi.fn(async () => { throw new Error(`${code}: ${detail}`) })
+    const api = fakeApi({ issueZ })
+    render(<IssueZScreen shiftId="s1" countedSatang={59_500} />, { api, session })
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('TungAo', '1111')
+    await user.type(screen.getByTestId('count-reason'), 'x')
+    await user.click(screen.getByTestId('count-confirm'))
+    expect(await screen.findByTestId('keep-shift-local-open')).toBeVisible()
+  })
+
+  // fix round 1 item 3: issueZ refused with CLOCK_AHEAD offers skipCountFloor, same as CloseShiftScreen.
+  it('issueZ refused CLOCK_AHEAD offers skipCountFloor and lists the skipped counts after', async () => {
+    const issueZ = vi.fn(async () => { throw new Error('BAD_INPUT: CLOCK_AHEAD: นาฬิกาเครื่องล้ำเวลาจริง') })
+    const api = fakeApi({ issueZ })
+    render(<IssueZScreen shiftId="s1" countedSatang={59_500} />, { api, session })
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('TungAo', '1111')
+    await user.type(screen.getByTestId('count-reason'), 'x')
+    await user.click(screen.getByTestId('count-confirm'))
+    await user.click(await screen.findByTestId('skip-count-floor-open'))
+    expect(screen.getByText(TH.skipCountFloorWarning)).toBeVisible()
+    await user.click(screen.getByTestId('approval-owner-DCm'))
+    await user.type(screen.getByTestId('approval-pin'), '2222')
+    await user.type(screen.getByTestId('approval-reason'), 'นาฬิกาผิด')
+    await user.click(screen.getByTestId('approval-ok'))
+    expect(await screen.findByTestId('skip-count-floor-done')).toHaveTextContent(TH.skipCountFloorDone(1))
+    expect(screen.queryByTestId('skip-count-floor-open')).toBeNull()
   })
 
   it('fix round 1 item 1: sends the bank-app total typed here too', async () => {

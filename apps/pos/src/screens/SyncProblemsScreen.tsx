@@ -1,11 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState, type JSX } from 'react'
 import type { Size, Sweetness } from '@dayo/dayo-pricing'
 import type { RemapScope, Remedy, SellCatalogDto, SyncProblemDto } from '../api/types'
 import { useApi } from '../app/api-context'
 import { can, type PosRole } from '../app/permissions'
-import { bootstrapKey, sellCatalogKey, syncProblemsKey, useBootstrap } from '../app/queries'
+import { bootstrapKey, sellCatalogKey, syncProblemsKey, syncStatusKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import { errorMessage } from '../ui/errors'
 import { saveFile } from '../ui/save-file'
@@ -391,7 +391,7 @@ export function SyncProblemsScreen(): JSX.Element {
     setNewStaffId(null)
   }
 
-  const mutation = useMutation({
+  const mutation: UseMutationResult<void, unknown, OwnerApproval> = useMutation<void, unknown, OwnerApproval>({
     mutationFn: async (approval: OwnerApproval): Promise<void> => {
       if (dialog === null) return
       const { row, remedy } = dialog
@@ -416,9 +416,18 @@ export function SyncProblemsScreen(): JSX.Element {
       }
     },
     onSuccess: async () => {
-      await Promise.all([queryClient.invalidateQueries({ queryKey: syncProblemsKey(user?.id ?? '') }), queryClient.invalidateQueries({ queryKey: bootstrapKey })])
+      // fix round 1 item 5: every remedy can change what the status banners warn about (a scope wait closed, a
+      // central mismatch acknowledged, …) — `syncStatusKey` must refresh alongside `bootstrapKey`, not 30 s later.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: syncProblemsKey(user?.id ?? '') }),
+        queryClient.invalidateQueries({ queryKey: bootstrapKey }),
+        queryClient.invalidateQueries({ queryKey: syncStatusKey }),
+      ])
       closeDialog()
     },
+    // fix round 1 item 4 (security): the PIN just typed must not sit in this mutation's `variables` a moment
+    // longer than the call itself needs it.
+    onSettled: (): void => mutation.reset(),
   })
 
   const doExport = async (row: SyncProblemDto): Promise<void> => {

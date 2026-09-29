@@ -9,6 +9,7 @@ import { bootstrapKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import { APP_VERSION } from '../lib/app-version'
 import { errorMessage } from '../ui/errors'
+import { formatThaiDate } from '../ui/format'
 import { TH } from '../ui/th'
 import { ConnectFields, type ConnectFieldsValue } from './ConnectFields'
 import { DbErrorScreen } from './DbErrorScreen'
@@ -127,6 +128,24 @@ export function SystemStatusScreen(): JSX.Element {
               : TH.statusPricingCommitLabel(sync.pricingCommit)}
         </p>
         <p data-testid="status-last-push">{sync.lastPushAt === null ? TH.statusLastPushNever : TH.statusLastPush(fmt(sync.lastPushAt) ?? '—')}</p>
+        {/* fix round 1 item 2: every shift stuck waiting for its count or its Z, oldest first — reachable from
+            OwnerRecoveryScreen (deviation 5) so the owner lands on the one 9a/9b actually needs, not only the
+            single oldest one the "ใบปิดกะ … รอออนไลน์" banner points at. */}
+        {(boot.data.countingShift !== null || boot.data.zWaiting.length > 0) && (
+          <section className="list" data-testid="status-stuck-shifts">
+            <h2>{TH.statusStuckShiftsTitle}</h2>
+            {boot.data.countingShift !== null && (
+              <button type="button" data-testid="status-stuck-counting" onClick={() => void navigate({ to: '/shift/close' })}>
+                {TH.statusStuckCounting}
+              </button>
+            )}
+            {boot.data.zWaiting.map((z, i) => (
+              <button key={z.shiftId} type="button" data-testid={`status-stuck-z-${i}`} onClick={() => void navigate({ to: '/shift/z/$shiftId', params: { shiftId: z.shiftId } })}>
+                {TH.zWaitingBanner(formatThaiDate(z.businessDate))}
+              </button>
+            ))}
+          </section>
+        )}
         <p data-testid="status-pending">{TH.statusPendingLine(sync.pendingSyncRows)}</p>
         {isOwner ? (
           <button type="button" data-testid="status-problems-link" onClick={() => void navigate({ to: '/sync-problems' })}>

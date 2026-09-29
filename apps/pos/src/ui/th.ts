@@ -597,10 +597,19 @@ export const TH = {
   setupConfirmLastZ: 'ตรวจแล้ว — ใบปิดกะใบถัดไปของเครื่องนี้จะต่อจากเลขนี้',
   countNotInDayo: (n: number, voidRefund: string): string => `${n} บิลในใบปิดกะนี้จะไม่ถึงระบบกลาง — คืนเงินบิลยกเลิกในนั้น ${voidRefund} ยังส่งเข้าระบบกลาง`,
   keepShiftLocalButton: 'เก็บกะนี้ไว้ในเครื่อง',
-  keepShiftLocalWarning: 'ใบปิดกะของกะนี้จะออกในเครื่องเท่านั้น — กะฝั่งระบบกลางยังเปิดอยู่ บิลบอทในช่วงนี้จะไม่อยู่ใน Z ใด และระบบกลางจะเห็นเลข Z ขาดไปหนึ่งใบ',
+  // fix round 1 item 1c: "ย้อนกลับไม่ได้" added — the owner must see this before typing a PIN, not only in prose elsewhere.
+  keepShiftLocalWarning:
+    'ย้อนกลับไม่ได้: ใบปิดกะของกะนี้จะออกในเครื่องเท่านั้น — กะฝั่งระบบกลางยังเปิดอยู่ บิลบอทในช่วงนี้จะไม่อยู่ใน Z ใด และระบบกลางจะเห็นเลข Z ขาดไปหนึ่งใบ',
+  // fix round 1 item 1b: a plain OFFLINE (network down) is not this device's own dead end yet — a small secondary
+  // link, never the prominent banner button, with text that says to wait for the network first.
+  keepShiftLocalSecondaryLink: 'เก็บกะนี้ไว้ในเครื่อง (ถ้าไม่รอ)',
+  keepShiftLocalOfflineHint: 'ยังต่อระบบกลางไม่ได้ — รอสัญญาณอินเทอร์เน็ตก่อน ถ้ารอไม่ได้จริง ๆ ค่อยเก็บกะนี้ไว้ในเครื่อง',
   skipCountFloorButton: 'ข้ามการตรวจเวลาที่ล้ำ',
   skipCountFloorWarning: 'บิลบอทของช่วงเวลานี้อาจถูกนับซ้ำหรือไม่ถูกนับเลย',
   skipCountFloorDone: (n: number): string => `ข้ามแล้ว ${n} รายการ`,
+  // fix round 1 item 2: SystemStatusScreen lists every stuck shift (reachable from OwnerRecoveryScreen too).
+  statusStuckShiftsTitle: 'กะที่รอนับเงิน/ออกใบปิดกะ',
+  statusStuckCounting: 'กะที่นับเงินแล้วยังไม่ยืนยัน — ไปหน้านับเงิน',
 
   // fu app-version — เวอร์ชันที่กำลังใช้งาน (/status เต็มบรรทัด, BrandBar ย่อ)
   statusVersionLine: (version: string, commit: string, builtAt: string): string => `เวอร์ชัน v${version} · commit ${commit} · build ${builtAt}`,

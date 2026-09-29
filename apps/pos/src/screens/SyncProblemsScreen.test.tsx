@@ -88,10 +88,10 @@ function renderProblems(api: PosApi, role: UserDto['role']): { router: Router<Re
  * router underneath (this screen's own `<Navigate>` needs one — `../test-utils`'s router-less `render` cannot be
  * used here without breaking the `useNavigate` this screen's real "กลับ" button relies on elsewhere in this file).
  */
-function renderProblemsAs(api: PosApi, user: UserDto): { router: Router<ReturnType<typeof buildRouteTree>> } {
+function renderProblemsAs(api: PosApi, user: UserDto): { router: Router<ReturnType<typeof buildRouteTree>>; queryClient: QueryClient } {
   const routeTree = buildRouteTree()
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/sync-problems'] }) })
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false, gcTime: 0 } } })
   render(
     <QueryClientProvider client={queryClient}>
       <ApiProvider api={api}>
@@ -103,7 +103,7 @@ function renderProblemsAs(api: PosApi, user: UserDto): { router: Router<ReturnTy
       </ApiProvider>
     </QueryClientProvider>,
   )
-  return { router }
+  return { router, queryClient }
 }
 
 function buildRouteTree() {
@@ -316,7 +316,7 @@ describe('SyncProblemsScreen — block 3 (spec 04 §6.4)', () => {
   })
   it('"ปิดเป็นบิลนอกแคตตาล็อก" warns, needs a reason and the owner PIN, then calls closeOffCatalog', async () => {
     const api = apiWith([problem()])
-    renderProblemsAs(api, OWNER_U1)
+    const { queryClient } = renderProblemsAs(api, OWNER_U1)
     await user.click(await screen.findByTestId('remedy-close-off-catalog'))
     const dialog = await screen.findByTestId('off-catalog-dialog')
     expect(dialog).toHaveTextContent(TH.offCatalogWarning)
@@ -326,6 +326,8 @@ describe('SyncProblemsScreen — block 3 (spec 04 §6.4)', () => {
     for (const d of '1111') await user.click(within(dialog).getByTestId(`pin-${d}`))
     await user.click(within(dialog).getByTestId('off-catalog-confirm'))
     await waitFor(() => expect(api.closeOffCatalog).toHaveBeenCalledWith({ approverUserId: 'u1', approverPin: '1111', reason: 'เมนูถูกลบในระบบกลาง', outboxId: 'ob1' }))
+    // fix round 1 item 4 (security): the PIN just typed must not sit in the mutation's own state afterwards.
+    await waitFor(() => expect(queryClient.getMutationCache().getAll().every((m) => m.state.status === 'idle')).toBe(true))
   })
   // deviation from task-16-brief.md: spec 04 §12 Q44 makes the WHOLE "ส่งไม่ผ่าน" page owner-only (already covered
   // by "a manager is sent away from /sync-problems too" above) — a manager never reaches a row to check the button

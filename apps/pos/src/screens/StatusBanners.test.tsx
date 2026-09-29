@@ -180,4 +180,16 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
     expect(await screen.findByTestId('banner-shift-conflict')).toHaveTextContent(TH.shiftConflictBanner)
     expect(screen.getByTestId('banner-central-mismatch')).toHaveTextContent(TH.centralMismatchBanner)
   })
+
+  // fix round 1 item 5: syncStatus.isError must not blank the banners — bootstrap().sync is still shown.
+  it('falls back to bootstrap().sync when syncStatus errors', async () => {
+    renderBlock3(<StatusBanners />, {
+      api: {
+        syncStatus: vi.fn(async () => { throw new Error('OFFLINE: network') }),
+        bootstrap: vi.fn(async () => ({ users: OWNERS, zWaiting: [], sync: status({ problemSyncRows: 3 }) })),
+      },
+      session: { userId: 'u1', role: 'owner' },
+    })
+    expect(await screen.findByTestId('banner-problems')).toHaveTextContent('3')
+  })
 })
