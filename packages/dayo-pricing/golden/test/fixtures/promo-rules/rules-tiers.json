@@ -1,0 +1,4491 @@
+{
+  "description": "ส่วนลดขั้นบันได (ADR-0072 ข้อ 1): ได้ขั้นสูงสุดที่ถึงขั้นเดียว · ขอบ min พอดี · tiered × qty/amount × percent/baht/fixed_price × apply_to option × cap × floor · stop_group ไม่ทำงานเมื่อไม่ถึงขั้น · separate ไม่นับแก้วที่กลุ่มก่อนลดแล้ว · stack นับแก้วเดิม · bill_tiers × subtotal (หลังส่วนลดรายแก้ว)/qty+target (ไม่นับแก้วกรอกเอง) × yield/combine × เลือกตัวมากสุดในกลุ่ม · คำเตือนโค้ด/เลือกเองไม่ถึงขั้นแรก",
+  "form": "rule",
+  "groups": [
+    {
+      "code": "main",
+      "name": "ทั่วไป",
+      "sortOrder": 0,
+      "stackMode": "separate",
+      "isActive": true
+    },
+    {
+      "code": "stack",
+      "name": "ซ้อนได้",
+      "sortOrder": 1,
+      "stackMode": "stack",
+      "isActive": true
+    },
+    {
+      "code": "sep2",
+      "name": "แยกกัน",
+      "sortOrder": 2,
+      "stackMode": "separate",
+      "isActive": true
+    }
+  ],
+  "promotions": [
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+      "template": "tiered_item",
+      "priority": 5,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "GT01"
+          ]
+        },
+        "reward": {
+          "type": "tiered",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 3,
+              "baht": 5
+            },
+            {
+              "min": 4,
+              "baht": 6
+            }
+          ]
+        },
+        "stop_group": true
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "น้ำเปล่าฟรี",
+      "template": "item_discount",
+      "priority": 6,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "WT01"
+          ]
+        },
+        "reward": {
+          "type": "percent",
+          "percent": 100
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+      "template": "tiered_item",
+      "priority": 10,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {
+          "categories": [
+            "ชาไทย"
+          ]
+        },
+        "reward": {
+          "type": "tiered",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 2,
+              "percent": 10
+            },
+            {
+              "min": 3,
+              "percent": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+      "template": "tiered_item",
+      "priority": 11,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {},
+        "reward": {
+          "type": "tiered",
+          "basis": "amount",
+          "tiers": [
+            {
+              "min": 100,
+              "baht": 5
+            },
+            {
+              "min": 200,
+              "baht": 10
+            }
+          ]
+        },
+        "cap_baht": 25
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+      "template": "tiered_item",
+      "priority": 12,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "MT01"
+          ]
+        },
+        "reward": {
+          "type": "tiered",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 2,
+              "fixed_price": 80
+            },
+            {
+              "min": 3,
+              "fixed_price": 70
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+      "template": "tiered_item",
+      "priority": 13,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {
+          "options": {
+            "milk": [
+              "oat"
+            ]
+          }
+        },
+        "reward": {
+          "type": "tiered",
+          "basis": "qty",
+          "apply_to": "option",
+          "tiers": [
+            {
+              "min": 2,
+              "percent": 50
+            },
+            {
+              "min": 3,
+              "percent": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+      "template": "tiered_item",
+      "priority": 14,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "GT01"
+          ]
+        },
+        "reward": {
+          "type": "tiered",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 2,
+              "percent": 15
+            },
+            {
+              "min": 4,
+              "percent": 25
+            }
+          ]
+        },
+        "rounding": "floor_baht"
+      }
+    },
+    {
+      "code": "TIER",
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "code",
+      "isActive": true,
+      "name": "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+      "template": "tiered_item",
+      "priority": 15,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "TT01"
+          ]
+        },
+        "reward": {
+          "type": "tiered",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 3,
+              "baht": 5
+            },
+            {
+              "min": 5,
+              "baht": 8
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "manual",
+      "isActive": true,
+      "name": "เลือกเองยอดครบ 150 ลด 10%",
+      "template": "tiered_item",
+      "priority": 16,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {},
+        "reward": {
+          "type": "tiered",
+          "basis": "amount",
+          "tiers": [
+            {
+              "min": 150,
+              "percent": 10
+            },
+            {
+              "min": 300,
+              "percent": 20
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "manual",
+      "isActive": true,
+      "name": "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+      "template": "tiered_item",
+      "priority": 17,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "MT01"
+          ]
+        },
+        "reward": {
+          "type": "tiered",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 2,
+              "percent": 10
+            },
+            {
+              "min": 3,
+              "percent": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "stack",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+      "template": "tiered_item",
+      "priority": 20,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {},
+        "reward": {
+          "type": "tiered",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 2,
+              "percent": 10
+            },
+            {
+              "min": 3,
+              "percent": 20
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "sep2",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+      "template": "tiered_item",
+      "priority": 21,
+      "rule": {
+        "v": 2,
+        "scope": "cup",
+        "target": {},
+        "reward": {
+          "type": "tiered",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 1,
+              "baht": 1
+            },
+            {
+              "min": 2,
+              "baht": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+      "template": "tiered_bill",
+      "priority": 30,
+      "rule": {
+        "v": 2,
+        "scope": "bill",
+        "reward": {
+          "type": "bill_tiers",
+          "basis": "subtotal",
+          "tiers": [
+            {
+              "min": 200,
+              "baht": 20
+            },
+            {
+              "min": 300,
+              "baht": 40
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+      "template": "tiered_bill",
+      "priority": 31,
+      "rule": {
+        "v": 2,
+        "scope": "bill",
+        "reward": {
+          "type": "bill_tiers",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 2,
+              "percent": 5
+            },
+            {
+              "min": 4,
+              "percent": 10
+            }
+          ]
+        },
+        "target": {
+          "categories": [
+            "ชาไทย"
+          ]
+        },
+        "cap_baht": 15
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+      "template": "tiered_bill",
+      "priority": 32,
+      "rule": {
+        "v": 2,
+        "scope": "bill",
+        "reward": {
+          "type": "bill_tiers",
+          "basis": "subtotal",
+          "tiers": [
+            {
+              "min": 100,
+              "percent": 5
+            },
+            {
+              "min": 200,
+              "percent": 10
+            }
+          ]
+        },
+        "rounding": "floor_baht",
+        "manual_bill": "combine"
+      }
+    },
+    {
+      "code": "BILLT",
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "code",
+      "isActive": true,
+      "name": "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+      "template": "tiered_bill",
+      "priority": 33,
+      "rule": {
+        "v": 2,
+        "scope": "bill",
+        "reward": {
+          "type": "bill_tiers",
+          "basis": "subtotal",
+          "tiers": [
+            {
+              "min": 500,
+              "baht": 50
+            },
+            {
+              "min": 800,
+              "baht": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "manual",
+      "isActive": true,
+      "name": "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+      "template": "tiered_bill",
+      "priority": 34,
+      "rule": {
+        "v": 2,
+        "scope": "bill",
+        "reward": {
+          "type": "bill_tiers",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 3,
+              "baht": 10
+            },
+            {
+              "min": 6,
+              "baht": 25
+            }
+          ]
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+      "template": "tiered_bill",
+      "priority": 35,
+      "rule": {
+        "v": 2,
+        "scope": "bill",
+        "reward": {
+          "type": "bill_tiers",
+          "basis": "qty",
+          "tiers": [
+            {
+              "min": 2,
+              "percent": 5
+            },
+            {
+              "min": 3,
+              "percent": 10
+            }
+          ]
+        },
+        "target": {
+          "categories": [
+            "ชาไทย",
+            "มัตจะ"
+          ],
+          "options": {
+            "milk": [
+              "oat"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "sep2",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30",
+      "template": "tiered_bill",
+      "priority": 40,
+      "rule": {
+        "v": 2,
+        "scope": "bill",
+        "reward": {
+          "type": "bill_tiers",
+          "basis": "subtotal",
+          "tiers": [
+            {
+              "min": 250,
+              "baht": 10
+            },
+            {
+              "min": 300,
+              "baht": 30
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "ชาไทย 2 แก้ว = ขั้นแรกพอดี 10%",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 7,
+        "billDiscountAmount": 0,
+        "totalAmount": 63,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 3.5,
+            "promotion": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "lineTotal": 63
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "kind": "tiered_item",
+            "discountAmount": 7,
+            "tier": {
+              "index": 0,
+              "min": 2,
+              "basis": "qty",
+              "value": 2
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ชาไทย 3 แก้ว = ขั้น 2 ลด 15% ทุกแก้ว",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 125,
+        "itemsDiscount": 18.75,
+        "billDiscountAmount": 0,
+        "totalAmount": 106.25,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5.25,
+            "promotion": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "lineTotal": 29.75
+          },
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 6.75,
+            "promotion": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "lineTotal": 38.25
+          },
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 6.75,
+            "promotion": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "lineTotal": 38.25
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "kind": "tiered_item",
+            "discountAmount": 18.75,
+            "tier": {
+              "index": 1,
+              "min": 3,
+              "basis": "qty",
+              "value": 3
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ชาไทย 1 แก้ว ไม่ถึงขั้น (อัตโนมัติไม่เตือน)",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 75,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 75,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ยอดแก้ว 75 ไม่ถึง 100",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 75,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 75,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ยอดแก้ว 125 ขั้นแรก ลด 5 ทุกแก้ว",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 125,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 0,
+        "totalAmount": 115,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 5,
+            "promotion": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "lineTotal": 80
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 5,
+            "promotion": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "kind": "tiered_item",
+            "discountAmount": 10,
+            "tier": {
+              "index": 0,
+              "min": 100,
+              "basis": "amount",
+              "value": 125
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ยอดแก้ว 100 พอดี · แก้ว 10 บาทลดได้ไม่เกินราคา",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 100,
+        "itemsDiscount": 15,
+        "billDiscountAmount": 0,
+        "totalAmount": 85,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 5,
+            "promotion": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "lineTotal": 40
+          },
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 5,
+            "promotion": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "lineTotal": 40
+          },
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 10,
+            "discountPerCup": 5,
+            "promotion": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "lineTotal": 5
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "kind": "tiered_item",
+            "discountAmount": 15,
+            "tier": {
+              "index": 0,
+              "min": 100,
+              "basis": "amount",
+              "value": 100
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ยอดแก้ว 210 ขั้น 2 ลด 10 ติดเพดาน 25",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 210,
+        "itemsDiscount": 25,
+        "billDiscountAmount": 0,
+        "totalAmount": 185,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 10,
+            "promotion": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "lineTotal": 150
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 5,
+            "promotion": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "kind": "tiered_item",
+            "discountAmount": 25,
+            "tier": {
+              "index": 1,
+              "min": 200,
+              "basis": "amount",
+              "value": 210
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ยอดแก้ว Grab 144 (ราคาหลังบวกช่องทาง)",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 144,
+        "itemsDiscount": 15,
+        "billDiscountAmount": 0,
+        "totalAmount": 129,
+        "channelFeeAmount": 38.7,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 46,
+            "discountPerCup": 5,
+            "promotion": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "lineTotal": 82
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 52,
+            "discountPerCup": 5,
+            "promotion": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "lineTotal": 47
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+            "kind": "tiered_item",
+            "discountAmount": 15,
+            "tier": {
+              "index": 0,
+              "min": 100,
+              "basis": "amount",
+              "value": 144
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "มัตจะ 3 แก้ว ราคา 70",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 255,
+        "itemsDiscount": 45,
+        "billDiscountAmount": 0,
+        "totalAmount": 210,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 85,
+            "discountPerCup": 15,
+            "promotion": "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+            "lineTotal": 210
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+            "kind": "tiered_item",
+            "discountAmount": 45,
+            "tier": {
+              "index": 1,
+              "min": 3,
+              "basis": "qty",
+              "value": 3
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "มัตจะ 2 แก้ว Grab ราคา 80",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 222,
+        "itemsDiscount": 62,
+        "billDiscountAmount": 0,
+        "totalAmount": 160,
+        "channelFeeAmount": 48,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 111,
+            "discountPerCup": 31,
+            "promotion": "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+            "lineTotal": 160
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+            "kind": "tiered_item",
+            "discountAmount": 62,
+            "tier": {
+              "index": 0,
+              "min": 2,
+              "basis": "qty",
+              "value": 2
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นมโอ๊ต 2 แก้ว ลดค่าตัวเลือกครึ่ง (แก้วนมสดไม่นับ)",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2,
+            "milk": "oat"
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 125,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 0,
+        "totalAmount": 115,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 45,
+            "discountPerCup": 5,
+            "promotion": "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+            "lineTotal": 80,
+            "optionAdds": {
+              "milk": {
+                "code": "oat",
+                "add": 10,
+                "paid": 10
+              }
+            }
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+            "kind": "tiered_item",
+            "discountAmount": 10,
+            "tier": {
+              "index": 0,
+              "min": 2,
+              "basis": "qty",
+              "value": 2
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นมโอ๊ต 3 แก้ว ค่าตัวเลือกฟรี",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3,
+            "milk": "oat"
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 135,
+        "itemsDiscount": 30,
+        "billDiscountAmount": 0,
+        "totalAmount": 105,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 45,
+            "discountPerCup": 10,
+            "promotion": "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+            "lineTotal": 105,
+            "optionAdds": {
+              "milk": {
+                "code": "oat",
+                "add": 10,
+                "paid": 10
+              }
+            }
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+            "kind": "tiered_item",
+            "discountAmount": 30,
+            "tier": {
+              "index": 1,
+              "min": 3,
+              "basis": "qty",
+              "value": 3
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ชาเขียว 2 แก้ว 15% = 6",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 80,
+        "itemsDiscount": 12,
+        "billDiscountAmount": 0,
+        "totalAmount": 68,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 40,
+            "discountPerCup": 6,
+            "promotion": "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+            "lineTotal": 68
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+            "kind": "tiered_item",
+            "discountAmount": 12,
+            "tier": {
+              "index": 0,
+              "min": 2,
+              "basis": "qty",
+              "value": 2
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ชาเขียว 4 แก้ว 25% ปัดบาท 10/10/12/12",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 180,
+        "itemsDiscount": 44,
+        "billDiscountAmount": 0,
+        "totalAmount": 136,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 40,
+            "discountPerCup": 10,
+            "promotion": "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+            "lineTotal": 60
+          },
+          {
+            "menuCode": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 50,
+            "discountPerCup": 12,
+            "promotion": "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+            "lineTotal": 76
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+            "kind": "tiered_item",
+            "discountAmount": 44,
+            "tier": {
+              "index": 1,
+              "min": 4,
+              "basis": "qty",
+              "value": 4
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ไม่ถึงขั้น = ไม่หยุดกลุ่ม โปรถัดไปยังคิด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "น้ำเปล่าฟรี",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 150,
+        "itemsDiscount": 7,
+        "billDiscountAmount": 0,
+        "totalAmount": 143,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 80
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 3.5,
+            "promotion": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "lineTotal": 63
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "kind": "tiered_item",
+            "discountAmount": 7,
+            "tier": {
+              "index": 0,
+              "min": 2,
+              "basis": "qty",
+              "value": 2
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ถึงขั้น = หยุดกลุ่ม",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "น้ำเปล่าฟรี",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 190,
+        "itemsDiscount": 15,
+        "billDiscountAmount": 0,
+        "totalAmount": 175,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 40,
+            "discountPerCup": 5,
+            "promotion": "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+            "lineTotal": 105
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+            "kind": "tiered_item",
+            "discountAmount": 15,
+            "tier": {
+              "index": 0,
+              "min": 3,
+              "basis": "qty",
+              "value": 3
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "stack นับแก้วที่กลุ่มก่อนลดแล้ว · ลดต่อจากราคาที่เหลือ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 105,
+        "itemsDiscount": 33.6,
+        "billDiscountAmount": 0,
+        "totalAmount": 71.4,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 35,
+            "discountPerCup": 11.2,
+            "promotion": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "lineTotal": 71.4,
+            "promoBreakdown": [
+              {
+                "promotion": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+                "amount": 5.25
+              },
+              {
+                "promotion": "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+                "amount": 5.95
+              }
+            ]
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "kind": "tiered_item",
+            "discountAmount": 15.75,
+            "tier": {
+              "index": 1,
+              "min": 3,
+              "basis": "qty",
+              "value": 3
+            }
+          },
+          {
+            "name": "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+            "kind": "tiered_item",
+            "discountAmount": 17.85,
+            "tier": {
+              "index": 1,
+              "min": 3,
+              "basis": "qty",
+              "value": 3
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "separate ไม่นับแก้วที่กลุ่มก่อนลดแล้ว",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 110,
+        "itemsDiscount": 8,
+        "billDiscountAmount": 0,
+        "totalAmount": 102,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 3.5,
+            "promotion": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "lineTotal": 63
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 1,
+            "promotion": "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+            "lineTotal": 39
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "kind": "tiered_item",
+            "discountAmount": 7,
+            "tier": {
+              "index": 0,
+              "min": 2,
+              "basis": "qty",
+              "value": 2
+            }
+          },
+          {
+            "name": "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+            "kind": "tiered_item",
+            "discountAmount": 1,
+            "tier": {
+              "index": 0,
+              "min": 1,
+              "basis": "qty",
+              "value": 1
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "stack นับแก้วที่เหลือราคา 0 (พฤติกรรมปัจจุบัน)",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 55,
+        "itemsDiscount": 27,
+        "billDiscountAmount": 0,
+        "totalAmount": 28,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 10,
+            "discountPerCup": 10,
+            "promotion": "น้ำเปล่าฟรี",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 7,
+            "promotion": "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+            "lineTotal": 28
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "น้ำเปล่าฟรี",
+            "kind": "item_discount",
+            "discountAmount": 20
+          },
+          {
+            "name": "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+            "kind": "tiered_item",
+            "discountAmount": 7,
+            "tier": {
+              "index": 1,
+              "min": 3,
+              "basis": "qty",
+              "value": 3
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "โค้ด 2 แก้ว ไม่ถึงขั้นแรก",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "promoCode": "tier",
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 70,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8: จำนวนแก้วยังไม่ถึงขั้นแรก 3 แก้ว"
+        ]
+      }
+    },
+    {
+      "name": "โค้ด ไม่มีเมนูเข้าเป้า",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "promoCode": "TIER",
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 40,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 40,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8: ไม่มีเมนูที่ร่วมโปรในบิล"
+        ]
+      }
+    },
+    {
+      "name": "โค้ด แก้วถูกกรอกส่วนลดเองหมด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3,
+            "discountBaht": 1
+          }
+        ],
+        "promoCode": "TIER",
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 105,
+        "itemsDiscount": 3,
+        "billDiscountAmount": 0,
+        "totalAmount": 102,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 35,
+            "discountPerCup": 1,
+            "promotion": null,
+            "lineTotal": 102
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8: แก้วที่ร่วมโปรถูกใช้กับโปรอื่นหรือส่วนลดที่กรอกเองแล้ว"
+        ]
+      }
+    },
+    {
+      "name": "โค้ด 5 แก้ว ขั้น 2",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 5
+          }
+        ],
+        "promoCode": "TIER",
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 175,
+        "itemsDiscount": 40,
+        "billDiscountAmount": 0,
+        "totalAmount": 135,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 5,
+            "unitPrice": 35,
+            "discountPerCup": 8,
+            "promotion": "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+            "lineTotal": 135
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+            "kind": "tiered_item",
+            "discountAmount": 40,
+            "tier": {
+              "index": 1,
+              "min": 5,
+              "basis": "qty",
+              "value": 5
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "เลือกเอง ยอด 75 ไม่ถึงขั้นแรก",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "manualPromotions": [
+          "เลือกเองยอดครบ 150 ลด 10%"
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 75,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 75,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร เลือกเองยอดครบ 150 ลด 10%: ยอดแก้วที่เข้าโปรยังไม่ถึงขั้นแรก ฿150"
+        ]
+      }
+    },
+    {
+      "name": "เลือกเองรายแก้ว ไม่มีเมนูเข้าเป้า",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "manualPromotions": [
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%"
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 70,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%: ไม่มีเมนูที่ร่วมโปรในบิล"
+        ]
+      }
+    },
+    {
+      "name": "เลือกเองรายแก้ว แก้วเข้าเป้าถูกกรอกส่วนลดเองหมด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2,
+            "discountBaht": 5
+          }
+        ],
+        "manualPromotions": [
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%"
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 0,
+        "totalAmount": 160,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 5,
+            "promotion": null,
+            "lineTotal": 160
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%: แก้วที่ร่วมโปรถูกใช้กับโปรอื่นหรือส่วนลดที่กรอกเองแล้ว"
+        ]
+      }
+    },
+    {
+      "name": "เลือกเอง ยอด 170 ลด 10%",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "manualPromotions": [
+          "เลือกเองยอดครบ 150 ลด 10%"
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 17,
+        "billDiscountAmount": 0,
+        "totalAmount": 153,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 8.5,
+            "promotion": "เลือกเองยอดครบ 150 ลด 10%",
+            "lineTotal": 153
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เลือกเองยอดครบ 150 ลด 10%",
+            "kind": "tiered_item",
+            "discountAmount": 17,
+            "tier": {
+              "index": 0,
+              "min": 150,
+              "basis": "amount",
+              "value": 170
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "บิล 210 ขั้นแรก",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 210,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 20,
+        "totalAmount": 190,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+            "kind": "tiered_bill",
+            "discountAmount": 20,
+            "tier": {
+              "index": 0,
+              "min": 200,
+              "basis": "subtotal",
+              "value": 210
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "บิล 300 พอดี ขั้น 2",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 300,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 40,
+        "totalAmount": 260,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          },
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 45
+          },
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 45
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+            "kind": "tiered_bill",
+            "discountAmount": 40,
+            "tier": {
+              "index": 1,
+              "min": 300,
+              "basis": "subtotal",
+              "value": 300
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "บิล 310 หลังลดรายแก้วเหลือ 289 = ขั้นแรก",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 4
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 310,
+        "itemsDiscount": 21,
+        "billDiscountAmount": 20,
+        "totalAmount": 269,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 4,
+            "unitPrice": 35,
+            "discountPerCup": 5.25,
+            "promotion": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "lineTotal": 119
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+            "kind": "tiered_item",
+            "discountAmount": 21,
+            "tier": {
+              "index": 1,
+              "min": 3,
+              "basis": "qty",
+              "value": 4
+            }
+          },
+          {
+            "name": "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+            "kind": "tiered_bill",
+            "discountAmount": 20,
+            "tier": {
+              "index": 0,
+              "min": 200,
+              "basis": "subtotal",
+              "value": 289
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นับแก้วชาไทย 2 ลดบิล 5%",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 155,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 7.75,
+        "totalAmount": 147.25,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 85
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+            "kind": "tiered_bill",
+            "discountAmount": 7.75,
+            "tier": {
+              "index": 0,
+              "min": 2,
+              "basis": "qty",
+              "value": 2
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นับแก้วตาม target หมวด + นมโอ๊ต (ชาเขียวโอ๊ต/ชาไทยนมสดไม่นับ) 3 แก้ว ลด 10%",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2,
+            "milk": "oat"
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "milk": "oat"
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "milk": "oat"
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 270,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 27,
+        "totalAmount": 243,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 90,
+            "optionAdds": {
+              "milk": {
+                "code": "oat",
+                "add": 10,
+                "paid": 10
+              }
+            }
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 95,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 95,
+            "optionAdds": {
+              "milk": {
+                "code": "oat",
+                "add": 10,
+                "paid": 10
+              }
+            }
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 50,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 50,
+            "optionAdds": {
+              "milk": {
+                "code": "oat",
+                "add": 10,
+                "paid": 10
+              }
+            }
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+            "kind": "tiered_bill",
+            "discountAmount": 27,
+            "tier": {
+              "index": 1,
+              "min": 3,
+              "basis": "qty",
+              "value": 3
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "กลุ่มที่ 2 ใช้ฐานหลังโปรบิลกลุ่มแรก (300 − 40 = 260 → ขั้นแรก)",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 300,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 50,
+        "totalAmount": 250,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          },
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 45
+          },
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 45
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+            "kind": "tiered_bill",
+            "discountAmount": 40,
+            "tier": {
+              "index": 1,
+              "min": 300,
+              "basis": "subtotal",
+              "value": 300
+            }
+          },
+          {
+            "name": "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30",
+            "kind": "tiered_bill",
+            "discountAmount": 10,
+            "tier": {
+              "index": 0,
+              "min": 250,
+              "basis": "subtotal",
+              "value": 260
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นับแก้วชาไทย 4 ลด 10% ติดเพดาน 15",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 4
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 310,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 15,
+        "totalAmount": 295,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 4,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 140
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+            "kind": "tiered_bill",
+            "discountAmount": 15,
+            "tier": {
+              "index": 1,
+              "min": 4,
+              "basis": "qty",
+              "value": 4
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นับแก้วไม่รวมแก้วฟรีที่กรอกเอง",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "free": true,
+            "discountReason": "ทดสอบ"
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 105,
+        "itemsDiscount": 35,
+        "billDiscountAmount": 3.5,
+        "totalAmount": 66.5,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": null,
+            "lineTotal": 0
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+            "kind": "tiered_bill",
+            "discountAmount": 3.5,
+            "tier": {
+              "index": 0,
+              "min": 2,
+              "basis": "qty",
+              "value": 2
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "combine + กรอกลด 10",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "billDiscountBaht": 10,
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 210,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 31,
+        "totalAmount": 179,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+            "kind": "tiered_bill",
+            "discountAmount": 21,
+            "tier": {
+              "index": 1,
+              "min": 200,
+              "basis": "subtotal",
+              "value": 210
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ปัดบาท 5.25 → 5",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 105,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 5,
+        "totalAmount": 100,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 105
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+            "kind": "tiered_bill",
+            "discountAmount": 5,
+            "tier": {
+              "index": 0,
+              "min": 100,
+              "basis": "subtotal",
+              "value": 105
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "กลุ่มเดียวเลือกตัวลดมากสุด (21 > 20)",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 210,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 21,
+        "totalAmount": 189,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+            "kind": "tiered_bill",
+            "discountAmount": 21,
+            "tier": {
+              "index": 1,
+              "min": 200,
+              "basis": "subtotal",
+              "value": 210
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "กลุ่มเดียวเลือกตัวลดมากสุด (40 > 30)",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 300,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 40,
+        "totalAmount": 260,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 255
+          },
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 45
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+            "kind": "tiered_bill",
+            "discountAmount": 40,
+            "tier": {
+              "index": 1,
+              "min": 300,
+              "basis": "subtotal",
+              "value": 300
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "โค้ดบิล 170 ไม่ถึงขั้นแรก",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "promoCode": "BILLT",
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 170,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100: ยอดหลังส่วนลดรายแก้วยังไม่ถึงขั้นแรก ฿500"
+        ]
+      }
+    },
+    {
+      "name": "โค้ดบิล + กรอกเอง = ยอมให้กรอกเอง",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "promoCode": "BILLT",
+        "billDiscountBaht": 5,
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 5,
+        "totalAmount": 165,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100: ใช้ส่วนลดทั้งบิลที่กรอกเองแทน"
+        ]
+      }
+    },
+    {
+      "name": "โค้ดบิล 510 ขั้นแรก",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 6
+          }
+        ],
+        "promoCode": "BILLT",
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 510,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 50,
+        "totalAmount": 460,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 6,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 510
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+            "kind": "tiered_bill",
+            "discountAmount": 50,
+            "tier": {
+              "index": 0,
+              "min": 500,
+              "basis": "subtotal",
+              "value": 510
+            }
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "เลือกเองบิล 2 แก้ว ไม่ถึงขั้นแรก",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "manualPromotions": [
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25"
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 70,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25: จำนวนแก้วยังไม่ถึงขั้นแรก 3 แก้ว"
+        ]
+      }
+    },
+    {
+      "name": "เลือกเองบิล 6 แก้ว ขั้น 2",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 6
+          }
+        ],
+        "manualPromotions": [
+          "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25"
+        ],
+        "skipPromotions": [
+          "ชาเขียวครบ 3 ลด 5 ครบ 4 ลด 6 หยุดกลุ่ม",
+          "น้ำเปล่าฟรี",
+          "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ยอดแก้วครบ 100 ลด 5 ครบ 200 ลด 10 เพดาน 25",
+          "มัตจะครบ 2 ราคา 80 ครบ 3 ราคา 70",
+          "นมโอ๊ตครบ 2 ลดครึ่ง ครบ 3 ฟรี",
+          "ชาเขียวครบ 2 ลด 15% ครบ 4 ลด 25% ปัดบาท",
+          "โค้ดชาไทยครบ 3 ลด 5 ครบ 5 ลด 8",
+          "เลือกเองยอดครบ 150 ลด 10%",
+          "เลือกเองมัตจะครบ 2 ลด 10% ครบ 3 ลด 15%",
+          "ซ้อน ครบ 2 ลด 10% ครบ 3 ลด 20%",
+          "แยก ครบ 1 ลด 1 ครบ 2 ลด 2",
+          "บิลครบ 200 ลด 20 ครบ 300 ลด 40",
+          "ชาไทยครบ 2 แก้วลดบิล 5% ครบ 4 ลด 10% เพดาน 15",
+          "บิลครบ 100 ลด 5% ครบ 200 ลด 10% ปัดบาท รวมกับกรอกเอง",
+          "โค้ดบิลครบ 500 ลด 50 ครบ 800 ลด 100",
+          "ชาไทย/มัตจะนมโอ๊ตครบ 2 แก้วลดบิล 5% ครบ 3 ลด 10%",
+          "กลุ่มแยก บิลครบ 250 ลด 10 ครบ 300 ลด 30"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 210,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 25,
+        "totalAmount": 185,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 6,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 210
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เลือกเองครบ 3 แก้วลดบิล 10 ครบ 6 ลด 25",
+            "kind": "tiered_bill",
+            "discountAmount": 25,
+            "tier": {
+              "index": 1,
+              "min": 6,
+              "basis": "qty",
+              "value": 6
+            }
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}

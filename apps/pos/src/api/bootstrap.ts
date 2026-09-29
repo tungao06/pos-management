@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { KIND_SCOPE, PUSH_KINDS, SHIFT_LANE_KINDS, type DetailPrefix, type PushKind } from '@dayo/contracts'
+import { TABLET_PROMO_RULE_VERSION } from '@dayo/domain'
 import { readCatalog, readSupported } from '../sync/catalog'
 import { maskApiKey } from '../sync/secret-store'
 import { isHeld, SCOPE_CLOSABLE_AFTER_MS, SCOPE_RED_AFTER_MS } from '../sync/push'
@@ -13,7 +14,7 @@ import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { hintFor, isShiftConflict } from './problem-rules'
 import { staffNeedingPin } from './staff'
-import type { BootstrapState, DeviceDto, ShiftDto, SyncStatusDto, UserDto, WaitingZDto } from './types'
+import type { BootstrapState, DeviceDto, PromoSupportDto, ShiftDto, SyncStatusDto, UserDto, WaitingZDto } from './types'
 
 /** sync_state key holding this device's id (decision T7). */
 export const LOCAL_DEVICE_KEY = 'local.device_id'
@@ -223,6 +224,17 @@ async function hasShiftDataConflict(db: RemoteDb): Promise<boolean> {
   })
 }
 
+/** plan 10 §0.2 (T7): what the last stored E1 `supported_*` says about promotions — none before any E1. */
+export async function promoSupport(db: RemoteDb): Promise<PromoSupportDto> {
+  const sup = await readSupported(db)
+  if (sup === null) return { manualSupported: false, ruleBehind: false, ruleVersions: [] }
+  return {
+    manualSupported: sup.fields.order?.includes('manual_promotion_ids') ?? false,
+    ruleBehind: sup.promoRuleVersions.some((v) => v > TABLET_PROMO_RULE_VERSION),
+    ruleVersions: [...sup.promoRuleVersions],
+  }
+}
+
 export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapState> {
   const dayoLinked = await isDayoLinked(db, deps)
   // Not a secret (controller ruling R1): read regardless of `dayoLinked` so a device whose key was revoked or
@@ -231,7 +243,7 @@ export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapS
   // null in exactly the cases `replaceApiKey`/`recoverOwner` themselves would refuse (e.g. a corrupt stored value).
   const dayoBaseUrl = await storedBaseUrl(db)
   if ((await localDeviceId(db)) === null) {
-    return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl, staffNeedingPin: [], ownerRecovery: false, sync: await syncStatus(db, deps), countingShift: null, zWaiting: [], centralLastZNo: null }
+    return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl, staffNeedingPin: [], ownerRecovery: false, sync: await syncStatus(db, deps), countingShift: null, zWaiting: [], centralLastZNo: null, promo: await promoSupport(db) }
   }
   const device = await requireDevice(db)
   const lastAt = await lastBackupAt(db)
@@ -253,5 +265,6 @@ export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapS
     countingShift: await countingShiftOf(db, device.id),
     zWaiting: await waitingZs(db, device.id),
     centralLastZNo: (await readCentralZ(db))?.lastZNo ?? null,
+    promo: await promoSupport(db),
   }
 }

@@ -7,11 +7,11 @@
 // step, the id field per kind and key_changed: of the shift kinds; dayo_pos_dispatch sends the four shift kinds to judge-shift.ts;
 // api_pos_push records every rejected `order` row in pos_push_rejections (0066:993-1002). Phase 2 (not shipped — preflight P3):
 // order_off_catalog (judge-off-catalog.ts), off_catalog_exists: on order rows, and the recompute of every Z (recompute.ts).
-import { clipCodePoints, fieldsUsed, KIND_ID_FIELD, type PushKind, type ReceivedRowResult } from '@dayo/contracts'
-import { computedTotalAt } from './reprice.js'
+import { clipCodePoints, fieldsUsed, KIND_ID_FIELD, MAX_MANUAL_PROMOTIONS, trimWs, type PushKind, type ReceivedRowResult } from '@dayo/contracts'
+import { dayoQuoteAt } from './reprice.js'
 import { judgeOffCatalog } from './judge-off-catalog.js'
 import { conflictShiftOf, flagConflict, judgeCashCount, judgeCashMovement, judgeShiftClose, judgeShiftOpen, SHIFT_KINDS } from './judge-shift.js'
-import { DAY, defer, existsData, FIVE_MIN, has, hashOf, isInt, isMoney, isObj, isPct, isText, isUuid, issueOrderNo, minusDays, reject, staffOk, thaiDate, ts, utcZ, Verdict, ymd, type J } from './judge-util.js'
+import { cents, DAY, defer, existsData, FIVE_MIN, has, hashOf, isInt, isMoney, isObj, isPct, isText, isUuid, issueOrderNo, minusDays, reject, staffOk, thaiDate, ts, utcZ, Verdict, ymd, type J } from './judge-util.js'
 import { recomputeAll } from './recompute.js'
 import { variantKey, type MockOrderData, type MockOrderLine, type MockOverride, type MockState, type StoredOrder } from './state.js'
 
@@ -23,6 +23,8 @@ const JSONB_UNSTORABLE_RE = /[\ud800-\udfff\u0000]/u
 /** Rule 6 of the recompute (spec 04 §4.10): an accepted row of these kinds may change a Z. */
 const RECOMPUTE_KINDS: ReadonlySet<string> = new Set(['order', 'order_void', 'order_off_catalog', 'cash_movement', 'shift_close'])
 const REASON_CODE_RE = /^[A-Z_]{1,40}$/
+/** 0069:1628-1630: what manual_promotion_reason may not hold ON TOP of dayo_pos_is_text — C1, zero-width, bidi, line/paragraph separators. */
+const MANUAL_REASON_BAD_RE = /[\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069]/
 
 /**
  * api_pos_push casts the whole body to jsonb before it looks at any row (0052:735-739), so ONE lone surrogate or NUL in
@@ -164,6 +166,11 @@ function judgeOrder(s: MockState, key: string, d: J, now: number): ReceivedRowRe
   if (has(d, 'promo_code') && !isText(d['promo_code'], 100)) reject('INVALID', 'promo_code ต้องเป็นข้อความหรือ null')
   if (has(d, 'skip_promotion_ids') && (!Array.isArray(d['skip_promotion_ids']) || !d['skip_promotion_ids'].every(isUuid))) reject('INVALID', 'skip_promotion_ids ต้องเป็น array ของ uuid')
   if (has(d, 'no_promotions') && typeof d['no_promotions'] !== 'boolean') reject('INVALID', 'no_promotions ต้องเป็น true/false')
+  // 0069:1620-1633 (dayo ≥ 0069 only — an older dayo defers the row UNSUPPORTED at the field list above)
+  if (has(d, 'manual_promotion_ids') && (!Array.isArray(d['manual_promotion_ids']) || !d['manual_promotion_ids'].every(isUuid))) reject('INVALID', 'manual_promotion_ids ต้องเป็น array ของ uuid')
+  if (has(d, 'manual_promotion_reason') && (!isText(d['manual_promotion_reason'], 200) || MANUAL_REASON_BAD_RE.test(d['manual_promotion_reason']))) {
+    reject('INVALID', 'manual_promotion_reason ต้องเป็นข้อความ 1–200 ตัวอักษร หรือ null')
+  }
   const totals = d['totals']
   if (!isObj(totals) || Object.keys(totals).some((k) => !['items_subtotal', 'items_discount', 'bill_discount', 'total'].includes(k))
     || !isMoney(totals['items_subtotal']) || !isMoney(totals['items_discount']) || !isMoney(totals['bill_discount']) || !isMoney(totals['total'])) {
@@ -206,15 +213,24 @@ function judgeOrder(s: MockState, key: string, d: J, now: number): ReceivedRowRe
 
   // ── save (dayo create_order: re-quote at sold_at · freeze · amount_mismatch · pos_computed_total) ──
   if (s.mode === 'force_row_error') throw new Error('force_row_error') // the business step fails after every check above
-  const computed = computedTotalAt(s, o, soldAt)
+  // dayo_impl_create_order (0074:1534-1561) → dayo_quote: the draft's manual list (dayo_draft_manual_promotions: DY422
+  // too_large) · the reason guard on dayo's OWN quote at sold_at (0069:1096-1098) · invalid_order: when that quote is not ok
+  // (0074:1544-1547) — each DY422 → rejected INVALID with dayo's message (dayo_pos_map_error)
+  if (o.manual_promotion_ids.length > MAX_MANUAL_PROMOTIONS) reject('INVALID', 'too_large: เลือกโปรเองได้ไม่เกิน 20 ตัวต่อบิล')
+  const q = dayoQuoteAt(s, o, soldAt) // null = the mock's catalog cannot reproduce dayo's price (see dayoQuoteAt): trust the tablet
+  if (q !== null && q.manualPromotionReasonRequired && o.manual_promotion_reason === null) reject('INVALID', 'reason_required: โปรที่เลือกเองทำให้บิลเหลือ ฿0 ต้องใส่เหตุผลค่ะ')
+  if (q !== null && !q.ok) reject('INVALID', `invalid_order: ${q.warnings.length > 0 ? q.warnings.join(' · ') : 'บิลไม่ถูกต้อง'}`)
+  // pos_computed_total = dayo's quote total · amount_mismatch = |reported − computed| > ฿1 (dayo_order_amounts 0008:998)
+  const computed = q === null ? o.totals.total : q.totalAmount
+  const warnings = q === null ? [] : [...q.warnings]
   const stored: StoredOrder = {
     orderNo: issueOrderNo(s, o.sale_date), posOrderId: o.pos_order_id, receiptNo: o.receipt_no,
     saleDate: o.sale_date, soldAt: o.sold_at, total: o.totals.total, status: 'ok', version: 1, staffId: o.staff_id, data: o, offCatalog: false,
-    computedTotal: computed, amountMismatch: Math.abs(o.totals.total - computed) > 1, createdAt: now, updatedAt: null, dayoEdit: null,
+    computedTotal: computed, amountMismatch: Math.abs(cents(o.totals.total) - cents(computed)) > 100, createdAt: now, updatedAt: null, dayoEdit: null,
   }
   s.orders.set(stored.posOrderId, stored)
   s.receipts.set(stored.receiptNo, stored.posOrderId)
-  return { key, status: 'accepted', data: orderData(s, stored, []) }
+  return { key, status: 'accepted', data: orderData(s, stored, warnings) }
 }
 
 function normalizeOrder(d: J): MockOrderData {
@@ -233,7 +249,16 @@ function normalizeOrder(d: J): MockOrderData {
     promo_code: opt(d, 'promo_code'), skip_promotion_ids: opt<string[]>(d, 'skip_promotion_ids') ?? [], no_promotions: opt<boolean>(d, 'no_promotions') ?? false,
     totals: { items_subtotal: t['items_subtotal'] as number, items_discount: t['items_discount'] as number, bill_discount: t['bill_discount'] as number, total: t['total'] as number },
     note: opt(d, 'note'),
+    manual_promotion_ids: [...new Set(opt<string[]>(d, 'manual_promotion_ids') ?? [])],
+    manual_promotion_reason: manualReasonOf(opt<string>(d, 'manual_promotion_reason')),
   }
+}
+
+/** dayo_draft_manual_reason (0069:322-345): cut by dayo_trim_ws · nothing left = null. */
+function manualReasonOf(raw: string | null): string | null {
+  if (raw === null) return null
+  const t = trimWs(raw)
+  return t === '' ? null : t
 }
 
 /** dayo_pos_order_data (0052:212-222): the bill as it is NOW (a duplicate sees a later version). */

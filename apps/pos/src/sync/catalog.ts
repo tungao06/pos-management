@@ -1,8 +1,8 @@
 import { and, eq, notInArray } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { PosOrderCatalog as PosOrderCatalogSchema, StaffEntry, UserRole, type PosCatalogLooseData, type Supported } from '@dayo/contracts'
-import { toPricingCatalog, type PosOrderCatalog } from '@dayo/domain'
+import { clipCodePoints, PosOrderCatalog as PosOrderCatalogSchema, PROMO_RULE_VERSIONS_KEY, StaffEntry, supportedOf, UserRole, type PosCatalogLooseData, type PosOrderCatalogParsed, type Supported } from '@dayo/contracts'
+import { checkCatalogRules, TABLET_PROMO_RULE_VERSION, toPricingCatalog, type PosOrderCatalog } from '@dayo/domain'
 import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 import type { ApiDeps } from '../api/deps'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from './dayo-client'
@@ -55,9 +55,24 @@ export async function readCatalog(db: RemoteDb): Promise<StoredCatalog | null> {
   }
 }
 
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/**
+ * The stored E1 `supported_*`, always through `supportedOf` (plan 10 T7): the current form `{kinds, fields, promoRuleVersions}`
+ * and the form older builds stored — `{kinds, fields}` with dayo's raw `supported_fields`, where `fields` may carry
+ * `promotion_rule_versions` (numbers) or any other non-list value. So `isRowSupported` never meets a non-array. Unreadable
+ * JSON = null (no list: push waits for the next E1), never a throw.
+ */
 export async function readSupported(db: RemoteDb): Promise<Supported | null> {
   const raw = await readKey(db, DAYO_KEYS.supportedJson)
-  return raw === null ? null : (JSON.parse(raw) as Supported)
+  if (raw === null) return null
+  let parsed: unknown
+  try { parsed = JSON.parse(raw) } catch { return null }
+  if (!isRecord(parsed)) return null
+  const kinds = Array.isArray(parsed.kinds) ? parsed.kinds.filter((k): k is string => typeof k === 'string') : []
+  const fields: Record<string, unknown> = isRecord(parsed.fields) ? { ...parsed.fields } : {}
+  if ('promoRuleVersions' in parsed) fields[PROMO_RULE_VERSIONS_KEY] = parsed.promoRuleVersions // the current form wins
+  return supportedOf(kinds, fields)
 }
 
 /** spec §4.4 rule 5: an empty name shows as "พนักงาน" + the last 4 characters of the id. */
@@ -124,13 +139,16 @@ export async function apiBlocked(db: RemoteDb, nowIso: string): Promise<boolean>
  * client.last_receipt_no is stored as sent — its shape is checked where it is used (Task 11/12).
  * Any answer that parses — unchanged included — ends an earlier BAD_RESPONSE; catalog/staff problems are only
  * re-judged by a `changed` answer (a refused catalog keeps the old version, so dayo keeps sending it).
+ * plan 10 T7: supported_* is stored as `supportedOf(...)` (never the raw record) · a catalog that parses but whose
+ * promotions the pricing engine cannot use (`checkCatalogRules`) is refused the same way — whole, never one promotion
+ * dropped · `promoRuleVersion` = the promo_rule_version the answer was asked with, recorded (R6) only with an accepted catalog.
  */
-export async function writeCatalogAnswer(tx: RemoteDb, deps: ApiDeps, data: PosCatalogLooseData, timing: { sentAtMs: number; receivedAtMs: number }): Promise<'changed' | 'unchanged' | 'catalog_rejected'> {
+export async function writeCatalogAnswer(tx: RemoteDb, deps: ApiDeps, data: PosCatalogLooseData, timing: { sentAtMs: number; receivedAtMs: number }, promoRuleVersion: number): Promise<'changed' | 'unchanged' | 'catalog_rejected'> {
   const at = deps.now()
   await recordServerTime(tx, data.server_time, timing.sentAtMs, timing.receivedAtMs, at)
   await writeKey(tx, DAYO_KEYS.pricingJson, JSON.stringify(data.pricing))
-  await writeKey(tx, DAYO_KEYS.pricingMismatch, samePricing(data.pricing.files_sha256) ? '0' : '1')
-  await writeKey(tx, DAYO_KEYS.supportedJson, JSON.stringify({ kinds: data.supported_kinds, fields: data.supported_fields }))
+  await writeKey(tx, DAYO_KEYS.pricingMismatch, samePricing(data.pricing.files_sha256) ? '0' : '1') // Q6: strict, all 8 pinned files
+  await writeKey(tx, DAYO_KEYS.supportedJson, JSON.stringify(supportedOf(data.supported_kinds, data.supported_fields)))
   await writeKey(tx, DAYO_KEYS.apiState, 'ok')
   await deleteKey(tx, DAYO_KEYS.apiRetryAt)
   await writeKey(tx, DAYO_KEYS.catalogCheckedAt, at)
@@ -143,18 +161,31 @@ export async function writeCatalogAnswer(tx: RemoteDb, deps: ApiDeps, data: PosC
   }
   const problems: string[] = []
   if ((await applyStaff(tx, deps, data.staff, at)) === 'no_active_owner') problems.push('NO_ACTIVE_OWNER: the staff list from dayo has no active owner — not applied')
-  const catalog = PosOrderCatalogSchema.safeParse(data.catalog)
-  if (!catalog.success) {
-    problems.push(`CATALOG_UNREADABLE: ${catalog.error.issues.slice(0, 3).map((i) => i.path.join('.')).join(', ')}`)
-    // keep catalog_json / catalog_version; the staff copy used by "ต้องตั้ง PIN" follows dayo anyway
+  const checked = checkCatalog(data.catalog)
+  if (!checked.ok) {
+    problems.push(`CATALOG_UNREADABLE: ${checked.problem}`)
+    // keep catalog_json / catalog_version / catalog_rule_version; the staff copy used by "ต้องตั้ง PIN" follows dayo anyway
     await tx.update(s.dayoCatalog).set({ staffJson: data.staff, clientJson: data.client }).where(eq(s.dayoCatalog.id, 'current'))
   } else {
-    const row = { id: 'current', catalogVersion: data.catalog_version, catalogJson: catalog.data, staffJson: data.staff, clientJson: data.client, fetchedAt: at }
+    const row = { id: 'current', catalogVersion: data.catalog_version, catalogJson: checked.catalog, staffJson: data.staff, clientJson: data.client, fetchedAt: at }
     await tx.insert(s.dayoCatalog).values(row).onConflictDoUpdate({ target: s.dayoCatalog.id, set: { catalogVersion: row.catalogVersion, catalogJson: row.catalogJson, staffJson: row.staffJson, clientJson: row.clientJson, fetchedAt: at } })
+    await writeKey(tx, DAYO_KEYS.catalogRuleVersion, String(promoRuleVersion))
   }
   if (problems.length > 0) await writeKey(tx, DAYO_KEYS.catalogError, problems.join(' · '))
   else await deleteKey(tx, DAYO_KEYS.catalogError)
-  return catalog.success ? 'changed' : 'catalog_rejected'
+  return checked.ok ? 'changed' : 'catalog_rejected'
+}
+
+/**
+ * Whether the tablet can price with this E1 `catalog`: the contract shape first (a refusal names the paths of the first
+ * three issues), then the promotion rules (`checkCatalogRules` — the first three problems, 200 code points each).
+ * Shared with setup (api/connect.ts), which has no old catalog to keep and refuses the key test instead.
+ */
+export function checkCatalog(raw: unknown): { ok: true; catalog: PosOrderCatalogParsed } | { ok: false; problem: string } {
+  const parsed = PosOrderCatalogSchema.safeParse(raw)
+  if (!parsed.success) return { ok: false, problem: parsed.error.issues.slice(0, 3).map((i) => i.path.join('.')).join(', ') }
+  const rules = checkCatalogRules(toPricingCatalog(parsed.data))
+  return rules.length === 0 ? { ok: true, catalog: parsed.data } : { ok: false, problem: rules.slice(0, 3).map((p) => clipCodePoints(p, 200)).join(', ') }
 }
 
 /** Prefix of a catalogError that came from an answer breaking the contract (not from its catalog or staff). */
@@ -213,8 +244,14 @@ export async function pullCatalog(ctx: SyncContext): Promise<CatalogPullResult> 
     return false
   })
   if (waiting) return { outcome: 'backoff' }
-  // the version alone, straight from the row: a stored catalog this build can no longer parse must not stop the pull
-  const known = await ctx.serial(async () => (await ctx.db.select({ v: s.dayoCatalog.catalogVersion }).from(s.dayoCatalog).where(eq(s.dayoCatalog.id, 'current')).get())?.v ?? 0)
+  // the version alone, straight from the row: a stored catalog this build can no longer parse must not stop the pull ·
+  // plan 10 R6: a catalog asked with another promo_rule_version (or before plan 10 recorded one) is asked for in full —
+  // dayo's answer depends on the parameter while catalog_version does not, so known_version alone would get changed:false
+  const rules = TABLET_PROMO_RULE_VERSION
+  const known = await ctx.serial(async () => {
+    const v = (await ctx.db.select({ v: s.dayoCatalog.catalogVersion }).from(s.dayoCatalog).where(eq(s.dayoCatalog.id, 'current')).get())?.v ?? 0
+    return (await readKey(ctx.db, DAYO_KEYS.catalogRuleVersion)) === String(rules) ? v : 0
+  })
   let client: DayoClient
   try {
     client = createDayoClient({ ...cfg, fetch: ctx.deps.fetch, nowMs: () => Date.parse(ctx.deps.now()) })
@@ -227,8 +264,8 @@ export async function pullCatalog(ctx: SyncContext): Promise<CatalogPullResult> 
     return { outcome: 'failed', failure }
   }
   try {
-    const r = await client.getCatalog(known) // network outside the serial queue
-    return { outcome: await ctx.serial(() => ctx.db.transaction((tx) => writeCatalogAnswer(tx, ctx.deps, r.value, r))) }
+    const r = await client.getCatalog(known, rules) // network outside the serial queue
+    return { outcome: await ctx.serial(() => ctx.db.transaction((tx) => writeCatalogAnswer(tx, ctx.deps, r.value, r, rules))) }
   } catch (e) {
     if (!(e instanceof DayoError)) throw e
     await ctx.serial(async () => { await recordDayoFailure(ctx.db, ctx.deps, e.failure); await recordCatalogBackoff(ctx.db, ctx.deps, e.failure) })

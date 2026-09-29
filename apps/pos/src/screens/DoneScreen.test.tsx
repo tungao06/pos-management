@@ -38,6 +38,7 @@ const ORDER: OrderDetailDto = {
   channelCode: 'store',
   catalogVersion: 42,
   promotions: [],
+  manualPromotionReason: null,
   lines: [],
   events: [],
   voidable: true,

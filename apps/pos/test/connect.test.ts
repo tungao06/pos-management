@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
-import { createMockDayo, MOCK_API_KEY } from '@dayo/dayo-mock'
+import { createMockDayo, MOCK_API_KEY, type MockDayo } from '@dayo/dayo-mock'
 import { posErrorCode } from '../src/api/errors'
-import { pullCatalog } from '../src/sync/catalog'
+import { pullCatalog, readCatalog } from '../src/sync/catalog'
 import { DAYO_KEYS, deleteKey, readKey, writeKey } from '../src/sync/state'
 import { insertLegacyShop, openTestApi, vacuumInto } from './helpers/db'
 import { STAFF } from './helpers/dayo'
@@ -13,6 +13,22 @@ const INPUT = { baseUrl: 'http://localhost:8787/api/v1/', apiKey: MOCK_API_KEY, 
 const LEGACY_DEVICE = { deviceName: 'เครื่องเดิม', receiptPrefix: 'A', owners: [{ displayName: 'TungAo', pin: '9999' }], promptPayId: '0812345678' }
 async function fresh() { const mock = createMockDayo({ now: '2026-09-25T02:00:00.120Z' }); return { mock, t: await openTestApi({ fetch: mock.fetch }) } }
 async function codeOf(p: Promise<unknown>) { try { await p; return null } catch (e) { return posErrorCode(e) } }
+const PIN_HASH = 'argon2id$t=1,m=64,p=1$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000'
+/**
+ * T7 fix round 1: a catalog the tablet cannot sell with — promotion rules it cannot use (plan 10) or a malformed shape —
+ * and, the same day, Mint removed from the staff. Only first setup may refuse such an answer.
+ */
+type MockCatalog = { staff: { id: string; active: boolean }[]; catalog: { promotions: unknown[]; variants: unknown[] } }
+/**
+ * [name, break the catalog, whether the mock must play a dayo with the rule engine] — the promotion-rule case needs dayo
+ * f4cda56 (plan 10 T5 mock: a dayo before 0071 serves no groupCode at all, so the broken group never reaches the tablet).
+ */
+const BROKEN: [string, (c: MockCatalog) => void, boolean][] = [
+  ['promotion rules it cannot use', (c) => { (c.catalog.promotions[0] as { groupCode?: string }).groupCode = 'ghost' }, true],
+  ['a malformed catalog', (c) => { (c.catalog.variants[0] as { size: string }).size = 'big' }, false],
+]
+const playRules = (m: MockDayo, on: boolean) => { if (on) m.setPromoRules({ versions: [1, 2], manualFields: true }) }
+const withoutMint = (c: MockCatalog) => { c.staff = c.staff.map((x) => (x.id === STAFF.Mint ? { ...x, active: false } : x)) }
 
 describe('probeDayo (spec 04 §7 ข้อ 1: test the key with E1 before saving it)', () => {
   it('names the device and lists the owners to choose from', async () => {
@@ -101,6 +117,34 @@ describe('connectShop', () => {
     expect(await t.deps.secrets.getApiKey()).toBe(MOCK_API_KEY)
     expect((await t.api.bootstrap()).ownerRecovery).toBe(true) // key refused → recovery is offered
   })
+  it.each(BROKEN)('replaceApiKey with %s: the swap succeeds, staff follow dayo, the old catalog stays (R12 · T7 fix round 1)', async (_name, breakIt, rules) => {
+    let active = createMockDayo({ now: '2026-09-25T02:00:00.120Z' })
+    const t = await openTestApi({ fetch: (input, init) => active.fetch(input, init) })
+    await t.api.connectShop(INPUT)
+    const at = t.clock.now()
+    await t.db.insert(s.user).values({ id: STAFF.Mint, displayName: 'Mint', role: 'staff', pinHash: PIN_HASH, isActive: true, createdAt: at, updatedAt: at, version: 1 })
+    await writeKey(t.db, DAYO_KEYS.apiState, 'unauthorized')
+    const newKey = `dayo_${'a'.repeat(64)}`
+    active = createMockDayo({ apiKey: newKey, now: '2026-09-25T02:00:00.120Z' })
+    playRules(active, rules)
+    active.bumpCatalog((c) => { breakIt(c as unknown as MockCatalog); withoutMint(c as unknown as MockCatalog) })
+    await t.api.replaceApiKey({ baseUrl: INPUT.baseUrl, apiKey: newKey, approverUserId: STAFF.TungAo, approverPin: '1111' })
+    expect(await t.deps.secrets.getApiKey()).toBe(newKey)
+    expect(await readKey(t.db, DAYO_KEYS.apiState)).toBe('ok')
+    expect((await t.db.select().from(s.user).all()).find((u) => u.id === STAFF.Mint)?.isActive).toBe(false) // Mint's PIN stops working
+    const kept = await readCatalog(t.db)
+    expect(kept?.catalogVersion).toBe(42)
+    expect(kept?.staff.find((x) => x.id === STAFF.Mint)?.active).toBe(false)
+    expect(await readKey(t.db, DAYO_KEYS.catalogError)).toMatch(/^CATALOG_UNREADABLE/)
+  })
+  it.each(BROKEN)('first setup still refuses %s (it has no catalog to keep)', async (_name, breakIt, rules) => {
+    const { t, mock } = await fresh()
+    playRules(mock, rules)
+    mock.bumpCatalog((c) => breakIt(c as unknown as MockCatalog))
+    expect(await codeOf(t.api.probeDayo({ baseUrl: INPUT.baseUrl, apiKey: MOCK_API_KEY }))).toBe('DAYO_BAD_RESPONSE')
+    expect(await codeOf(t.api.connectShop(INPUT))).toBe('DAYO_BAD_RESPONSE')
+    expect(await t.deps.secrets.getApiKey()).toBeNull()
+  })
 })
 
 /**
@@ -169,6 +213,22 @@ describe('recoverOwner — "เชื่อมใหม่ด้วยคีย�
     const audit = JSON.stringify(t.raw.prepare(`select action, after_json from audit_log where action in ('owner_recovered', 'api_key_replaced')`).all())
     expect(audit).toMatch(/owner_recovered/)
     expect(audit.includes(NEW_KEY.slice(5)) || audit.includes('2468')).toBe(false)
+  })
+  it.each(BROKEN)('with %s: recovery succeeds, staff follow dayo, the old catalog stays (R12 · T7 fix round 1)', async (_name, breakIt, rules) => {
+    const { t, oldKey, newKey } = await lockedOut()
+    const at = t.clock.now()
+    await t.db.insert(s.user).values({ id: STAFF.Mint, displayName: 'Mint', role: 'staff', pinHash: PIN_HASH, isActive: true, createdAt: at, updatedAt: at, version: 1 })
+    oldKey.setMode('unauthorized')
+    playRules(newKey, rules)
+    newKey.bumpCatalog((c) => { breakIt(c as unknown as MockCatalog); withoutMint(c as unknown as MockCatalog) })
+    await t.api.recoverOwner(REC)
+    expect(await t.deps.secrets.getApiKey()).toBe(NEW_KEY)
+    expect(await t.api.login(STAFF.DCm, '2468')).toMatchObject({ role: 'owner' })
+    expect((await t.db.select().from(s.user).all()).find((u) => u.id === STAFF.Mint)?.isActive).toBe(false)
+    const kept = await readCatalog(t.db)
+    expect(kept?.catalogVersion).toBe(43) // the copy lockedOut's pull stored
+    expect(kept?.staff.find((x) => x.id === STAFF.Mint)?.active).toBe(false)
+    expect(await readKey(t.db, DAYO_KEYS.catalogError)).toMatch(/^CATALOG_UNREADABLE/)
   })
   it('also works when the key was revoked before the tablet saw the owner change (apiState unauthorized)', async () => {
     const { t } = await fresh()

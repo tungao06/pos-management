@@ -10,6 +10,7 @@ import type {
   MatchaGradeCode,
   MenuVariantEntry,
   MilkCode,
+  OptionAdds,
   OrderCatalog,
   OrderDraft,
   QuotedLine,
@@ -91,6 +92,30 @@ export function applyOptions(
   return { ok, recipeLines: lines, priceAdd, milk: milkUsed, grade: gradeUsed, warnings };
 }
 
+/**
+ * ค่าตัวเลือกของแก้ว (ADR-0071 ข้อ 2 R2 · แช่แข็งลง order_items.option_add_json) — เฉพาะตัวเลือกที่เลือกและบวกราคา (add ≠ 0)
+ * paid_k = max(0, round2(unit_price − channelPrice(basePrice − add_k, ch))) = ส่วนที่ลูกค้าจ่ายจริงหลังบวกช่องทาง
+ */
+export function optionAddsOf(
+  opt: Pick<ApplyOptionsResult, "milk" | "grade">,
+  catalog: Pick<OrderCatalog, "milkOptions" | "gradeOptions">,
+  basePrice: number,
+  unitPrice: number,
+  channel: Pick<SalesChannelEntry, "priceMarkupPct" | "priceAddBaht" | "rounding">,
+): OptionAdds | null {
+  const out: OptionAdds = {};
+  const paidOf = (add: number) => Math.max(0, round2(unitPrice - channelPrice(basePrice - add, channel)));
+  if (opt.milk !== "fresh") {
+    const add = catalog.milkOptions.find((o) => o.code === opt.milk)?.priceAdd ?? 0;
+    if (add !== 0) out.milk = { code: opt.milk, add, paid: paidOf(add) };
+  }
+  if (opt.grade) {
+    const add = catalog.gradeOptions.find((o) => o.code === opt.grade)?.priceAdd ?? 0;
+    if (add !== 0) out.grade = { code: opt.grade, add, paid: paidOf(add) };
+  }
+  return out.milk || out.grade ? out : null;
+}
+
 /** ราคาช่องทาง (ADR-0013 ข้อ 2): ปัดตามกติกาช่องทางแล้วบวกค่าธรรมเนียมคงที่ */
 export function channelPrice(basePrice: number, channel: Pick<SalesChannelEntry, "priceMarkupPct" | "priceAddBaht" | "rounding">): number {
   const marked = round2(basePrice * (1 + channel.priceMarkupPct));
@@ -149,6 +174,7 @@ export function computeOrder(draft: OrderDraft, catalog: OrderCatalog): QuoteRes
       costTotal: 0,
       grossProfit: null,
       gpPercent: null,
+      manualPromotionReasonRequired: false,
       warnings: [`ไม่พบช่องทางขาย "${channelCode}"`],
     };
   }
@@ -198,6 +224,7 @@ export function computeOrder(draft: OrderDraft, catalog: OrderCatalog): QuoteRes
     const { cost } = variantCost(optResult.recipeLines, catalog.ingredients, catalog.bases);
     const basePrice = variant.price + optResult.priceAdd;
     const unitPrice = channelPrice(basePrice, channel);
+    const optionAdds = optionAddsOf(optResult, catalog, basePrice, unitPrice, channel);
     const discountPerCup = lineDiscount(unitPrice, {
       free: draftLine.free ?? false,
       discountBaht: draftLine.discountBaht ?? null,
@@ -221,6 +248,7 @@ export function computeOrder(draft: OrderDraft, catalog: OrderCatalog): QuoteRes
     for (let i = 0; i < qty; i++) {
       cups.push({
         menuCode: variant.menuCode,
+        categoryLabel: variant.categoryLabel,
         size: variant.size,
         sweetness: variant.sweetness,
         milk: optResult.milk,
@@ -231,6 +259,7 @@ export function computeOrder(draft: OrderDraft, catalog: OrderCatalog): QuoteRes
         discountReason: manual ? (draftLine.discountReason ?? null) : null,
         promotionId: null,
         manual,
+        optionAdds,
       });
     }
   }
@@ -244,17 +273,33 @@ export function computeOrder(draft: OrderDraft, catalog: OrderCatalog): QuoteRes
       channelCode: channel.code,
       promoCode: draft.promoCode ?? null,
       skipPromotionIds: draft.skipPromotionIds ?? [],
+      manualPromotionIds: draft.manualPromotionIds ?? [],
+      // ADR-0072 ข้อ 2: โปรที่ครบจำนวนครั้ง (ระบบนับให้ · แท็บเล็ต POS ว่างเสมอ)
+      exhaustedPromotions: draft.exhaustedPromotions ?? [],
     },
     { billDiscountBaht: draft.billDiscountBaht ?? null, billDiscountPercent: draft.billDiscountPercent ?? null },
+    catalog.promotionGroups,
   );
+  warnings.push(...promoResult.warnings);
 
   // จัดกลุ่มแก้วที่ราคา/ส่วนลด/โปรเหมือนกันกลับเป็นบรรทัด คงลำดับที่พบครั้งแรก (ตัวอย่างก่อนยืนยัน/order_items)
   const grouped = new Map<string, QuotedLine>();
   const order: string[] = [];
   for (const cup of promoResult.cups) {
-    const key = [cup.menuCode, cup.size, cup.sweetness, cup.milk, cup.grade, cup.unitPrice, cup.discountPerCup, cup.promotionId, cup.discountReason].join(
-      "\u0000",
-    );
+    // คีย์รวม promo_breakdown + option_add ด้วย (แก้วที่แบ่งส่วนลดต่างกันต้องไม่รวมบรรทัด — = SQL dayo_quote_priced_ov)
+    const key = [
+      cup.menuCode,
+      cup.size,
+      cup.sweetness,
+      cup.milk,
+      cup.grade,
+      cup.unitPrice,
+      cup.discountPerCup,
+      cup.promotionId,
+      cup.discountReason,
+      JSON.stringify(cup.promoBreakdown ?? null),
+      JSON.stringify(cup.optionAdds ?? null),
+    ].join("\u0000");
     let line = grouped.get(key);
     if (!line) {
       const variant = findVariant(catalog, cup.menuCode, cup.size, cup.sweetness);
@@ -273,6 +318,8 @@ export function computeOrder(draft: OrderDraft, catalog: OrderCatalog): QuoteRes
         discountReason: cup.discountReason,
         promotionId: cup.promotionId,
         lineTotal: 0,
+        optionAdds: cup.optionAdds ?? null,
+        promoBreakdown: cup.promoBreakdown ?? null,
       };
       grouped.set(key, line);
       order.push(key);
@@ -310,6 +357,25 @@ export function computeOrder(draft: OrderDraft, catalog: OrderCatalog): QuoteRes
     warnings.push("ส่วนลดทั้งบิลเต็มยอดต้องมีหมายเหตุ (ADR-0023)");
   }
 
+  // เหตุผลเลือกโปร (ADR-0070 ข้อ 4 — Q-D): บังคับเฉพาะเมื่อยอดบิลเหลือ ฿0 เพราะโปรเลือกเองอย่างน้อย 1 ตัว
+  // SQL dayo_draft_manual_reason ปฏิเสธด้วย DY422 ทันทีตั้งแต่สร้างบริบท (แม้ตอน quote_order) เมื่อยาวเกิน 200 ตัว
+  // หรือมีอักขระควบคุม — ที่นี่ (ตัวอย่างก่อนยืนยัน) ใช้ ok=false + คำเตือนแทนเพื่อไม่ throw จากฟังก์ชันบริสุทธิ์
+  const manualPromotionReason = draft.manualPromotionReason?.trim() ?? "";
+  // เข้มกว่าเหตุผลอื่น (parity กับ dayo_draft_manual_reason ใน 0069): กัน C0/DEL/C1 controls + zero-width + bidi override/isolate + line/para separator
+  // eslint-disable-next-line no-control-regex, no-misleading-character-class
+  if (manualPromotionReason.length > 200 || /[\x01-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2028\u2029\u2066-\u2069]/.test(manualPromotionReason)) {
+    ok = false;
+    warnings.push("เหตุผลเลือกโปรยาวได้ 1–200 ตัวอักษร บรรทัดเดียวค่ะ (บันทึกจริงจะถูกปฏิเสธ DY422)");
+  }
+  // ธง manual_promotion_reason_required = เงื่อนไขล้วน (ยอดบิล = 0 และมีโปรเลือกเองให้ส่วนลด > 0) ไม่ขึ้นกับว่ามีเหตุผลแล้วหรือยัง
+  // (ตรง SQL dayo_manual_reason_guard — ADR-0070 ข้อ 4/ข้อ divergence 1 ของ task) · ok=false เฉพาะตอนยังไม่มีเหตุผล
+  const manualDiscountUsed = promoResult.applied.some((p) => p.detail?.applyMode === "manual" && p.discountAmount > 0);
+  const manualPromotionReasonRequired = totalAmount === 0 && manualDiscountUsed;
+  if (manualPromotionReasonRequired && manualPromotionReason.length === 0) {
+    ok = false;
+    warnings.push("โปรที่เลือกเองทำให้บิลเหลือ ฿0 ต้องใส่เหตุผลค่ะ");
+  }
+
   return {
     ok,
     lines,
@@ -322,6 +388,7 @@ export function computeOrder(draft: OrderDraft, catalog: OrderCatalog): QuoteRes
     costTotal,
     grossProfit,
     gpPercent,
+    manualPromotionReasonRequired,
     warnings,
   };
 }

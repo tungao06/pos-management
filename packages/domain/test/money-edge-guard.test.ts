@@ -14,6 +14,8 @@ const GUARDED = [
   'packages/domain/src/order-draft.ts',
   'packages/domain/src/shift-rows.ts',
   'packages/domain/src/off-catalog-row.ts',
+  'packages/domain/src/promo-catalog.ts',
+  'packages/domain/src/priced-from-quote.ts',
 ]
 
 function* sources(path: string): Generator<string> {

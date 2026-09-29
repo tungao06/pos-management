@@ -1,0 +1,276 @@
+{
+  "description": "promo_breakdown: 2 แก้วส่วนลดรวมเท่ากัน (5) แต่แบ่งต่างกัน (A 5 / A 3 + B 2) = 2 บรรทัด · โปรแรกจองแก้วด้วยส่วนลด 0 แล้วกลุ่มซ้อนลด 5 = breakdown บอกโปรที่ลดจริง",
+  "form": "rule",
+  "groups": [
+    {
+      "code": "main",
+      "name": "ทั่วไป",
+      "sortOrder": 0,
+      "stackMode": "separate",
+      "isActive": true
+    },
+    {
+      "code": "stack",
+      "name": "ซ้อนได้",
+      "sortOrder": 1,
+      "stackMode": "stack",
+      "isActive": true
+    }
+  ],
+  "promotions": [
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาไทยลด 5 เพดาน 8",
+      "template": "item_discount",
+      "priority": 10,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "TT01"
+          ]
+        },
+        "reward": {
+          "type": "amount",
+          "baht": 5
+        },
+        "cap_baht": 8
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "stack",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ซ้อน แก้วแพงสุดลด 2",
+      "template": "nth_cup",
+      "priority": 20,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "TT01"
+          ]
+        },
+        "reward": {
+          "type": "buy_get",
+          "buy": 1,
+          "get": 1,
+          "get_target": null,
+          "get_discount": {
+            "baht": 2
+          },
+          "get_pick": "most_expensive",
+          "max_sets": null
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาไทยราคา 50 (ลด 0)",
+      "template": "fixed_price",
+      "priority": 30,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "TT01"
+          ]
+        },
+        "reward": {
+          "type": "fixed_price",
+          "price": 50
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "stack",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ซ้อน ชาไทยลด 5",
+      "template": "item_discount",
+      "priority": 40,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "TT01"
+          ]
+        },
+        "reward": {
+          "type": "amount",
+          "baht": 5
+        }
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "ส่วนลดเท่ากันแต่แบ่งต่างกัน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยราคา 50 (ลด 0)",
+          "ซ้อน ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 0,
+        "totalAmount": 60,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "ชาไทยลด 5 เพดาน 8",
+            "lineTotal": 30
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "ชาไทยลด 5 เพดาน 8",
+            "lineTotal": 30,
+            "promoBreakdown": [
+              {
+                "promotion": "ชาไทยลด 5 เพดาน 8",
+                "amount": 3
+              },
+              {
+                "promotion": "ซ้อน แก้วแพงสุดลด 2",
+                "amount": 2
+              }
+            ]
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 5 เพดาน 8",
+            "kind": "item_discount",
+            "discountAmount": 8
+          },
+          {
+            "name": "ซ้อน แก้วแพงสุดลด 2",
+            "kind": "nth_cup",
+            "discountAmount": 2
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "โปรแรกลด 0 กลุ่มซ้อนลดต่อ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 5 เพดาน 8",
+          "ซ้อน แก้วแพงสุดลด 2"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 5,
+        "billDiscountAmount": 0,
+        "totalAmount": 30,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "ชาไทยราคา 50 (ลด 0)",
+            "lineTotal": 30,
+            "promoBreakdown": [
+              {
+                "promotion": "ซ้อน ชาไทยลด 5",
+                "amount": 5
+              }
+            ]
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยราคา 50 (ลด 0)",
+            "kind": "fixed_price",
+            "discountAmount": 0
+          },
+          {
+            "name": "ซ้อน ชาไทยลด 5",
+            "kind": "item_discount",
+            "discountAmount": 5
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}
