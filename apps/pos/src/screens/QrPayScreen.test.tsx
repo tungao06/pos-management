@@ -90,8 +90,8 @@ describe('QrPayScreen — review round 2 item 1 (Medium): a clock-crossed promot
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const BEFORE = '2026-09-25T06:59:50.000Z' // Friday 13:59:50 Bangkok — before มัตฉะบ่าย ลด 15% starts
-      // dayo compares the promo's time window as a string ("14:00" < "14:00:00" lexicographically) — the window
-      // only actually applies from 14:01 on, so this Medium fix's own scenario uses 14:05, safely inside it.
+      // dayo's engine applies the window from 14:00 sharp (D130 · f4cda56 — the old one started at 14:01);
+      // this Medium fix's own scenario uses 14:05, safely inside it either way.
       const DURING = '2026-09-25T07:05:00.000Z' // Friday 14:05 Bangkok — inside the promo window
       vi.setSystemTime(new Date(BEFORE))
 
