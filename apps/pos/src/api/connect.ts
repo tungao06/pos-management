@@ -39,8 +39,14 @@ function checkedTarget(input: { baseUrl: string; apiKey: string }): { baseUrl: s
   return { baseUrl, apiKey }
 }
 
-/** E1 with known_version=0 — the only dayo call of setup; maps failures to setup codes (never the key in a message). */
-async function fetchFullCatalog(deps: ApiDeps, target: { baseUrl: string; apiKey: string }): Promise<Timed<ChangedAnswer>> {
+/**
+ * E1 with known_version=0 — the only dayo call of setup, key swap and recovery; maps failures to setup codes (never the key
+ * in a message). `firstSetup` (probeDayo / connectShop): the device has no catalog yet, so one it cannot sell with is
+ * refused. Key swap / recovery (T7 fix round 1): the device keeps its old catalog — the answer goes on to writeCatalogAnswer's
+ * R12 path (old catalog kept, staff applied, catalogError set), so a broken dayo catalog never blocks a new key or leaves a
+ * removed employee's PIN working.
+ */
+async function fetchFullCatalog(deps: ApiDeps, target: { baseUrl: string; apiKey: string }, opts: { firstSetup: boolean }): Promise<Timed<ChangedAnswer>> {
   const client = createDayoClient({ ...target, fetch: deps.fetch, nowMs: () => Date.parse(deps.now()) })
   let r: Timed<PosCatalogLooseData>
   try {
@@ -55,10 +61,10 @@ async function fetchFullCatalog(deps: ApiDeps, target: { baseUrl: string; apiKey
     throw new PosError('DAYO_UNREACHABLE', f.kind)
   }
   if (!r.value.changed) throw new PosError('DAYO_BAD_RESPONSE', 'known_version=0 answered unchanged')
-  // setup needs a catalog the tablet can sell with (R12 lets a running tablet keep its old one — a new one has none) —
+  // first setup needs a catalog the tablet can sell with (R12 lets a linked tablet keep its old one — a new one has none) —
   // its shape AND its promotion rules (plan 10 T7), the same check as the periodic pull
-  const checked = checkCatalog(r.value.catalog)
-  if (!checked.ok) throw new PosError('DAYO_BAD_RESPONSE', `catalog unreadable by this tablet version: ${checked.problem}`)
+  const checked = opts.firstSetup ? checkCatalog(r.value.catalog) : null
+  if (checked !== null && !checked.ok) throw new PosError('DAYO_BAD_RESPONSE', `catalog unreadable by this tablet version: ${checked.problem}`)
   return { ...r, value: r.value }
 }
 
@@ -87,7 +93,7 @@ function pricingMatches(files: Record<string, string>): boolean {
 
 /** spec 04 §7 ข้อ 1: test the key with E1 before saving anything. Touches no table. */
 export async function probeDayo(deps: ApiDeps, input: DayoProbeInput): Promise<DayoProbe> {
-  const answer = await fetchFullCatalog(deps, checkedTarget(input))
+  const answer = await fetchFullCatalog(deps, checkedTarget(input), { firstSetup: true })
   const v = answer.value
   const last = v.client.last_receipt_no
   return {
@@ -132,7 +138,7 @@ export async function connectShop(db: RemoteDb, deps: ApiDeps, input: ConnectSho
   try { promptPayDigits = classifyPromptPayId(input.promptPayId).digits } catch (e) { throw new PosError('BAD_INPUT', e instanceof Error ? e.message : String(e)) }
   const target = checkedTarget(input)
 
-  const answer = await fetchFullCatalog(deps, target)
+  const answer = await fetchFullCatalog(deps, target, { firstSetup: true })
   const v = answer.value
   const owner = activeOwners(v).find((o) => o.id === input.ownerStaffId)
   if (owner === undefined) throw new PosError('BAD_INPUT', 'เลือกเจ้าของจากรายชื่อระบบกลาง (owner ที่ใช้งานอยู่)')
@@ -221,7 +227,7 @@ export async function replaceApiKey(db: RemoteDb, deps: ApiDeps, input: ReplaceA
   if (target.baseUrl !== stored) throw new PosError('BAD_INPUT', 'DAYO_ADDRESS_CHANGED: a new key must be for the same central address')
   await requireOwnerPin(db, deps, input.approverUserId, input.approverPin)
   const device = await linkedDevice(db)
-  const answer = await fetchFullCatalog(deps, { baseUrl: stored, apiKey: target.apiKey }) // only ever the stored address
+  const answer = await fetchFullCatalog(deps, { baseUrl: stored, apiKey: target.apiKey }, { firstSetup: false }) // only ever the stored address
   const v = answer.value
   if (!activeOwners(v).some((o) => o.id === input.approverUserId)) throw new PosError('NOT_OWNER', 'dayo no longer lists this owner — use "เชื่อมใหม่ด้วยคีย์ใหม่"')
   const last = v.client.last_receipt_no
@@ -270,7 +276,7 @@ export async function recoverOwner(db: RemoteDb, deps: ApiDeps, input: RecoverOw
     throw new PosError('DAYO_UNREACHABLE', `could not confirm the old key is revoked (${e.failure.kind})`)
   })
   if (!oldRevoked) throw new PosError('OLD_KEY_STILL_ACTIVE', 'revoke the old key on the dayo web first')
-  const answer = await fetchFullCatalog(deps, { baseUrl: stored, apiKey: target.apiKey }) // only ever the stored address
+  const answer = await fetchFullCatalog(deps, { baseUrl: stored, apiKey: target.apiKey }, { firstSetup: false }) // only ever the stored address
   const v = answer.value
   const owner = activeOwners(v).find((o) => o.id === input.ownerStaffId)
   if (owner === undefined) throw new PosError('BAD_INPUT', 'เลือกเจ้าของจากรายชื่อระบบกลาง (owner ที่ใช้งานอยู่)')

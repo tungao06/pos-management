@@ -105,7 +105,7 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
     }
   }
   return {
-    getCatalog: (known, rules) => call(`/pos/catalog?known_version=${Math.max(0, Math.trunc(known))}&promo_rule_version=${Math.max(0, Math.trunc(rules))}`,{ method: 'GET' }, (b) => PosCatalogLooseResponse.parse(b).data), // `catalog` checked by the caller (R12)
+    getCatalog: (known, rules) => call(`/pos/catalog?known_version=${Math.max(0, Math.trunc(known))}&promo_rule_version=${Math.max(0, Math.trunc(rules))}`, { method: 'GET' }, (b) => PosCatalogLooseResponse.parse(b).data), // `catalog` checked by the caller (R12)
     push: (body) => call('/pos/push', { method: 'POST', body: JSON.stringify(body) }, (b) => PushResponse.parse(b).data),
     shiftCash: (q) => call(`/pos/shift-cash?after=${encodeURIComponent(q.after)}&until=${encodeURIComponent(q.until)}`, { method: 'GET' }, (b) => ShiftCashResponse.parse(b).data),
     listOrders: (q) => call(`/orders?from=${encodeURIComponent(q.from)}&to=${encodeURIComponent(q.to)}${q.updatedSince === undefined ? '' : `&updated_since=${encodeURIComponent(q.updatedSince)}`}`, { method: 'GET' }, (b) => OrdersListResponse.parse(b).data),
