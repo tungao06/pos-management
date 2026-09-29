@@ -1,15 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState, type JSX } from 'react'
 import type { Size, Sweetness } from '@dayo/dayo-pricing'
 import type { RemapScope, Remedy, SellCatalogDto, SyncProblemDto } from '../api/types'
 import { useApi } from '../app/api-context'
-import { can } from '../app/permissions'
-import { bootstrapKey, sellCatalogKey, syncProblemsKey, useBootstrap } from '../app/queries'
+import { can, type PosRole } from '../app/permissions'
+import { bootstrapKey, sellCatalogKey, syncProblemsKey, syncStatusKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import { errorMessage } from '../ui/errors'
 import { saveFile } from '../ui/save-file'
 import { TH } from '../ui/th'
+import { CloseOffCatalogDialog } from './CloseOffCatalogDialog'
 import { OwnerApprovalDialog, type OwnerApproval } from './OwnerApprovalDialog'
 
 const TIME = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' })
@@ -22,7 +23,9 @@ function dialogTitle(remedy: Remedy): string {
   if (remedy === 'RENUMBER') return TH.remedyRenumber
   if (remedy === 'REMAP_CODE') return TH.remedyRemapCode
   if (remedy === 'REMAP_STAFF') return TH.remedyRemapStaff
-  return TH.remedyExclude
+  if (remedy === 'ACKNOWLEDGE_ELSEWHERE') return TH.remedyAcknowledge
+  if (remedy === 'RECONFIRM_OWNER') return TH.remedyReconfirm
+  return TH.remedyExcludeLocal
 }
 
 /**
@@ -224,6 +227,7 @@ function ProblemRow({
   row,
   depth,
   excludeConfirmId,
+  canCloseOffCatalog,
   onRemedy,
   onExcludeAsk,
   onExport,
@@ -231,12 +235,18 @@ function ProblemRow({
   row: SyncProblemDto
   depth: number
   excludeConfirmId: string | null
+  /** can(role, 'close_off_catalog') — the screen decides the row's remedies (dayo/E1), the ROLE decides who may
+   * still see this one specific button (D97 · security review). */
+  canCloseOffCatalog: boolean
   onRemedy: (row: SyncProblemDto, remedy: Remedy) => void
   onExcludeAsk: (outboxId: string | null) => void
   onExport: (row: SyncProblemDto) => void
 }): JSX.Element {
   const isClockAhead = row.reason === 'CLOCK_AHEAD'
-  const testId = `problem-${row.receiptNo ?? row.key}`
+  // Task 16: by `outboxId` (always present, always unique) — `receiptNo` is null on every shift-lane row and a
+  // dead order's `key` can equal its own off-catalog replacement's key across a remedy, so neither is a safe pick
+  // for a row identity a test (or e2e) can rely on.
+  const testId = `problem-${row.outboxId}`
   return (
     <div className="problem" style={{ marginLeft: depth * 16 }}>
       <div data-testid={testId}>
@@ -246,6 +256,8 @@ function ProblemRow({
           · {row.receiptNo ?? row.key} · {TIME.format(new Date(row.at))}
         </span>
         <span> · {TH.syncProblemDetail(row.detail)}</span>
+        {row.centralOrderNo !== null && <span> · {row.centralOrderNo}</span>}
+        {row.central !== null && <span> · {row.central.orderNo}</span>}
         {isClockAhead && (
           <>
             {' '}
@@ -254,6 +266,25 @@ function ProblemRow({
           </>
         )}
         {row.remapHint !== null && <p data-testid="problem-remap-hint">{row.remapHint}</p>}
+        {/* ก้อน 3 (Task 14 · carried item 6/11): a row still queued but stuck for a reason of its own — a card, not
+            a "dead" row's warning. `waiting` never appears together with `hint`/`central` in practice (a queued row
+            is never dead), but the checks below stay independent so nothing here assumes that. */}
+        {row.waiting !== null && (
+          <p data-testid={`problem-waiting-${row.waiting}`} className="badge">
+            {TH.problemWaitingHint[row.waiting]}
+          </p>
+        )}
+        {row.blocksLaneRows > 0 && <p>{TH.blocksLaneRows(row.blocksLaneRows)}</p>}
+        {/* ก้อน 3 (Task 14 · §6.4 ค · S5 · carried item 7): what a dead row's `hint` tells the owner to do next. */}
+        {row.hint === 'void_rejected' && row.centralOrderNo !== null && <p>{TH.voidRejectedHint(row.centralOrderNo)}</p>}
+        {row.hint === 'shift_conflict' && <p data-testid="problem-hint-shift-conflict">{TH.shiftConflictBanner}</p>}
+        {row.hint === 'key_replaced' && <p data-testid="problem-hint-key-replaced">{TH.keyReplacedHint}</p>}
+        {/* m2 · R16: dayo's exists: data disagrees with what this tablet froze — display only, never recomputed here. */}
+        {row.central !== null && !row.central.matchesLocal && (
+          <p role="alert" className="error" data-testid="problem-central-mismatch">
+            {TH.problemCentralMismatch}
+          </p>
+        )}
         <div className="actions">
           {row.remedies.includes('RETRY') && (
             <button type="button" data-testid="remedy-retry" onClick={() => onRemedy(row, 'RETRY')}>
@@ -275,6 +306,21 @@ function ProblemRow({
               {TH.remedyRemapStaff}
             </button>
           )}
+          {row.remedies.includes('CLOSE_OFF_CATALOG') && canCloseOffCatalog && (
+            <button type="button" data-testid="remedy-close-off-catalog" onClick={() => onRemedy(row, 'CLOSE_OFF_CATALOG')}>
+              {TH.remedyCloseOffCatalog}
+            </button>
+          )}
+          {row.remedies.includes('ACKNOWLEDGE_ELSEWHERE') && (
+            <button type="button" data-testid="remedy-acknowledge" onClick={() => onRemedy(row, 'ACKNOWLEDGE_ELSEWHERE')}>
+              {TH.remedyAcknowledge}
+            </button>
+          )}
+          {row.remedies.includes('RECONFIRM_OWNER') && (
+            <button type="button" data-testid="remedy-reconfirm" onClick={() => onRemedy(row, 'RECONFIRM_OWNER')}>
+              {TH.remedyReconfirm}
+            </button>
+          )}
           {row.remedies.includes('EXCLUDE') &&
             (excludeConfirmId === row.outboxId ? (
               <>
@@ -294,16 +340,18 @@ function ProblemRow({
               </>
             ) : (
               <button type="button" data-testid="remedy-exclude" onClick={() => onExcludeAsk(row.outboxId)}>
-                {TH.remedyExclude}
+                {TH.remedyExcludeLocal}
               </button>
             ))}
-          <button type="button" data-testid="remedy-export" onClick={() => onExport(row)}>
+          {/* carried item 11 / brief test 6: a waiting card's export uses its own testid — a dead row keeps
+              "remedy-export" (unchanged since Task 15). */}
+          <button type="button" data-testid={row.waiting !== null ? 'problem-export' : 'remedy-export'} onClick={() => onExport(row)}>
             {TH.remedyExport}
           </button>
         </div>
       </div>
       {row.children.map((c) => (
-        <ProblemRow key={c.key} row={c} depth={depth + 1} excludeConfirmId={excludeConfirmId} onRemedy={onRemedy} onExcludeAsk={onExcludeAsk} onExport={onExport} />
+        <ProblemRow key={c.key} row={c} depth={depth + 1} excludeConfirmId={excludeConfirmId} canCloseOffCatalog={canCloseOffCatalog} onRemedy={onRemedy} onExcludeAsk={onExcludeAsk} onExport={onExport} />
       ))}
     </div>
   )
@@ -322,6 +370,8 @@ export function SyncProblemsScreen(): JSX.Element {
   const boot = useBootstrap()
   const queryClient = useQueryClient()
   const allowed = user !== null && can(user.role, 'sync_problems')
+  const role: PosRole | null = user?.role ?? null
+  const canCloseOffCatalog = role !== null && can(role, 'close_off_catalog')
 
   const problems = useQuery({ queryKey: syncProblemsKey(user?.id ?? ''), queryFn: () => api.listSyncProblems(user?.id ?? ''), enabled: allowed })
   const sellCatalog = useQuery({ queryKey: sellCatalogKey, queryFn: () => api.loadSellCatalog(), enabled: allowed })
@@ -331,17 +381,28 @@ export function SyncProblemsScreen(): JSX.Element {
   const [newStaffId, setNewStaffId] = useState<string | null>(null)
   const [excludeConfirmId, setExcludeConfirmId] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  // fix round 2 item A (security, High): `mutation.reset()` (below) detaches the mutation observer in the same
+  // tick as the error dispatch it follows — `mutation.isError`/`mutation.error` never actually show a wrong PIN,
+  // NOT_OWNER, REMEDY_NOT_ALLOWED, … to the owner. A plain `useState` written by `onError` (a real React update,
+  // never reset away) is what the dialogs actually render; cleared whenever a dialog opens or closes.
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
   const owners = boot.data?.users.filter((u) => u.role === 'owner') ?? []
   const staffOptions = [...(boot.data?.users ?? []), ...(boot.data?.staffNeedingPin ?? [])].filter((u, i, arr) => arr.findIndex((x) => x.id === u.id) === i)
+
+  const openRemedy = (row: SyncProblemDto, remedy: Remedy): void => {
+    setMutationError(null)
+    setDialog({ row, remedy })
+  }
 
   const closeDialog = (): void => {
     setDialog(null)
     setTarget(null)
     setNewStaffId(null)
+    setMutationError(null)
   }
 
-  const mutation = useMutation({
+  const mutation: UseMutationResult<void, unknown, OwnerApproval> = useMutation<void, unknown, OwnerApproval>({
     mutationFn: async (approval: OwnerApproval): Promise<void> => {
       if (dialog === null) return
       const { row, remedy } = dialog
@@ -355,14 +416,31 @@ export function SyncProblemsScreen(): JSX.Element {
       } else if (remedy === 'REMAP_STAFF') {
         if (newStaffId === null) throw new Error('choose a staff member first')
         await api.remapStaff({ ...approval, outboxId: row.outboxId, newStaffId })
+      } else if (remedy === 'CLOSE_OFF_CATALOG') {
+        await api.closeOffCatalog({ ...approval, outboxId: row.outboxId })
+      } else if (remedy === 'ACKNOWLEDGE_ELSEWHERE') {
+        await api.acknowledgeElsewhere({ ...approval, outboxId: row.outboxId })
+      } else if (remedy === 'RECONFIRM_OWNER') {
+        await api.reconfirmOwner({ ...approval, outboxId: row.outboxId })
       } else {
         await api.excludeFromSync({ ...approval, outboxId: row.outboxId })
       }
     },
     onSuccess: async () => {
-      await Promise.all([queryClient.invalidateQueries({ queryKey: syncProblemsKey(user?.id ?? '') }), queryClient.invalidateQueries({ queryKey: bootstrapKey })])
+      setMutationError(null)
+      // fix round 1 item 5: every remedy can change what the status banners warn about (a scope wait closed, a
+      // central mismatch acknowledged, …) — `syncStatusKey` must refresh alongside `bootstrapKey`, not 30 s later.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: syncProblemsKey(user?.id ?? '') }),
+        queryClient.invalidateQueries({ queryKey: bootstrapKey }),
+        queryClient.invalidateQueries({ queryKey: syncStatusKey }),
+      ])
       closeDialog()
     },
+    onError: (e) => setMutationError(errorMessage(e)),
+    // fix round 1 item 4 (security): the PIN just typed must not sit in this mutation's `variables` a moment
+    // longer than the call itself needs it.
+    onSettled: (): void => mutation.reset(),
   })
 
   const doExport = async (row: SyncProblemDto): Promise<void> => {
@@ -394,7 +472,16 @@ export function SyncProblemsScreen(): JSX.Element {
       {problems.data?.length === 0 && <p>{TH.syncProblemsEmpty}</p>}
       <div className="list">
         {problems.data?.map((row) => (
-          <ProblemRow key={row.key} row={row} depth={0} excludeConfirmId={excludeConfirmId} onRemedy={(r, remedy) => setDialog({ row: r, remedy })} onExcludeAsk={setExcludeConfirmId} onExport={(r) => void doExport(r)} />
+          <ProblemRow
+            key={row.key}
+            row={row}
+            depth={0}
+            excludeConfirmId={excludeConfirmId}
+            canCloseOffCatalog={canCloseOffCatalog}
+            onRemedy={openRemedy}
+            onExcludeAsk={setExcludeConfirmId}
+            onExport={(r) => void doExport(r)}
+          />
         ))}
       </div>
       {exportError !== null && (
@@ -402,13 +489,29 @@ export function SyncProblemsScreen(): JSX.Element {
           {exportError}
         </p>
       )}
-      {dialog !== null && (
+      {dialog !== null && dialog.remedy === 'CLOSE_OFF_CATALOG' && (
+        <CloseOffCatalogDialog
+          owners={owners}
+          defaultApproverId={user?.role === 'owner' ? user.id : null}
+          busy={mutation.isPending}
+          error={mutationError}
+          onSubmit={(approval) => {
+            // fix round 3 item 1 (M): the same reason as OwnerEscapeControls — a second wrong PIN in a row sets
+            // the exact same Thai error string, which the dialog's own "clear the PIN on error change" effect
+            // never sees as a change at all unless it goes through `null` first.
+            setMutationError(null)
+            mutation.mutate(approval)
+          }}
+          onClose={closeDialog}
+        />
+      )}
+      {dialog !== null && dialog.remedy !== 'CLOSE_OFF_CATALOG' && (
         <OwnerApprovalDialog
           title={dialogTitle(dialog.remedy)}
           owners={owners}
           defaultApproverId={user?.role === 'owner' ? user.id : null}
           busy={mutation.isPending}
-          error={mutation.isError ? errorMessage(mutation.error) : null}
+          error={mutationError}
           submitDisabled={(dialog.remedy === 'REMAP_CODE' && target === null) || (dialog.remedy === 'REMAP_STAFF' && newStaffId === null)}
           extra={
             dialog.remedy === 'REMAP_CODE' ? (
@@ -425,7 +528,10 @@ export function SyncProblemsScreen(): JSX.Element {
               </p>
             ) : undefined
           }
-          onSubmit={(approval) => mutation.mutate(approval)}
+          onSubmit={(approval) => {
+            setMutationError(null)
+            mutation.mutate(approval)
+          }}
           onClose={closeDialog}
         />
       )}

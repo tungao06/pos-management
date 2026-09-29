@@ -26,3 +26,16 @@ export function useBootstrap() {
   const api = useApi()
   return useQuery({ queryKey: bootstrapKey, queryFn: () => api.bootstrap(), refetchInterval: BOOTSTRAP_REFETCH_MS })
 }
+
+/**
+ * Task 16 (block 3 · spec §6.2 m1 · S5 · m2): the sync-health banners (`scopeWait`/`shiftDataConflict`/
+ * `centralMismatchBills`/`shiftLaneHeld`) come from their own poll — same `syncStatus()` call `bootstrap` embeds,
+ * but on its own cadence so they do not wait on the whole `bootstrap` round trip. `StatusBanners` falls back to
+ * `bootstrap().sync` (unchanged since Task 14) whenever this one has not answered yet — offline first render, or a
+ * fake api in a screen test that stubs `bootstrap` alone.
+ */
+export const syncStatusKey = ['sync-status'] as const
+export function useSyncStatus() {
+  const api = useApi()
+  return useQuery({ queryKey: syncStatusKey, queryFn: () => api.syncStatus(), refetchInterval: BOOTSTRAP_REFETCH_MS, retry: false })
+}

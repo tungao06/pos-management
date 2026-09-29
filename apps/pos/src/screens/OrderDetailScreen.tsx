@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
+import { formatSatangAsBaht } from '@dayo/domain'
 import type { DayoEditDto } from '../api/types'
 import { useApi } from '../app/api-context'
 import { can } from '../app/permissions'
@@ -60,6 +61,20 @@ export function OrderDetailScreen(): JSX.Element {
       <p data-testid="order-status" data-status={o.status} className={o.status === 'voided' ? 'error' : undefined}>
         {o.status === 'voided' ? TH.statusVoided : TH.statusPaid}
       </p>
+      {/* Task 14/16 (spec §6.4): the owner closed this bill as an off-catalog bill — display only, never editable
+          here (money/cost/stock rules of an off-catalog bill live entirely on the server side). */}
+      {o.offCatalog && (
+        <span className="badge" data-testid="order-off-catalog-badge">
+          {TH.offCatalogBadge}
+        </span>
+      )}
+      {/* m2: dayo's copy of this bill disagrees with what this tablet froze — read-only, never recomputed here
+          (@dayo/domain's own formatter, no math). */}
+      {o.centralMismatch !== null && (
+        <p role="alert" className="error" data-testid="order-central-mismatch">
+          {TH.centralMismatchLine(o.centralMismatch.orderNo, formatSatangAsBaht(o.centralMismatch.reportedTotalSatang), formatSatangAsBaht(o.centralMismatch.localTotalSatang))}
+        </p>
+      )}
       {o.dayoEdit !== null && (
         <p data-testid="order-dayo-edit" className="banner">
           {dayoEditText(o.dayoEdit)}

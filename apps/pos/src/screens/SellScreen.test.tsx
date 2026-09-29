@@ -39,6 +39,7 @@ function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
     sync: HEALTHY_SYNC,
     countingShift: null,
     zWaiting: [],
+    centralLastZNo: null,
     ...overrides,
   }
 }

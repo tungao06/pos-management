@@ -36,7 +36,9 @@ export type FakeApi = { [K in keyof PosApi]?: (...args: never[]) => unknown }
  * methods are typically `vi.fn()` returning only the fields the screen under test reads.
  */
 export function renderWithApi(ui: JSX.Element, api: FakeApi): { queryClient: QueryClient; container: HTMLElement } {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  // mutations.gcTime: 0 mirrors main.tsx (fix round 1 item 4, security) — a PIN-carrying mutation's cache entry
+  // must not linger past the call it served, here as much as in production.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false, gcTime: 0 } } })
   const { container } = rtlRender(
     <QueryClientProvider client={queryClient}>
       <ApiProvider api={api as unknown as PosApi}>
@@ -59,10 +61,12 @@ function SignedIn({ session, children }: { session: { userId: string; role: PosR
  * Block 3 screens (Task 15): the same stack `renderWithApi` builds, plus an optional signed-in `session` — most of
  * these screens read `useSession().user` straight away (the actor of `finishCount`/`confirmCount`/`issueZ`).
  */
-export function render(ui: JSX.Element, opts: { api: FakeApi; session?: { userId: string; role: PosRole } }): { queryClient: QueryClient; container: HTMLElement } {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+export function render(ui: JSX.Element, opts: { api: FakeApi; session?: { userId: string; role: PosRole } }): { queryClient: QueryClient; container: HTMLElement; unmount: () => void } {
+  // mutations.gcTime: 0 mirrors main.tsx (fix round 1 item 4, security) — a PIN-carrying mutation's cache entry
+  // must not linger past the call it served, here as much as in production.
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false, gcTime: 0 } } })
   const inner = opts.session === undefined ? ui : <SignedIn session={opts.session}>{ui}</SignedIn>
-  const { container } = rtlRender(
+  const { container, unmount } = rtlRender(
     <QueryClientProvider client={queryClient}>
       <ApiProvider api={opts.api as unknown as PosApi}>
         <SessionProvider>
@@ -71,5 +75,5 @@ export function render(ui: JSX.Element, opts: { api: FakeApi; session?: { userId
       </ApiProvider>
     </QueryClientProvider>,
   )
-  return { queryClient, container }
+  return { queryClient, container, unmount }
 }

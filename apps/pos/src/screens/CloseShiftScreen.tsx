@@ -1,8 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState, type JSX } from 'react'
-import { posErrorCode } from '../api/errors'
-import type { ConfirmCountInput } from '../api/types'
+import { isCentralZBlockedError, isClockAheadCountError, posErrorCode } from '../api/errors'
+import type { ConfirmCountInput, SkipCountFloorResult } from '../api/types'
 import { useApi } from '../app/api-context'
 import { useCart } from '../app/cart-context'
 import { bootstrapKey, countSummaryKey, ordersKey, useBootstrap, zListKey } from '../app/queries'
@@ -10,6 +10,7 @@ import { useSession } from '../app/session'
 import { errorMessage } from '../ui/errors'
 import { TH } from '../ui/th'
 import { CountReview } from './CountReview'
+import { KeepShiftLocalControl, SkipCountFloorControl } from './OwnerEscapeControls'
 
 /**
  * D101 (spec 04 §6.8 · §4.10): "นับเสร็จ" (finishCount) freezes the open shift → `countSummary` shows the review,
@@ -38,6 +39,12 @@ export function CloseShiftScreen(): JSX.Element {
   const [confirmError, setConfirmError] = useState<string | null>(null)
   const [botCashError, setBotCashError] = useState<string | null>(null)
   const [savedOffline, setSavedOffline] = useState<string | null>(null) // the shiftId of a count confirmed offline (z: null)
+  // Task 14 · carried items 9a/9b — fix round 1 items 1a/1: a far-ahead count (CLOCK_AHEAD) or a permanently
+  // blocked central Z (DAYO_BAD_RESPONSE, Z_TOO_LARGE, COUNT_BEFORE_CENTRAL_Z, a builder refusal) both need an
+  // owner escape (`isCentralZBlockedError`/`isClockAheadCountError`, api/errors.ts).
+  const [clockAheadBlocked, setClockAheadBlocked] = useState(false)
+  const [zBlockedPermanently, setZBlockedPermanently] = useState(false)
+  const [skipResult, setSkipResult] = useState<SkipCountFloorResult | null>(null)
   // SHIFT_CHANGED (D54): bumped to remount `CountReview` fresh (`key`) — the typed count, chosen approver and
   // reason are all discarded, same as the old screen's "count again, blind" (review kept this behaviour deliberately).
   const [resetNonce, setResetNonce] = useState(0)
@@ -56,11 +63,15 @@ export function CloseShiftScreen(): JSX.Element {
     mutationFn: () => api.finishCount({ actorUserId: user?.id ?? '' }),
     onSuccess: (r) => {
       setConfirmError(null)
+      setClockAheadBlocked(false)
       setShiftId(r.shiftId)
       setCounted(true)
       setBlind(false)
     },
-    onError: (e) => setConfirmError(errorMessage(e)),
+    onError: (e) => {
+      setConfirmError(errorMessage(e))
+      setClockAheadBlocked(isClockAheadCountError(e))
+    },
   })
 
   const summaryQuery = useQuery({
@@ -96,7 +107,7 @@ export function CloseShiftScreen(): JSX.Element {
     }
   }, [summaryQuery.data, shiftId, api, queryClient])
 
-  const confirm = useMutation({
+  const confirm: UseMutationResult<Awaited<ReturnType<typeof api.confirmCount>>, unknown, ConfirmCountInput> = useMutation({
     mutationFn: (input: ConfirmCountInput) => api.confirmCount(input),
     onSuccess: async (r) => {
       setConfirmError(null)
@@ -113,18 +124,22 @@ export function CloseShiftScreen(): JSX.Element {
       const code = posErrorCode(e)
       if (code === 'Z_CHAIN_BROKEN') {
         const detail = e instanceof Error ? e.message.slice(code.length + 2) : ''
-        // Task 13 (parallel worktree, not merged yet) adds `centralLastZNo?: number | null` to `BootstrapState`
-        // (apps/pos/src/api/types.ts) — read defensively so this screen compiles today and picks up the real
-        // field once that merges; remove this cast then. Only surfaced in this Z_CHAIN_BROKEN "central" branch,
-        // never as a general status figure.
-        const centralLastZNo: number | null | undefined = (boot.data as unknown as { centralLastZNo?: number | null | undefined } | undefined)?.centralLastZNo
+        // Task 13 (ruling R9): shown only in this Z_CHAIN_BROKEN "central" branch, never as a general status figure.
+        const centralLastZNo = boot.data?.centralLastZNo ?? null
         setChainBroken(true)
         setChainCentralZNo(detail === 'central' && centralLastZNo != null ? centralLastZNo : null)
         setConfirmError(null)
+        setClockAheadBlocked(false)
+        setZBlockedPermanently(false)
         return
       }
       setChainBroken(false)
       setConfirmError(errorMessage(e))
+      setClockAheadBlocked(isClockAheadCountError(e))
+      // fix round 1 item 1a · fix round 2 item D: only while a Z was actually being attempted against dayo
+      // (`online` AND the shift is still `central` — confirming the count alone, `z: null`, never runs `writeZ`,
+      // and a shift already `local_only` has nothing left for keepShiftLocal to do).
+      setZBlockedPermanently(online && summary?.syncMode === 'central' && isCentralZBlockedError(e))
       if (code === 'NO_OPEN_SHIFT' || code === 'SHIFT_NOT_COUNTING') {
         void queryClient.invalidateQueries({ queryKey: bootstrapKey })
       }
@@ -137,7 +152,17 @@ export function CloseShiftScreen(): JSX.Element {
         void queryClient.invalidateQueries({ queryKey: countSummaryKey(shiftId) })
       }
     },
+    // fix round 2 item A (security): `approverPin` sits in this mutation's `variables` while `CloseShiftScreen`
+    // stays mounted (the count review, its own retry) — reset once settled, same as every other PIN mutation.
+    onSettled: (): void => confirm.reset(),
   })
+
+  const clearBlocked = (): void => {
+    setClockAheadBlocked(false)
+    setZBlockedPermanently(false)
+    setConfirmError(null)
+    if (shiftId !== null) void queryClient.invalidateQueries({ queryKey: countSummaryKey(shiftId) })
+  }
 
   if (boot.data !== undefined && boot.data.openShift === null && boot.data.countingShift === null && savedOffline === null) return <Navigate to="/shift/open" />
 
@@ -184,6 +209,23 @@ export function CloseShiftScreen(): JSX.Element {
           </button>
         </p>
       )}
+      {/* Task 14 · carried items 9a/9b — fix round 1 items 1a/3: shown right where "นับเสร็จ"/"ยืนยัน" refused
+          for a reason this device's own retry can never fix — the risk/warning shown before the PIN either way. */}
+      {clockAheadBlocked && (
+        <SkipCountFloorControl
+          owners={(boot.data?.users ?? []).filter((u) => u.role === 'owner')}
+          onDone={(r) => {
+            setSkipResult(r)
+            clearBlocked()
+          }}
+        />
+      )}
+      {skipResult !== null && (
+        <p className="badge" data-testid="skip-count-floor-done">
+          {TH.skipCountFloorDone(skipResult.skipped.length)} ({skipResult.skipped.map((s) => s.countedAt).join(', ')})
+        </p>
+      )}
+      {zBlockedPermanently && shiftId !== null && <KeepShiftLocalControl shiftId={shiftId} owners={(boot.data?.users ?? []).filter((u) => u.role === 'owner')} prominent onDone={clearBlocked} />}
       {botCashError !== null && (
         <p role="alert" className="error" data-testid="count-bot-cash-error">
           {botCashError}

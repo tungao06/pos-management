@@ -131,7 +131,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     const boot = await t.api.bootstrap()
     expect(boot.openShift).toBeNull()
     expect(await t.api.getZReport(t.shift.id)).toEqual(z)
-    expect(await t.api.listZReports()).toEqual([{ shiftId: t.shift.id, businessDate: '2026-09-17', zNo: 1, closedAt: '2026-09-17T13:05:00.000Z', netSalesSatang: 4_000, cashVarianceSatang: 0, openedQuick: false, hashOk: true, chainWarning: false }])
+    expect(await t.api.listZReports()).toEqual([{ shiftId: t.shift.id, businessDate: '2026-09-17', zNo: 1, closedAt: '2026-09-17T13:05:00.000Z', netSalesSatang: 4_000, cashVarianceSatang: 0, openedQuick: false, hashOk: true, chainWarning: false, syncMode: 'local_only' }])
     // after the close: no selling, no void, no second close (spec §4.8, D47 ข้อ 2)
     await expect(legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })).rejects.toThrow(/^NO_OPEN_SHIFT: /)
     await expect(t.api.cancelSale({ orderId: sc.cashKept.orderId, actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, reason: 'x', made: false, refundReference: null })).rejects.toThrow(/^VOID_NOT_ALLOWED: /)
@@ -835,14 +835,14 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     const gotInvalid = await t.api.getZReport(t.shift.id)
     expect(gotInvalid).toEqual({ id: z.id, shiftId: t.shift.id, createdAt: z.createdAt, hash: z.hash, hashOk: false, snapshot: null })
     expect(await t.api.listZReports()).toEqual([
-      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false },
+      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false, syncMode: 'local_only' },
     ])
 
     t.raw.prepare(`update z_report set snapshot_json = json_remove(?, '$.sales') where shift_id = ?`).run(JSON.stringify(z.snapshot), t.shift.id)
     const gotNoSales = await t.api.getZReport(t.shift.id)
     expect(gotNoSales).toEqual({ id: z.id, shiftId: t.shift.id, createdAt: z.createdAt, hash: z.hash, hashOk: false, snapshot: null })
     expect(await t.api.listZReports()).toEqual([
-      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false },
+      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false, syncMode: 'local_only' },
     ])
   })
 

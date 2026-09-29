@@ -29,6 +29,7 @@ const bootstrap: BootstrapState = {
   sync: HEALTHY_SYNC,
   countingShift: null,
   zWaiting: [],
+  centralLastZNo: null,
 }
 
 function ZReportRoute(): JSX.Element {

@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BootstrapState, PosApi, SyncStatusDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { CartProvider } from '../app/cart-context'
+import { syncStatusKey } from '../app/queries'
 import { SessionProvider, useSession } from '../app/session'
 import { render as renderBlock3 } from '../test-utils'
 import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { testSellCatalog } from '../test-utils/sell-catalog'
 import { TH } from '../ui/th'
-import { fakeApi, OWNERS } from './block3-test-fixtures'
+import { fakeApi, OWNERS, status } from './block3-test-fixtures'
 import { SellScreen } from './SellScreen'
 import { StatusBanners } from './StatusBanners'
 
@@ -41,6 +42,7 @@ function bootstrapWith(sync: SyncStatusDto, overrides: Partial<BootstrapState> =
     sync,
     countingShift: null,
     zWaiting: [],
+    centralLastZNo: null,
     ...overrides,
   }
 }
@@ -100,7 +102,7 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
     [{ apiState: 'forbidden' as const }, 'banner-key-forbidden'],
     [{ catalogError: 'อ่านไม่ได้' }, 'banner-catalog'],
     [{ pendingOver24h: true }, 'banner-stale-queue'],
-    [{ pendingBills: 3 }, 'badge-pending'],
+    [{ pendingSyncRows: 3 }, 'badge-pending'],
   ])('%o shows %s', async (sync, id) => {
     renderBanners({ ...BASE_SYNC, ...sync }, 'staff')
     expect(await screen.findByTestId(id)).toBeInTheDocument()
@@ -115,19 +117,19 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
   })
 
   it('pricingCommit: null shows no banner-pricing (only a files_sha256 mismatch does — spec §4.4 ข้อ 9)', async () => {
-    renderBanners({ ...BASE_SYNC, pricingCommit: null, pricingMismatch: false, pendingBills: 1 }, 'owner')
+    renderBanners({ ...BASE_SYNC, pricingCommit: null, pricingMismatch: false, pendingSyncRows: 1 }, 'owner')
     expect(await screen.findByTestId('badge-pending')).toBeInTheDocument() // proves the sync data has loaded
     expect(screen.queryByTestId('banner-pricing')).toBeNull()
   })
 
   it('shows banner-clock-far-ahead and banner-problems to the owner, with the right counts', async () => {
-    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 2, problemBills: 5 }, 'owner')
+    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 2, problemSyncRows: 5 }, 'owner')
     expect(await screen.findByTestId('banner-clock-far-ahead')).toHaveTextContent('2')
     expect(screen.getByTestId('banner-problems')).toHaveTextContent('5')
   })
 
   it('ruling N5: staff sees neither banner-clock-far-ahead nor banner-problems, nor the counts', async () => {
-    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 2, problemBills: 5, pendingBills: 1 }, 'staff')
+    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 2, problemSyncRows: 5, pendingSyncRows: 1 }, 'staff')
     expect(await screen.findByTestId('badge-pending')).toBeInTheDocument() // proves the sync data has loaded
     expect(screen.queryByTestId('banner-clock-far-ahead')).toBeNull()
     expect(screen.queryByTestId('banner-problems')).toBeNull()
@@ -136,14 +138,14 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
   })
 
   it('a manager sees neither owner-only banner either', async () => {
-    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 1, problemBills: 1, pendingBills: 1 }, 'manager')
+    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 1, problemSyncRows: 1, pendingSyncRows: 1 }, 'manager')
     expect(await screen.findByTestId('badge-pending')).toBeInTheDocument()
     expect(screen.queryByTestId('banner-clock-far-ahead')).toBeNull()
     expect(screen.queryByTestId('banner-problems')).toBeNull()
   })
 
   it('clicking banner-problems navigates toward /sync-problems (owner)', async () => {
-    renderBanners({ ...BASE_SYNC, problemBills: 1 }, 'owner')
+    renderBanners({ ...BASE_SYNC, problemSyncRows: 1 }, 'owner')
     const btn = await screen.findByTestId('banner-problems')
     fireEvent.click(btn) // just proves it is clickable — navigation itself is mocked in this suite
   })
@@ -155,5 +157,55 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
     })
     expect(await screen.findByTestId('banner-z-waiting')).toHaveTextContent(TH.zWaitingBanner('25 ก.ย. 2569'))
     expect(screen.getByTestId('z-issue')).toBeVisible()
+  })
+
+  // Task 16 (block 3 · spec §6.2 m1 · S5 · m2): these banners read `api.syncStatus()` on its own poll — `bootstrap`
+  // still supplies `users`/`zWaiting` only (its own `sync` field, when present, is only the fallback).
+  it('scope bar: yellow at first, red after 24 h, owner only (m1)', async () => {
+    const api = { syncStatus: vi.fn(async () => status({ scopeWait: { scope: 'shift:write', since: '2026-09-25T03:00:00.000Z', red: false, closable: false } })), bootstrap: vi.fn(async () => ({ users: OWNERS, zWaiting: [] })) }
+    const { unmount } = renderBlock3(<StatusBanners />, { api, session: { userId: 'u1', role: 'owner' } })
+    expect(await screen.findByTestId('banner-scope')).toHaveAttribute('data-level', 'warn')
+    expect(screen.getByTestId('banner-scope')).toHaveTextContent(TH.scopeBanner('shift:write'))
+    unmount()
+    api.syncStatus.mockResolvedValue(status({ scopeWait: { scope: 'shift:write', since: '2026-09-24T03:00:00.000Z', red: true, closable: false } }))
+    renderBlock3(<StatusBanners />, { api, session: { userId: 'u1', role: 'owner' } })
+    expect(await screen.findByTestId('banner-scope')).toHaveAttribute('data-level', 'error')
+    renderBlock3(<StatusBanners />, { api, session: { userId: 's1', role: 'staff' } })
+    expect(screen.getAllByTestId('banner-scope')).toHaveLength(1) // the staff render adds none
+  })
+  it('shift data conflict and central mismatch are red bars for the owner (S5 · m2)', async () => {
+    renderBlock3(<StatusBanners />, {
+      api: { syncStatus: vi.fn(async () => status({ shiftDataConflict: true, centralMismatchBills: 2 })), bootstrap: vi.fn(async () => ({ users: OWNERS, zWaiting: [] })) },
+      session: { userId: 'u1', role: 'owner' },
+    })
+    expect(await screen.findByTestId('banner-shift-conflict')).toHaveTextContent(TH.shiftConflictBanner)
+    expect(screen.getByTestId('banner-central-mismatch')).toHaveTextContent(TH.centralMismatchBanner)
+  })
+
+  // fix round 1 item 5: syncStatus.isError must not blank the banners — bootstrap().sync is still shown.
+  it('falls back to bootstrap().sync when syncStatus errors', async () => {
+    renderBlock3(<StatusBanners />, {
+      api: {
+        syncStatus: vi.fn(async () => { throw new Error('OFFLINE: network') }),
+        bootstrap: vi.fn(async () => ({ users: OWNERS, zWaiting: [], sync: status({ problemSyncRows: 3 }) })),
+      },
+      session: { userId: 'u1', role: 'owner' },
+    })
+    expect(await screen.findByTestId('banner-problems')).toHaveTextContent('3')
+  })
+
+  // fix round 2 item E: a query that once succeeded keeps its stale `data` sitting around while a LATER background
+  // poll fails — the fallback must still trigger on `isError` alone, never only on `data === undefined`, or a
+  // brand-new problem `bootstrap().sync` already knows about would stay hidden behind the stale figure.
+  it('an error after a successful poll still falls back to bootstrap().sync, not the stale figure (item E)', async () => {
+    const syncStatusMock = vi.fn(async () => status({ problemSyncRows: 0 }))
+    const { queryClient } = renderBlock3(<StatusBanners />, {
+      api: { syncStatus: syncStatusMock, bootstrap: vi.fn(async () => ({ users: OWNERS, zWaiting: [], sync: status({ problemSyncRows: 5 }) })) },
+      session: { userId: 'u1', role: 'owner' },
+    })
+    await waitFor(() => expect(syncStatusMock).toHaveBeenCalledTimes(1))
+    syncStatusMock.mockRejectedValueOnce(new Error('OFFLINE: network'))
+    await queryClient.refetchQueries({ queryKey: syncStatusKey })
+    expect(await screen.findByTestId('banner-problems')).toHaveTextContent('5')
   })
 })

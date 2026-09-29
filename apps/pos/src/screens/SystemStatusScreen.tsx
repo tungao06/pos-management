@@ -5,10 +5,11 @@ import type { ApiState } from '../sync/state'
 import type { DayoProbe } from '../api/types'
 import { PIN_RE } from '../api/types'
 import { useApi } from '../app/api-context'
-import { bootstrapKey, useBootstrap } from '../app/queries'
+import { bootstrapKey, syncStatusKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import { APP_VERSION } from '../lib/app-version'
 import { errorMessage } from '../ui/errors'
+import { formatThaiDate } from '../ui/format'
 import { TH } from '../ui/th'
 import { ConnectFields, type ConnectFieldsValue } from './ConnectFields'
 import { DbErrorScreen } from './DbErrorScreen'
@@ -59,7 +60,9 @@ export function SystemStatusScreen(): JSX.Element {
       return api.replaceApiKey({ baseUrl, apiKey, approverUserId: approverId ?? '', approverPin: pin })
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: bootstrapKey })
+      // fix round 2 item E: a new key changes apiState/scope immediately — syncStatusKey must refresh alongside
+      // bootstrapKey, not wait up to 30 s for its own poll.
+      await Promise.all([queryClient.invalidateQueries({ queryKey: bootstrapKey }), queryClient.invalidateQueries({ queryKey: syncStatusKey })])
       setReplaceDone(true)
       setApiKey('')
       setProbed(null)
@@ -127,13 +130,31 @@ export function SystemStatusScreen(): JSX.Element {
               : TH.statusPricingCommitLabel(sync.pricingCommit)}
         </p>
         <p data-testid="status-last-push">{sync.lastPushAt === null ? TH.statusLastPushNever : TH.statusLastPush(fmt(sync.lastPushAt) ?? '—')}</p>
-        <p data-testid="status-pending">{TH.statusPendingLine(sync.pendingBills)}</p>
+        {/* fix round 1 item 2: every shift stuck waiting for its count or its Z, oldest first — reachable from
+            OwnerRecoveryScreen (deviation 5) so the owner lands on the one 9a/9b actually needs, not only the
+            single oldest one the "ใบปิดกะ … รอออนไลน์" banner points at. */}
+        {(boot.data.countingShift !== null || boot.data.zWaiting.length > 0) && (
+          <section className="list" data-testid="status-stuck-shifts">
+            <h2>{TH.statusStuckShiftsTitle}</h2>
+            {boot.data.countingShift !== null && (
+              <button type="button" data-testid="status-stuck-counting" onClick={() => void navigate({ to: '/shift/close' })}>
+                {TH.statusStuckCounting}
+              </button>
+            )}
+            {boot.data.zWaiting.map((z, i) => (
+              <button key={z.shiftId} type="button" data-testid={`status-stuck-z-${i}`} onClick={() => void navigate({ to: '/shift/z/$shiftId', params: { shiftId: z.shiftId } })}>
+                {TH.zWaitingBanner(formatThaiDate(z.businessDate))}
+              </button>
+            ))}
+          </section>
+        )}
+        <p data-testid="status-pending">{TH.statusPendingLine(sync.pendingSyncRows)}</p>
         {isOwner ? (
           <button type="button" data-testid="status-problems-link" onClick={() => void navigate({ to: '/sync-problems' })}>
-            {TH.statusProblemsLine(sync.problemBills)}
+            {TH.statusProblemsLine(sync.problemSyncRows)}
           </button>
         ) : (
-          <p data-testid="status-problems">{TH.statusProblemsLine(sync.problemBills)}</p>
+          <p data-testid="status-problems">{TH.statusProblemsLine(sync.problemSyncRows)}</p>
         )}
         {isOwner ? (
           <button type="button" data-testid="status-price-diff-link" onClick={() => void navigate({ to: '/price-diffs' })}>

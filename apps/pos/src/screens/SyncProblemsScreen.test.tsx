@@ -6,9 +6,11 @@ import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PosApi, SyncProblemDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
+import { can } from '../app/permissions'
 import { SessionProvider, useSession } from '../app/session'
 import { testSellCatalog } from '../test-utils/sell-catalog'
 import { TH } from '../ui/th'
+import { OWNERS, problem, user } from './block3-test-fixtures'
 import { SyncProblemsScreen } from './SyncProblemsScreen'
 
 const downloads: { name: string; text: string }[] = []
@@ -36,10 +38,13 @@ function fakeProblemsApi(rows: SyncProblemDto[], overrides: Partial<PosApi> = {}
       dayoBaseUrl: 'https://dayo.example/api/v1',
       staffNeedingPin: [],
       ownerRecovery: false,
+      countingShift: null,
+      zWaiting: [],
+      centralLastZNo: null,
       sync: {
         linked: true, apiState: 'ok', maskedKey: 'dayo_…cdef', baseUrl: 'https://dayo.example/api/v1', clockSkewMs: 0, clockWarning: false, pricingMismatch: false, pricingCommit: null,
-        catalogVersion: 42, catalogCheckedAt: null, catalogError: null, lastPushAt: null, pendingBills: 0, problemBills: rows.length, oldestPendingAt: null, pendingOver24h: false,
-        priceDiffBills: 0, clockFarAheadBills: 0,
+        catalogVersion: 42, catalogCheckedAt: null, catalogError: null, lastPushAt: null, pendingSyncRows: 0, problemSyncRows: rows.length, oldestPendingAt: null, pendingOver24h: false,
+        priceDiffBills: 0, clockFarAheadBills: 0, scopeWait: null, shiftDataConflict: false, centralMismatchBills: 0, shiftLaneHeld: null,
       },
     })),
     retrySyncRow: vi.fn(async () => undefined),
@@ -77,6 +82,30 @@ function renderProblems(api: PosApi, role: UserDto['role']): { router: Router<Re
   return { router }
 }
 
+/**
+ * The block-3 tests below (spec §6.4) need an arbitrary signed-in user id (to match `approverUserId` in what they
+ * assert the API was called with) — `renderProblems` above always picks a fixed one per role. Same stack, a real
+ * router underneath (this screen's own `<Navigate>` needs one — `../test-utils`'s router-less `render` cannot be
+ * used here without breaking the `useNavigate` this screen's real "กลับ" button relies on elsewhere in this file).
+ */
+function renderProblemsAs(api: PosApi, user: UserDto): { router: Router<ReturnType<typeof buildRouteTree>>; queryClient: QueryClient } {
+  const routeTree = buildRouteTree()
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/sync-problems'] }) })
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false, gcTime: 0 } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ApiProvider api={api}>
+        <SessionProvider>
+          <SignedIn user={user}>
+            <RouterProvider router={router} />
+          </SignedIn>
+        </SessionProvider>
+      </ApiProvider>
+    </QueryClientProvider>,
+  )
+  return { router, queryClient }
+}
+
 function buildRouteTree() {
   const rootRoute = createRootRoute()
   const syncProblemsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/sync-problems', component: SyncProblemsScreen })
@@ -88,6 +117,7 @@ function buildRouteTree() {
 const ROW = (over: Partial<SyncProblemDto> = {}): SyncProblemDto => ({
   outboxId: 'x1', key: 'order:o1', kind: 'order', orderId: 'o1', receiptNo: 'A-000001', at: '2026-09-25T03:00:00.000Z',
   reason: 'CONFLICT', detail: 'เลขใบเสร็จ A-000001 ถูกใช้กับบิลอื่นของเครื่องนี้แล้ว', remedies: ['RETRY', 'RENUMBER'], remap: null, remapHint: null, children: [],
+  pushKind: 'order', shiftId: null, prefix: null, waiting: null, hint: null, central: null, centralOrderNo: null, blocksLaneRows: 0,
   ...over,
 })
 
@@ -174,7 +204,7 @@ describe('SyncProblemsScreen (spec §6.4 — owner only, ruling R11/R8/N5)', () 
   it('CLOCK_AHEAD: shows "รอเวลา" and the stronger exclude warning, with EXCLUDE as the only remedy', async () => {
     const api = fakeProblemsApi([ROW({ reason: 'CLOCK_AHEAD', detail: 'เวลาบิลล้ำเวลาระบบกลาง', remedies: ['EXCLUDE'] })])
     renderProblems(api, 'owner')
-    const row = await screen.findByTestId('problem-A-000001')
+    const row = await screen.findByTestId('problem-x1')
     expect(within(row).getByText(TH.syncProblemClockAheadTag)).toBeInTheDocument()
     expect(within(row).queryByTestId('remedy-retry')).toBeNull()
     fireEvent.click(within(row).getByTestId('remedy-exclude'))
@@ -185,12 +215,14 @@ describe('SyncProblemsScreen (spec §6.4 — owner only, ruling R11/R8/N5)', () 
     const child = ROW({ outboxId: 'x2', key: 'order_void:o1', kind: 'order_void', receiptNo: 'A-000001', reason: 'PARENT_REJECTED', detail: '', remedies: [] })
     const api = fakeProblemsApi([ROW({ children: [child] })])
     renderProblems(api, 'owner')
-    // parent and child share the same receipt number — both share the testid; the child (nested inside the parent) is
-    // the one that shows "ยกเลิกบิล" (its own kind), and it never gets its own remedy buttons (remedies: []).
-    const rows = await screen.findAllByTestId('problem-A-000001')
-    expect(rows).toHaveLength(2)
-    expect(within(rows[1]!).getByText(TH.syncProblemKind.order_void)).toBeInTheDocument()
-    expect(within(rows[1]!).queryByTestId('remedy-retry')).toBeNull()
+    // deviation from the pre-Task-16 comment: the row testid is now by `outboxId` (stable and always present, unlike
+    // `receiptNo` — null on a shift-lane row) rather than shared receipt number — the child (nested under the
+    // parent's OUTER wrapper, a sibling of the parent's own testid div — indented, `style` margin-left) is the one
+    // that shows "ยกเลิกบิล" (its own kind) and never gets its own remedy buttons (remedies: []).
+    await screen.findByTestId('problem-x1')
+    const childRow = await screen.findByTestId('problem-x2')
+    expect(within(childRow).getByText(TH.syncProblemKind.order_void)).toBeInTheDocument()
+    expect(within(childRow).queryByTestId('remedy-retry')).toBeNull()
   })
 
   it('"ส่งออก JSON" downloads the row under sync-row-<key>.json', async () => {
@@ -255,5 +287,117 @@ describe('SyncProblemsScreen — "เลือกรหัสแทน" follows 
     renderProblems(api, 'owner')
     expect(await screen.findByTestId('problem-remap-hint')).toHaveTextContent('ให้เพิ่มวิธีชำระเงินสดกลับ')
     expect(screen.queryByTestId('remedy-remap-code')).toBeNull()
+  })
+})
+
+/** `bootstrap` only needs `users` (owners) here — everything this screen reads off it. */
+const apiWith = (rows: SyncProblemDto[]): PosApi =>
+  ({
+    listSyncProblems: vi.fn(async () => rows),
+    loadSellCatalog: vi.fn(async () => testSellCatalog()),
+    closeOffCatalog: vi.fn(async () => ({ offCatalogKey: 'order_off_catalog:o1' })),
+    acknowledgeElsewhere: vi.fn(async () => ({ orderNo: 'L260925-014', matchesLocal: false })),
+    reconfirmOwner: vi.fn(async () => undefined),
+    excludeFromSync: vi.fn(async () => undefined),
+    exportSyncRow: vi.fn(async () => '{}'),
+    bootstrap: vi.fn(async () => ({ users: OWNERS })),
+  }) as unknown as PosApi
+const OWNER_U1: UserDto = { id: 'u1', displayName: 'TungAo', role: 'owner' }
+const MANAGER_M1: UserDto = { id: 'm1', displayName: 'ผู้จัดการ', role: 'manager' }
+
+describe('SyncProblemsScreen — block 3 (spec 04 §6.4)', () => {
+  it('shows exactly the buttons the row carries', async () => {
+    renderProblemsAs(apiWith([problem({ reason: 'CONFLICT', prefix: 'exists:', remedies: ['ACKNOWLEDGE_ELSEWHERE', 'EXCLUDE'] })]), OWNER_U1)
+    const row = await screen.findByTestId('problem-ob1')
+    expect(within(row).getByTestId('remedy-acknowledge')).toHaveTextContent(TH.remedyAcknowledge)
+    expect(within(row).getByTestId('remedy-exclude')).toHaveTextContent(TH.remedyExcludeLocal)
+    expect(within(row).queryByTestId('remedy-close-off-catalog')).toBeNull()
+    expect(within(row).queryByTestId('remedy-retry')).toBeNull()
+  })
+  it('"ปิดเป็นบิลนอกแคตตาล็อก" warns, needs a reason and the owner PIN, then calls closeOffCatalog', async () => {
+    const api = apiWith([problem()])
+    const { queryClient } = renderProblemsAs(api, OWNER_U1)
+    await user.click(await screen.findByTestId('remedy-close-off-catalog'))
+    const dialog = await screen.findByTestId('off-catalog-dialog')
+    expect(dialog).toHaveTextContent(TH.offCatalogWarning)
+    expect(within(dialog).getByTestId('off-catalog-confirm')).toBeDisabled()
+    await user.type(within(dialog).getByTestId('off-catalog-reason'), 'เมนูถูกลบในระบบกลาง')
+    await user.click(within(dialog).getByTestId('count-approver-TungAo'))
+    for (const d of '1111') await user.click(within(dialog).getByTestId(`pin-${d}`))
+    await user.click(within(dialog).getByTestId('off-catalog-confirm'))
+    await waitFor(() => expect(api.closeOffCatalog).toHaveBeenCalledWith({ approverUserId: 'u1', approverPin: '1111', reason: 'เมนูถูกลบในระบบกลาง', outboxId: 'ob1' }))
+    // fix round 1 item 4 (security): the PIN just typed must not sit in the mutation's own state afterwards.
+    await waitFor(() => expect(queryClient.getMutationCache().getAll().every((m) => m.state.status === 'idle')).toBe(true))
+  })
+
+  // fix round 2 item A (High): reset() must never hide the error — a wrong PIN has to actually show, and the
+  // mutation cache still ends up holding no PIN once it does.
+  it('a wrong PIN shows an error in the remedy dialog (reset() never hides it), and the cache holds no PIN after', async () => {
+    const api = apiWith([problem()])
+    api.closeOffCatalog = vi.fn(async () => { throw new Error('PIN_WRONG: nope') })
+    const { queryClient } = renderProblemsAs(api, OWNER_U1)
+    await user.click(await screen.findByTestId('remedy-close-off-catalog'))
+    const dialog = await screen.findByTestId('off-catalog-dialog')
+    await user.type(within(dialog).getByTestId('off-catalog-reason'), 'เมนูถูกลบในระบบกลาง')
+    await user.click(within(dialog).getByTestId('count-approver-TungAo'))
+    for (const d of '9999') await user.click(within(dialog).getByTestId(`pin-${d}`))
+    await user.click(within(dialog).getByTestId('off-catalog-confirm'))
+    expect(await within(dialog).findByText(TH.errPinWrong)).toBeVisible()
+    await waitFor(() =>
+      expect(queryClient.getMutationCache().getAll().some((m) => (m.state.variables as { approverPin?: string } | undefined)?.approverPin === '9999')).toBe(false),
+    )
+  })
+
+  // fix round 3 item 1 (M): the OwnerApprovalDialog-based remedies (text-input PIN) clear the field only when
+  // `error` CHANGES — the exact same Thai string twice in a row (a second wrong PIN) is no change at all unless
+  // the saved error is cleared to `null` before every submit. `RETRY` exercises that dialog (CloseOffCatalogDialog
+  // above uses `PinPad`, which already clears on every submit regardless of outcome — a different component, not
+  // the one this item fixes).
+  it('a wrong PIN in a text-input remedy dialog (RETRY) clears the field twice in a row', async () => {
+    const api = apiWith([problem({ remedies: ['RETRY'] })])
+    api.retrySyncRow = vi.fn(async () => { throw new Error('PIN_WRONG: nope') })
+    const { queryClient } = renderProblemsAs(api, OWNER_U1)
+    await user.click(await screen.findByTestId('remedy-retry'))
+    await screen.findByRole('dialog')
+    await user.type(screen.getByTestId('approval-reason'), 'x')
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await user.type(screen.getByTestId('approval-pin'), '9999')
+      await user.click(screen.getByTestId('approval-ok'))
+      expect(await screen.findByText(TH.errPinWrong)).toBeVisible()
+      expect(screen.getByTestId('approval-pin')).toHaveValue('')
+      await waitFor(() =>
+        expect(queryClient.getMutationCache().getAll().some((m) => (m.state.variables as { approverPin?: string } | undefined)?.approverPin === '9999')).toBe(false),
+      )
+    }
+  })
+  // deviation from task-16-brief.md: spec 04 §12 Q44 makes the WHOLE "ส่งไม่ผ่าน" page owner-only (already covered
+  // by "a manager is sent away from /sync-problems too" above) — a manager never reaches a row to check the button
+  // against, so this checks the same role gate `canCloseOffCatalog` uses instead (defense in depth, D97): even a
+  // row that carries CLOSE_OFF_CATALOG never shows the button to a role `can()` refuses it to.
+  it('CLOSE_OFF_CATALOG is hidden from any role can() refuses (D97 defense in depth)', async () => {
+    renderProblemsAs(apiWith([problem()]), OWNER_U1)
+    const row = await screen.findByTestId('problem-ob1')
+    expect(within(row).getByTestId('remedy-close-off-catalog')).toBeVisible() // owner: shown (can('owner','close_off_catalog'))
+    expect(can('manager', 'close_off_catalog')).toBe(false) // manager never reaches this row (owner-only page) — the same check would hide it too
+  })
+  it('an exists: row shows dayo\'s order number and "ไม่ตรง" when the totals differ (m2)', async () => {
+    renderProblemsAs(apiWith([problem({ reason: 'CONFLICT', prefix: 'exists:', remedies: ['ACKNOWLEDGE_ELSEWHERE', 'EXCLUDE'], central: { orderNo: 'L260925-014', reportedTotalSatang: 4_000, paymentIsCash: false, matchesLocal: false } })]), OWNER_U1)
+    const row = await screen.findByTestId('problem-ob1')
+    expect(row).toHaveTextContent('L260925-014')
+    expect(within(row).getByTestId('problem-central-mismatch')).toBeVisible()
+  })
+  it('a rejected void tells the owner which bill to cancel on the web', async () => {
+    renderProblemsAs(apiWith([problem({ kind: 'order_void', key: 'order_void:o1', reason: 'FORBIDDEN', prefix: 'rule:', remedies: ['EXCLUDE'], hint: 'void_rejected', centralOrderNo: 'L260925-014' })]), OWNER_U1)
+    expect(await screen.findByText(TH.voidRejectedHint('L260925-014'))).toBeVisible()
+  })
+  it('a scope wait of 7 days shows as a waiting card with "ปิดไว้ในเครื่อง" only', async () => {
+    renderProblemsAs(apiWith([problem({ kind: 'shift_open', key: 'shift_open:s1', orderId: null, receiptNo: null, reason: 'FORBIDDEN', prefix: 'scope:', remedies: ['EXCLUDE'], waiting: 'scope' })]), OWNER_U1)
+    const row = await screen.findByTestId('problem-ob1')
+    expect(within(row).getByTestId('problem-waiting-scope')).toBeVisible()
+    expect(within(row).getAllByRole('button').map((b) => b.getAttribute('data-testid'))).toEqual(['remedy-exclude', 'problem-export'])
+  })
+  it('a shift conflict (CONFLICT counted: or INVALID data_conflict:) shows the change-key card (R12 · R5-2)', async () => {
+    renderProblemsAs(apiWith([problem({ kind: 'shift_close', key: 'shift_close:s1', orderId: null, reason: 'INVALID', prefix: 'data_conflict:', remedies: ['EXCLUDE'], hint: 'shift_conflict' })]), OWNER_U1)
+    expect(await screen.findByTestId('problem-hint-shift-conflict')).toHaveTextContent(TH.shiftConflictBanner)
   })
 })

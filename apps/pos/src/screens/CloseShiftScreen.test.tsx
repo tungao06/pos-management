@@ -138,6 +138,27 @@ describe('CloseShiftScreen (D52 Q3b-3 · D101 · D102)', () => {
     expect(screen.queryByTestId('count-expected')).toBeNull() // still blind — the review never opened
   })
 
+  // Task 14 · carried item 9b (Task 16): CLOCK_AHEAD offers "ข้ามการตรวจเวลาที่ล้ำ" — the risk shown before the
+  // PIN, the skipped counts listed after.
+  it('CLOCK_AHEAD offers skipCountFloor: shows the risk before confirming, lists the skipped counts after', async () => {
+    const api = fakeApi({
+      finishCount: vi.fn(async () => {
+        throw new PosError('BAD_INPUT', 'CLOCK_AHEAD: นาฬิกาเครื่องล้ำเวลาจริง')
+      }),
+    })
+    render(<CloseShiftScreen />, { api, session })
+    await user.click(screen.getByTestId('count-finish'))
+    await user.click(await screen.findByTestId('skip-count-floor-open'))
+    expect(screen.getByText(TH.skipCountFloorWarning)).toBeVisible()
+    await user.click(screen.getByTestId('approval-owner-DCm'))
+    await user.type(screen.getByTestId('approval-pin'), '2222')
+    await user.type(screen.getByTestId('approval-reason'), 'นาฬิกาผิด')
+    await user.click(screen.getByTestId('approval-ok'))
+    expect(await screen.findByTestId('skip-count-floor-done')).toHaveTextContent(TH.skipCountFloorDone(1))
+    expect(api.skipCountFloor).toHaveBeenCalledWith({ approverUserId: 'u2', approverPin: '2222', reason: 'นาฬิกาผิด' })
+    expect(screen.queryByTestId('skip-count-floor-open')).toBeNull() // the refusal is cleared
+  })
+
   it('fix round 1 item 5 (security): SHIFT_CHANGED then confirming with no retype saves what is shown (0), never the stale count', async () => {
     let calls = 0
     const confirmCount = vi.fn(async () => {
@@ -212,5 +233,81 @@ describe('CloseShiftScreen (D52 Q3b-3 · D101 · D102)', () => {
     await countBaht(615)
     await user.click(screen.getByTestId('count-finish'))
     expect(await screen.findByTestId('count-z-blocked-go')).toBeVisible()
+  })
+
+  // Task 14 · carried item 8 (Task 16): receipts of this shift dayo will never receive
+  it('shows "N บิลในใบปิดกะนี้จะไม่ถึงระบบกลาง" with the VOID_REFUND of those bills', async () => {
+    const api = fakeApi({ countSummary: vi.fn(async () => summary({ notInDayo: { bills: 2, voidRefundSatang: 3_000 } })) })
+    render(<CloseShiftScreen />, { api, session })
+    await countBaht(615)
+    await user.click(screen.getByTestId('count-finish'))
+    expect(await screen.findByTestId('count-not-in-dayo')).toHaveTextContent(TH.countNotInDayo(2, '฿30.00'))
+  })
+
+  // fix round 2 · 1d gap: confirm.onError with an allowlisted code (online, central) shows keepShiftLocal prominently.
+  it('confirmCount refused Z_TOO_LARGE (online, central) shows keepShiftLocal prominently', async () => {
+    const api = fakeApi({ confirmCount: vi.fn(async () => { throw new Error('Z_TOO_LARGE: too many rows') }) })
+    render(<CloseShiftScreen />, { api, session })
+    await countBaht(615)
+    await user.click(screen.getByTestId('count-finish'))
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('DCm', '2222')
+    await user.click(screen.getByTestId('count-confirm'))
+    expect(await screen.findByTestId('keep-shift-local-open')).toBeVisible()
+  })
+
+  // fix round 2 item C: an ALLOWLIST, never "any BAD_INPUT" — an ordinary input mistake never shows keepShiftLocal.
+  it('confirmCount refused an ordinary BAD_INPUT (not allowlisted) does NOT show keepShiftLocal', async () => {
+    const api = fakeApi({ confirmCount: vi.fn(async () => { throw new Error('BAD_INPUT: unknown or inactive user nobody') }) })
+    render(<CloseShiftScreen />, { api, session })
+    await countBaht(615)
+    await user.click(screen.getByTestId('count-finish'))
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('DCm', '2222')
+    await user.click(screen.getByTestId('count-confirm'))
+    await screen.findByText(TH.errBadInput, { exact: false })
+    expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+  })
+
+  // fix round 2 item D: an already local_only shift has nothing left for keepShiftLocal to do.
+  it('confirmCount refused an allowlisted code on a local_only shift shows no escape', async () => {
+    const api = fakeApi({
+      confirmCount: vi.fn(async () => { throw new Error('Z_TOO_LARGE: too many rows') }),
+      countSummary: vi.fn(async () => summary({ syncMode: 'local_only', includesBotCash: false, bot: null, cash: { ...summary().cash, botCashSatang: 0 } })),
+    })
+    render(<CloseShiftScreen />, { api, session })
+    await countBaht(545)
+    await user.click(screen.getByTestId('count-finish'))
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('DCm', '2222')
+    await user.type(screen.getByTestId('count-reason'), 'x')
+    await user.click(screen.getByTestId('count-confirm'))
+    await screen.findByRole('alert')
+    expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+  })
+
+  // fix round 2 item A (High) · fix round 3 item 1: a wrong PIN in skipCountFloor must show, not disappear
+  // because reset() ran — and again after a SECOND wrong PIN (the exact same Thai string twice), clearing the
+  // field both times, with no PIN left in the mutation cache either time.
+  it('a wrong PIN in skipCountFloor shows an error twice in a row, clearing the PIN field each time', async () => {
+    const api = fakeApi({
+      skipCountFloor: vi.fn(async () => { throw new Error('PIN_WRONG: nope') }),
+      finishCount: vi.fn(async () => { throw new PosError('BAD_INPUT', 'CLOCK_AHEAD: นาฬิกาเครื่องล้ำเวลาจริง') }),
+    })
+    const { queryClient } = render(<CloseShiftScreen />, { api, session })
+    await user.click(screen.getByTestId('count-finish'))
+    await user.click(await screen.findByTestId('skip-count-floor-open'))
+    await user.click(screen.getByTestId('approval-owner-DCm'))
+    await user.type(screen.getByTestId('approval-reason'), 'x')
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await user.type(screen.getByTestId('approval-pin'), '9999')
+      await user.click(screen.getByTestId('approval-ok'))
+      expect(await screen.findByText(TH.errPinWrong)).toBeVisible()
+      expect(screen.getByTestId('approval-pin')).toHaveValue('')
+      // no mutation in the cache (this one, or any unrelated one like `finishCount`) ever keeps this PIN.
+      await waitFor(() =>
+        expect(queryClient.getMutationCache().getAll().some((m) => (m.state.variables as { approverPin?: string } | undefined)?.approverPin === '9999')).toBe(false),
+      )
+    }
   })
 })
