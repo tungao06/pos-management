@@ -35,6 +35,7 @@ export async function mockControl(mock: MockDayo, path: string, body: unknown): 
       const b = body as { promotions: CatalogPromotion[]; groups?: PromotionGroup[] }
       return { status: 200, body: { catalog_version: mock.setPromotions(b.promotions, b.groups) } }
     }
+    case '/__mock/exhaust': mock.exhaust((body as { id: string }).id, (body as { scope: 'total' | 'day' }).scope); return ok // plan 10: a promotion over its usage limit
     case '/__mock/promo-rules': { // plan 10: {versions, manualFields} — the promotion-rule release of dayo
       return { status: 200, body: { catalog_version: mock.setPromoRules(body as PromoRulesOption) } }
     }

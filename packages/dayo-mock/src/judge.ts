@@ -219,7 +219,7 @@ function judgeOrder(s: MockState, key: string, d: J, now: number): ReceivedRowRe
   if (o.manual_promotion_ids.length > 0 && o.manual_promotion_reason === null && manualReasonRequiredAt(s, o, soldAt)) {
     reject('INVALID', 'reason_required: โปรที่เลือกเองทำให้บิลเหลือ ฿0 ต้องใส่เหตุผลค่ะ')
   }
-  const computed = computedTotalAt(s, o, soldAt)
+  const { computed, warnings } = computedTotalAt(s, o, soldAt)
   const stored: StoredOrder = {
     orderNo: issueOrderNo(s, o.sale_date), posOrderId: o.pos_order_id, receiptNo: o.receipt_no,
     saleDate: o.sale_date, soldAt: o.sold_at, total: o.totals.total, status: 'ok', version: 1, staffId: o.staff_id, data: o, offCatalog: false,
@@ -227,7 +227,7 @@ function judgeOrder(s: MockState, key: string, d: J, now: number): ReceivedRowRe
   }
   s.orders.set(stored.posOrderId, stored)
   s.receipts.set(stored.receiptNo, stored.posOrderId)
-  return { key, status: 'accepted', data: orderData(s, stored, []) }
+  return { key, status: 'accepted', data: orderData(s, stored, warnings) }
 }
 
 function normalizeOrder(d: J): MockOrderData {

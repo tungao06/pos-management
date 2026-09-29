@@ -257,24 +257,97 @@ describe('E2 reason_required: (ADR-0070 rule 4 · 0069:1096-1098 — judged on d
     row.data['lines'] = [{ ...(row.data['lines'] as P[])[0], free: true }]
     expect((await push(rulesMock(), [row]))[0]).toMatchObject({ status: 'accepted' })
   })
-  it('the manual promotion closed before sold_at: dayo prices ฿85, no reason needed, amount_mismatch (hand: Matcha ฿85, no promotion active 10:25)', async () => {
+  it('the manual promotion closed before sold_at: dayo prices ฿85, no reason needed, amount_mismatch, "ปิดอยู่" (hand: Matcha ฿85, no promotion active 10:25)', async () => {
+    // dayo still loads a closed promotion the staff picked, off, so its warning finds it (0074:1114-1128)
     const m = rulesMock()
     m.closePromotion(P4, '2026-09-25T03:00:00.000Z')
     const row = matchaRow()
     delete row.data['manual_promotion_reason']
-    expect((await push(m, [row]))[0]).toMatchObject({ status: 'accepted', data: { computed_total: 85, amount_mismatch: true } })
+    expect((await push(m, [row]))[0]).toMatchObject({ status: 'accepted', data: { computed_total: 85, amount_mismatch: true, warnings: ['ไม่ใช้โปร ชงผิด ฟรีแก้วใหม่ (เลือกเอง): ปิดอยู่'] } })
   })
   it('the re-price sends the manual promotions too: P5 closed before sold_at → dayo ฿35 (hand: ฿35 − nothing)', async () => {
     // computed = total + quote(active at sold_at) − quote(+ closed) = 30 + 35 − 30; without the manual ids in the draft
     // the tablet-side quote would be 35 and computed 30 (no mismatch) — wrong
     const m = rulesMock()
     m.closePromotion(P5, '2026-09-25T03:00:00.000Z')
-    expect((await push(m, [thaiRow()]))[0]).toMatchObject({ status: 'accepted', data: { computed_total: 35, amount_mismatch: true } })
+    expect((await push(m, [thaiRow()]))[0]).toMatchObject({ status: 'accepted', data: { computed_total: 35, amount_mismatch: true, warnings: ['ไม่ใช้โปร ลดชาไทย 5 บาท (เลือกเอง): ปิดอยู่'] } })
   })
   it('a duplicate of an accepted bill is still a duplicate (the key check comes first)', async () => {
     const m = rulesMock()
     const row = matchaRow()
     expect((await push(m, [row]))[0]!.status).toBe('accepted')
     expect((await push(m, [row]))[0]!.status).toBe('duplicate')
+  })
+})
+
+// ── usage limits (ADR-0072 rule 2 · handoff §10 · 0074): dayo counts, the tablet never does. A bill over the limit is still
+// accepted; dayo prices it without that promotion (→ amount_mismatch when it differs by > ฿1) and, for a code/manual
+// promotion only, its engine adds "ไม่ใช้โปร <name>: ครบจำนวนครั้งแล้ว" / "…ครบจำนวนครั้งต่อวันแล้ว" (0074:500-517 ·
+// dayo_promo_exhausted_reason 0074:150-158) to the row's warnings (dayo_create_order → dayo_pos_order_data). Hand-priced.
+describe('E2 over a usage limit (mock.exhaust)', () => {
+  const at = (row: Row, n: number): Row => {
+    const id = `5d5d5d5d-0000-4000-8000-${String(900 + n).padStart(12, '0')}`
+    return { ...row, key: `order:${id}`, data: { ...row.data, pos_order_id: id, receipt_no: `A-000${900 + n}` } }
+  }
+  /** 3 Thai Tea 16 oz ฿35 = ฿105; P1 (auto, buy 2 get 1) makes the cheapest free → ฿70. P3 is off on Friday 10:20. */
+  const threeThai = (): Row => {
+    const row = thaiRow()
+    row.data['lines'] = [{ ...(row.data['lines'] as P[])[0], qty: 3 }]
+    row.data['totals'] = { items_subtotal: 105, items_discount: 35, bill_discount: 0, total: 70 }
+    delete row.data['manual_promotion_ids']
+    return row
+  }
+  it('an AUTO promotion over its limit: accepted, dayo ฿105 (no promotion) → amount_mismatch, no warning (auto promotions never warn)', async () => {
+    const m = rulesMock()
+    m.exhaust(P1, 'total')
+    expect((await push(m, [threeThai()]))[0]).toEqual({
+      key: threeThai().key, status: 'accepted',
+      data: { order_no: 'L260925-001', version: 1, computed_total: 105, amount_mismatch: true, duplicate_of: [], warnings: [] },
+    })
+  })
+  it.each([
+    ['total', 'ครบจำนวนครั้งแล้ว'],
+    ['day', 'ครบจำนวนครั้งต่อวันแล้ว'],
+  ] as const)('a MANUAL promotion over its %s limit: accepted, dayo ฿35, amount_mismatch + "ไม่ใช้โปร …: %s"', async (scope, why) => {
+    const m = rulesMock()
+    m.exhaust(P5, scope)
+    expect((await push(m, [thaiRow()]))[0]).toMatchObject({
+      status: 'accepted', data: { computed_total: 35, amount_mismatch: true, warnings: [`ไม่ใช้โปร ลดชาไทย 5 บาท (เลือกเอง): ${why}`] },
+    })
+  })
+  it('both scopes on one promotion: total wins (0074:255 · money.ts exhaustedReason)', async () => {
+    const m = rulesMock()
+    m.exhaust(P5, 'day')
+    m.exhaust(P5, 'total')
+    expect((await push(m, [thaiRow()]))[0]!.data!['warnings']).toEqual(['ไม่ใช้โปร ลดชาไทย 5 บาท (เลือกเอง): ครบจำนวนครั้งแล้ว'])
+  })
+  it('a ฿0 bill whose manual promotion is used up needs no reason (dayo prices ฿85) — accepted, not reason_required', async () => {
+    const m = rulesMock()
+    m.exhaust(P4, 'total')
+    const row = matchaRow()
+    delete row.data['manual_promotion_reason']
+    expect((await push(m, [row]))[0]).toMatchObject({
+      status: 'accepted', data: { computed_total: 85, amount_mismatch: true, warnings: ['ไม่ใช้โปร ชงผิด ฟรีแก้วใหม่ (เลือกเอง): ครบจำนวนครั้งแล้ว'] },
+    })
+  })
+  it('bills already in are never re-priced: a resend is a duplicate with the numbers it got (dayo counts in arrival order)', async () => {
+    const m = rulesMock()
+    const first = (await push(m, [thaiRow()]))[0]!
+    expect(first).toMatchObject({ status: 'accepted', data: { computed_total: 30, amount_mismatch: false, warnings: [] } })
+    m.exhaust(P5, 'total')
+    expect((await push(m, [thaiRow()]))[0]).toEqual({ ...first, status: 'duplicate' })
+    expect((await push(m, [at(thaiRow(), 1)]))[0]).toMatchObject({ status: 'accepted', data: { computed_total: 35, amount_mismatch: true } })
+  })
+  it('a used-up promotion the bill does not touch changes nothing', async () => {
+    const m = rulesMock()
+    m.exhaust(P2, 'day')
+    expect((await push(m, [thaiRow()]))[0]).toMatchObject({ status: 'accepted', data: { computed_total: 30, amount_mismatch: false, warnings: [] } })
+  })
+  it('/__mock/exhaust does the same for e2e; reset() forgets it', async () => {
+    const m = rulesMock()
+    expect(await mockControl(m, '/__mock/exhaust', { id: P5, scope: 'total' })).toEqual({ status: 200, body: { ok: true } })
+    expect((await push(m, [thaiRow()]))[0]).toMatchObject({ data: { computed_total: 35, amount_mismatch: true } })
+    m.reset()
+    expect((await push(m, [thaiRow()]))[0]).toMatchObject({ data: { computed_total: 30, amount_mismatch: false, warnings: [] } })
   })
 })

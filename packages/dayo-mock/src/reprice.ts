@@ -4,26 +4,38 @@
 // general (it trusts parity: computed_total = total); it only adds what the closed promotions were worth, priced with dayo's
 // own pricing code: computed = total + quote(promotions active at sold_at) − quote(the same + those closed before sold_at).
 // Plan 10 Task 5: the draft carries the bill's manual promotions and reason (0069 dayo_pos_order → manual_promotions), and
-// the same quote decides dayo's reason guard (0069:1096-1098).
+// the same quote decides dayo's reason guard (0069:1096-1098). dayo's quote also carries the promotions its count says are
+// used up (0074 p_ctx.exhausted_promotions — mock.exhaust); the tablet's never does (it cannot count — ADR-0072 rule 2).
 import { bkkTime, computeOrder, round2, type MenuOptionGradeEntry, type MenuOptionMilkEntry, type OrderCatalog, type OrderDraft, type QuoteResult, type Sweetness } from '@dayo/dayo-pricing'
 import type { CatalogPromotion, MockOrderData, MockState } from './state.js'
 
-/** The promotions dayo counts as active at sold_at, and those the tablet may still have priced with (closed before it). */
-function promotionsAt(s: MockState, soldAt: number): { activeAt: CatalogPromotion[]; closedBefore: CatalogPromotion[] } {
+/**
+ * The promotions dayo counts as active at sold_at, and those the tablet may still have priced with (closed before it).
+ * `offForDayo` = the closed ones the staff picked by hand: dayo's quote still loads them, off, so its warning can name them
+ * ("ไม่ใช้โปร <name>: ปิดอยู่" — 0074:1114-1128 · vendor promoIneligibleReason); a closed one nobody picked is not loaded.
+ */
+function promotionsAt(s: MockState, o: MockOrderData, soldAt: number): { activeAt: CatalogPromotion[]; closedBefore: CatalogPromotion[]; offForDayo: CatalogPromotion[] } {
   const closed = [...s.closedPromotions.values()]
   const closedBefore = closed.filter((c) => c.closedAt <= soldAt).map((c) => c.promotion) // changed_at ≤ ts = the closed state counts
   const activeAt = [...s.catalog.catalog.promotions, ...closed.filter((c) => c.closedAt > soldAt).map((c) => c.promotion)]
-  return { activeAt, closedBefore }
+  return { activeAt, closedBefore, offForDayo: closedBefore.filter((p) => o.manual_promotion_ids.includes(p.id)) }
 }
 
 // A test's `expected` for a closed-promotion bill must come from a fixture or hand calculation, never from this mock's own output — the mock only copies the tablet's pricing deltas, so its answer can never check itself.
-export function computedTotalAt(s: MockState, o: MockOrderData, soldAt: number): number {
-  const { activeAt, closedBefore } = promotionsAt(s, soldAt)
-  if (closedBefore.length === 0) return o.totals.total
-  const dayo = quote(s, o, activeAt)
-  const tablet = quote(s, o, [...activeAt, ...closedBefore])
-  if (!priced(dayo, o) || !priced(tablet, o)) return o.totals.total
-  return Math.max(0, round2(o.totals.total + dayo.totalAmount - tablet.totalAmount))
+/**
+ * computed_total and the row's warnings (dayo_create_order returns its quote's warnings → dayo_pos_order_data). Only a bill
+ * dayo prices differently from the tablet is re-quoted — a promotion closed before sold_at or one used up: then the
+ * warnings are dayo's quote's (e.g. "ไม่ใช้โปร <name>: ครบจำนวนครั้งแล้ว" for a used-up code/manual promotion — 0074:500-517).
+ * Otherwise the mock trusts parity: computed = total, no warnings.
+ */
+export function computedTotalAt(s: MockState, o: MockOrderData, soldAt: number): { computed: number; warnings: string[] } {
+  const { activeAt, closedBefore, offForDayo } = promotionsAt(s, o, soldAt)
+  const trusted = { computed: o.totals.total, warnings: [] }
+  if (closedBefore.length === 0 && s.exhausted.length === 0) return trusted
+  const dayo = quote(s, o, activeAt, offForDayo, s.exhausted)
+  const tablet = quote(s, o, [...activeAt, ...closedBefore], [], [])
+  if (!priced(dayo, o) || !priced(tablet, o)) return trusted
+  return { computed: Math.max(0, round2(o.totals.total + dayo.totalAmount - tablet.totalAmount)), warnings: [...dayo.warnings] }
 }
 
 /**
@@ -39,11 +51,13 @@ const priced = (q: QuoteResult, o: MockOrderData): boolean =>
  * SQL guard runs before its `not ok` check.
  */
 export function manualReasonRequiredAt(s: MockState, o: MockOrderData, soldAt: number): boolean {
-  return quote(s, o, promotionsAt(s, soldAt).activeAt).manualPromotionReasonRequired
+  const { activeAt, offForDayo } = promotionsAt(s, o, soldAt)
+  return quote(s, o, activeAt, offForDayo, s.exhausted).manualPromotionReasonRequired
 }
 
-function quote(s: MockState, o: MockOrderData, promotions: CatalogPromotion[]): QuoteResult {
-  const active = promotions.map((p) => ({ ...p, isActive: true }))
+/** `on` = active at sold_at · `off` = loaded but closed (isActive false, as dayo_promo_active_at says) · dayo's priority order is the engine's. */
+function quote(s: MockState, o: MockOrderData, on: CatalogPromotion[], off: CatalogPromotion[], exhausted: MockState['exhausted']): QuoteResult {
+  const active = [...on.map((p) => ({ ...p, isActive: true })), ...off.map((p) => ({ ...p, isActive: false }))]
   const c = s.catalog.catalog
   const ingredients = Object.fromEntries(Object.entries(c.ingredients).map(([id, ing]) => [id, { ...ing, costPerUseUnit: 0 }])) // cost never reaches the mock
   // E1 = OrderCatalog without cost; milk/grade ingredientId and multiplier may be null like dayo's menu_options rows — passed
@@ -60,6 +74,7 @@ function quote(s: MockState, o: MockOrderData, promotions: CatalogPromotion[]): 
     promoCode: o.promo_code,
     skipPromotionIds: o.no_promotions ? active.map((p) => p.id) : o.skip_promotion_ids, // no_promotions = skip every promotion (dayo_quote_priced)
     manualPromotionIds: o.manual_promotion_ids, manualPromotionReason: o.manual_promotion_reason,
+    exhaustedPromotions: exhausted.map((e) => ({ ...e })),
   }
   return computeOrder(draft, catalog)
 }

@@ -68,7 +68,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       scopes: [...(opts.scopes ?? (phase1 ? BLOCK3_SCOPES : ALL_SCOPES))], catalog, pricing: opts.pricing ?? null, known, closedPromotions: new Map(),
       orders: new Map(), receipts: new Map(), keys: new Map(), seq: new Map(), overrides: [], seedOrders: [...(opts.seedOrders ?? [])], log: [],
       block3: false, block3Phase2: false, shifts: new Map(), movements: new Map(), counts: new Map(), zReports: new Map(), preloadedZ: null, conflicts: [], block3LiveFrom: null,
-      offCatalogCap: DEFAULT_OFF_CATALOG_CAP, rejections: new Map(), promoRules,
+      offCatalogCap: DEFAULT_OFF_CATALOG_CAP, rejections: new Map(), promoRules, exhausted: [],
     }
     if (phase1) setPhases(s, phase1, phase2, false) // no bump · explicit opts.scopes win (the default block 3 key has shift:write)
     return s
@@ -244,6 +244,9 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       s.catalog.catalog.promotions = promotions.map(promotionRow)
       if (groups !== undefined) s.catalog.catalog.promotionGroups = structuredClone([...groups])
       return bump()
+    },
+    exhaust: (promoId, scope) => {
+      if (!s.exhausted.some((e) => e.id === promoId && e.scope === scope)) s.exhausted.push({ id: promoId, scope })
     },
     setPromoRules: (p) => {
       s.promoRules = structuredClone(p)
