@@ -10,10 +10,13 @@ const session = { userId: 'u1', role: 'owner' as const }
 
 describe('IssueZScreen (D101 step 3)', () => {
   it('fetches E4 on open, shows the real variance, the count is read-only, a reason at ≥ ฿20, then issueZ', async () => {
-    const api = fakeApi() // expected ฿615.00 with bot cash; the saved count is ฿595 → −฿20.00
+    // the count was saved offline (no bot cash yet); E4 answers → expected ฿615.00 with bot cash; the saved count is ฿595 → −฿20.00
+    const countSummary = vi.fn(async () => summary()).mockResolvedValueOnce(summary({ includesBotCash: false, bot: null }))
+    const api = fakeApi({ countSummary })
     render(<IssueZScreen shiftId="s1" countedSatang={59_500} />, { api, session })
     expect(await screen.findByTestId('count-expected')).toHaveTextContent('615.00')
     expect(api.fetchBotCash).toHaveBeenCalledWith('s1')
+    expect(countSummary).toHaveBeenCalledTimes(2) // read first, E4, then read again with the bot cash in
     expect(screen.queryByTestId('count-input-1')).toBeNull()
     await pickOwnerAndPin('TungAo', '1111')
     expect(screen.getByTestId('count-confirm')).toBeDisabled()
@@ -21,6 +24,27 @@ describe('IssueZScreen (D101 step 3)', () => {
     await user.click(screen.getByTestId('count-confirm'))
     expect(api.issueZ).toHaveBeenCalledWith(expect.objectContaining({ shiftId: 's1', shownFingerprint: 'fp', varianceReason: 'ทอนผิด', approverUserId: 'u1', approverPin: '1111' }))
     expect(await screen.findByTestId('z-issued')).toBeVisible()
+  })
+  // final fix C1: the same rule as CloseShiftScreen — E4 only for a central shift whose stored answer does not cover this
+  // count yet. A local-only shift (after keepShiftLocal) has no bot cash: fetchBotCash would refuse it ("a local-only shift
+  // has no bot cash") and paint a red error box on every local-only Z.
+  it('a local-only shift never calls E4 and shows no error — straight to the count review', async () => {
+    const fetchBotCash = vi.fn(async () => { throw new Error('BAD_INPUT: a local-only shift has no bot cash') })
+    const api = fakeApi({ fetchBotCash, countSummary: vi.fn(async () => summary({ syncMode: 'local_only', includesBotCash: false, bot: null })) })
+    render(<IssueZScreen shiftId="s1" countedSatang={54_500} />, { api, session })
+    expect(await screen.findByTestId('count-expected')).toBeVisible()
+    expect(fetchBotCash).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByTestId('z-retry')).toBeNull()
+    expect(screen.getByTestId('count-confirm')).toBeVisible()
+  })
+  it('a central shift whose stored E4 answer already covers the count reads it once, with no second E4 call', async () => {
+    const countSummary = vi.fn(async () => summary())
+    const api = fakeApi({ countSummary })
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    expect(await screen.findByTestId('count-expected')).toHaveTextContent('615.00')
+    expect(api.fetchBotCash).not.toHaveBeenCalled()
+    expect(countSummary).toHaveBeenCalledTimes(1)
   })
   it('E4 fails: the error text and a retry button — no confirm button', async () => {
     const api = fakeApi({ fetchBotCash: vi.fn(async () => { throw new Error('OFFLINE: network') }), countSummary: vi.fn(async () => summary({ includesBotCash: false, bot: null })) })

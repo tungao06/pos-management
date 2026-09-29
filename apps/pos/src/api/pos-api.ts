@@ -139,17 +139,20 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     quickOpenShift: async (input) => { await pullBeforeShift(); const r = await serial(() => quickOpenShift(db, deps, input)); wake('before_shift'); return r },
     recordCashMovement: (input) => serial(() => recordCashMovement(db, deps, input)),
     shiftReport: () => serial(() => shiftReport(db, deps)),
-    // spec §6.2 "ก่อนปิดกะ": the wake comes only once the input and the PIN passed (fix round 1 item 4). Its reads and
-    // writes queue behind this closeShift in the serial queue, so the send itself happens AFTER the close commits —
-    // no effect in block 2 (the Z does not count unsent bills yet); block 3 must revisit this (fix round 1 item 11).
+    // Block 2's one-step close — no screen calls it since block 3 (the count screens use finishCount → confirmCount →
+    // issueZ); kept on the PosApi for a local-only shift and for the API tests of that path (close-shift.test.ts). Its
+    // before_close wake comes once the input and the PIN passed (fix round 1 item 4).
     closeShift: (input) => serial(() => closeShift(db, deps, input, { validated: () => wake('before_close') })),
-    // block 3 count and Z (D101): each write wakes the sender (deps.afterWrite → kick('write'))
-    finishCount: (input) => serial(() => finishCount(db, deps, input)),
+    // block 3 count and Z (D101): each write wakes the sender (deps.afterWrite → kick('write')) · final fix C3 — spec §6.2
+    // "ก่อนปิดกะ": once "นับเสร็จ" froze the shift and once a Z was issued, the sender is also woken with before_close (sent
+    // now — not after the 2 s write debounce — and a 5xx backoff may be cleared, ≤ once per 30 s): the shift's unsent bills
+    // and its Z reach dayo while the owner is still at the counter. After success only — a refusal wakes nothing.
+    finishCount: async (input) => { const r = await serial(() => finishCount(db, deps, input)); wake('before_close'); return r },
     countSummary: (shiftId) => serial(() => countSummary(db, shiftId)),
     // E4: network OUTSIDE the serial queue (its reads and writes are inside), like syncNow / E3
     fetchBotCash: (shiftId) => fetchBotCash({ db, deps, serial }, shiftId, { beforeRequest: e4Call, refreshClock: pullForClock }),
     confirmCount: (input) => serial(() => confirmCount(db, deps, input)),
-    issueZ: (input) => serial(() => issueZ(db, deps, input)),
+    issueZ: async (input) => { const r = await serial(() => issueZ(db, deps, input)); wake('before_close'); return r },
     listZReports: () => serial(() => listZReports(db)),
     getZReport: (shiftId) => serial(() => getZReport(db, shiftId)),
     exportBackup: (actorUserId) => serial(() => exportBackup(db, deps, actorUserId)),

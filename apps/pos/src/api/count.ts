@@ -23,7 +23,8 @@ import {
  * the owner confirms the count (confirmCount, PIN) — with the Z in the same transaction when E4 is in (online), or the
  * count alone (offline: no reason asked yet) → issueZ later, once online (PIN again). Status: open → counting →
  * counted → closed, in this order only (ruling R2 · trigger shift_status_forward_only). closeShift (block 2's one step)
- * stays for local-only shifts and runs the same three steps in ONE transaction.
+ * runs the same three steps in ONE transaction for a local-only shift — no screen calls it any more; it stays on the PosApi
+ * for that path and its API tests (final fix C4).
  */
 
 type ShiftRow = typeof s.shift.$inferSelect
@@ -206,7 +207,9 @@ export async function issueZ(db: RemoteDb, deps: ApiDeps, i: IssueZInput): Promi
 }
 
 /**
- * Block 2's one-step close, kept for LOCAL-ONLY shifts (spec 04 §6.1 · ruling R6): finishCount + confirmCount with the Z,
+ * Block 2's one-step close, kept for LOCAL-ONLY shifts (spec 04 §6.1 · ruling R6) — no screen calls it since block 3 (the
+ * count screens go finishCount → confirmCount → issueZ); it stays on the PosApi for that path and its API tests
+ * (close-shift.test.ts), final fix C4. finishCount + confirmCount with the Z,
  * in ONE transaction — any refusal (SHIFT_CHANGED, VARIANCE_REASON_REQUIRED, Z_CHAIN_BROKEN, R7 …) leaves the shift
  * open exactly as before, so the screen can retry. A central shift needs E4 first: BOT_CASH_REQUIRED (the count screens).
  * `hooks.validated` runs once the input and the owner PIN passed, just before the transaction (task 14 fix round 1 item 4).

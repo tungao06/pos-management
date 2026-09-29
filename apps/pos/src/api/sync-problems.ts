@@ -542,12 +542,12 @@ export async function listSyncProblems(db: RemoteDb, deps: ApiDeps, actorUserId:
       : { ...ex, matchesLocal: ex.reportedTotalSatang === order.totalSatang && ex.paymentIsCash === cashBills.has(order.id) }
     const waiting = waitingOf(r)
     const at = pendingShift.findIndex((x) => x.id === r.id)
+    const kind = r.tableName as PushKind // every listed row is one of PUSH_KINDS (the query above)
     return {
-      // SyncProblemDto.kind is declared as the two bill kinds until Task 16 widens it (see api/types.ts) — the value is the row's kind
-      outboxId: r.id, key: r.idempotencyKey, kind: r.tableName as SyncProblemDto['kind'], pushKind: r.tableName as PushKind, orderId, shiftId,
+      outboxId: r.id, key: r.idempotencyKey, kind, pushKind: kind, orderId, shiftId,
       receiptNo: order?.receiptNo ?? null, at: r.createdAt, reason: e.reason, detail: e.detail, prefix, remedies,
       remap: remedies.includes('REMAP_CODE') ? scope.remap : null, remapHint: scope.remapHint, children: [],
-      waiting, hint: hintFor({ kind: r.tableName as PushKind, dead: r.status === 'dead', reason: e.reason, prefix, shiftOpenedBeforeKeyReplace: shiftId !== null && oldKey.has(shiftId) }),
+      waiting, hint: hintFor({ kind, dead: r.status === 'dead', reason: e.reason, prefix, shiftOpenedBeforeKeyReplace: shiftId !== null && oldKey.has(shiftId) }),
       central, centralOrderNo: order?.centralOrderNo ?? null,
       blocksLaneRows: waiting !== null && at >= 0 ? pendingShift.length - at - 1 : 0,
     }

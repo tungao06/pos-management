@@ -99,11 +99,10 @@ test('D102: a shortage of exactly ฿20.00 needs a reason; ฿19.00 short does n
   await page.getByTestId('count-finish').click()
   await expect(page.getByTestId('count-expected')).toHaveText('฿500.00')
   await expect(page.getByTestId('count-reason')).toHaveCount(0)
-  await page.getByTestId('nav-sell').click()
 
-  await page.getByTestId('close-shift-open').click()
+  // recounted on the same review (the shift is frozen now: "กลับ" to selling only bounces back here once the tablet's
+  // state refreshes — and since final fix C3 the before_close wake refreshes it at once, so the spec no longer leaves)
   await fillCount(page, 480) // exactly ฿20.00 short — at the threshold, a reason is required
-  await page.getByTestId('count-finish').click()
   await expect(page.getByTestId('count-expected')).toHaveText('฿500.00')
   await expect(page.getByTestId('count-reason')).toBeVisible()
   await page.getByTestId(`count-approver-${OWNER.name}`).click()

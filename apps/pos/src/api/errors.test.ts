@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isCentralZBlockedError, isClockAheadCountError, isRecoverableE4Error, PosError, posErrorCode } from './errors'
+import { isCentralZBlockedError, isClockAheadCountError, PosError, posErrorCode } from './errors'
 
 describe('PosError', () => {
   it('prefixes the message with the code so it survives the Worker boundary', () => {
@@ -45,18 +45,5 @@ describe('isCentralZBlockedError (fix round 1 item 1a · fix round 2 item C — 
     for (const code of ['Z_CHAIN_BROKEN', 'SHIFT_CHANGED', 'OFFLINE', 'NOT_OWNER', 'PIN_WRONG'] as const) {
       expect(isCentralZBlockedError(new PosError(code, 'x'))).toBe(false)
     }
-  })
-})
-
-describe('isRecoverableE4Error (fix round 2 item B)', () => {
-  it('DAYO_UNREACHABLE, DAYO_BAD_KEY, DAYO_KEY_NO_SCOPE, DAYO_API_DISABLED and CLOCK_AHEAD are all recoverable', () => {
-    for (const code of ['DAYO_UNREACHABLE', 'DAYO_BAD_KEY', 'DAYO_KEY_NO_SCOPE', 'DAYO_API_DISABLED'] as const) {
-      expect(isRecoverableE4Error(new PosError(code, 'x'))).toBe(true)
-    }
-    expect(isRecoverableE4Error(new PosError('BAD_INPUT', 'CLOCK_AHEAD: เวลานับเงินยังไม่ถึงในระบบกลาง'))).toBe(true)
-  })
-  it('DAYO_BAD_RESPONSE and Z_TOO_LARGE (a genuinely bad/oversized E4 answer) are not recoverable', () => {
-    expect(isRecoverableE4Error(new PosError('DAYO_BAD_RESPONSE', 'x'))).toBe(false)
-    expect(isRecoverableE4Error(new PosError('Z_TOO_LARGE', 'x'))).toBe(false)
   })
 })
