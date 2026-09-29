@@ -29,7 +29,7 @@ describe('manual promotions (ADR-0070 · plan 10 §0.2) go to dayo\'s engine onl
     const picked = priceCart(cart([line()], { manualPromotionIds: [PROMO.M_5] }), CAT, FRI_1030)
     expect(picked.totalSatang).toBe(3_000)
     expect(picked.promotionsApplied).toEqual([
-      { promotionId: PROMO.M_5, code: null, name: 'ลดชาไทย 5 บาท (เลือกเอง)', kind: 'item_discount', mode: 'manual', discountSatang: 500 },
+      { promotionId: PROMO.M_5, code: null, name: 'ลดชาไทย 5 บาท (เลือกเอง)', kind: 'item_discount', mode: 'manual', discountSatang: 500, usageLimitTotal: null, usageLimitPerDay: null },
     ])
     expect(picked.lines.map((l) => [l.discountPerCupSatang, l.promotionId, l.promoBreakdown])).toEqual([[500, PROMO.M_5, null]])
   })
@@ -115,9 +115,16 @@ describe('pricedFromQuote: the new money of the engine in satang (the one baht�
   it('mode comes from the catalog promotion (promoApplyMode), kind is the engine\'s template name', () => {
     const p = priceCart(cart([line({ qty: 3 })]), CAT, FRI_1030)
     expect(p.promotionsApplied).toEqual([
-      { promotionId: PROMO.B2G1, code: null, name: 'ชาไทย ซื้อ 2 แถม 1', kind: 'buy_n_get_m', mode: 'auto', discountSatang: 3_500 },
+      { promotionId: PROMO.B2G1, code: null, name: 'ชาไทย ซื้อ 2 แถม 1', kind: 'buy_n_get_m', mode: 'auto', discountSatang: 3_500, usageLimitTotal: null, usageLimitPerDay: null },
     ])
     expect(p.lines.every((l) => l.promoBreakdown === null)).toBe(true)
+  })
+  it('carries the usage limits of the catalog promotion, for display only — auto and code ones too (gap G3)', () => {
+    const sunday = '2026-09-27T05:00:00.000Z' // Sunday 12:00 Bangkok: the tiered promotion (limits 500 / 50 a day) runs all day
+    const p = priceCart(cart([line({ qty: 2 })]), CAT, sunday)
+    expect(p.promotionsApplied.map((a) => [a.promotionId, a.mode, a.usageLimitTotal, a.usageLimitPerDay])).toEqual([[PROMO.TIERED, 'auto', 500, 50]])
+    const unlimited = priceCart(cart([line()], { manualPromotionIds: [PROMO.M_5] }), CAT, FRI_1030).promotionsApplied[0]!
+    expect([unlimited.usageLimitTotal, unlimited.usageLimitPerDay]).toEqual([null, null])
   })
   it('converts synthetic engine output exactly and keeps the subtotal − discounts = total check', () => {
     const draft = toOrderDraft(cart([line()]), CAT, FRI_1030)

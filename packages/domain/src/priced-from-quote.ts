@@ -9,11 +9,12 @@ import type { PosOrderCatalog, PricedCart } from './price-cart.js'
  * applied promotion its apply mode.
  */
 export function pricedFromQuote(q: QuoteResult, draft: OrderDraft, soldAtIso: string, catalog: PosOrderCatalog): PricedCart {
-  const modeOf = (promotionId: string): ApplyMode => {
+  const fromCatalog = (promotionId: string): { mode: ApplyMode; usageLimitTotal: number | null; usageLimitPerDay: number | null } => {
     const p = catalog.promotions.find((x) => x.id === promotionId)
     // the engine only applies promotions of the catalog it was given: anything else is a bug, never a guessed mode
     if (p === undefined) throw new Error(`UNKNOWN_APPLIED_PROMOTION: ${promotionId} is not a promotion of the priced catalog`)
-    return promoApplyMode(p)
+    // usage limits: display only (ADR-0072 rule 2 · D126) — they never decide a discount; the tablet does not count uses
+    return { mode: promoApplyMode(p), usageLimitTotal: p.usageLimitTotal ?? null, usageLimitPerDay: p.usageLimitPerDay ?? null }
   }
   // spec §5.1: only these fields are money; costTotal/grossProfit/gpPercent/unitCost are not converted
   const priced: Omit<PricedCart, 'discountSatang'> = {
@@ -32,9 +33,13 @@ export function pricedFromQuote(q: QuoteResult, draft: OrderDraft, soldAtIso: st
       lineTotalSatang: edgeBahtToSatang(l.lineTotal),
       promoBreakdown: l.promoBreakdown == null ? null : l.promoBreakdown.map((b) => ({ promotionId: b.promotionId, satang: edgeBahtToSatang(b.amount) })),
     })),
-    promotionsApplied: q.promotionsApplied.map((p) => ({
-      promotionId: p.promotionId, code: p.code, name: p.name, kind: p.kind, mode: modeOf(p.promotionId), discountSatang: edgeBahtToSatang(p.discountAmount),
-    })),
+    promotionsApplied: q.promotionsApplied.map((p) => {
+      const c = fromCatalog(p.promotionId)
+      return {
+        promotionId: p.promotionId, code: p.code, name: p.name, kind: p.kind, mode: c.mode, discountSatang: edgeBahtToSatang(p.discountAmount),
+        usageLimitTotal: c.usageLimitTotal, usageLimitPerDay: c.usageLimitPerDay,
+      }
+    }),
     itemsSubtotalSatang: edgeBahtToSatang(q.itemsSubtotal),
     itemsDiscountSatang: edgeBahtToSatang(q.itemsDiscount),
     billDiscountSatang: edgeBahtToSatang(q.billDiscountAmount),

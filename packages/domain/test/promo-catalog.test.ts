@@ -28,6 +28,10 @@ describe('TABLET_PROMO_RULE_VERSION (plan 10 §0.2 E1 request · owner Q5 = 2)',
     expect(TABLET_PROMO_RULE_VERSION).toBe(2)
     expect([...CONTRACT_PROMO_RULE_VERSIONS]).toEqual([...PROMO_RULE_VERSIONS])
   })
+  it('equals the highest rule version the contract schema accepts (gap G2): a re-vendor to v3 without the contract fails here', () => {
+    // otherwise the tablet would ask E1 for v3 while PosOrderCatalog refuses every v3 rule — the catalog would go stale
+    expect(TABLET_PROMO_RULE_VERSION).toBe(Math.max(...CONTRACT_PROMO_RULE_VERSIONS))
+  })
   it('is exported from the package index with checkCatalogRules and selectableManualPromotions', () => {
     expect([domain.TABLET_PROMO_RULE_VERSION, typeof domain.checkCatalogRules, typeof domain.selectableManualPromotions, typeof domain.zeroTotalVerdict]).toEqual([2, 'function', 'function', 'function'])
   })

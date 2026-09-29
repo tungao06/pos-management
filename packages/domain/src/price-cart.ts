@@ -42,8 +42,15 @@ export type PricedLine = {
   /** dayo order_items.promo_breakdown in satang — only on cups discounted by more than one promotion, else null. Frozen with the bill. */
   promoBreakdown: { promotionId: string; satang: number }[] | null
 }
-/** kind = the engine's template name (order_promotions.kind) · mode = promoApplyMode of the catalog promotion. */
-export type PricedPromotion = { promotionId: string; code: string | null; name: string; kind: PromoTemplate; mode: ApplyMode; discountSatang: number }
+/**
+ * kind = the engine's template name (order_promotions.kind) · mode = promoApplyMode of the catalog promotion ·
+ * usageLimitTotal/PerDay = the catalog promotion's limits (null = none), for the "จำกัด n ครั้ง" badge only — never a
+ * discount rule (ADR-0072 rule 2 · D126 · gap G3). Optional: a bill frozen before plan 10 has none; priceCart always sets them.
+ */
+export type PricedPromotion = {
+  promotionId: string; code: string | null; name: string; kind: PromoTemplate; mode: ApplyMode; discountSatang: number
+  usageLimitTotal?: number | null; usageLimitPerDay?: number | null
+}
 export type PricedCart = {
   ok: boolean; warnings: string[]; soldAt: string; saleDate: string; saleTime: string; draft: OrderDraft
   lines: PricedLine[]; promotionsApplied: PricedPromotion[]
