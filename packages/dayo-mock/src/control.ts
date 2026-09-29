@@ -37,6 +37,7 @@ export async function mockControl(mock: MockDayo, path: string, body: unknown): 
     }
     case '/__mock/exhaust': { // plan 10: a promotion over its usage limit — {id, scope:'total'} | {id, scope:'day', sale_date}
       const b = body as { id: string; scope: 'total' } | { id: string; scope: 'day'; sale_date: string }
+      if (b.scope === 'day' && typeof b.sale_date !== 'string') return { status: 422, body: { ok: false, error: 'scope day needs sale_date' } }
       if (b.scope === 'day') mock.exhaust(b.id, 'day', b.sale_date)
       else mock.exhaust(b.id, 'total')
       return ok
