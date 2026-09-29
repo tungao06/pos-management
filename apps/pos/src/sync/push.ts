@@ -1,11 +1,17 @@
-import { and, asc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { clipCodePoints, isRowSupported, MAX_PUSH_BODY_BYTES, MAX_PUSH_ROWS, OrderAcceptedData, OrderVoidAcceptedData, PUSH_KINDS, type PushRequest, type ReceivedRowResult, type Supported } from '@dayo/contracts'
+import {
+  BOT_ORDER_NO_RE, CashCountAcceptedData, CashMovementAcceptedData, clipCodePoints, detailPrefix, ExistsConflictData, isRowSupported, laneOf, MAX_DETAIL_CODE_POINTS, MAX_PUSH_BODY_BYTES, MAX_PUSH_ROWS,
+  OffCatalogAcceptedData, OrderAcceptedData, OrderVoidAcceptedData, PUSH_KINDS, PushRow, rowKey, SHIFT_LANE_KINDS, ShiftCloseAcceptedData, ShiftOpenAcceptedData,
+  type PushRequest, type ReceivedRowResult, type Supported,
+} from '@dayo/contracts'
 import { edgeBahtToSatang } from '@dayo/domain'
 import type { ApiDeps } from '../api/deps'
+import { enqueuePush } from '../db/outbox'
 import { apiBlocked, readDayoConfig, readSupported, recordDayoFailure, type SyncContext } from './catalog'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure, type Timed } from './dayo-client'
+import { createLanePicker, type ParentState } from './lanes'
 import { BACKOFF_MS, backoffMs, DAYO_KEYS, decodeLastError, deleteKey, encodeLastError, extendRateLimit, NO_ANSWER_RETRY_MS, OWN_FAILURE_EVERY_MS, RATE_LIMIT_DEFAULT_MS, readKey, recordServerTime, STUCK_AFTER_ATTEMPTS, writeKey, type LastErrorExtra } from './state'
 
 export type PushOutcome = { requests: number; sent: number; rejected: number; deferred: number; held: number; noAnswer: number; stopped: null | 'not_linked' | 'no_supported_list' | 'api_blocked' | 'backoff' | DayoFailure['kind'] }
@@ -22,6 +28,22 @@ export type PushOutcome = { requests: number; sent: number; rejected: number; de
 type Row = typeof s.outbox.$inferSelect & { rid: number }
 type Mark = { createdAt: string; rid: number }
 
+/**
+ * spec 04 §6.2 (m1) · ruling R14: a row answered FORBIDDEN `scope:` (the key lacks the kind's scope — the owner adds it on
+ * dayo's web) waits like a deferred row: retried every 15 minutes (no jitter), never counted toward STUCK; the owner banner
+ * turns red after 24 hours and "ปิดไว้ในเครื่อง" is offered after 7 days (Task 16 reads lastError.scopeSince).
+ */
+export const SCOPE_RETRY_MS = 15 * 60_000
+export const SCOPE_RED_AFTER_MS = 24 * 3_600_000
+export const SCOPE_CLOSABLE_AFTER_MS = 7 * 86_400_000
+
+/** audit_log action: dayo stored a row the owner had closed local_only while its request was on the wire (Task 14 fix round 1). */
+export const SENT_AFTER_LOCAL_ACTION = 'sync_row_reached_dayo_after_local'
+/**
+ * Reasons only the TABLET writes on a row (ruling R11 "ของเครื่อง") — a verdict of dayo carrying one of these is renamed
+ * REJECTED (fix round 1 item 4), so dayo can never park a row as PARENT_REJECTED or pass it off as the tablet's own.
+ */
+export const TABLET_OWN_REASONS: ReadonlySet<string> = new Set(['PARENT_REJECTED', 'STUCK', 'ENVELOPE', 'CLOCK_AHEAD', 'REQUEST_FAILED', 'NO_VERDICT_REPEATED', 'NO_ANSWER', 'DUPLICATE_VERDICT', 'UNSUPPORTED'])
 /** plan 5 fix M-2: only these mean dayo stored the row. */
 const KNOWN_SUCCESS = new Set(['accepted', 'duplicate'])
 const utf8 = new TextEncoder()
@@ -51,8 +73,15 @@ const WARNING_MAX = 200
 const PAGE = 200
 const rowid = sql<number>`rowid`.mapWith(Number)
 const isPushKind = inArray(s.outbox.tableName, [...PUSH_KINDS])
-/** One-row mode reads the queue by this key: a row refunded after an outage (next_attempt_at = refund time) goes to the back. */
-const effTime = sql<string>`coalesce(${s.outbox.nextAttemptAt}, ${s.outbox.createdAt})`
+const isShiftLane = inArray(s.outbox.tableName, [...SHIFT_LANE_KINDS])
+/**
+ * One-row mode reads the queue by this key: a bill refunded after an outage (next_attempt_at = refund time) goes to the
+ * back. A shift-lane row keeps its created_at (spec §6.2: that lane is strictly in createdAt order — rotation never
+ * reorders it).
+ */
+const effTime = sql<string>`case when ${isShiftLane} then ${s.outbox.createdAt} else coalesce(${s.outbox.nextAttemptAt}, ${s.outbox.createdAt}) end`
+/** "Cannot go now" for the lane picker: a row judged earlier in this call, or not a trusted probe. */
+const NOT_NOW = '9999-12-31T23:59:59.999Z'
 /** (created_at, rowid) strictly after a mark — the keyset of the page reader. */
 const afterMark = (m: Mark): SQL => or(gt(s.outbox.createdAt, m.createdAt), and(eq(s.outbox.createdAt, m.createdAt), sql`rowid > ${m.rid}`))!
 const blockedStates = new Set(['unauthorized', 'forbidden', 'bad_base_url'])
@@ -60,18 +89,35 @@ const blockedStates = new Set(['unauthorized', 'forbidden', 'bad_base_url'])
 /** Every status change of a row is guarded by `status = 'pending'` — a decision already taken is never overwritten. */
 const pendingRow = (id: string): SQL => and(eq(s.outbox.id, id), eq(s.outbox.status, 'pending'))!
 
-async function markDead(db: RemoteDb, r: Row, at: string, reason: string, detail: string, attempts = r.attempts): Promise<void> {
-  await db.update(s.outbox).set({ status: 'dead', deadAt: at, attempts, nextAttemptAt: null, lastError: encodeLastError(reason, detail) }).where(pendingRow(r.id))
+/** `result` (R16): the verdict's data kept with the dead row — `undefined` leaves result_json as it is. */
+async function markDead(db: RemoteDb, r: Row, at: string, reason: string, detail: string, attempts = r.attempts, extra: LastErrorExtra = {}, result?: Record<string, unknown> | null): Promise<void> {
+  await db.update(s.outbox).set({ status: 'dead', deadAt: at, attempts, nextAttemptAt: null, lastError: encodeLastError(reason, detail, extra), ...(result === undefined ? {} : { resultJson: result as never }) }).where(pendingRow(r.id))
 }
 
-/** A parent that became dead takes its waiting children with it (spec §4.5 table: PARENT_REJECTED). */
+/**
+ * A parent that became dead takes its waiting children with it (spec §4.5 table: PARENT_REJECTED) — every level at once
+ * (spec §4.10: shift_open → cash_count → shift_close), so a Z never waits behind a count that can no longer go.
+ */
 async function cascadeChildren(db: RemoteDb, parentKey: string, at: string): Promise<void> {
-  const kids = await db.select({ ...getTableColumns(s.outbox), rid: rowid }).from(s.outbox).where(and(eq(s.outbox.parentKey, parentKey), eq(s.outbox.status, 'pending'))).all()
-  for (const k of kids) await markDead(db, k, at, 'PARENT_REJECTED', `แถวแม่ ${parentKey} ส่งไม่ผ่าน — จะส่งเองเมื่อแถวแม่ผ่าน`)
+  const todo = [parentKey]
+  const seen = new Set(todo)
+  for (let key = todo.pop(); key !== undefined; key = todo.pop()) {
+    const kids = await db.select({ ...getTableColumns(s.outbox), rid: rowid }).from(s.outbox).where(and(eq(s.outbox.parentKey, key), eq(s.outbox.status, 'pending'))).all()
+    for (const k of kids) {
+      await markDead(db, k, at, 'PARENT_REJECTED', `แถวแม่ ${key} ส่งไม่ผ่าน — จะส่งเองเมื่อแถวแม่ผ่าน`)
+      if (!seen.has(k.idempotencyKey)) { seen.add(k.idempotencyKey); todo.push(k.idempotencyKey) }
+    }
+  }
+}
+
+/** The outbox status of a row's local parent (spec §4.10 table) — no row under that key = 'missing'. */
+async function parentStateOf(db: RemoteDb, key: string): Promise<ParentState> {
+  const p = await db.select({ status: s.outbox.status }).from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get()
+  return p === undefined ? 'missing' : p.status
 }
 
 /** Held = not sent and not counted: dayo does not list its kind/fields, or answered UNSUPPORTED under this same list. */
-function isHeld(r: { tableName: string; rowJson: unknown; lastError: string | null }, sup: Supported): boolean {
+export function isHeld(r: { tableName: string; rowJson: unknown; lastError: string | null }, sup: Supported): boolean {
   const last = decodeLastError(r.lastError)
   return !isRowSupported(r.tableName, r.rowJson as Record<string, unknown>, sup) || (last.reason === 'UNSUPPORTED' && last.supportedHash === hashOf(sup))
 }
@@ -111,9 +157,11 @@ async function batchSize(db: RemoteDb, sup: Supported): Promise<number> {
 
 /**
  * Reads the queue page by page until a batch is full or the queue ends (review item 20). FIFO = keyset on (created_at,
- * rowid). `rotate` (R4 one-row mode, fix round 3) = keyset on (coalesce(next_attempt_at, created_at), created_at, rowid),
- * so rows refunded after a run of failures are tried after the others and a run of failing rows cannot wedge the head.
+ * rowid). `rotate` (R4 one-row mode, fix round 3) = keyset on (effTime, created_at, rowid), so bills refunded after a run
+ * of failures are tried after the others and a run of failing rows cannot wedge the head.
  * A child still never goes before its parent: pickBatch checks the parent whatever the order.
+ * Block 3: shift-lane rows are read even while they wait out a backoff — the lane picker must SEE a waiting row to hold
+ * every later shift-lane row behind it (spec §6.2). Bills that are not due stay out, as in block 2.
  */
 async function* pendingRows(db: RemoteDb, nowIso: string, rotate: boolean): AsyncGenerator<Row> {
   let after: (Mark & { eff: string }) | null = null
@@ -121,7 +169,7 @@ async function* pendingRows(db: RemoteDb, nowIso: string, rotate: boolean): Asyn
     const keyset = after === null ? undefined
       : rotate ? sql`(${effTime}, ${s.outbox.createdAt}, rowid) > (${after.eff}, ${after.createdAt}, ${after.rid})` : afterMark(after)
     const page: (Row & { eff: string })[] = await db.select({ ...getTableColumns(s.outbox), rid: rowid, eff: effTime }).from(s.outbox)
-      .where(and(eq(s.outbox.status, 'pending'), isPushKind, or(isNull(s.outbox.nextAttemptAt), lte(s.outbox.nextAttemptAt, nowIso)), keyset))
+      .where(and(eq(s.outbox.status, 'pending'), isPushKind, or(isNull(s.outbox.nextAttemptAt), lte(s.outbox.nextAttemptAt, nowIso), isShiftLane), keyset))
       .orderBy(...(rotate ? [asc(effTime), asc(s.outbox.createdAt), asc(rowid)] : [asc(s.outbox.createdAt), asc(rowid)])).limit(PAGE).all()
     for (const r of page) yield r
     if (page.length < PAGE) return
@@ -142,34 +190,65 @@ const isTrusted = (r: Row): boolean => {
 /**
  * `probe` (one-row mode, after a failure in this call): the first sendable row that has never been part of a failed
  * request, else the first sendable row — a good row behind failing ones is reached within K requests.
+ *
+ * Block 3 (Task 10 · spec §6.2 · §4.10): every row goes through the lane picker (sync/lanes.ts) — the strict shift lane
+ * and the bill lane share one batch budget (rows and UTF-8 bytes; the byte count of block 2 lives only there now). Before
+ * a row is offered, a parent that is dead / local only takes it along (PARENT_REJECTED / local_only), for every kind and
+ * every level in one pass (the queue is read in created_at order, so a grandchild sees its parent's new status). A row
+ * bigger than an empty batch ends dead ENVELOPE here, before any request, with no try counted.
  */
 async function pickBatch(db: RemoteDb, nowIso: string, sup: Supported, size: number, decided: Set<string>, opts: { rotate: boolean; probe: boolean } = { rotate: false, probe: false }): Promise<{ batch: Row[]; held: number }> {
+  const first = await pickPass(db, nowIso, sup, size, decided, opts.rotate, opts.probe)
+  if (first.batch.length > 0 || !first.skippedUntrusted) return first
+  // no trusted row could go: the first sendable row goes alone (block 2's fallback — a lane picker offers each row once)
+  return pickPass(db, nowIso, sup, size, decided, opts.rotate, false)
+}
+
+async function pickPass(db: RemoteDb, nowIso: string, sup: Supported, size: number, decided: Set<string>, rotate: boolean, probe: boolean): Promise<{ batch: Row[]; held: number; skippedUntrusted: boolean }> {
+  const parents = new Map<string, ParentState>()
+  const picker = createLanePicker((k) => parents.get(k) ?? 'missing', nowIso, { maxRows: size, maxBytes: MAX_PUSH_BODY_BYTES - ENVELOPE_BYTES })
   const batch: Row[] = []
-  let fallback: Row | null = null
-  const inBatch = new Set<string>()
-  let bytes = ENVELOPE_BYTES
+  const seen = new Map<string, Row>()
   let held = 0
-  for await (const r of pendingRows(db, nowIso, opts.rotate)) {
-    if (decided.has(r.id)) continue
-    if (isHeld(r, sup)) { held++; continue }
-    // a child never goes before its parent: the parent must be sent already, or sit earlier in this same batch
-    if (r.parentKey !== null && !inBatch.has(r.parentKey)) {
-      const parent = await db.select({ status: s.outbox.status }).from(s.outbox).where(eq(s.outbox.idempotencyKey, r.parentKey)).get()
-      if (parent?.status === 'dead') { await markDead(db, r, nowIso, 'PARENT_REJECTED', `แถวแม่ ${r.parentKey} ส่งไม่ผ่าน`); decided.add(r.id); continue }
-      if (parent?.status === 'local_only') { await db.update(s.outbox).set({ status: 'local_only', nextAttemptAt: null }).where(pendingRow(r.id)); decided.add(r.id); continue }
-      if (parent !== undefined && parent.status !== 'sent') continue // wait for the parent
+  let skippedUntrusted = false
+  for await (const r of pendingRows(db, nowIso, rotate)) {
+    if (picker.full()) break
+    const q = { id: r.id, kind: r.tableName, key: r.idempotencyKey, createdAt: r.createdAt, nextAttemptAt: r.nextAttemptAt, parentKey: r.parentKey, supported: true, bytes: 0 }
+    if (decided.has(r.id)) {
+      // judged once per call (plan 5 fix H-1) — a shift-lane row still pending holds every later shift-lane row
+      if (laneOf(r.tableName) === 'shift') picker.offer({ ...q, nextAttemptAt: NOT_NOW })
+      continue
     }
-    const b = rowBytes(r)
-    if (ENVELOPE_BYTES + b > MAX_PUSH_BODY_BYTES) { await markDead(db, r, nowIso, 'ENVELOPE', 'แถวนี้ใหญ่เกิน 256 KB'); decided.add(r.id); continue }
-    if (bytes + b > MAX_PUSH_BODY_BYTES) break
-    if (opts.probe && !isTrusted(r)) { fallback ??= r; continue }
-    batch.push(r)
-    inBatch.add(r.idempotencyKey)
-    bytes += b
-    if (batch.length >= size) break
+    if (r.parentKey !== null) {
+      let st = await parentStateOf(db, r.parentKey)
+      if (st === 'closed_off_catalog') {
+        // carried item 3 · spec §4.10 (แถวแม่ถูกปิด): the new parent of a bill's void is its order_off_catalog row. closeOffCatalog
+        // moves every child in its own transaction; this catches a void queued under the old parent (an older build) — the same
+        // UPDATE, and to one of the two parents enqueuePush allows. No such row = the bill will never be sent: local_only.
+        const moved = r.tableName === 'order_void' ? rowKey('order_off_catalog', String((r.rowJson as { pos_order_id: string }).pos_order_id)) : null
+        st = moved === null ? 'missing' : await parentStateOf(db, moved)
+        if (moved === null || st === 'missing') { await db.update(s.outbox).set({ status: 'local_only', nextAttemptAt: null }).where(pendingRow(r.id)); decided.add(r.id); continue }
+        await db.update(s.outbox).set({ parentKey: moved }).where(pendingRow(r.id))
+        r.parentKey = moved
+        q.parentKey = moved
+      }
+      if (st === 'dead') { await markDead(db, r, nowIso, 'PARENT_REJECTED', `แถวแม่ ${r.parentKey} ส่งไม่ผ่าน`); decided.add(r.id); continue }
+      if (st === 'local_only') { await db.update(s.outbox).set({ status: 'local_only', nextAttemptAt: null }).where(pendingRow(r.id)); decided.add(r.id); continue }
+      parents.set(r.parentKey, st)
+    }
+    const unsupported = isHeld(r, sup)
+    if (unsupported) held++
+    const untrusted = probe && !isTrusted(r)
+    if (untrusted) skippedUntrusted = true
+    seen.set(r.id, r)
+    if (picker.offer({ ...q, supported: !unsupported, bytes: rowBytes(r), nextAttemptAt: untrusted ? NOT_NOW : r.nextAttemptAt })) batch.push(r)
   }
-  if (batch.length === 0 && fallback !== null) batch.push(fallback)
-  return { batch, held }
+  for (const o of picker.oversized()) {
+    const r = seen.get(o.id)!
+    await markDead(db, r, nowIso, 'ENVELOPE', 'แถวนี้ใหญ่เกิน 256 KB')
+    decided.add(r.id)
+  }
+  return { batch, held, skippedUntrusted }
 }
 
 async function gate(db: RemoteDb, deps: ApiDeps): Promise<{ cfg: { baseUrl: string; apiKey: string } | null; sup: Supported | null; blocked: PushOutcome['stopped'] }> {
@@ -218,6 +297,8 @@ function keptExtras(lastError: string | null, own: Own): LastErrorExtra {
   return {
     ...(d.farAhead === true ? { farAhead: true as const } : {}), ...(d.noVerdict !== undefined ? { noVerdict: d.noVerdict } : {}), requestFailed: true,
     ...(own.ownFailures > 0 ? { ownFailures: own.ownFailures } : {}), ...(own.ownFailedAt !== null ? { ownFailedAt: own.ownFailedAt } : {}),
+    // block 3: an outage does not restart a scope: wait's 24 h / 7 day clock (the next scope: verdict reads it back)
+    ...(d.scopeSince !== undefined ? { scopeSince: d.scopeSince } : {}),
   }
 }
 /** This failure counted or not: once per OWN_FAILURE_EVERY_MS; a clock that moved back by more than that counts again. */
@@ -310,17 +391,50 @@ function knownResult(kind: string, data: unknown): Record<string, unknown> | nul
       warnings: d.data.warnings.slice(0, WARNINGS_MAX).map((x) => clipCodePoints(x, WARNING_MAX)),
     }
   }
-  const v = OrderVoidAcceptedData.safeParse(data)
-  return v.success ? { order_no: clipCodePoints(v.data.order_no, ORDER_NO_MAX), version: v.data.version } : null
+  if (kind === 'order_void' || kind === 'order_off_catalog') {
+    const v = (kind === 'order_void' ? OrderVoidAcceptedData : OffCatalogAcceptedData).safeParse(data)
+    return v.success ? { order_no: clipCodePoints(v.data.order_no, ORDER_NO_MAX), version: v.data.version } : null
+  }
+  // block 3 shift kinds: `{<id field>}` only (spec §4.10 · dayo 0066) — no money, nothing else kept
+  if (kind === 'shift_open') { const d = ShiftOpenAcceptedData.safeParse(data); return d.success ? { shift_id: d.data.shift_id } : null }
+  if (kind === 'cash_movement') { const d = CashMovementAcceptedData.safeParse(data); return d.success ? { movement_id: d.data.movement_id } : null }
+  if (kind === 'cash_count') { const d = CashCountAcceptedData.safeParse(data); return d.success ? { count_id: d.data.count_id } : null }
+  if (kind === 'shift_close') { const d = ShiftCloseAcceptedData.safeParse(data); return d.success ? { shift_id: d.data.shift_id } : null }
+  return null
 }
 
-async function markSent(db: RemoteDb, r: Row, v: ReceivedRowResult, at: string): Promise<void> {
+/**
+ * R16: the data of a `rejected` verdict, kept with the dead row — today only the `exists:` / `off_catalog_exists:` conflict
+ * data (spec §4.10 m2: the tablet reads order_no / reported_total / payment_is_cash from here, never from the Thai detail).
+ * Known fields only, bounded (M6); anything else = null.
+ */
+function rejectedResult(data: unknown): Record<string, unknown> | null {
+  const d = ExistsConflictData.safeParse(data)
+  if (!d.success) return null
+  return { order_no: clipCodePoints(d.data.order_no, ORDER_NO_MAX), version: d.data.version, reported_total: d.data.reported_total, payment_is_cash: d.data.payment_is_cash, off_catalog: d.data.off_catalog }
+}
+
+/**
+ * final fix S5: order.central_order_no takes only a real dayo order number (L<yymmdd>-<seq> — BOT_ORDER_NO_RE, the same check
+ * sync-problems.ts makes on an `exists:` conflict); anything else = null (the row stays sent, its result kept as it came).
+ */
+function centralOrderNoOf(known: Record<string, unknown>): string | null {
+  const no = known['order_no']
+  return typeof no === 'string' && BOT_ORDER_NO_RE.test(no) ? no : null
+}
+
+/** `from` = the status the row must still have (pending; local_only for a verdict that arrived after the owner closed it). */
+async function markSent(db: RemoteDb, r: Row, v: ReceivedRowResult, at: string, from: 'pending' | 'local_only' = 'pending'): Promise<void> {
   const known = knownResult(r.tableName, v.data)
-  await db.update(s.outbox).set({ status: 'sent', sentAt: at, attempts: r.attempts + 1, lastError: null, nextAttemptAt: null, resultJson: known as never }).where(pendingRow(r.id))
-  if (r.tableName !== 'order' || known === null) return // stored by dayo all the same; the bill just shows no central number
+  await db.update(s.outbox).set({ status: 'sent', sentAt: at, attempts: r.attempts + 1, lastError: null, nextAttemptAt: null, resultJson: known as never }).where(and(eq(s.outbox.id, r.id), eq(s.outbox.status, from)))
+  if (r.tableName === 'order_off_catalog' && known !== null) { // spec §6.4: the bill now carries dayo's number of its off-catalog bill
+    await db.update(s.order).set({ centralOrderNo: centralOrderNoOf(known) }).where(eq(s.order.id, String((r.rowJson as { pos_order_id: string }).pos_order_id)))
+    return
+  }
+  if (r.tableName !== 'order' || known === null) return // stored by dayo all the same; the bill just shows no central number · shift kinds: result only
   let computed: number | null = null
   try { computed = edgeBahtToSatang(known['computed_total'] as number) } catch { computed = null }
-  await db.update(s.order).set({ centralOrderNo: known['order_no'] as string, centralComputedTotalSatang: computed, centralAmountMismatch: known['amount_mismatch'] as boolean, centralDuplicateOfJson: known['duplicate_of'] as string[] })
+  await db.update(s.order).set({ centralOrderNo: centralOrderNoOf(known), centralComputedTotalSatang: computed, centralAmountMismatch: known['amount_mismatch'] as boolean, centralDuplicateOfJson: known['duplicate_of'] as string[] })
     .where(eq(s.order.id, String((r.rowJson as { pos_order_id: string }).pos_order_id)))
 }
 
@@ -342,8 +456,7 @@ async function markDeferred(db: RemoteDb, deps: ApiDeps, r: Row, v: ReceivedRowR
   }
   if (reason === 'CLOCK_AHEAD') { // ruling R3: not counted; the banner is the signal (D80)
     await writeKey(db, DAYO_KEYS.clockAheadAt, at)
-    const data = r.rowJson as { sold_at?: string; voided_at?: string }
-    const rowTime = Date.parse(data.sold_at ?? data.voided_at ?? at)
+    const rowTime = rowTimeMs(r.rowJson, at)
     // ruling N5: far ahead (> 24 h) is only FLAGGED — the row stays pending and keeps retrying; EXCLUDE is the owner's manual choice
     const farAhead = rowTime - Date.parse(serverTime) > CLOCK_AHEAD_FAR_MS
     const text = farAhead ? `เวลาในแถวล้ำระบบกลางเกิน 24 ชม. — ${detail}` : detail
@@ -353,6 +466,26 @@ async function markDeferred(db: RemoteDb, deps: ApiDeps, r: Row, v: ReceivedRowR
   const attempts = r.attempts + 1
   if (attempts >= STUCK_AFTER_ATTEMPTS) { await markDead(db, r, at, 'STUCK', `${reason}: ${detail}`, attempts); return }
   await db.update(s.outbox).set({ attempts, lastError: encodeLastError(reason, detail), nextAttemptAt: later(at, backoffMs(attempts, deps.random)) }).where(pendingRow(r.id))
+}
+
+/** The row's latest own time (bills: sold_at / voided_at · shift kinds: opened_at / created_at / counted_at / closed_at). */
+const ROW_TIME_FIELDS = ['sold_at', 'voided_at', 'opened_at', 'created_at', 'counted_at', 'closed_at'] as const
+function rowTimeMs(rowJson: unknown, fallback: string): number {
+  const d = (rowJson ?? {}) as Record<string, unknown>
+  const times = ROW_TIME_FIELDS.map((f) => d[f]).filter((v): v is string => typeof v === 'string').map((v) => Date.parse(v)).filter((v) => Number.isFinite(v))
+  return times.length > 0 ? Math.max(...times) : Date.parse(fallback)
+}
+
+/**
+ * FORBIDDEN `scope:` (spec §6.2 m1 · R14): pending, no try counted, retried in exactly 15 minutes; `scopeSince` keeps the
+ * FIRST time it was seen. Counted as deferred, never on the problems page.
+ */
+async function markScopeWait(db: RemoteDb, r: Row, v: ReceivedRowResult, at: string): Promise<void> {
+  const prev = decodeLastError(r.lastError)
+  await db.update(s.outbox).set({
+    nextAttemptAt: new Date(Date.parse(at) + SCOPE_RETRY_MS).toISOString(),
+    lastError: encodeLastError('FORBIDDEN', clipCodePoints(v.detail ?? '', MAX_DETAIL_CODE_POINTS), { prefix: 'scope:', scopeSince: prev.scopeSince ?? at }),
+  }).where(pendingRow(r.id))
 }
 
 /** No verdict / an unknown status / two verdicts: no try spent, retried in 60 s; ten in a row = an owner-visible warning (M5). */
@@ -365,7 +498,7 @@ async function markNoVerdict(db: RemoteDb, r: Row, reason: string, detail: strin
   }).where(pendingRow(r.id))
 }
 
-async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: Timed<{ server_time: string; results: ReceivedRowResult[] }>, sup: Supported): Promise<Pick<PushOutcome, 'sent' | 'rejected' | 'deferred' | 'noAnswer'>> {
+async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: Timed<{ server_time: string; results: ReceivedRowResult[] }>, sup: Supported): Promise<Pick<PushOutcome, 'sent' | 'rejected' | 'deferred' | 'noAnswer'> & { released: string[] }> {
   return db.transaction(async (tx) => {
     const at = deps.now()
     await recordServerTime(tx, answer.value.server_time, answer.sentAtMs, answer.receivedAtMs, at)
@@ -387,12 +520,43 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
     }
     const t = { sent: 0, rejected: 0, deferred: 0, noAnswer: 0 }
     const rejectedKeys: string[] = []
+    const sentKeys: string[] = []
     for (const r of batch) {
       // review item 3: only a row still pending in THIS transaction is judged — an earlier decision in the batch is never overwritten
-      if ((await tx.select({ status: s.outbox.status }).from(s.outbox).where(eq(s.outbox.id, r.id)).get())?.status !== 'pending') continue
+      const status = (await tx.select({ status: s.outbox.status }).from(s.outbox).where(eq(s.outbox.id, r.id)).get())?.status
       const v = twice.has(r.idempotencyKey) ? undefined : byKey.get(r.idempotencyKey)
-      if (v !== undefined && KNOWN_SUCCESS.has(v.status)) { await markSent(tx, r, v, at); t.sent++ }
-      else if (v?.status === 'rejected') { await markDead(tx, r, at, v.reason ?? 'REJECTED', v.detail ?? '', r.attempts + 1); rejectedKeys.push(r.idempotencyKey); t.rejected++ }
+      if (status === 'local_only' && v !== undefined && KNOWN_SUCCESS.has(v.status)) {
+        // Task 14 fix round 1 (item 2 · block-2 ledger ruling 1): the owner closed this row ("ปิดไว้ในเครื่อง", keepShiftLocal)
+        // while a request carrying it was on the wire, and dayo STORED it. The tablet must say so — the money is in dayo —
+        // or the owner may enter it again on the web. The row becomes sent (dayo's data kept as usual), an audit_log row
+        // records that it reached dayo after the close, and a bill closed "ปิดไว้ในเครื่อง" is no longer shown as outside dayo.
+        await markSent(tx, r, v, at, 'local_only')
+        let previousExcludedAt: string | null = null
+        let restored: string[] = []
+        let queuedVoid: string | null = null
+        let queuedVoidError: string | null = null
+        if (r.tableName === 'order' || r.tableName === 'order_off_catalog') {
+          const orderId = String((r.rowJson as { pos_order_id: string }).pos_order_id)
+          previousExcludedAt = (await tx.select({ x: s.order.excludedAt }).from(s.order).where(eq(s.order.id, orderId)).get())?.x ?? null
+          await tx.update(s.order).set({ excludedAt: null }).where(eq(s.order.id, orderId))
+          restored = await restoreExcludedChildren(tx, r, orderId) // fix round 2: its void must reach dayo too
+          ;({ key: queuedVoid, error: queuedVoidError } = await queueMissingVoid(tx, deps, r, orderId, at)) // fix round 3: a void cancelSale did not queue (the bill was excluded then)
+        }
+        await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'sync_row', entityId: r.idempotencyKey, action: SENT_AFTER_LOCAL_ACTION, beforeJson: { status: 'local_only', excludedAt: previousExcludedAt }, afterJson: { status: 'sent', verdict: v.status, restoredChildren: restored, queuedVoid, ...(queuedVoidError === null ? {} : { queuedVoidError }) }, actorUserId: null, at })
+        t.sent++
+        continue
+      }
+      if (status !== 'pending') continue
+      const prefix = detailPrefix(v?.detail)
+      if (v !== undefined && KNOWN_SUCCESS.has(v.status)) { await markSent(tx, r, v, at); sentKeys.push(r.idempotencyKey); t.sent++ }
+      else if (v?.status === 'rejected' && v.reason === 'FORBIDDEN' && prefix === 'scope:') { await markScopeWait(tx, r, v, at); t.deferred++ } // not dead: no cascade
+      else if (v?.status === 'rejected') {
+        // fix round 1 item 4: a reason the tablet writes itself (PARENT_REJECTED, STUCK, …) is never taken from dayo — it would
+        // hide the row's buttons or its count; it is dayo's plain rejection
+        const reason = v.reason === undefined || v.reason === '' || TABLET_OWN_REASONS.has(v.reason) ? 'REJECTED' : v.reason
+        await markDead(tx, r, at, reason, v.detail ?? '', r.attempts + 1, prefix === null ? {} : { prefix }, rejectedResult(v.data))
+        rejectedKeys.push(r.idempotencyKey); t.rejected++
+      }
       else if (v?.status === 'deferred') { await markDeferred(tx, deps, r, v, at, sup, answer.value.server_time); t.deferred++ }
       else {
         const reason = twice.has(r.idempotencyKey) ? 'DUPLICATE_VERDICT' : v === undefined ? 'NO_ANSWER' : `UNKNOWN_STATUS:${clipCodePoints(v.status, 40)}`
@@ -403,9 +567,66 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
     // after the loop: children waiting for a rejected parent (including a void in this same batch that got its own
     // PARENT_PENDING verdict above) end as PARENT_REJECTED, so retryRow can wake them later
     for (const k of rejectedKeys) await cascadeChildren(tx, k, at)
-    return t
+    // R18 · spec §4.10: a parent accepted (or duplicate) brings back its PARENT_REJECTED children, in the same transaction
+    const released = await releaseChildIds(tx, sentKeys)
+    return { ...t, released }
   })
 }
+
+/**
+ * Task 14 fix round 2: dayo stored a bill the owner had just closed "ปิดไว้ในเครื่อง" — the children that close took along
+ * (listed in the EXCLUDED_FROM_SYNC event of this very row) come back to the queue: its void must reach dayo too, or dayo
+ * counts a cancelled bill as a sale. Only those still local_only and still waiting on THIS row — a void the owner closed on
+ * its own, or one moved to another parent, stays as it is (enqueuePush's parent rules are untouched). Shift-lane rows are
+ * never restored: a shift kept local stays local (keepShiftLocal · R19). Returns their keys.
+ */
+async function restoreExcludedChildren(tx: RemoteDb, r: Row, orderId: string): Promise<string[]> {
+  const events = await tx.select({ payload: s.orderEvent.payloadJson }).from(s.orderEvent)
+    .where(and(eq(s.orderEvent.orderId, orderId), eq(s.orderEvent.type, 'EXCLUDED_FROM_SYNC'))).orderBy(desc(s.orderEvent.seq)).all()
+  const ev = events.map((e) => e.payload as { key?: unknown; children?: unknown }).find((p) => p.key === r.idempotencyKey)
+  const listed = Array.isArray(ev?.children) ? ev.children.filter((k): k is string => typeof k === 'string') : []
+  if (listed.length === 0) return []
+  const kids = await tx.select({ id: s.outbox.id, key: s.outbox.idempotencyKey }).from(s.outbox)
+    .where(and(inArray(s.outbox.idempotencyKey, listed), eq(s.outbox.tableName, 'order_void'), eq(s.outbox.parentKey, r.idempotencyKey), eq(s.outbox.status, 'local_only'))).all()
+  if (kids.length === 0) return []
+  await tx.update(s.outbox).set({ status: 'pending', attempts: 0, deadAt: null, nextAttemptAt: null, lastError: null })
+    .where(and(inArray(s.outbox.id, kids.map((k) => k.id)), eq(s.outbox.status, 'local_only')))
+  return kids.map((k) => k.key)
+}
+
+/**
+ * Task 14 fix round 3 (ruling option ก): the bill was cancelled here AFTER the owner closed it "ปิดไว้ในเครื่อง" — cancelSale
+ * then queues no order_void (an excluded bill has no central void) — and dayo stored the bill all the same. Its void is
+ * queued now, in the same transaction, exactly as cancelSale builds it (the VOIDED event: who, the owner who approved,
+ * the reason · voided_at = the bill's voided_at), under this row as its parent (enqueuePush's parent rule), so dayo does
+ * not keep a cancelled bill as a sale. Nothing when the bill is not voided, has no sold_at, or already has a void row.
+ * Returns the queued key, or null.
+ * final fix S1: runs inside applyVerdicts' transaction — a void row that cannot be built (PushRow or the parent rule refuses
+ * it) must never throw there, or the whole batch's verdicts roll back and the queue stalls on one row (Iron Rule 5). It is
+ * checked first and left unqueued; the error goes into the SENT_AFTER_LOCAL audit row for the owner to see.
+ */
+async function queueMissingVoid(tx: RemoteDb, deps: ApiDeps, r: Row, orderId: string, at: string): Promise<{ key: string | null; error: string | null }> {
+  const none = { key: null, error: null }
+  const order = await tx.select().from(s.order).where(eq(s.order.id, orderId)).get()
+  if (order === undefined || order.status !== 'voided' || order.voidedAt === null || order.soldAt === null) return none
+  const key = rowKey('order_void', orderId)
+  if ((await tx.select({ id: s.outbox.id }).from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get()) !== undefined) return none
+  const voided = await tx.select().from(s.orderEvent).where(and(eq(s.orderEvent.orderId, orderId), eq(s.orderEvent.type, 'VOIDED'))).orderBy(desc(s.orderEvent.seq)).limit(1).get()
+  const p = (voided?.payloadJson ?? {}) as { reason?: unknown; approvedBy?: unknown }
+  if (voided === undefined || typeof p.reason !== 'string') return none
+  const data = { pos_order_id: orderId, voided_at: order.voidedAt, staff_id: voided.actorId, approved_by: typeof p.approvedBy === 'string' ? p.approvedBy : null, reason: p.reason }
+  const checked = PushRow.safeParse({ key, kind: 'order_void', data })
+  if (!checked.success) {
+    return { key: null, error: clipCodePoints(`E2 order_void row: ${checked.error.issues.slice(0, 3).map((x) => `${x.path.join('.')} ${x.message}`).join(' · ')}`, MAX_DETAIL_CODE_POINTS) }
+  }
+  try {
+    await enqueuePush(tx, { kind: 'order_void', id: orderId, data, parentKey: r.idempotencyKey }, notBeforeIso(at, order.voidedAt), deps.newId)
+  } catch (e) {
+    return { key: null, error: clipCodePoints(e instanceof Error ? e.message : String(e), MAX_DETAIL_CODE_POINTS) }
+  }
+  return { key, error: null }
+}
+const notBeforeIso = (a: string, b: string): string => (Date.parse(a) < Date.parse(b) ? b : a)
 
 /**
  * One call of the sender (item 8 — the states it moves through):
@@ -488,6 +709,7 @@ export async function pushOnce(ctx: SyncContext): Promise<PushOutcome> {
     out.requests++
     const t = await ctx.serial(() => applyVerdicts(ctx.db, ctx.deps, batch, answer, sup))
     out.sent += t.sent; out.rejected += t.rejected; out.deferred += t.deferred; out.noAnswer += t.noAnswer
+    for (const id of t.released) decided.add(id) // a released child goes from the next call on — judged once per call
   }
   await refundAll() // the round cap ended the call in the middle of a run: no row is blamed
   return out
@@ -520,12 +742,47 @@ export async function clearFailureBackoff(db: RemoteDb, opts: { onlyNetwork?: bo
   }
 }
 
+/**
+ * Task 17 fix round 1 item 3 (ruling): a scope-wait row (`markScopeWait`, FORBIDDEN `scope:`) otherwise sits out its
+ * full SCOPE_RETRY_MS (15 real minutes) — even a manual "ส่งตอนนี้" wake would not resend it a moment sooner, since
+ * `pendingRows`'s `isShiftLane` only lets the lane picker SEE it early (so it keeps holding the lane), never send it
+ * again. The owner just added the scope back on dayo's website — nothing here is worth waiting 15 minutes for once
+ * they press "ส่งตอนนี้" — so a manual wake (already throttled to at most once per 30 s, same as the failure-backoff
+ * clear right above) also makes every scope-wait row due again right away. An automatic wake (the minute tick, a
+ * write) still waits the full 15 minutes — only 'manual' reaches this.
+ */
+export async function hasScopeWait(db: RemoteDb): Promise<boolean> {
+  const r = await db.values<[number]>(sql`select count(*) from outbox where status = 'pending' and json_valid(last_error) and json_extract(last_error, '$.prefix') = 'scope:'`)
+  return (r[0]?.[0] ?? 0) > 0
+}
+export async function clearScopeWait(db: RemoteDb, at: string): Promise<void> {
+  await db.update(s.outbox).set({ nextAttemptAt: at })
+    .where(and(eq(s.outbox.status, 'pending'), sql`json_valid(last_error) and json_extract(last_error, '$.prefix') = 'scope:'`))
+}
+
 /** Owner's "ลองใหม่" (spec §6.4): dead → pending with a fresh budget; children parked as PARENT_REJECTED come back too. */
 export async function retryRow(db: RemoteDb, outboxId: string): Promise<void> {
   const r = await db.select().from(s.outbox).where(eq(s.outbox.id, outboxId)).get()
   if (r === undefined || r.status !== 'dead') return
   // a dead row carries no ownFailures (markDead writes no extras), so its own count starts again from 0 as well
   await db.update(s.outbox).set({ status: 'pending', attempts: 0, deadAt: null, nextAttemptAt: null }).where(eq(s.outbox.id, r.id))
-  const kids = await db.select().from(s.outbox).where(and(eq(s.outbox.parentKey, r.idempotencyKey), eq(s.outbox.status, 'dead'))).all()
-  for (const k of kids) if (decodeLastError(k.lastError).reason === 'PARENT_REJECTED') await db.update(s.outbox).set({ status: 'pending', attempts: 0, deadAt: null, nextAttemptAt: null }).where(eq(s.outbox.id, k.id))
+  await releaseChildren(db, [r.idempotencyKey]) // preflight P6: one releaser (they wait for the parent again in the queue)
+}
+
+/** The ids releaseChildren put back (pushOnce keeps them out of the rest of its call). */
+async function releaseChildIds(tx: RemoteDb, parentKeys: readonly string[]): Promise<string[]> {
+  if (parentKeys.length === 0) return []
+  const rows = await tx.select({ id: s.outbox.id, lastError: s.outbox.lastError }).from(s.outbox).where(and(inArray(s.outbox.parentKey, [...parentKeys]), eq(s.outbox.status, 'dead'))).all()
+  const ids = rows.filter((x) => decodeLastError(x.lastError).reason === 'PARENT_REJECTED').map((x) => x.id)
+  if (ids.length > 0) await tx.update(s.outbox).set({ status: 'pending', attempts: 0, nextAttemptAt: null, lastError: null, deadAt: null }).where(and(inArray(s.outbox.id, ids), eq(s.outbox.status, 'dead')))
+  return ids
+}
+
+/**
+ * R18 · spec §4.10: once a parent is accepted (or acknowledged), its PARENT_REJECTED children go back to the queue in
+ * their old order (created_at is untouched) with a fresh budget. Only children dead for PARENT_REJECTED — a child dead
+ * for its own reason stays on the problems page. The same key is sent again, so dayo can never store a row twice.
+ */
+export async function releaseChildren(tx: RemoteDb, parentKeys: readonly string[]): Promise<number> {
+  return (await releaseChildIds(tx, parentKeys)).length
 }

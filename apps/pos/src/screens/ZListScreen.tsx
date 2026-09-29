@@ -40,6 +40,12 @@ export function ZListScreen(): JSX.Element {
               {TH.variance} {z.cashVarianceSatang === null ? '—' : formatBaht(z.cashVarianceSatang)}
             </span>
             <span className={z.hashOk ? 'badge' : 'error'}>{z.hashOk ? TH.zHashOk : TH.zHashBad}</span>
+            {/* carried item 6 (Task 16): the same badge the Z detail screen shows — this Z never left the tablet. */}
+            {z.syncMode === 'local_only' && (
+              <span className="badge" data-testid={`z-local-only-${i}`}>
+                {TH.zLocalOnly}
+              </span>
+            )}
             {z.chainWarning && (
               <span className="error" data-testid={`z-warn-${i}`}>
                 {TH.zChainWarningShort}

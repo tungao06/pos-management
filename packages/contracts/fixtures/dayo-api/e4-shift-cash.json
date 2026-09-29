@@ -1,0 +1,31 @@
+{
+  "name": "e4-shift-cash",
+  "spec": "04 §4.10 E4 GET /api/v1/pos/shift-cash (scope orders:read): บิล status ok · เงินสด · source line/web · created_at ∈ (after, until] · sold_at รูป …mmm+00:00 · created_by_name เมื่อ key มี staff:read · cash_total = Σ total (dayo 0067:18-75) · สถานะก่อน: บิลบอท L260925-901 ฿70 ของ DCm",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": {
+      "ok": true,
+      "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c",
+      "shop_id": "11111111-2222-4333-8444-555555555555",
+      "name": "แท็บเล็ตขาย 1",
+      "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write", "shift:write"]
+    },
+    "api_shift_cash": "@data"
+  },
+  "request": {
+    "method": "GET",
+    "path": "/api/v1/pos/shift-cash?after=2026-09-24T17:00:00.000Z&until=2026-09-25T12:00:00.000Z",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001" }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": {
+      "ok": true,
+      "data": {
+        "bills": [{ "order_no": "L260925-901", "version": 1, "source": "line", "sold_at": "2026-09-25T04:00:00.000+00:00", "total": 70, "created_by_name": "DCm" }],
+        "cash_total": 70
+      }
+    }
+  }
+}

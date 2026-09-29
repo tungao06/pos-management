@@ -21,10 +21,11 @@ export type Action =
   | 'set_other_pin'
   | 'sync_problems'
   | 'backup'
+  | 'close_off_catalog' // D97: only an owner closes a rejected bill as off-catalog (PIN + reason at the API too)
 
 const STAFF_ACTIONS: readonly Action[] = ['sell', 'void_own', 'open_shift', 'close_shift', 'cash_move', 'count_cash', 'central_orders', 'system_status']
 const MANAGER_ONLY_ACTIONS: readonly Action[] = ['view_shift_report'] // Q44: manager "+ ดูรายงานกะ"
-const OWNER_ONLY_ACTIONS: readonly Action[] = ['void_any', 'price_diffs', 'device_setup', 'set_other_pin', 'sync_problems', 'backup']
+const OWNER_ONLY_ACTIONS: readonly Action[] = ['void_any', 'price_diffs', 'device_setup', 'set_other_pin', 'sync_problems', 'backup', 'close_off_catalog']
 
 const TABLE: Record<PosRole, ReadonlySet<Action>> = {
   staff: new Set(STAFF_ACTIONS),

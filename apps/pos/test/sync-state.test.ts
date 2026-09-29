@@ -50,6 +50,12 @@ describe('encode/decodeLastError', () => {
     expect(decodeLastError('42')).toEqual({ reason: '', detail: '42' })
     expect(decodeLastError('[1]')).toEqual({ reason: '', detail: '[1]' })
   })
+  it('block 3: the detail prefix and the first scope: time round-trip; an unknown prefix or a bad time is dropped', () => {
+    const raw = encodeLastError('FORBIDDEN', 'scope: x', { prefix: 'scope:', scopeSince: '2026-09-25T03:00:00.000Z' })
+    expect(decodeLastError(raw)).toEqual({ reason: 'FORBIDDEN', detail: 'scope: x', prefix: 'scope:', scopeSince: '2026-09-25T03:00:00.000Z' })
+    expect(decodeLastError('{"reason":"CONFLICT","detail":"","prefix":"evil:","scopeSince":"yesterday"}')).toEqual({ reason: 'CONFLICT', detail: '' })
+    expect(decodeLastError('{"reason":"CONFLICT","detail":"","prefix":7,"scopeSince":1}')).toEqual({ reason: 'CONFLICT', detail: '' })
+  })
 })
 
 describe('sync_state keys', () => {

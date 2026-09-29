@@ -17,6 +17,7 @@ export const auditLog = sqliteTable('audit_log', {
 /**
  * Local-only: transaction rows waiting to be pushed (spec §6.1). status pending → sent, or pending → dead when the
  * server rejects the row for good (dead-letter: dead_at + last_error, shown on the settings screen, never re-sent).
+ * row_json is frozen once the row is sent or closed_off_catalog (trigger outbox_row_json_frozen · spec 04 §6.1).
  */
 export const outbox = sqliteTable('outbox', {
   id: id(),

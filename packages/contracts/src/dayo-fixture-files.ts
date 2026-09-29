@@ -17,7 +17,8 @@ export function contractFixtureHashes(dir: string = DIR): { name: string; sha256
   })
 }
 const RICH = fileURLToPath(new URL('../fixtures/pos-test/e1-catalog-rich.json', import.meta.url))
-export const listContractFixtures = (): string[] => readdirSync(DIR).filter((f) => f.endsWith('.json')).sort().map((f) => join(DIR, f))
+/** Sorted by NAME like CONTRACT_FIXTURE_NAMES — by file name '-' < '.' would put e1-catalog-changed-block3.json first. */
+export const listContractFixtures = (): string[] => readdirSync(DIR).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -'.json'.length)).sort().map((n) => join(DIR, `${n}.json`))
 export const loadContractFixture = (name: string): PosContractFixture => PosContractFixture.parse(JSON.parse(readFileSync(join(DIR, `${name}.json`), 'utf8')))
 export function loadRichCatalog(): Extract<PosCatalogData, { changed: true }> {
   const d = PosCatalogResponse.parse(JSON.parse(readFileSync(RICH, 'utf8'))).data

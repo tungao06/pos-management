@@ -88,6 +88,13 @@ describe('OwnerRecoveryScreen (ruling N2 · R1)', () => {
     expect(container.querySelectorAll('input[type="password"]')).toHaveLength(0)
   })
 
+  // Task 14 · carried items 8/9 (Task 16): a link to /status for an owner who already has a working PIN and only
+  // needs `keepShiftLocal`/`skipCountFloor` — never a duplicate PIN flow on this no-PIN-works screen.
+  it('links to /status for shift/Z problems that do not need a new key (carried items 8/9)', async () => {
+    renderWithApi(<OwnerRecoveryScreen />, { bootstrap: boot({}) })
+    expect(await screen.findByTestId('owner-recovery-status-link')).toBeVisible()
+  })
+
   it('says to revoke the old key when dayo still accepts it', async () => {
     const api: FakeApi = {
       bootstrap: boot({}),
@@ -102,5 +109,9 @@ describe('OwnerRecoveryScreen (ruling N2 · R1)', () => {
     fireEvent.change(screen.getByTestId('recovery-pin2'), { target: { value: '2468' } })
     fireEvent.click(screen.getByTestId('recovery-save'))
     expect(await screen.findByText('ยังไม่ได้เพิกถอนกุญแจเก่าบนเว็บ — เพิกถอนก่อนแล้วกดอีกครั้ง')).toBeInTheDocument()
+    // fix round 3 item 4 (security): matches SetupScreen/SystemStatusScreen — a refused attempt must not leave
+    // the PIN sitting in the field.
+    expect(screen.getByTestId('recovery-pin')).toHaveValue('')
+    expect(screen.getByTestId('recovery-pin2')).toHaveValue('')
   })
 })

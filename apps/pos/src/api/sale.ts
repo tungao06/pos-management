@@ -10,6 +10,7 @@ import { DAYO_KEYS, readKey } from '../sync/state'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
+import { notBefore } from './rows'
 import { getSetting, PROMPTPAY_SETTING_KEY } from './setup'
 import { PAYMENT_CODE, REASON_MAX_LENGTH, type DeviceDto, type RecordSaleInput, type RecordSaleResult } from './types'
 
@@ -89,7 +90,8 @@ function checkReason(text: string | null, what: string): void {
 /**
  * spec 04 §4.5, §5.1, §6.1: price with dayo's code at the payment instant (sold_at), refuse a total the customer did
  * not see (PRICE_CHANGED), then write order + order_item + payment (+ discount) + hash-chained events + ONE E2 row in
- * one transaction. No stock rows (D60). shift_id stays local; the E2 row sends null (block 2). Never calls dayo.
+ * one transaction. No stock rows (D60). The E2 row sends shift_id only for a central shift (ruling R1 · §4.5), else
+ * null (the shift never reaches dayo). Never calls dayo.
  */
 export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleInput): Promise<RecordSaleResult> {
   const cart = normalizeCart(input)
@@ -110,7 +112,9 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
   const result = await db.transaction(async (tx) => {
     const shift = await currentOpenShift(tx, device.id)
     if (shift === null) throw new PosError('NO_OPEN_SHIFT', 'open a shift before selling')
-    const soldAt = deps.now()
+    // fix round 2: never before the shift opened (its opening may be floored at the last count — a clock set back across
+    // midnight must not give the bill a Thai day before its shift's, or its void a day after its sale: dayo 0052:512)
+    const soldAt = notBefore(deps.now(), shift.openedAt)
     let priced: PricedCart
     try {
       priced = priceCart(cart, stored.catalog, soldAt)
@@ -134,7 +138,7 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
     const queueNo = (await lastQueueNo(tx, device.id, shift.businessDate)) + 1
     if (queueNo > 9999) throw new PosError('QUEUE_FULL', 'queue number 9999 reached today') // ruling R13
     // Checked before anything is written: a row dayo would refuse as INVALID fails the sale here, never the queue.
-    const parsed = OrderRowData.safeParse(buildOrderRowData({ posOrderId: input.orderId, receiptNo, queueNo, staffId: actor.id, catalogVersion: stored.catalogVersion, cart, priced, note: null }))
+    const parsed = OrderRowData.safeParse(buildOrderRowData({ posOrderId: input.orderId, receiptNo, queueNo, staffId: actor.id, catalogVersion: stored.catalogVersion, shiftId: shift.syncMode === 'central' ? shift.id : null, cart, priced, note: null })) // R1: only a central shift's id reaches dayo
     if (!parsed.success) throw new PosError('BAD_INPUT', `E2 order row: ${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join('.')} ${i.message}`).join(' · ')}`)
     const discountSatang = priced.discountSatang // items + bill, computed and cross-checked in the domain (review item 18)
     const { draft, ...pricedRest } = priced

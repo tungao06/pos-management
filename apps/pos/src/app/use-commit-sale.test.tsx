@@ -7,7 +7,7 @@ import type { PosApi, RecordSaleResult } from '../api/types'
 import { testSellCatalog } from '../test-utils/sell-catalog'
 import { ApiProvider } from './api-context'
 import { CartProvider } from './cart-context'
-import { shiftReportKey, stockKey } from './queries'
+import { shiftReportKey, stockKey, syncStatusKey } from './queries'
 import { SessionProvider } from './session'
 import { useCommitSale } from './use-commit-sale'
 
@@ -62,6 +62,20 @@ describe('useCommitSale — review m-2 (carried): the shift-report cache must be
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: shiftReportKey })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: stockKey })
+  })
+
+  // Task 17 fix round 1 item 2: StatusBanners prefers `syncStatus()`'s own cached answer over `bootstrap().sync`
+  // once it has one (fix round 2 item E) — invalidating bootstrapKey alone left the badge/every banner stale
+  // right after a sale; this must invalidate syncStatusKey too.
+  it('invalidates syncStatusKey too, so the pending badge and every banner refresh right after a sale', async () => {
+    const recordSale = vi.fn(async (): Promise<RecordSaleResult> => RESULT)
+    const { wrapper, queryClient } = withApi({ recordSale })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const { result } = renderHook(() => useCommitSale(), { wrapper })
+
+    await act(() => result.current.pay({ method: 'PROMPTPAY' }, 7_500))
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: syncStatusKey })
   })
 })
 

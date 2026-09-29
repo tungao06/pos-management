@@ -43,6 +43,14 @@ export type PosErrorCode =
   // block 2 Task 15 — owner remedies and E3 (spec 04 §4.6, §6.4)
   | 'REMEDY_NOT_ALLOWED' // the row is not on the "ส่งไม่ผ่าน" page, or this fix does not fit its reason
   | 'OFFLINE' // E3 (bot/web bills, dayo edits) needs dayo now: offline, refused key, API off, rate limit — detail = why
+  // block 3 shifts/cash/Z (spec 04 §6.4, §6.8, §7 ข้อ 5–6 · D97)
+  | 'COUNT_PENDING' // R2: a shift of this device is 'counting' (นับเสร็จ แต่ยังไม่ยืนยัน) — confirm it before opening a new one
+  | 'SHIFT_NOT_COUNTING' // confirmCount/countSummary on a shift that is not counting/counted — detail = shiftId
+  | 'Z_NOT_READY' // R7: issueZ while an earlier counted shift has no Z yet, or the count is not confirmed — detail = that shiftId
+  | 'BOT_CASH_REQUIRED' // D68/§6.8: the Z of a central shift needs E4 bot cash (fetchBotCash first, online)
+  | 'DAYO_Z_STATE_INVALID' // §4.4 ข้อ 6: client.last_z_no/last_z_hash/last_z_until unreadable — detail = the raw last_z_no
+  | 'Z_TOO_LARGE' // R20: > 2000 POS bills / > 500 bot bills / > 500 cash movements in one Z
+  | 'OFF_CATALOG_NOT_POSSIBLE' // R10/R11: this bill cannot be closed as off-catalog (use "ปิดไว้ในเครื่อง")
 
 /** Comlink forwards only name/message/stack, so the code travels as a "CODE: " message prefix. */
 export class PosError extends Error {
@@ -58,4 +66,48 @@ export function posErrorCode(e: unknown): PosErrorCode | null {
   const message = e instanceof Error ? e.message : ''
   const m = /^([A-Z_]+): /.exec(message)
   return m ? (m[1] as PosErrorCode) : null
+}
+
+/**
+ * Fix round 3 item 3: the structured detail prefixes every `BAD_INPUT` writer (rows.ts, count.ts, close.ts,
+ * central-z.ts) and every reader here (`isClockAheadCountError`, `isCentralZBlockedError`) share by name, not by
+ * re-typing the same literal string on both sides — a typo in either place then fails to typecheck instead of
+ * silently un-matching. `builtRow` (rows.ts) appends its own `: ` before the underlying error text; every other
+ * one already ends the way it is thrown.
+ */
+export const CLOCK_AHEAD = 'CLOCK_AHEAD'
+export const COUNT_BEFORE_CENTRAL_Z = 'COUNT_BEFORE_CENTRAL_Z'
+export const E2_SHIFT_CLOSE_ROW = 'E2 shift_close row'
+export const E2_CASH_COUNT_ROW = 'E2 cash_count row'
+export const Z_BUILD = 'Z_BUILD'
+
+/**
+ * Task 14 · carried item 9b (Task 16): `BAD_INPUT` whose detail starts with `CLOCK_AHEAD:` (rows.ts
+ * `clockAheadError`, bot-cash.ts `assertWindowClosed`) — the tablet's own last count is more than 24 h ahead of the
+ * real time, floor-blocking every later count and Z until the owner skips it (`skipCountFloor`). Matched on the
+ * structured detail prefix, never by parsing the rest of the Thai text as free text (same rule as every other
+ * prefixed detail in this app).
+ */
+export function isClockAheadCountError(e: unknown): boolean {
+  return posErrorCode(e) === 'BAD_INPUT' && e instanceof Error && e.message.startsWith(`BAD_INPUT: ${CLOCK_AHEAD}:`)
+}
+
+/** Every `BAD_INPUT` detail prefix `isCentralZBlockedError` allowlists (fix round 2 item C) — never "any BAD_INPUT". */
+const CENTRAL_Z_BLOCKED_BAD_INPUT_PREFIXES = [`${COUNT_BEFORE_CENTRAL_Z}:`, `${E2_SHIFT_CLOSE_ROW}:`, `${E2_CASH_COUNT_ROW}:`, `${Z_BUILD}:`] as const
+
+/**
+ * Task 14 · carried item 9a fix round 1 (item 1a) · fix round 2 item C: every reason a CENTRAL shift's Z can
+ * refuse for good — dayo answered something this tablet cannot use (`DAYO_BAD_RESPONSE`), the Z is too large for
+ * E2 (`Z_TOO_LARGE`), the count is before dayo's own last Z (`BAD_INPUT COUNT_BEFORE_CENTRAL_Z:`), the shift_close
+ * or cash_count row itself could not be built (`BAD_INPUT E2 shift_close row:` / `E2 cash_count row:` — rows.ts
+ * `builtRow`), or the Z snapshot itself could not be built (`BAD_INPUT Z_BUILD:` — a `RangeError` in `buildZReport`,
+ * close.ts). An ALLOWLIST of structured detail prefixes, never "any BAD_INPUT" (fix round 2 review: that swept up
+ * ordinary input mistakes — an inactive user, a reason with control characters, bad count lines — that are not
+ * this dead end at all and have nothing to do with keepShiftLocal).
+ */
+export function isCentralZBlockedError(e: unknown): boolean {
+  const code = posErrorCode(e)
+  if (code === 'DAYO_BAD_RESPONSE' || code === 'Z_TOO_LARGE') return true
+  if (code !== 'BAD_INPUT' || !(e instanceof Error)) return false
+  return CENTRAL_Z_BLOCKED_BAD_INPUT_PREFIXES.some((prefix) => e.message.startsWith(`BAD_INPUT: ${prefix}`))
 }

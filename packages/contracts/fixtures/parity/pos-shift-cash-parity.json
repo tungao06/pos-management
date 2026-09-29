@@ -1,0 +1,12 @@
+{
+  "cases": [
+    { "name": "ขายเงินสดอย่างเดียว นับตรง", "cash": { "opening_float": 500, "pos_cash_sales": 130, "void_refunds": 0, "paid_in": 0, "paid_out": 0, "drops": 0, "drawer_expenses": 0, "bot_cash": 0 }, "counted": 630, "expected": 630, "variance": 0 },
+    { "name": "สถานการณ์แผน 3b + บิลบอท ขาด 0.50", "cash": { "opening_float": 500, "pos_cash_sales": 130, "void_refunds": 90, "paid_in": 0, "paid_out": 20, "drops": 0, "drawer_expenses": 0, "bot_cash": 155.5 }, "counted": 675, "expected": 675.5, "variance": -0.5 },
+    { "name": "เงินคืน เงินเข้า จ่ายออก นำออก ขาดพอดี 20.00", "cash": { "opening_float": 1000, "pos_cash_sales": 2345.75, "void_refunds": 45.25, "paid_in": 100, "paid_out": 250.5, "drops": 2000, "drawer_expenses": 0, "bot_cash": 0 }, "counted": 1130, "expected": 1150, "variance": -20 },
+    { "name": "ขาด 19.99 ไม่ต้องมีเหตุผล", "cash": { "opening_float": 500, "pos_cash_sales": 0, "void_refunds": 0, "paid_in": 0, "paid_out": 0, "drops": 0, "drawer_expenses": 0, "bot_cash": 0 }, "counted": 480.01, "expected": 500, "variance": -19.99 },
+    { "name": "ติดลบ — จ่ายออกเกินเงินในลิ้นชัก (D54 Q3b-14)", "cash": { "opening_float": 0, "pos_cash_sales": 0, "void_refunds": 0, "paid_in": 0, "paid_out": 300, "drops": 0, "drawer_expenses": 0, "bot_cash": 0 }, "counted": 0, "expected": -300, "variance": 300 },
+    { "name": "ติดลบพร้อมบิลบอท", "cash": { "opening_float": 100, "pos_cash_sales": 50, "void_refunds": 50, "paid_in": 0, "paid_out": 120.1, "drops": 200, "drawer_expenses": 0, "bot_cash": 19.99 }, "counted": 0, "expected": -200.11, "variance": 200.11 },
+    { "name": "ค่าที่ float ชอบพลาด", "cash": { "opening_float": 0.1, "pos_cash_sales": 0.2, "void_refunds": 0, "paid_in": 59.97, "paid_out": 0, "drops": 0, "drawer_expenses": 0, "bot_cash": 37.45 }, "counted": 97.72, "expected": 97.72, "variance": 0 },
+    { "name": "ค่าใช้จ่ายจากลิ้นชัก (ก้อน 4)", "cash": { "opening_float": 500, "pos_cash_sales": 0, "void_refunds": 0, "paid_in": 0, "paid_out": 0, "drops": 0, "drawer_expenses": 120, "bot_cash": 0 }, "counted": 380, "expected": 380, "variance": 0 }
+  ]
+}

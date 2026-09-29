@@ -1,0 +1,58 @@
+{
+  "name": "e2-cash-count-counted-conflict",
+  "spec": "04 §4.10 · R5-2: การนับใบที่สอง (id ใหม่) ของกะที่มีการนับแล้ว → rejected CONFLICT \"counted:\" + ธงข้อมูลกะชนกัน S5 (0066:305-310) · สถานะก่อน: กะ 5a5a…0001 เปิดแล้วและนับแล้ว (count 7c7c…0001 ฿615 เวลา 12:00Z)",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": {
+      "ok": true,
+      "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c",
+      "shop_id": "11111111-2222-4333-8444-555555555555",
+      "name": "แท็บเล็ตขาย 1",
+      "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write", "shift:write"]
+    },
+    "api_pos_push": "@data"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/pos/push",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" },
+    "body": {
+      "device_time": "2026-09-25T12:10:00.000Z",
+      "rows": [
+        {
+          "key": "cash_count:7c7c7c7c-0000-4000-8000-000000000003",
+          "kind": "cash_count",
+          "data": {
+            "count_id": "7c7c7c7c-0000-4000-8000-000000000003",
+            "shift_id": "5a5a5a5a-0000-4000-8000-000000000001",
+            "lines": [
+              { "denomination": 1000, "count": 0 },
+              { "denomination": 500, "count": 1 },
+              { "denomination": 100, "count": 1 },
+              { "denomination": 50, "count": 0 },
+              { "denomination": 20, "count": 0 },
+              { "denomination": 10, "count": 1 },
+              { "denomination": 5, "count": 1 },
+              { "denomination": 2, "count": 0 },
+              { "denomination": 1, "count": 0 }
+            ],
+            "counted": 615,
+            "counted_by": "7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f",
+            "counted_at": "2026-09-25T12:01:00.000Z"
+          }
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": {
+      "ok": true,
+      "data": {
+        "server_time": "2026-09-25T12:10:00.410+00:00",
+        "results": [{ "key": "cash_count:7c7c7c7c-0000-4000-8000-000000000003", "status": "rejected", "reason": "CONFLICT", "detail": "counted: กะนี้มีการนับเงินอีกใบแล้ว" }]
+      }
+    }
+  }
+}

@@ -1,8 +1,8 @@
-import type { AdjustReason, CashMovementKind, MovementKind, UseUnit, UserRole } from '@dayo/contracts'
+import type { AdjustReason, CashMovementKind, DetailPrefix, MovementKind, PushKind, ShiftSyncMode, UseUnit, UserRole } from '@dayo/contracts'
 import type { Size, Sweetness } from '@dayo/dayo-pricing'
 import type { SyncCycleResult } from '../sync/scheduler'
 import type { ApiState } from '../sync/state'
-import type { CartDraft, CashCountLine, CashInputs, ExpiryState, PosOrderCatalog, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
+import type { CartDraft, CashCountLine, CashInputs, ExpiryState, PosOrderCatalog, SalesSummary, StockStatus, ZBotBill, ZSnapshot, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -11,7 +11,8 @@ export const REASON_MAX_LENGTH = 200
 
 export type UserDto = { id: string; displayName: string; role: UserRole }
 export type DeviceDto = { id: string; name: string; receiptPrefix: string }
-export type ShiftDto = { id: string; businessDate: string; openedAt: string; openedBy: string; openingFloatSatang: number }
+/** syncMode (ruling R1): 'central' = the shift and its cash rows go to dayo (E2 shift lane) · 'local_only' = they never leave the tablet. */
+export type ShiftDto = { id: string; businessDate: string; openedAt: string; openedBy: string; openingFloatSatang: number; syncMode: ShiftSyncMode }
 export type BootstrapState = {
   needsSetup: boolean
   device: DeviceDto | null
@@ -35,6 +36,13 @@ export type BootstrapState = {
   ownerRecovery: boolean
   /** Task 14: the health of the link to dayo (spec 04 §4.3, §6.7, §10.5 · D80). */
   sync: SyncStatusDto
+  /** D101 · R2: this device's shift after "นับเสร็จ" whose count is not confirmed yet — a reload goes back to the count review. */
+  countingShift: { shiftId: string; countedAt: string } | null
+  /** D68 · spec §6.8: counted shifts of this device with no Z yet (the red "ใบปิดกะ <วันที่> รอออนไลน์" bar), oldest count first. */
+  zWaiting: WaitingZDto[]
+  /** Task 13 (ruling R9): dayo's last Z number of this key as stored at setup / key swap / recovery (sync_state
+   * dayo.last_z_no), or null — the close screen names it on Z_CHAIN_BROKEN 'central'. */
+  centralLastZNo: number | null
 }
 /** Task 14 (spec 04 §4.3, §4.4 rule 9, §6.7, §10.5 · D80). Never carries the API key — only its masked form. */
 export type SyncStatusDto = {
@@ -53,19 +61,43 @@ export type SyncStatusDto = {
   catalogCheckedAt: string | null
   catalogError: string | null
   lastPushAt: string | null
-  pendingBills: number
-  problemBills: number
+  /** Task 16 · carried item 5: renamed from `pendingBills` — a pending item is a bill OR a shift-lane row
+   * (`shift_open`/`cash_movement`/`cash_count`/`shift_close`), one per shift_id/pos_order_id (D50 Q3-26). */
+  pendingSyncRows: number
+  /** Task 16 · carried item 5: renamed from `problemBills` — same "bill or shift-lane row" counting rule, dead
+   * rows only, one per ROOT cause (a `PARENT_REJECTED` child never counted on its own). */
+  problemSyncRows: number
   oldestPendingAt: string | null
   pendingOver24h: boolean
   /** Bills whose dayo computed_total differs from ours by any amount (spec §4.3). */
   priceDiffBills: number
-  /** ruling N5: pending bills flagged CLOCK_AHEAD more than 24 h ahead of the server (owner-only banner). */
+  /** ruling N5: pending items (bills and shift-lane rows — Task 14) flagged CLOCK_AHEAD more than 24 h ahead of the server (owner-only banner). */
   clockFarAheadBills: number
+  /**
+   * Task 14 (spec §6.2 m1 · R14): the oldest row waiting for a scope this key lacks (FORBIDDEN `scope:`) — the owner bar: yellow at
+   * once, `red` after 24 h, `closable` ("ปิดไว้ในเครื่อง" on the problems page) after 7 days · null = none.
+   */
+  scopeWait: { scope: string; since: string; red: boolean; closable: boolean } | null
+  /** Task 14 (S5 · R5-2 · D7): a dead shift-lane row says someone else's data is under this key — red bar "ตรวจกุญแจเครื่อง". */
+  shiftDataConflict: boolean
+  /** Task 14 (m2): bills whose "รับทราบ — บิลอยู่ในระบบกลางแล้ว" found dayo's total or cash/non-cash different (red bar). */
+  centralMismatchBills: number
+  /** Task 14 fix round 1 (carried item 6): the shift lane waits behind a row dayo does not support ('unsupported') or one
+   * > 24 h ahead of dayo ('clock') — `rows` = it and every pending shift-lane row after it · `blockingKey` = the row to close. */
+  shiftLaneHeld: { rows: number; blockingKey: string; reason: 'unsupported' | 'clock' } | null
 }
 export type StaffOptionDto = { id: string; displayName: string; role: UserRole }
 export type DayoProbeInput = { baseUrl: string; apiKey: string }
-export type DayoProbe = { clientName: string; lastReceiptNo: string | null; requiredPrefix: string | null; catalogVersion: number; owners: { id: string; displayName: string }[]; pricingMatches: boolean }
-export type ConnectShopInput = { baseUrl: string; apiKey: string; receiptPrefix: string; ownerStaffId: string; ownerPin: string; promptPayId: string; legacyApproval: { userId: string; pin: string } | null }
+/** lastZNo (Task 13 · spec §4.4 ข้อ 6): the last Z number of this key as dayo holds it (E1 client.last_z_no), null = none yet —
+ * shown on "ทดสอบกุญแจ"; the owner confirms it (ConnectShopInput.confirmedLastZNo). probeDayo always sets it; optional in
+ * the type only until the screen fixtures carry it (Task 16). */
+export type DayoProbe = { clientName: string; lastReceiptNo: string | null; requiredPrefix: string | null; catalogVersion: number; owners: { id: string; displayName: string }[]; pricingMatches: boolean; lastZNo: number | null }
+/**
+ * confirmedLastZNo (Task 13 · R4-1 · Task 16 MERGE GATE): DayoProbe.lastZNo as the owner saw and ticked it — must equal
+ * what E1 says now, else BAD_INPUT. null = dayo holds no Z yet (no tick needed) — a key whose dayo holds a Z is refused
+ * until the owner has confirmed that number.
+ */
+export type ConnectShopInput = { baseUrl: string; apiKey: string; receiptPrefix: string; ownerStaffId: string; ownerPin: string; promptPayId: string; legacyApproval: { userId: string; pin: string } | null; confirmedLastZNo: number | null }
 export type SetStaffPinInput = { staffId: string; pin: string; approverUserId: string; approverPin: string }
 export type ReplaceApiKeyInput = { baseUrl: string; apiKey: string; approverUserId: string; approverPin: string }
 /** ruling N2 — no approver: the new key (issued on the dayo web after a LINE login) is the proof. */
@@ -175,7 +207,13 @@ export type OrderSummaryDto = {
   central: CentralStateDto
   /** The owner's latest edit/cancel of this bill on the dayo web (E3 dayo_edit), display only (spec 04 §4.6 · O1 pending). */
   dayoEdit: DayoEditDto | null
+  /** Task 14 (spec §6.4): the owner closed this bill as an off-catalog bill — badge "นอกแคตตาล็อก". */
+  offCatalog: boolean
+  /** Task 14 (m2): dayo's copy of this bill differs from what was collected here (red bar) — display only, null = agrees. */
+  centralMismatch: CentralMismatchDto | null
 }
+/** m2: what "รับทราบ" found — dayo's reported total/cash-ness against this tablet's frozen bill (order.central_mismatch_json). */
+export type CentralMismatchDto = { orderNo: string; reportedTotalSatang: number; paymentIsCash: boolean; localTotalSatang: number; localPaymentIsCash: boolean }
 /**
  * What dayo reported in E3 `dayo_edit`. Display only: the bill's total, payment and status here stay what was collected
  * (spec 04 §4.6). `editedByName` and `reason` are null for a key without staff:read; `version` may be null (contract).
@@ -217,8 +255,13 @@ export type OrderDetailDto = OrderSummaryDto & {
 
 // ---- ก้อน 2 Task 15: ทางแก้ของ owner (หน้า "ส่งไม่ผ่าน") · บิลบอท/เว็บวันนี้ (E3) · ยอดไม่ตรงระบบกลาง ----
 
-/** spec 04 §6.4: the owner's fixes of a row dayo refused (or of a far-ahead row, ruling N5 — EXCLUDE only). */
-export type Remedy = 'RETRY' | 'RENUMBER' | 'REMAP_CODE' | 'REMAP_STAFF' | 'EXCLUDE'
+/**
+ * spec 04 §6.4: the owner's fixes of a row dayo refused (or of a far-ahead row, ruling N5 — EXCLUDE only). Block 3 (Task 14):
+ * CLOSE_OFF_CATALOG "ปิดเป็นบิลนอกแคตตาล็อก" (only while dayo advertises order_off_catalog — preflight P2) ·
+ * ACKNOWLEDGE_ELSEWHERE "รับทราบ — บิลอยู่ในระบบกลางแล้ว" · RECONFIRM_OWNER "ปิดใหม่โดย owner" (FORBIDDEN role:).
+ */
+export type Remedy = 'RETRY' | 'RENUMBER' | 'REMAP_CODE' | 'REMAP_STAFF' | 'EXCLUDE' | 'CLOSE_OFF_CATALOG' | 'ACKNOWLEDGE_ELSEWHERE' | 'RECONFIRM_OWNER'
+
 /**
  * What dayo's UNKNOWN_CODE detail named (sync-problems.ts namedUnknown) — the one field "เลือกรหัสแทน" may change. For a
  * line: the lines of the bill dayo described, as they are now; `gradeOnly` = dayo named only their grade, so menu, size
@@ -227,14 +270,35 @@ export type Remedy = 'RETRY' | 'RENUMBER' | 'REMAP_CODE' | 'REMAP_STAFF' | 'EXCL
 export type RemapScope =
   | { field: 'channel' | 'payment' }
   | { field: 'line'; lines: { index: number; code: string; size: Size; sweetness: Sweetness }[]; gradeOnly: boolean }
+/** What dayo's `exists:` / `off_catalog_exists:` verdict data says about the bill (R16 · m2), against this tablet's frozen bill. */
+export type CentralExistsDto = { orderNo: string; reportedTotalSatang: number; paymentIsCash: boolean; matchesLocal: boolean }
 /**
- * One row of the "ส่งไม่ผ่าน" page. `children` = rows waiting on it (PARENT_REJECTED) — they come back with it.
+ * One row of the "ส่งไม่ผ่าน" page. `children` = rows waiting on it (PARENT_REJECTED, every level) — they come back with it.
  * `remap` = set exactly when REMAP_CODE is offered. `remapHint` = why dayo's UNKNOWN_CODE has no remap here and what
- * to do instead (Thai), or null.
+ * to do instead (Thai), or null (block 2 · preflight P5 keeps both).
+ *
+ * Block 3 (Task 14 · Task 16 carried item 1): rows of EVERY push kind are listed — `kind` holds any `PushKind` (widened
+ * in Task 16; ui/th.ts `syncProblemKind` now has a label for every one). `pushKind` always equals `kind` — kept as its
+ * own field for the pre-Task-16 code that already reads it.
+ * - `pushKind`: the row's kind (= `kind`) · `orderId`: the bill (null for a shift-lane row) · `shiftId`: the shift the row
+ *   belongs to (a bill: its central shift, else null)
+ * - `prefix`: dayo's fixed detail prefix (the tablet decides by it only — §4.10)
+ * - `waiting`: a card for a row still in the queue — 'clock' (N5, > 24 h ahead) · 'scope' (FORBIDDEN scope: for ≥ 7 days)
+ *   · 'unsupported' (a shift-lane row dayo no longer supports — carried item 6) · null = a dead row
+ * - `hint`: 'void_rejected' (§6.4 ค — cancel `centralOrderNo` on the dayo web) · 'shift_conflict' (S5 — check the key) ·
+ *   'key_replaced' (the shift began under the key replaced since — carried item 7: keep the shift on the tablet)
+ * - `central`: dayo's data of an exists: conflict (R16) · `centralOrderNo`: the bill's dayo number (order.central_order_no)
+ * - `blocksLaneRows`: how many later shift-lane rows wait behind this waiting row (the strict shift lane — carried item 6)
  */
 export type SyncProblemDto = {
-  outboxId: string; key: string; kind: 'order' | 'order_void'; orderId: string; receiptNo: string | null; at: string; reason: string; detail: string; remedies: Remedy[]
+  outboxId: string; key: string; kind: PushKind; orderId: string | null; receiptNo: string | null; at: string; reason: string; detail: string; remedies: Remedy[]
   remap: RemapScope | null; remapHint: string | null; children: SyncProblemDto[]
+  pushKind: PushKind; shiftId: string | null; prefix: DetailPrefix | null
+  waiting: 'clock' | 'scope' | 'unsupported' | null
+  hint: 'void_rejected' | 'shift_conflict' | 'key_replaced' | null
+  central: CentralExistsDto | null
+  centralOrderNo: string | null
+  blocksLaneRows: number
 }
 /** Every remedy = an owner's PIN + a reason (spec §6.4). */
 export type OwnerApproval = { approverUserId: string; approverPin: string; reason: string }
@@ -314,7 +378,48 @@ export type CloseShiftInput = {
  * `sales` (review I-1). `hashOk` is then always false: a snapshot the UI cannot read is never trusted. The UI
  * (Task 9) must show "ไฟล์เสีย" rather than assume `snapshot` is present.
  */
-export type ZReportDto = { id: string; shiftId: string; createdAt: string; hash: string; hashOk: boolean; snapshot: ZSnapshot | null }
+export type ZReportDto = { id: string; shiftId: string; createdAt: string; hash: string; hashOk: boolean; snapshot: StoredZSnapshot | null }
+/** Block-3 fields of a Z snapshot (D101 · spec 04 §4.10): absent from every Z frozen before block 3 (the hash covers the
+ * stored JSON as it is — an old Z is never filled in). */
+type Block3ZField = 'countedAt' | 'botWindow' | 'botBills'
+type Block3CashField = 'drawerExpensesSatang' | 'botCashSatang'
+/** A Z snapshot as read back from `z_report.snapshot_json`: a pre-block-3 Z has no countedAt/botWindow/botBills and its
+ * `cash` has no drawerExpensesSatang/botCashSatang (carried from Task 2 review) — readers must treat them as optional. */
+export type StoredZSnapshot = Omit<ZSnapshot, Block3ZField | 'cash'> & Partial<Pick<ZSnapshot, Block3ZField>> & {
+  cash: Omit<CashInputs, Block3CashField> & Partial<Pick<CashInputs, Block3CashField>>
+}
+
+// ── block 3 count and Z (D101 · spec 04 §6.8 · §4.10) ────────────────────────────────────────────────────────────────
+/** E4 as the tablet keeps it (spec §4.10): the bot/web cash bills of (after, until], until = the shift's counted_at. */
+export type BotCashDto = { shiftId: string; after: string; until: string; bills: ZBotBill[]; cashTotalSatang: number; fetchedAt: string }
+/** The count review screen: the shift's figures at counted_at, with the stored E4 bot cash when there is one (includesBotCash). */
+/** zBlockedBy (ruling R7): the id of an earlier counted shift of this device still waiting for its Z — while set, a Z of
+ * this shift is refused (Z_NOT_READY): the screen confirms the count only (z: null) and points at that shift first. */
+export type CountSummaryDto = ShiftReportDto & { countedAt: string; syncMode: ShiftSyncMode; includesBotCash: boolean; bot: BotCashDto | null; zBlockedBy: string | null
+  /** Task 14 (carried item 8): receipts of this shift dayo will never receive (the owner closed them "ปิดไว้ในเครื่อง", or a
+   * plan-3 bill) and the cash refunds of those that were cancelled — their VOID_REFUND still goes to dayo (ruling). The
+   * screen says "N บิลในใบปิดกะนี้จะไม่ถึงระบบกลาง". */
+  notInDayo: { bills: number; voidRefundSatang: number } }
+/**
+ * Task 14 · carried item 9a (release gate) · R19: "เก็บกะนี้ไว้ในเครื่อง" — a central shift whose Z can never be issued with
+ * dayo (E4 keeps failing, Z_TOO_LARGE, COUNT_BEFORE_CENTRAL_Z, a shift_close dayo would refuse…) becomes local-only; its Z is
+ * then issued like any local Z and R7 stops holding the later ones. `closedKeys` = its queued rows now local_only ·
+ * `sentKeys` = rows dayo already has (dayo keeps that shift open) · `botWindow` = the E4 window whose bot cash no Z will
+ * count (null = the shift is not counted yet) — the screen warns about both.
+ */
+export type KeepShiftLocalResult = { shiftId: string; closedKeys: string[]; sentKeys: string[]; botWindow: { after: string; until: string } | null }
+/** Task 14 · carried item 9b (release gate): every far-ahead count floor the owner skipped at once (fix round 1 item 1) — bot
+ * bills of their windows may be counted twice or missed. */
+export type SkipCountFloorResult = { skipped: { countedAt: string; shiftId: string }[]; botBillsRisk: 'double_or_missed' }
+/** What the owner settles when the Z is issued: the reason (asked when |variance| ≥ the threshold, D102), the bank-app QR total, a chain acknowledgement. */
+export type ZSettle = { varianceReason: string | null; bankQrTotalSatang: number | null; acknowledgeZChainBroken: boolean }
+/** D101 step 2/3 · owner PIN · `z` null = count only (offline: no reason asked yet) · `z` set = count and Z in one transaction. */
+export type ConfirmCountInput = { shiftId: string; actorUserId: string; approverUserId: string; approverPin: string; countLines: CashCountLine[]; shownFingerprint: string; z: ZSettle | null }
+export type ConfirmCountResult = { countId: string; z: ZReportDto | null }
+/** D101 step 3 (online again): the Z of a counted shift — owner PIN again. */
+export type IssueZInput = ZSettle & { shiftId: string; approverUserId: string; approverPin: string; shownFingerprint: string }
+/** A counted shift waiting for its Z · countedSatang = the saved cash_count (IssueZScreen shows the variance from it). */
+export type WaitingZDto = { shiftId: string; businessDate: string; countedAt: string; syncMode: ShiftSyncMode; countedSatang: number }
 /** Summary fields are null when the underlying snapshot could not be read (review I-1) — `hashOk` says so; `shiftId` and `hashOk` are always readable from their own columns. */
 export type ZReportSummaryDto = {
   shiftId: string
@@ -327,6 +432,10 @@ export type ZReportSummaryDto = {
   hashOk: boolean
   /** This Z was closed after acknowledging a previous Z that failed its hash (Q3b-11 · D53); false when unreadable. */
   chainWarning: boolean
+  /** Task 14/16 (carried item 6): its shift's own `syncMode` — 'local_only' shows "ใบปิดกะนี้เก็บในเครื่องเท่านั้น"
+   * on the list, same badge the Z detail screen already shows (`TH.zLocalOnly`) — read from the shift row itself
+   * (never from the snapshot, which never carried it). */
+  syncMode: ShiftSyncMode
 }
 
 /** The raw SQLite file of this device (spec §11 · spike I3 `exportFile`) and the latest Z it contains. */
@@ -488,7 +597,19 @@ export interface PosApi {
   quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
   recordCashMovement(input: CashMovementInput): Promise<CashMovementDto>
   shiftReport(): Promise<ShiftReportDto>
+  /** One-step close of a LOCAL-ONLY shift (block 2 behaviour = finishCount + confirmCount with the Z) · central → BOT_CASH_REQUIRED. */
   closeShift(input: CloseShiftInput): Promise<ZReportDto>
+  /** "นับเสร็จ" (D101 step 1 · R3): the open shift takes no more bills or cash movements; counted_at is set once. */
+  finishCount(input: { actorUserId: string }): Promise<{ shiftId: string; countedAt: string }>
+  /** The count review of a counting/counted shift — the one rule confirmCount and issueZ use too (stored E4 when there is one). */
+  countSummary(shiftId: string): Promise<CountSummaryDto>
+  /** E4 (spec §4.10) — not in the serial queue · network failure = OFFLINE · 401/403/404 = DAYO_BAD_KEY/DAYO_KEY_NO_SCOPE/DAYO_API_DISABLED ·
+   * > 500 bills = Z_TOO_LARGE · 5xx/429/timeout = DAYO_UNREACHABLE · an answer that fails the tablet's checks = DAYO_BAD_RESPONSE. */
+  fetchBotCash(shiftId: string): Promise<BotCashDto>
+  /** owner PIN · z != null: count + Z in one transaction (D101 step 2). */
+  confirmCount(input: ConfirmCountInput): Promise<ConfirmCountResult>
+  /** owner PIN again (D101 step 3) · Zs in count order (R7). */
+  issueZ(input: IssueZInput): Promise<ZReportDto>
   listZReports(): Promise<ZReportSummaryDto[]>
   getZReport(shiftId: string): Promise<ZReportDto>
   exportBackup(actorUserId: string): Promise<BackupFileDto>
@@ -521,6 +642,17 @@ export interface PosApi {
   excludeFromSync(input: OwnerApproval & { outboxId: string }): Promise<void>
   /** owner · pretty JSON of {key, kind, data, lastError, createdAt} — no API key, no PIN, no sync_state. */
   exportSyncRow(input: { actorUserId: string; outboxId: string }): Promise<string>
+  // Task 14 (block 3 · spec 04 §6.4 · D91 · D97): owner PIN + reason, each in the serial queue
+  /** "ปิดเป็นบิลนอกแคตตาล็อก" — can('close_off_catalog') · only while dayo advertises order_off_catalog (P2). */
+  closeOffCatalog(input: OwnerApproval & { outboxId: string }): Promise<{ offCatalogKey: string }>
+  /** "รับทราบ — บิลอยู่ในระบบกลางแล้ว" (exists: / off_catalog_exists:). */
+  acknowledgeElsewhere(input: OwnerApproval & { outboxId: string }): Promise<{ orderNo: string; matchesLocal: boolean }>
+  /** FORBIDDEN role: of a shift_close / order_off_catalog — closed again by this owner. */
+  reconfirmOwner(input: OwnerApproval & { outboxId: string }): Promise<void>
+  /** carried item 9a: keep a central shift on the tablet (R19). */
+  keepShiftLocal(input: OwnerApproval & { shiftId: string }): Promise<KeepShiftLocalResult>
+  /** carried item 9b: skip the far-ahead count floor once. */
+  skipCountFloor(input: OwnerApproval): Promise<SkipCountFloorResult>
   /** every role (Q44) · online only (E3) — OFFLINE otherwise · the network wait is outside the serial queue. */
   listCentralOrdersToday(): Promise<CentralOrderDto[]>
   /** every role · E3 with updated_since: records dayo_edit of this tablet's bills (display only) · OFFLINE when it cannot. */
@@ -545,6 +677,11 @@ export const POS_API_METHODS = [
   'recordCashMovement',
   'shiftReport',
   'closeShift',
+  'finishCount',
+  'countSummary',
+  'fetchBotCash',
+  'confirmCount',
+  'issueZ',
   'listZReports',
   'getZReport',
   'exportBackup',
@@ -573,6 +710,11 @@ export const POS_API_METHODS = [
   'remapStaff',
   'excludeFromSync',
   'exportSyncRow',
+  'closeOffCatalog',
+  'acknowledgeElsewhere',
+  'reconfirmOwner',
+  'keepShiftLocal',
+  'skipCountFloor',
   'listCentralOrdersToday',
   'refreshDayoEdits',
   'listPriceDiffs',

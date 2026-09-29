@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CentralStateDto, DayoEditDto, OrderDetailDto, PosApi, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { SessionProvider, useSession } from '../app/session'
+import { TH } from '../ui/th'
 import { OrderDetailScreen } from './OrderDetailScreen'
 
 afterEach(() => cleanup())
@@ -26,6 +27,8 @@ const ORDER: OrderDetailDto = {
   soldByName: 'มิ้นท์',
   central: CENTRAL_NONE,
   dayoEdit: null,
+  offCatalog: false,
+  centralMismatch: null,
   businessDate: '2026-09-25',
   shiftId: 's1',
   subtotalSatang: 15_500,
@@ -144,5 +147,19 @@ describe('OrderDetailScreen — dayo_edit, read only (spec §4.6, §4.7 · ADR-0
     renderDetail(fakeOrderApi({ dayoEdit: null }))
     await screen.findByTestId('central-state')
     expect(screen.queryByTestId('order-dayo-edit')).toBeNull()
+  })
+})
+
+describe('OrderDetailScreen — block 3 (spec §6.4 · m2)', () => {
+  it('an off-catalog bill carries the badge; a central mismatch is shown read-only', async () => {
+    renderDetail(
+      fakeOrderApi({
+        offCatalog: true,
+        centralMismatch: { orderNo: 'L260925-014', reportedTotalSatang: 4_000, paymentIsCash: false, localTotalSatang: 4_500, localPaymentIsCash: false },
+      }),
+    )
+    expect(await screen.findByTestId('order-off-catalog-badge')).toHaveTextContent(TH.offCatalogBadge)
+    expect(screen.getByTestId('order-central-mismatch')).toHaveTextContent(TH.centralMismatchLine('L260925-014', '40.00', '45.00'))
+    expect(screen.queryByTestId('order-edit')).toBeNull()
   })
 })

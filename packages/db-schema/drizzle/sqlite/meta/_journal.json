@@ -43,6 +43,13 @@
       "when": 1790357711385,
       "tag": "0005_order_central_dayo_edit",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790654480696,
+      "tag": "0006_block3_shift_cash",
+      "breakpoints": true
     }
   ]
 }

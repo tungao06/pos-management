@@ -24,6 +24,8 @@ const ORDER: OrderDetailDto = {
   soldByName: 'DCm',
   central: { state: 'legacy', orderNo: null, computedTotalSatang: null, diffSatang: null, duplicateOf: [], reason: null, voidState: 'none' },
   dayoEdit: null,
+  offCatalog: false,
+  centralMismatch: null,
   businessDate: '2026-09-25',
   shiftId: 's1',
   subtotalSatang: 4_500,

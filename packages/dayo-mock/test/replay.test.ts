@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { header, type CentralOrder, type OrderRowData } from '@dayo/contracts'
+import { BLOCK3_FIXTURE_NAMES, header, type CentralOrder, type OrderRowData } from '@dayo/contracts'
 import { listContractFixtures, loadContractFixture } from '@dayo/contracts/fixture-files'
 import { basename } from 'node:path'
 import { ALL_SCOPES, createMockDayo, type MockDayo, type MockMode } from '../src/index.js'
@@ -56,7 +56,8 @@ function mockFor(fx: Fx): MockDayo {
   return m
 }
 
-for (const file of listContractFixtures()) {
+const BLOCK3 = new Set<string>(BLOCK3_FIXTURE_NAMES) // replayed on the block 3 mock in fixtures-replay.test.ts
+for (const file of listContractFixtures().filter((f) => !BLOCK3.has(basename(f, '.json')))) {
   const fx = loadContractFixture(basename(file, '.json'))
   describe(`replay ${fx.name}`, () => {
     it('the mock answers exactly as the contract fixture says', async () => {

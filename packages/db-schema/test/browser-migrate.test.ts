@@ -70,31 +70,38 @@ describe('migrateSqliteRemote (drizzle migrator over sqlite-proxy, browser-safe)
       const file = join(dir, 'plan4.sqlite3')
       writeFileSync(file, plan4.raw.export())
       const { raw, db } = open(new DatabaseSync(file))
-      const rows = (q: string) => raw.prepare(q).all()
-      const orderCols = PLAN4_ORDER_COLUMNS.map((c) => `"${c}"`).join(', ')
-      const orderBefore = rows(`select ${orderCols} from "order"`)
-      expect(Object.values(orderBefore[0]!).filter((v) => v === null)).toEqual([]) // a value in every old column
-      const childrenBefore = UNTOUCHED_BILL_TABLES.map((t) => rows(`select * from "${t}" order by id`))
-      const outboxBefore = rows(`select * from outbox order by id`)
+      try {
+        const rows = (q: string) => raw.prepare(q).all()
+        const orderCols = PLAN4_ORDER_COLUMNS.map((c) => `"${c}"`).join(', ')
+        const orderBefore = rows(`select ${orderCols} from "order"`)
+        expect(Object.values(orderBefore[0]!).filter((v) => v === null)).toEqual([]) // a value in every old column
+        // the old columns only: block 3 (0006) appends counted_at/sync_mode to shift (checked below)
+        const oldCols = (t: string) => (raw.prepare(`select name from pragma_table_info('${t}') order by cid`).all() as { name: string }[]).map((c) => `"${c.name}"`).join(', ')
+        const childCols = UNTOUCHED_BILL_TABLES.map(oldCols)
+        const childrenBefore = UNTOUCHED_BILL_TABLES.map((t, i) => rows(`select ${childCols[i]!} from "${t}" order by id`))
+        const outboxBefore = rows(`select * from outbox order by id`)
 
-      const pending = SQLITE_MIGRATIONS.slice(SQLITE_MIGRATIONS.findIndex((m) => m.tag === '0003_block2_central_catalog'))
-      expect((await migrateSqliteRemote(db)).applied).toEqual(pending.map((m) => m.tag))
-      expect(rows(`select ${orderCols} from "order"`)).toEqual(orderBefore)
-      expect(UNTOUCHED_BILL_TABLES.map((t) => rows(`select * from "${t}" order by id`))).toEqual(childrenBefore)
-      expect(rows(`select * from outbox order by id`)).toEqual(outboxBefore.map((r) => ({ ...r, status: 'local_only', next_attempt_at: null, parent_key: null, result_json: null })))
-      expect(rows('PRAGMA foreign_key_check')).toEqual([])
-      expect(raw.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
-      expect(names(raw, 'trigger')).toEqual([...SQLITE_TRIGGERS])
+        const pending = SQLITE_MIGRATIONS.slice(SQLITE_MIGRATIONS.findIndex((m) => m.tag === '0003_block2_central_catalog'))
+        expect((await migrateSqliteRemote(db)).applied).toEqual(pending.map((m) => m.tag))
+        expect(rows(`select ${orderCols} from "order"`)).toEqual(orderBefore)
+        expect(UNTOUCHED_BILL_TABLES.map((t, i) => rows(`select ${childCols[i]!} from "${t}" order by id`))).toEqual(childrenBefore)
+        expect(rows(`select id, sync_mode, counted_at from shift`)).toEqual([{ id: 'shift-1', sync_mode: 'local_only', counted_at: null }]) // ruling R1
+        expect(rows(`select * from outbox order by id`)).toEqual(outboxBefore.map((r) => ({ ...r, status: 'local_only', next_attempt_at: null, parent_key: null, result_json: null })))
+        expect(rows('PRAGMA foreign_key_check')).toEqual([])
+        expect(raw.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
+        expect(names(raw, 'trigger')).toEqual([...SQLITE_TRIGGERS])
 
-      raw.exec(`insert into "order" (id, origin, device_id, receipt_no, queue_no, business_date, shift_id, channel_code, status,
-          subtotal_satang, discount_satang, total_satang, vat_satang, cost_satang, created_by_type, created_by_id, created_at, sold_at)
-        values ('order-b2', 'device', 'dev-1', 'A-000002', 2, '2026-09-25', 'shift-1', 'store', 'paid', 4500, 0, 4500, 0, 0, 'user', 'u1', '${NOW}', '${NOW}');
-        insert into order_item (id, order_id, line_no, menu_code, menu_name_th, size, sweetness, milk, grade, qty, unit_price_satang, discount_per_cup_satang, discount_reason, promotion_id, line_total_satang)
-        values ('oi-1', 'order-b2', 1, 'TT01', 'ชาไทย', '16 oz', '100%', 'fresh', null, 1, 4500, 0, null, null, 4500)`)
-      expect(() => raw.exec(`update order_item set qty = 2 where id = 'oi-1'`)).toThrow(/order_item is append-only: UPDATE rejected/)
-      expect(() => raw.exec(`delete from order_item where id = 'oi-1'`)).toThrow(/order_item is append-only: DELETE rejected/)
-      expect(rows(`select qty from order_item`)).toEqual([{ qty: 1 }])
-      raw.close()
+        raw.exec(`insert into "order" (id, origin, device_id, receipt_no, queue_no, business_date, shift_id, channel_code, status,
+            subtotal_satang, discount_satang, total_satang, vat_satang, cost_satang, created_by_type, created_by_id, created_at, sold_at)
+          values ('order-b2', 'device', 'dev-1', 'A-000002', 2, '2026-09-25', 'shift-1', 'store', 'paid', 4500, 0, 4500, 0, 0, 'user', 'u1', '${NOW}', '${NOW}');
+          insert into order_item (id, order_id, line_no, menu_code, menu_name_th, size, sweetness, milk, grade, qty, unit_price_satang, discount_per_cup_satang, discount_reason, promotion_id, line_total_satang)
+          values ('oi-1', 'order-b2', 1, 'TT01', 'ชาไทย', '16 oz', '100%', 'fresh', null, 1, 4500, 0, null, null, 4500)`)
+        expect(() => raw.exec(`update order_item set qty = 2 where id = 'oi-1'`)).toThrow(/order_item is append-only: UPDATE rejected/)
+        expect(() => raw.exec(`delete from order_item where id = 'oi-1'`)).toThrow(/order_item is append-only: DELETE rejected/)
+        expect(rows(`select qty from order_item`)).toEqual([{ qty: 1 }])
+      } finally {
+        raw.close() // also when an expectation fails — Windows cannot delete an open file (EBUSY)
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

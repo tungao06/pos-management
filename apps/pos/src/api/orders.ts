@@ -4,7 +4,7 @@ import * as s from '@dayo/db-schema/sqlite'
 import { bangkokDateOf, rowKey } from '@dayo/contracts'
 import { centralDiffSatang, type PricedPromotion } from '@dayo/domain'
 import { readCatalog, staffDisplayName } from '../sync/catalog'
-import { DAYO_KEYS, decodeLastError, readKey, SKEW_FRESH_MS } from '../sync/state'
+import { decodeLastError, estimatedServerMs } from '../sync/state'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
@@ -23,7 +23,12 @@ function voidStateOf(o: OrderRow, v: OutboxRow | undefined): CentralStateDto['vo
   return v.status === 'sent' ? 'sent' : v.status === 'dead' ? 'problem' : 'pending'
 }
 
-function centralState(o: OrderRow, row: OutboxRow | undefined, voidRow: OutboxRow | undefined): CentralStateDto {
+/**
+ * Task 14 (carried item 3): once the owner closed the bill off-catalog, its `order` row is closed_off_catalog for good and the
+ * bill travels as its order_off_catalog row — that row says where the bill is.
+ */
+function centralState(o: OrderRow, orderRow: OutboxRow | undefined, voidRow: OutboxRow | undefined, offRow: OutboxRow | undefined): CentralStateDto {
+  const row = orderRow?.status === 'closed_off_catalog' && offRow !== undefined ? offRow : orderRow
   const base = {
     orderNo: o.centralOrderNo,
     computedTotalSatang: o.centralComputedTotalSatang,
@@ -36,6 +41,7 @@ function centralState(o: OrderRow, row: OutboxRow | undefined, voidRow: OutboxRo
   if (o.excludedAt !== null) return { ...base, state: 'excluded' }
   if (row?.status === 'sent') return { ...base, state: 'sent' }
   if (row?.status === 'dead') return { ...base, state: 'problem' }
+  if (row?.status === 'local_only') return { ...base, state: 'excluded' }
   return { ...base, state: 'pending' }
 }
 
@@ -52,8 +58,10 @@ function summarize(o: OrderRow, payments: readonly { method: string }[], cupRows
     cups: cupRows.reduce((a, l) => a + l.qty, 0), // order_line (plan-3 bills) + order_item (block 2)
     soldById: o.createdById,
     soldByName: ctx.sellerName(o.createdById),
-    central: centralState(o, ctx.outbox.get(rowKey('order', o.id)), ctx.outbox.get(rowKey('order_void', o.id))),
+    central: centralState(o, ctx.outbox.get(rowKey('order', o.id)), ctx.outbox.get(rowKey('order_void', o.id)), ctx.outbox.get(rowKey('order_off_catalog', o.id))),
     dayoEdit: dayoEditOf(o),
+    offCatalog: o.offCatalogAt !== null,
+    centralMismatch: o.centralMismatchJson ?? null,
   }
 }
 
@@ -76,7 +84,7 @@ async function sellerNames(db: RemoteDb, ids: readonly string[]): Promise<(id: s
 
 async function outboxOf(db: RemoteDb, orderIds: readonly string[]): Promise<Map<string, OutboxRow>> {
   if (orderIds.length === 0) return new Map()
-  const keys = orderIds.flatMap((id) => [rowKey('order', id), rowKey('order_void', id)])
+  const keys = orderIds.flatMap((id) => [rowKey('order', id), rowKey('order_void', id), rowKey('order_off_catalog', id)])
   const rows = await db.select().from(s.outbox).where(inArray(s.outbox.idempotencyKey, keys)).all()
   return new Map(rows.map((r) => [r.idempotencyKey, r]))
 }
@@ -120,14 +128,8 @@ function promotionsOf(o: OrderRow): { name: string; discountSatang: number }[] {
 export async function voidInstant(db: RemoteDb, deviceId: string, deviceNow: string): Promise<{ stamp: string; judge: string }> {
   const latest = (await db.select({ v: max(s.order.soldAt) }).from(s.order).where(eq(s.order.deviceId, deviceId)).get())?.v ?? null
   const stamp = latest !== null && Date.parse(latest) > Date.parse(deviceNow) ? latest : deviceNow
-  const skewRaw = await readKey(db, DAYO_KEYS.clockSkewMs)
-  const skew = skewRaw === null ? Number.NaN : Number(skewRaw)
-  const measuredAt = Date.parse((await readKey(db, DAYO_KEYS.clockMeasuredAt)) ?? '')
-  const age = Date.parse(deviceNow) - measuredAt
-  const server = !Number.isFinite(skew) || !Number.isFinite(age) || age > SKEW_FRESH_MS ? Number.NaN
-    : age < 0 ? measuredAt + skew // the clock went back since: never move the estimate back with it
-      : Date.parse(deviceNow) + skew
-  const judge = Number.isFinite(server) && server > Date.parse(stamp) ? new Date(server).toISOString() : stamp
+  const server = await estimatedServerMs(db, deviceNow) // fresh skew only; frozen at the measurement when the clock went back
+  const judge = server !== null && Number.isFinite(server) && server > Date.parse(stamp) ? new Date(server).toISOString() : stamp
   return { stamp, judge }
 }
 

@@ -27,6 +27,8 @@ const ORDER: OrderDetailDto = {
   soldByName: 'TungAo',
   central: { state: 'legacy', orderNo: null, computedTotalSatang: null, diffSatang: null, duplicateOf: [], reason: null, voidState: 'none' },
   dayoEdit: null,
+  offCatalog: false,
+  centralMismatch: null,
   businessDate: '2026-09-17',
   shiftId: 's1',
   subtotalSatang: 4_500,
@@ -48,7 +50,7 @@ const BOOT: BootstrapState = {
   needsSetup: false,
   device: { id: 'd1', name: 'เครื่อง 1', receiptPrefix: 'A' },
   users: [OWNER],
-  openShift: { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 50_000 },
+  openShift: { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 50_000, syncMode: 'local_only' },
   pendingSyncItems: 0,
   lastBackupAt: null,
   backupDue: false,
@@ -58,6 +60,9 @@ const BOOT: BootstrapState = {
   staffNeedingPin: [],
   ownerRecovery: false,
   sync: HEALTHY_SYNC,
+  countingShift: null,
+  zWaiting: [],
+  centralLastZNo: null,
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

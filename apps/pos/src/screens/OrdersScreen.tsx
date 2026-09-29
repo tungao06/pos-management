@@ -55,6 +55,16 @@ export function OrdersScreen(): JSX.Element {
             <span>{formatBaht(o.totalSatang)}</span>
             <span className={o.status === 'voided' ? 'error' : 'badge'}>{o.status === 'voided' ? TH.statusVoided : TH.statusPaid}</span>
             <CentralStateChip central={o.central} />
+            {o.offCatalog && (
+              <span data-testid="order-off-catalog-badge" className="badge">
+                {TH.offCatalogBadge}
+              </span>
+            )}
+            {o.centralMismatch !== null && (
+              <span data-testid="order-central-mismatch-badge" className="chip chip-orange" role="alert">
+                {TH.centralMismatchBanner}
+              </span>
+            )}
             {o.dayoEdit !== null && (
               <span data-testid="order-dayo-edit-chip" className="chip chip-orange">
                 {o.dayoEdit.kind === 'cancel' ? TH.orderDayoEditChipCancel : TH.orderDayoEditChipEdit}

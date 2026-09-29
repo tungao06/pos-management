@@ -71,6 +71,12 @@ export function ShiftScreen(): JSX.Element {
         <button type="button" data-testid="nav-backup" onClick={() => void navigate({ to: '/backup' })}>
           {TH.backupTitle}
         </button>
+        {/* Task 20 says "/status (every role)" — but until now the only ways in were a handful of special banners
+            (key revoked, a sync problem, owner-recovery). A plain, always-there way in belongs on the shift hub,
+            not tucked behind trouble. */}
+        <button type="button" data-testid="nav-status" onClick={() => void navigate({ to: '/status' })}>
+          {TH.statusTitle}
+        </button>
       </div>
     </main>
   )

@@ -2,9 +2,10 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { MAX_ZNO_LIST_LENGTH, zReportHash } from '@dayo/domain'
-import { closeShift } from '../src/api/close'
+import { closeShift } from '../src/api/count'
 import type { CloseShiftInput } from '../src/api/types'
 import { hashPin } from '../src/lib/pin'
+import { openConnectedApi } from './helpers/dayo'
 import { openReadyApi, PINS, legacySale, TEST_PIN_COST, type ReadyApi } from './helpers/db'
 import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
@@ -97,8 +98,11 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
       closedAt: '2026-09-17T13:05:00.000Z',
       closedBy: t.owner.id,
       countedBy: t.other.id,
+      countedAt: '2026-09-17T13:05:00.000Z', // block 2 counts and closes in one step (R17)
+      botWindow: null,
+      botBills: [],
       sales: { orderCount: 3, voidCount: 2, grossSalesSatang: 18_500, discountSatang: 500, voidedSatang: 14_000, netSalesSatang: 4_000, cashSalesSatang: 13_000, qrSalesSatang: 5_000, qrRefundedSatang: 5_000, qrNetSatang: 0 },
-      cash: { openingFloatSatang: 50_000, cashSalesSatang: 13_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0 },
+      cash: { openingFloatSatang: 50_000, cashSalesSatang: 13_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 },
       countedCashSatang: 52_000,
       expectedCashSatang: 52_000,
       cashVarianceSatang: 0,
@@ -127,7 +131,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     const boot = await t.api.bootstrap()
     expect(boot.openShift).toBeNull()
     expect(await t.api.getZReport(t.shift.id)).toEqual(z)
-    expect(await t.api.listZReports()).toEqual([{ shiftId: t.shift.id, businessDate: '2026-09-17', zNo: 1, closedAt: '2026-09-17T13:05:00.000Z', netSalesSatang: 4_000, cashVarianceSatang: 0, openedQuick: false, hashOk: true, chainWarning: false }])
+    expect(await t.api.listZReports()).toEqual([{ shiftId: t.shift.id, businessDate: '2026-09-17', zNo: 1, closedAt: '2026-09-17T13:05:00.000Z', netSalesSatang: 4_000, cashVarianceSatang: 0, openedQuick: false, hashOk: true, chainWarning: false, syncMode: 'local_only' }])
     // after the close: no selling, no void, no second close (spec §4.8, D47 ข้อ 2)
     await expect(legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })).rejects.toThrow(/^NO_OPEN_SHIFT: /)
     await expect(t.api.cancelSale({ orderId: sc.cashKept.orderId, actorUserId: t.owner.id, approverUserId: t.owner.id, approverPin: PINS.TungAo, reason: 'x', made: false, refundReference: null })).rejects.toThrow(/^VOID_NOT_ALLOWED: /)
@@ -137,12 +141,14 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     ).rejects.toThrow(/^NO_OPEN_SHIFT: /)
   })
 
-  it('a variance above ฿20 needs a reason — without one nothing is written; with one it is kept (spec §4.8)', async () => {
+  it('a variance of ฿20 or more needs a reason — without one nothing is written; with one it is kept (D102)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
-    // ฿500 counted, ฿520 expected → −฿20, which is not above the ฿20 threshold: no reason needed
-    const z0 = await t.api.closeShift(await closeInput(t, { countLines: [{ denominationSatang: 50_000, count: 1 }] }))
-    expect(z0.snapshot).toMatchObject({ cashVarianceSatang: -2_000, varianceReason: null })
+    // ฿500 counted, ฿520 expected → −฿20, at the ฿20 threshold: needs a reason (D102, amends D98)
+    const at20 = [{ denominationSatang: 50_000, count: 1 }]
+    await expect(t.api.closeShift(await closeInput(t, { countLines: at20 }))).rejects.toThrow(/^VARIANCE_REASON_REQUIRED: /)
+    const z0 = await t.api.closeShift(await closeInput(t, { countLines: at20, varianceReason: 'ทอนผิด' }))
+    expect(z0.snapshot).toMatchObject({ cashVarianceSatang: -2_000, varianceReason: 'ทอนผิด' })
 
     const u = await openReadyApi()
     await sellVoidScenario(u)
@@ -179,7 +185,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     await expect(closeShift(t.db, t.deps, await closeInput(t, { approverPin: '9999' }), hooks)).rejects.toThrow(/^PIN_WRONG: /)
     await expect(closeShift(t.db, t.deps, await closeInput(t, { countLines: [{ denominationSatang: 100, count: -1 }] }), hooks)).rejects.toThrow(/^BAD_INPUT: /)
     expect(woken).toEqual([])
-    await closeShift(t.db, t.deps, await closeInput(t), hooks)
+    await closeShift(t.db, t.deps, await closeInput(t, { countLines: [{ denominationSatang: 50_000, count: 1 }] }), hooks) // ฿500 float, no sales: counted = expected (D102: +฿20 would need a reason)
     expect(woken).toEqual(['before_close'])
   })
 
@@ -213,11 +219,14 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
   })
 
   it('the grand total follows the Z number, not the clock (a clock set back cannot skip a Z)', async () => {
-    const t = await openReadyApi()
+    const t = await openConnectedApi({ now: '2026-09-17T03:00:00.000Z' }) // = openReadyApi, with its mock dayo
     await sellVoidScenario(t)
-    t.clock.set('2026-09-18T13:00:00.000Z') // tablet clock a day ahead
+    t.clock.set('2026-09-18T13:00:00.000Z') // tablet clock a day ahead (23 h)
     const z1 = await t.api.closeShift(await closeInput(t))
     t.clock.set('2026-09-17T14:00:00.000Z') // corrected
+    // dayo's clock is real time too (the mock's is fixed at 03:00): the next opening measures the skew against it, and
+    // task 12 fix round 2 refuses a count more than 24 h ahead of dayo's time — this one is 23 h ahead, so it floors
+    t.mock.setNow('2026-09-17T14:00:00.000Z')
     for (const n of [2, 3]) {
       await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
       await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })
@@ -826,14 +835,14 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     const gotInvalid = await t.api.getZReport(t.shift.id)
     expect(gotInvalid).toEqual({ id: z.id, shiftId: t.shift.id, createdAt: z.createdAt, hash: z.hash, hashOk: false, snapshot: null })
     expect(await t.api.listZReports()).toEqual([
-      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false },
+      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false, syncMode: 'local_only' },
     ])
 
     t.raw.prepare(`update z_report set snapshot_json = json_remove(?, '$.sales') where shift_id = ?`).run(JSON.stringify(z.snapshot), t.shift.id)
     const gotNoSales = await t.api.getZReport(t.shift.id)
     expect(gotNoSales).toEqual({ id: z.id, shiftId: t.shift.id, createdAt: z.createdAt, hash: z.hash, hashOk: false, snapshot: null })
     expect(await t.api.listZReports()).toEqual([
-      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false },
+      { shiftId: t.shift.id, businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false, syncMode: 'local_only' },
     ])
   })
 
@@ -851,12 +860,21 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     expect(z.snapshot).toMatchObject({ zNo: 1 })
   })
 
-  it('the positive variance boundary needs no reason at +฿20 and does above it (m-3)', async () => {
+  it('the positive variance boundary needs no reason at +฿19 and does at +฿20 (m-3 · D102)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
-    // ฿520 expected, ฿540 counted → +฿20, not above the ฿20 threshold: no reason needed
-    const zAt = await t.api.closeShift(await closeInput(t, { countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 2_000, count: 2 }] }))
-    expect(zAt.snapshot).toMatchObject({ cashVarianceSatang: 2_000, varianceReason: null })
+    // ฿520 expected, ฿539 counted → +฿19, under the ฿20 threshold: no reason needed
+    const under = [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 2_000, count: 1 }, { denominationSatang: 1_000, count: 1 }, { denominationSatang: 500, count: 1 }, { denominationSatang: 200, count: 2 }]
+    const zUnder = await t.api.closeShift(await closeInput(t, { countLines: under }))
+    expect(zUnder.snapshot).toMatchObject({ cashVarianceSatang: 1_900, varianceReason: null })
+
+    const v = await openReadyApi()
+    await sellVoidScenario(v)
+    // ฿540 counted → +฿20, at the threshold: needs a reason (D102, amends D98)
+    const at = [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 2_000, count: 2 }]
+    await expect(v.api.closeShift(await closeInput(v, { countLines: at }))).rejects.toThrow(/^VARIANCE_REASON_REQUIRED: /)
+    const zAt = await v.api.closeShift(await closeInput(v, { countLines: at, varianceReason: 'เกินมา' }))
+    expect(zAt.snapshot).toMatchObject({ cashVarianceSatang: 2_000, varianceReason: 'เกินมา' })
 
     const u = await openReadyApi()
     await sellVoidScenario(u)

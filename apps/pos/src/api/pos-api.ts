@@ -2,12 +2,15 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import { adjustStock, discardBase } from './adjust'
 import { login } from './auth'
 import { confirmBackupSaved, exportBackup } from './backup'
-import { createDayoPacer, createSyncScheduler, RATE_WINDOW_MS, type Scheduler } from '../sync/scheduler'
+import { pullCatalog } from '../sync/catalog'
+import { createDayoPacer, createSyncScheduler, DAYO_REQUESTS_PER_MIN, RATE_WINDOW_MS, SYNC_BUDGET_PER_MIN, type DayoPacer, type Scheduler } from '../sync/scheduler'
 import { bootstrap, syncStatus } from './bootstrap'
 import { recordCashMovement } from './cash'
 import { listCentralOrdersToday, refreshDayoEdits } from './central-orders'
-import { closeShift, getZReport, listZReports } from './close'
-import { connectShop, probeDayo, recoverOwner, replaceApiKey } from './connect'
+import { fetchBotCash } from './bot-cash'
+import { getZReport, listZReports } from './close'
+import { closeShift, confirmCount, countSummary, finishCount, issueZ } from './count'
+import { connectShop, isDayoLinked, probeDayo, recoverOwner, replaceApiKey } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { loadDrinkCatalog } from './drink-catalog'
@@ -22,7 +25,8 @@ import { shiftReport } from './shift-report'
 import { setStaffPin } from './staff'
 import { closeStockCount, getOpenStockCount, removeCountLine, saveCountLine, startStockCount } from './stock-count'
 import { stockOverview } from './stock-overview'
-import { excludeFromSync, exportSyncRow, listPriceDiffs, listSyncProblems, remapCode, remapStaff, renumberReceipt, retrySyncRow } from './sync-problems'
+import { keepShiftLocal, skipCountFloor } from './owner-escapes'
+import { acknowledgeElsewhere, closeOffCatalog, excludeFromSync, exportSyncRow, listPriceDiffs, listSyncProblems, reconfirmOwner, remapCode, remapStaff, renumberReceipt, retrySyncRow } from './sync-problems'
 import type { PosApi } from './types'
 import { cancelSale } from './void'
 
@@ -34,6 +38,8 @@ export type PosApiOptions = {
   locks?: Parameters<typeof createSyncScheduler>[0]['locks']
   /** Task 21 hotfix 2: told after every scheduler cycle — the Worker passes notifySyncCycleDone (sync/cycle-signal.ts). */
   onCycleDone?: () => void
+  /** Task 11 test seam: the request pacer every dayo request of this PosApi counts in (default: a new one). */
+  pacer?: DayoPacer
 }
 
 /**
@@ -72,9 +78,14 @@ export function createPosApi(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOption
 export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOptions = {}): { api: PosApi; scheduler: Scheduler } {
   const serial = createSerialQueue()
   const auto = opts.autoSync === true
-  const pacer = createDayoPacer(undefined, () => Date.parse(baseDeps.now()))
+  const pacer = opts.pacer ?? createDayoPacer(undefined, () => Date.parse(baseDeps.now()))
   const setupCall = createLimiter(SETUP_CALLS_PER_MIN, () => new PosError('DAYO_UNREACHABLE', `SETUP_RATE_LIMITED: at most ${SETUP_CALLS_PER_MIN} tries a minute — wait a minute`))
   const e3Call = createLimiter(E3_CALLS_PER_MIN, () => new PosError('OFFLINE', `E3_RATE_LIMITED: at most ${E3_CALLS_PER_MIN} a minute — wait a minute`))
+  // E4 (Task 12): a user action, once per Z — refused only when dayo's own 60/min for the key is already used up in the
+  // window (every request of this PosApi is in the pacer), so it can never be the request that earns a 429
+  const e4Call = (): void => {
+    if (pacer.waitFor(1, DAYO_REQUESTS_PER_MIN) > 0) throw new PosError('DAYO_UNREACHABLE', `E4_RATE_LIMITED: dayo takes ${DAYO_REQUESTS_PER_MIN} requests a minute — wait a minute`)
+  }
   let scheduler: Scheduler | null = null
   // reads through to baseDeps on every use (the Worker never swaps them; fault-injection tests do), plus the counted
   // fetch and the write wake
@@ -89,10 +100,35 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
   const sch = createSyncScheduler({ db, deps, serial, pacer, ...(opts.timers === undefined ? {} : { timers: opts.timers }), ...(opts.locks === undefined ? {} : { locks: opts.locks }), ...(opts.onCycleDone === undefined ? {} : { onCycleDone: opts.onCycleDone }) })
   scheduler = sch
   const wake = (reason: 'before_shift' | 'before_close'): void => { if (auto) sch.kick(reason) }
+  /**
+   * Ruling R1 · spec 04 §6.5 "ก่อนเปิดกะ": a linked tablet pulls E1 before opening a shift, so a dayo that has just started
+   * to support the shift kinds is seen and the new shift is central. Network OUTSIDE the serial queue (its reads and
+   * writes are inside); any outcome — offline, failed, blocked, E1's own backoff or 429 wait, even a throw — only means
+   * the shift is decided from the last stored E1: opening is never stopped, and never waits longer than the client's
+   * own timeout. It draws on the sender's share of the per-minute budget: no room left = no pull.
+   */
+  const pullBeforeShift = async (): Promise<void> => {
+    try {
+      if (!(await serial(() => isDayoLinked(db, deps)))) return
+      if (pacer.waitFor(1, SYNC_BUDGET_PER_MIN) > 0) return
+      await pullCatalog({ db, deps, serial })
+    } catch {
+      // R1: never blocks the shift — the last stored E1 decides
+    }
+  }
+  // Task 13 fix round 1 item 5: E4 without a fresh skew first asks E1 for dayo's time (same budget and silence as pullBeforeShift)
+  const pullForClock = async (): Promise<void> => {
+    try {
+      if (pacer.waitFor(1, SYNC_BUDGET_PER_MIN) > 0) return
+      await pullCatalog({ db, deps, serial })
+    } catch {
+      // the device-clock fallback stands
+    }
+  }
   const api: PosApi = {
     bootstrap: () => serial(() => bootstrap(db, deps)),
     login: (userId, pin) => serial(() => login(db, deps, userId, pin)),
-    openShift: async (input) => { const r = await serial(() => openShift(db, deps, input)); wake('before_shift'); return r },
+    openShift: async (input) => { await pullBeforeShift(); const r = await serial(() => openShift(db, deps, input)); wake('before_shift'); return r },
     loadDrinkCatalog: () => serial(() => loadDrinkCatalog(db)),
     loadSellCatalog: () => serial(() => loadSellCatalog(db, deps)),
     recordSale: (input) => serial(() => recordSale(db, deps, input)),
@@ -100,13 +136,23 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     getOrder: (orderId) => serial(() => getOrder(db, deps, orderId)),
     promptPayForAmount: (amountSatang) => serial(() => promptPayForAmount(db, deps, amountSatang)),
     cancelSale: (input) => serial(() => cancelSale(db, deps, input)),
-    quickOpenShift: async (input) => { const r = await serial(() => quickOpenShift(db, deps, input)); wake('before_shift'); return r },
+    quickOpenShift: async (input) => { await pullBeforeShift(); const r = await serial(() => quickOpenShift(db, deps, input)); wake('before_shift'); return r },
     recordCashMovement: (input) => serial(() => recordCashMovement(db, deps, input)),
     shiftReport: () => serial(() => shiftReport(db, deps)),
-    // spec §6.2 "ก่อนปิดกะ": the wake comes only once the input and the PIN passed (fix round 1 item 4). Its reads and
-    // writes queue behind this closeShift in the serial queue, so the send itself happens AFTER the close commits —
-    // no effect in block 2 (the Z does not count unsent bills yet); block 3 must revisit this (fix round 1 item 11).
+    // Block 2's one-step close — no screen calls it since block 3 (the count screens use finishCount → confirmCount →
+    // issueZ); kept on the PosApi for a local-only shift and for the API tests of that path (close-shift.test.ts). Its
+    // before_close wake comes once the input and the PIN passed (fix round 1 item 4).
     closeShift: (input) => serial(() => closeShift(db, deps, input, { validated: () => wake('before_close') })),
+    // block 3 count and Z (D101): each write wakes the sender (deps.afterWrite → kick('write')) · final fix C3 — spec §6.2
+    // "ก่อนปิดกะ": once "นับเสร็จ" froze the shift and once a Z was issued, the sender is also woken with before_close (sent
+    // now — not after the 2 s write debounce — and a 5xx backoff may be cleared, ≤ once per 30 s): the shift's unsent bills
+    // and its Z reach dayo while the owner is still at the counter. After success only — a refusal wakes nothing.
+    finishCount: async (input) => { const r = await serial(() => finishCount(db, deps, input)); wake('before_close'); return r },
+    countSummary: (shiftId) => serial(() => countSummary(db, shiftId)),
+    // E4: network OUTSIDE the serial queue (its reads and writes are inside), like syncNow / E3
+    fetchBotCash: (shiftId) => fetchBotCash({ db, deps, serial }, shiftId, { beforeRequest: e4Call, refreshClock: pullForClock }),
+    confirmCount: (input) => serial(() => confirmCount(db, deps, input)),
+    issueZ: async (input) => { const r = await serial(() => issueZ(db, deps, input)); wake('before_close'); return r },
     listZReports: () => serial(() => listZReports(db)),
     getZReport: (shiftId) => serial(() => getZReport(db, shiftId)),
     exportBackup: (actorUserId) => serial(() => exportBackup(db, deps, actorUserId)),
@@ -133,13 +179,19 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     // and writes the outbox through (`serial` above) — so a remedy never interleaves with a push decision on the same
     // row. A verdict of a request already on the wire meets the remedy's result, and applyVerdicts judges only rows
     // still pending (test/sync-problems.test.ts "never interleave").
-    listSyncProblems: (actorUserId) => serial(() => listSyncProblems(db, actorUserId)),
+    listSyncProblems: (actorUserId) => serial(() => listSyncProblems(db, deps, actorUserId)),
     retrySyncRow: (input) => serial(() => retrySyncRow(db, deps, input)),
     renumberReceipt: (input) => serial(() => renumberReceipt(db, deps, input)),
     remapCode: (input) => serial(() => remapCode(db, deps, input)),
     remapStaff: (input) => serial(() => remapStaff(db, deps, input)),
     excludeFromSync: (input) => serial(() => excludeFromSync(db, deps, input)),
     exportSyncRow: (input) => serial(() => exportSyncRow(db, input)),
+    // Task 14 (block 3 · spec 04 §6.4): the same serial queue as the sender — see above
+    closeOffCatalog: (input) => serial(() => closeOffCatalog(db, deps, input)),
+    acknowledgeElsewhere: (input) => serial(() => acknowledgeElsewhere(db, deps, input)),
+    reconfirmOwner: (input) => serial(() => reconfirmOwner(db, deps, input)),
+    keepShiftLocal: (input) => serial(() => keepShiftLocal(db, deps, input)),
+    skipCountFloor: (input) => serial(() => skipCountFloor(db, deps, input)),
     listPriceDiffs: (actorUserId) => serial(() => listPriceDiffs(db, actorUserId)),
     // E3: network OUTSIDE the serial queue (its reads and writes are inside) — sales keep going; own cap under 60/min
     listCentralOrdersToday: () => listCentralOrdersToday({ db, deps, serial }, { beforeRequest: e3Call }),

@@ -1,3 +1,4 @@
+import { BOT_ORDER_NO_RE } from '@dayo/contracts'
 import { canonicalJson, sha256Hex } from './hash.js'
 import { assertSafeInt } from './money.js'
 
@@ -14,8 +15,14 @@ import { assertSafeInt } from './money.js'
  * - `paidOutSatang` — sum of `cash_movement` rows of kind PAID_OUT (entered by a person, e.g. buying ice).
  *   Void refunds are never PAID_OUT rows (D36), so this is simply every PAID_OUT row of the shift.
  * - `dropsSatang` — sum of `cash_movement` rows of kind DROP (cash removed to the safe).
+ * - `drawerExpensesSatang` — spec 04 §4.10 `cash.drawer_expenses`: expenses paid from the drawer. Always 0 in block 3
+ *   (block 4 fills it); never produced by `cashInputsFromMovements`.
+ * - `botCashSatang` — Σ bot/web cash bills E4 returned for the window (after, counted_at]. 0 until the Z is issued
+ *   (D68), then set once by `withBotCash`; never produced by `cashInputsFromMovements`.
  *
- * expected = opening + cash_sales − void_refunds + paid_in − paid_out − drops
+ * spec 04 §4.10 R-m1 — dayo's formula (`dayo_z_expected`, migration 0065), same terms in the same order:
+ * expected = opening + cash_sales − void_refunds + paid_in − paid_out − drops − drawer_expenses + bot_cash
+ * It may be negative (D54 Q3b-14).
  */
 export type CashInputs = {
   openingFloatSatang: number
@@ -24,10 +31,32 @@ export type CashInputs = {
   paidInSatang: number
   paidOutSatang: number
   dropsSatang: number
+  /** spec 04 §4.10 cash.drawer_expenses — always 0 in block 3 (block 4 fills it). */
+  drawerExpensesSatang: number
+  /** Σ bot/web cash bills of the E4 window (after, counted_at] — 0 until the Z is issued (D68). */
+  botCashSatang: number
 }
 
 export function expectedCashSatang(x: CashInputs): number {
-  return x.openingFloatSatang + x.cashSalesSatang - x.voidRefundsSatang + x.paidInSatang - x.paidOutSatang - x.dropsSatang
+  // Security fix round 1 (L-3): term by term, each term and each partial sum a safe integer — a sum that leaves
+  // the safe range part-way (or fractions that cancel out) must throw, not come back looking exact.
+  const terms: readonly [number, 1 | -1, string][] = [
+    [x.openingFloatSatang, 1, 'openingFloatSatang'],
+    [x.cashSalesSatang, 1, 'cashSalesSatang'],
+    [x.voidRefundsSatang, -1, 'voidRefundsSatang'],
+    [x.paidInSatang, 1, 'paidInSatang'],
+    [x.paidOutSatang, -1, 'paidOutSatang'],
+    [x.dropsSatang, -1, 'dropsSatang'],
+    [x.drawerExpensesSatang, -1, 'drawerExpensesSatang'],
+    [x.botCashSatang, 1, 'botCashSatang'],
+  ]
+  let expected = 0
+  for (const [term, sign, name] of terms) {
+    assertSafeInt(term, `cash.${name}`)
+    expected += sign * term
+    assertSafeInt(expected, 'expectedCashSatang')
+  }
+  return expected
 }
 
 function assertNonNegInt(n: number, name: string): void {
@@ -46,7 +75,16 @@ export function cashInputsFromMovements(
 ): CashInputs {
   assertNonNegInt(openingFloatSatang, 'openingFloatSatang')
   assertNonNegInt(cashSalesSatang, 'cashSalesSatang')
-  const x: CashInputs = { openingFloatSatang, cashSalesSatang, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+  const x: CashInputs = {
+    openingFloatSatang,
+    cashSalesSatang,
+    voidRefundsSatang: 0,
+    paidInSatang: 0,
+    paidOutSatang: 0,
+    dropsSatang: 0,
+    drawerExpensesSatang: 0,
+    botCashSatang: 0,
+  }
   for (const m of movements) {
     assertSafeInt(m.amountSatang, 'amountSatang')
     if (m.amountSatang <= 0) throw new RangeError(`cash movement amount must be > 0, got ${m.amountSatang}`)
@@ -58,6 +96,21 @@ export function cashInputsFromMovements(
   }
   for (const [k, v] of Object.entries(x)) assertSafeInt(v, k) // M-1
   return x
+}
+
+/** D68 · spec §6.8: the bot/web cash bills E4 returned for (after, counted_at] — added once, when the Z is issued. */
+export function withBotCash(x: CashInputs, botCashSatang: number): CashInputs {
+  assertNonNegInt(botCashSatang, 'botCashSatang')
+  return { ...x, botCashSatang }
+}
+
+/** spec §4.10: variance = counted − expected (negative = short). The one formula; buildZReport uses it too. */
+export function cashVarianceSatang(countedSatang: number, expectedSatang: number): number {
+  assertNonNegInt(countedSatang, 'countedSatang')
+  assertSafeInt(expectedSatang, 'expectedSatang') // may be negative (D54 Q3b-14)
+  const v = countedSatang - expectedSatang
+  assertSafeInt(v, 'cashVarianceSatang')
+  return v
 }
 
 /** One order of the shift that got a receipt number: paid, or paid and voided later (spec §4.3 keeps it in gross). */
@@ -176,11 +229,20 @@ export function tallyCashCount(lines: readonly CashCountLine[]): { lines: CashCo
 /** spec §3.1 setting `cash.variance_alert_satang` default (฿20). */
 export const DEFAULT_VARIANCE_ALERT_SATANG = 2_000
 
-/** spec §4.8: a shortage or overage strictly greater than the alert threshold needs a reason. */
+/** R4: the threshold actually used — a setting of 0 would ask for a reason (and alert dayo) on a perfect count. */
+export const MIN_VARIANCE_ALERT_SATANG = 1
+
+export function effectiveVarianceAlertSatang(settingSatang: number): number {
+  assertNonNegInt(settingSatang, 'settingSatang')
+  return Math.max(MIN_VARIANCE_ALERT_SATANG, settingSatang)
+}
+
+/** D102 (amends D98): one rule on the tablet and at dayo — a shortage or overage of at least the threshold needs a reason. */
 export function varianceNeedsReason(varianceSatang: number, alertSatang: number): boolean {
   assertSafeInt(varianceSatang, 'varianceSatang')
-  assertNonNegInt(alertSatang, 'alertSatang')
-  return Math.abs(varianceSatang) > alertSatang
+  assertSafeInt(alertSatang, 'alertSatang')
+  if (alertSatang < MIN_VARIANCE_ALERT_SATANG) throw new RangeError(`alertSatang must be >= ${MIN_VARIANCE_ALERT_SATANG}, got ${alertSatang}`)
+  return Math.abs(varianceSatang) >= alertSatang
 }
 
 /** A voided receipt as frozen into the Z report — the daily void report (D50 Q3-22). Names are frozen too. */
@@ -247,7 +309,76 @@ export type ZChainWarning = {
    * existed keeps its shape and hash; a safe integer >= 0 when present.
    */
   zNoGap?: number
+  /** R9: this Z continues the key's numbering from dayo (E1 client.last_z_no/last_z_hash) after a reinstall.
+   * Optional so a warning frozen before this field existed keeps its shape and hash; when present, zNo >= 1 and
+   * a 64-char lowercase hex hash. */
+  centralLastZ?: { zNo: number; hash: string }
 }
+
+/** dayo 0066 `bot_bills`: at most 500 per Z (the same cap dayo applies — a longer list is rejected INVALID). */
+export const MAX_BOT_BILLS = 500
+/** dayo 0066 `bot_bills[].order_no` `^L[0-9]{6}-[0-9]{3,}$` — contracts `BOT_ORDER_NO_RE` itself, one pattern (fix round 1). */
+export const BOT_ORDER_NO_PATTERN: RegExp = BOT_ORDER_NO_RE
+/** dayo 0066 `bot_bills[].version` is an int4 1..2147483647. */
+const BOT_BILL_VERSION_MAX = 2_147_483_647
+/** Instants frozen into a Z: ISO-8601 UTC, `Z` or `+00:00` (dayo returns `…+00:00`, ruling P7), at most millisecond
+ * precision so comparing them with Date.parse is exact. */
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|\+00:00)$/
+
+/** Security fix round 1 (L-1): the form above, and a real calendar instant (Date.parse alone rolls 30 Feb or 24:00 over).
+ * Exported for the E2 row builders (shift-rows.ts) — one check of instants for the Z and the rows built from it. */
+export function isoUtcMs(iso: unknown, name: string): number {
+  const t = typeof iso === 'string' && ISO_UTC.test(iso) ? Date.parse(iso) : Number.NaN
+  if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 19) !== (iso as string).slice(0, 19)) {
+    throw new RangeError(`${name} is not an ISO UTC instant (YYYY-MM-DDTHH:MM:SS[.mmm]Z or +00:00)`)
+  }
+  return t
+}
+
+/** An instant as the tablet SENDS it (contracts IsoSent `YYYY-MM-DDTHH:MM:SS.mmmZ`): the same instant, checked by `isoUtcMs`. */
+export function toSentIso(iso: string, name: string): string {
+  return new Date(isoUtcMs(iso, name)).toISOString()
+}
+
+/** Security fix round 1 (M-1): every bill checked exactly as dayo 0066 checks it (so a Z that dayo would reject
+ * INVALID forever is never frozen), duplicates looked for only after that, and each frozen bill rebuilt from an
+ * explicit field list — a stray caller property never reaches the snapshot or its hash. */
+function frozenBotBills(bills: unknown): ZBotBill[] {
+  if (!Array.isArray(bills)) throw new RangeError('botBills must be an array')
+  if (bills.length > MAX_BOT_BILLS) throw new RangeError(`at most ${MAX_BOT_BILLS} bot bills per Z (dayo 0066), got ${bills.length}`)
+  const out: ZBotBill[] = []
+  for (const raw of bills as unknown[]) {
+    if (typeof raw !== 'object' || raw === null) throw new RangeError('each bot bill must be an object')
+    const b = raw as Record<string, unknown>
+    const orderNo = b['orderNo']
+    if (typeof orderNo !== 'string' || !BOT_ORDER_NO_PATTERN.test(orderNo)) throw new RangeError(`bot bill orderNo must match ${BOT_ORDER_NO_PATTERN.source}, got ${JSON.stringify(orderNo)}`)
+    const version = b['version']
+    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1 || version > BOT_BILL_VERSION_MAX) {
+      throw new RangeError(`bot bill ${orderNo} version must be a whole number 1..${BOT_BILL_VERSION_MAX}`)
+    }
+    const totalSatang = b['totalSatang']
+    if (typeof totalSatang !== 'number') throw new RangeError(`bot bill ${orderNo} totalSatang must be a number`)
+    assertNonNegInt(totalSatang, `bot bill ${orderNo} totalSatang`)
+    const source = b['source']
+    if (typeof source !== 'string') throw new RangeError(`bot bill ${orderNo} source must be a string`)
+    const soldAt = b['soldAt']
+    if (soldAt !== null && typeof soldAt !== 'string') throw new RangeError(`bot bill ${orderNo} soldAt must be a string or null`)
+    const createdByName = b['createdByName']
+    if (createdByName !== null && typeof createdByName !== 'string') throw new RangeError(`bot bill ${orderNo} createdByName must be a string or null`)
+    out.push({ orderNo, version, source, soldAt, totalSatang, createdByName })
+  }
+  const seen = new Set<string>()
+  for (const b of out) {
+    if (seen.has(b.orderNo)) throw new RangeError(`bot bill ${b.orderNo} counted twice`)
+    seen.add(b.orderNo)
+  }
+  return out
+}
+
+/** One bot/web cash bill as E4 returned it (spec §4.10 bot_bills) — frozen into the Z. */
+export type ZBotBill = { orderNo: string; version: number; source: string; soldAt: string | null; totalSatang: number; createdByName: string | null }
+/** spec §4.10 bot_window: the E4 window (after, until], until = the Z's countedAt. */
+export type ZBotWindow = { after: string; until: string }
 
 export type ZInput = {
   shiftId: string
@@ -264,6 +395,12 @@ export type ZInput = {
   closedBy: string
   /** The signed-in user who counted the drawer. */
   countedBy: string
+  /** D101: the instant "นับเสร็จ" was pressed — the shift took no bill or cash movement after it. */
+  countedAt: string
+  /** spec §4.10 E4 window (after, until = countedAt]; null for a local-only shift (ruling R6). */
+  botWindow: ZBotWindow | null
+  /** The bot/web cash bills of that window, frozen as E4 returned them (spec §4.10 bot_bills). */
+  botBills: ZBotBill[]
   sales: SalesSummary
   cash: CashInputs
   countLines: CashCountLine[]
@@ -427,8 +564,9 @@ export function recomputeZChainLenient(entries: readonly LenientZEntry[]): Lenie
 /**
  * Frozen Z report: computed once at shift close, never recomputed (spec §4.8). Refuses an inconsistent input
  * (Plan 1 notes §4): sales relations, cash sales on both sides, the count total, the void list (count, total, cash
- * voids = VOID_REFUND rows, QR voids = QR refunded), and a missing reason when the variance is above the alert
- * threshold. Z(n).grand = Z(n−1).grand + net of this shift, chained on `zNo` (the previous Z's snapshot), never on the
+ * voids = VOID_REFUND rows, QR voids = QR refunded), a missing reason when the variance is at or above the alert
+ * threshold (D102), times out of order (opened ≤ counted ≤ closed, D101), and bot bills that do not match the bot
+ * window or `cash.botCashSatang` (spec §4.10). Z(n).grand = Z(n−1).grand + net of this shift, chained on `zNo` (the previous Z's snapshot), never on the
  * clock — a device clock can be wrong and later corrected. With a `chainWarning`, `prev` is the recomputed chain.
  */
 export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatang: number } | null): { snapshot: ZSnapshot; hash: string } {
@@ -493,13 +631,47 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     }
     if (w.zNoGap !== undefined) assertNonNegInt(w.zNoGap, 'chainWarning.zNoGap') // 2026-09-21 · D55 (review R4-1, R4-2)
   }
+  // Security fix round 1 (L-1): ISO UTC only, compared as instants.
+  const openedMs = isoUtcMs(input.openedAt, 'openedAt')
+  const countedMs = isoUtcMs(input.countedAt, 'countedAt')
+  const closedMs = isoUtcMs(input.closedAt, 'closedAt')
+  if (countedMs < openedMs) throw new RangeError('countedAt must not be before openedAt (D101)')
+  if (closedMs < countedMs) throw new RangeError('closedAt must not be before countedAt (spec §4.10 shift_close)')
+  const botBills = frozenBotBills(input.botBills)
+  let botWindow: ZBotWindow | null = null
+  if (input.botWindow === null) {
+    if (botBills.length > 0 || input.cash.botCashSatang !== 0) throw new RangeError('bot bills need a bot window (ruling R6: a local-only Z has none)')
+  } else {
+    if (typeof input.botWindow !== 'object') throw new RangeError('botWindow must be {after, until} or null')
+    const afterMs = isoUtcMs(input.botWindow.after, 'botWindow.after')
+    const untilMs = isoUtcMs(input.botWindow.until, 'botWindow.until')
+    if (untilMs !== countedMs) throw new RangeError('botWindow.until must equal countedAt (spec §4.10 bot_window)')
+    if (afterMs >= untilMs) throw new RangeError('botWindow.after must be before until')
+    botWindow = { after: input.botWindow.after, until: input.botWindow.until } // explicit fields: nothing stray is frozen
+  }
+  let botSum = 0
+  for (const b of botBills) {
+    botSum += b.totalSatang
+    assertSafeInt(botSum, 'Σ botBills.totalSatang') // M-1
+  }
+  if (botSum !== input.cash.botCashSatang) throw new RangeError('Σ botBills.totalSatang must equal cash.botCashSatang (spec §4.10 bot_bills)')
+  if (input.varianceAlertSatang < MIN_VARIANCE_ALERT_SATANG) throw new RangeError('varianceAlertSatang must be >= 1 satang (ruling R4)')
+  const cz: unknown = input.chainWarning?.centralLastZ
+  if (cz !== undefined) {
+    // Security fix round 1 (L-2): present = a real object naming exactly the Z this one continues (prev).
+    if (typeof cz !== 'object' || cz === null) throw new RangeError('chainWarning.centralLastZ must be {zNo, hash} when present')
+    const { zNo, hash } = cz as { zNo: unknown; hash: unknown }
+    if (typeof zNo !== 'number' || !Number.isSafeInteger(zNo) || zNo < 1 || typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) {
+      throw new RangeError('chainWarning.centralLastZ needs zNo >= 1 and a 64-hex hash')
+    }
+    if (zNo !== prevZNo) throw new RangeError(`chainWarning.centralLastZ.zNo must be the previous Z number ${prevZNo}, got ${zNo}`)
+  }
   const expected = expectedCashSatang(input.cash)
   assertSafeInt(expected, 'expectedCashSatang') // M-1
-  const variance = input.countedCashSatang - expected
-  assertSafeInt(variance, 'cashVarianceSatang') // M-1
+  const variance = cashVarianceSatang(input.countedCashSatang, expected) // spec §4.10: the one formula
   const reason = input.varianceReason?.trim() ?? ''
   if (varianceNeedsReason(variance, input.varianceAlertSatang) && reason === '') {
-    throw new RangeError('a cash variance above the alert threshold needs a reason (spec §4.8)')
+    throw new RangeError('a cash variance at or above the alert threshold needs a reason (D102)')
   }
   const qrDifference = input.bankQrTotalSatang === null ? null : input.bankQrTotalSatang - input.sales.qrNetSatang
   if (qrDifference !== null) assertSafeInt(qrDifference, 'qrDifferenceSatang') // M-1
@@ -517,6 +689,9 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     closedAt: input.closedAt,
     closedBy: input.closedBy,
     countedBy: input.countedBy,
+    countedAt: input.countedAt,
+    botWindow,
+    botBills,
     sales: input.sales,
     cash: input.cash,
     countLines: tally.lines,

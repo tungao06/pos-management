@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { MOCK_API_KEY } from '@dayo/dayo-mock'
-import { createPosApi, SETUP_CALLS_PER_MIN } from '../src/api/pos-api'
+import { createPosApi, createPosRuntime, SETUP_CALLS_PER_MIN } from '../src/api/pos-api'
 import { createSyncScheduler, FOLLOW_UP_GAP_MS, MANUAL_CLEAR_GAP_MS, SYNC_BUDGET_PER_MIN, type DayoPacer } from '../src/sync/scheduler'
 import { pushOnce } from '../src/sync/push'
 import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
@@ -79,6 +79,78 @@ describe('sync scheduler (spec 04 §6.2)', () => {
     t.clock.advanceMs(MANUAL_CLEAR_GAP_MS)
     await sch.runNow()
     expect(pushes(t)).toBe(3)                // 30 s after the last clear it may clear again
+  })
+  // Task 17 fix round 1 item 3 (ruling): a manual wake shares the failure-backoff clear's own 30 s throttle, but
+  // ALSO makes every scope-wait row (markScopeWait, FORBIDDEN "scope:") due again right away — never just letting
+  // its own SCOPE_RETRY_MS (15 real minutes) run out. An automatic wake (the minute tick) still waits the full time.
+  it('manual "ส่งตอนนี้" clears a scope-wait row\'s own 15-minute retry at once; an automatic wake still waits (Task 17 fix round 1 item 3)', async () => {
+    const t = await openConnectedApi({ block3: true, openShift: false })
+    t.mock.setScopes(['catalog:read', 'staff:read', 'orders:read', 'orders:write']) // no shift:write
+    const shift = await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    const key = `shift_open:${shift.id}`
+    const outboxRow = async () => (await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get())!
+    const pushCalls = () => t.mock.requests().filter((r) => r.path === '/api/v1/pos/push').length
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+
+    await sch.runNow() // first attempt: FORBIDDEN scope: — parked as a scope-wait row, 15 min out
+    expect(pushCalls()).toBe(1)
+    expect((await outboxRow()).status).toBe('pending') // still waiting — never accepted yet
+
+    await sch.kick('timer') // an automatic wake must not resend it a moment early
+    await new Promise((r) => setTimeout(r, 0))
+    expect(pushCalls()).toBe(1) // still not due — no new push request at all
+
+    t.mock.setScopes(['catalog:read', 'staff:read', 'orders:read', 'orders:write', 'shift:write']) // owner adds it back
+    await sch.runNow() // manual — sent in this very cycle, never waiting out SCOPE_RETRY_MS
+    expect(pushCalls()).toBe(2)
+    expect((await outboxRow()).status).toBe('sent')
+  })
+  // Task 17 fix round 2 item 2a (L): the scope-wait clear shares the exact same 30 s token as the ordinary
+  // failure-backoff clear (fix round 1 item 3) — a second manual press right after the first must not clear it
+  // again either, same as the pre-existing "ส่งตอนนี้ clears the failure backoff at most once per 30 s" test above.
+  it('a second manual press within 30 s does not clear a scope-wait row again (shared N4 token, Task 17 fix round 2 item 2a)', async () => {
+    const t = await openConnectedApi({ block3: true, openShift: false })
+    t.mock.setScopes(['catalog:read', 'staff:read', 'orders:read', 'orders:write']) // no shift:write, kept missing throughout
+    await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    const pushCalls = () => t.mock.requests().filter((r) => r.path === '/api/v1/pos/push').length
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
+
+    await sch.runNow() // first attempt: nothing to clear yet — parked as scope-wait, no token spent
+    expect(pushCalls()).toBe(1)
+    await sch.runNow() // manual again, immediately: the FIRST real clear (token spent) — resent, FORBIDDEN scope: again
+    expect(pushCalls()).toBe(2)
+    await sch.runNow() // manual again within 30 s: the token is on cooldown — not cleared, no new request
+    expect(pushCalls()).toBe(2)
+
+    t.clock.advanceMs(MANUAL_CLEAR_GAP_MS)
+    await sch.runNow() // 30 s later: the token is available again
+    expect(pushCalls()).toBe(3)
+  })
+  // Task 17 fix round 2 item 2b (L): `clearScopeWait` only ever touches rows whose `lastError.prefix` is literally
+  // `scope:` (apps/pos/src/sync/push.ts) — a manual wake that DOES have a real scope-wait row to clear (so
+  // `clearScopeWait` actually runs) must still leave a CLOCK_AHEAD row and an ordinary deferred/backoff row
+  // exactly where they were, never resending either early.
+  it('a manual wake that clears a real scope-wait row still leaves a CLOCK_AHEAD row and an ordinary deferred/backoff row untouched (Task 17 fix round 2 item 2b)', async () => {
+    const t = await openConnectedApi({ block3: true, openShift: false })
+    t.mock.setScopes(['catalog:read', 'staff:read', 'orders:read', 'orders:write']) // no shift:write — the shift row becomes a real scope-wait
+    await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    // sellCode never reads t.shift — same cast as push-block3.test.ts's own sellOne (t here has shift: null
+    // statically, since openShift:false, even though `t.api.openShift` above opened one for real).
+    const clockAhead = await sellCode(t as unknown as Parameters<typeof sellCode>[0], [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const busy = await sellCode(t as unknown as Parameters<typeof sellCode>[0], [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.override({ match: { key: `order:${clockAhead.orderId}` }, verdict: { status: 'deferred', reason: 'CLOCK_AHEAD', detail: 'x' }, times: 1 })
+    t.mock.override({ match: { key: `order:${busy.orderId}` }, verdict: { status: 'deferred', reason: 'BUSY', detail: 'lock' }, times: 1 })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+
+    await sch.runNow() // first attempt: shift row parked as scope-wait; both bills deferred with their own backoff
+    const rowOf = async (key: string) => (await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get())!
+    const before = { clockAhead: (await rowOf(`order:${clockAhead.orderId}`)).nextAttemptAt, busy: (await rowOf(`order:${busy.orderId}`)).nextAttemptAt }
+    expect(before.clockAhead).not.toBeNull()
+    expect(before.busy).not.toBeNull()
+
+    await sch.runNow() // manual again: a REAL scope-wait row exists now — clearScopeWait runs — but only for it
+    const after = { clockAhead: (await rowOf(`order:${clockAhead.orderId}`)).nextAttemptAt, busy: (await rowOf(`order:${busy.orderId}`)).nextAttemptAt }
+    expect(after).toEqual(before) // neither bill's own wait was touched
   })
   it('online wakes it at once; a second wake during a cycle runs one more cycle, never two in parallel', async () => {
     const t = await openConnectedApi()
@@ -331,9 +403,10 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     const t = await openConnectedApi()
     const n = t.mock.requests().length
     const input = { baseUrl: 'http://localhost:8787/api/v1', apiKey: MOCK_API_KEY }
-    for (let i = 0; i < SETUP_CALLS_PER_MIN - 1; i++) await t.api.probeDayo(input) // connectShop (in openConnectedApi) was the first
+    // probeDayo + connectShop (in openConnectedApi, as the setup screen does — Task 13) were the first two
+    for (let i = 0; i < SETUP_CALLS_PER_MIN - 2; i++) await t.api.probeDayo(input)
     await expect(t.api.probeDayo(input)).rejects.toThrow(/^DAYO_UNREACHABLE: SETUP_RATE_LIMITED/)
-    expect(t.mock.requests().length).toBe(n + SETUP_CALLS_PER_MIN - 1)
+    expect(t.mock.requests().length).toBe(n + SETUP_CALLS_PER_MIN - 2)
   })
 })
 
@@ -517,5 +590,40 @@ describe('sync scheduler — the Web Locks it uses without ctx.locks (follow-up 
     await locks.request('dayo-push', { ifAvailable: true }, async (lock) => { seen.push(lock) })
     expect(seen[0]).toBeNull()
     expect(seen[1]).not.toBeNull()
+  })
+})
+
+describe('the before_close wake (spec 04 §6.2 "ก่อนปิดกะ" · final fix C3)', () => {
+  /** A Worker-like PosApi (autoSync) whose scheduler wakes are only recorded — no cycle, no timer, no request from them. */
+  async function recorded() {
+    const t = await openConnectedApi({ block3: true })
+    const noTimers = { setTimeout: () => 0, clearTimeout: () => undefined, setInterval: () => 0, clearInterval: () => undefined } as unknown as NonNullable<Parameters<typeof createPosRuntime>[2]>['timers']
+    const rt = createPosRuntime(t.db, t.deps, { autoSync: true, locks: createTestLocks(), timers: noTimers })
+    const kick = vi.spyOn(rt.scheduler, 'kick').mockImplementation(() => undefined)
+    const closeWakes = () => kick.mock.calls.filter(([r]) => r === 'before_close').length
+    t.clock.advanceMs(3_600_000); t.mock.setNow(t.clock.now())
+    return { t, rt, closeWakes }
+  }
+  const owner2 = { approverUserId: STAFF.DCm, approverPin: '2222' }
+  const settle = { varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: false }
+
+  it('finishCount and issueZ wake the sender with before_close once they succeed', async () => {
+    const { rt, closeWakes } = await recorded()
+    const { shiftId } = await rt.api.finishCount({ actorUserId: STAFF.TungAo })
+    expect(closeWakes()).toBe(1) // the count moment is fixed: unsent bills of the shift should go now
+    await rt.api.confirmCount({ shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: [{ denominationSatang: 100, count: 500 }], shownFingerprint: (await rt.api.countSummary(shiftId)).fingerprint, z: null })
+    await rt.api.fetchBotCash(shiftId)
+    await rt.api.issueZ({ shiftId, ...owner2, shownFingerprint: (await rt.api.countSummary(shiftId)).fingerprint, ...settle })
+    expect(closeWakes()).toBe(2) // the Z (shift_close) is queued: send it now, not after the 2 s write debounce
+    rt.scheduler.stop()
+  })
+  it('a refused finishCount or issueZ does not wake it', async () => {
+    const { rt, closeWakes } = await recorded()
+    const { shiftId } = await rt.api.finishCount({ actorUserId: STAFF.TungAo })
+    await expect(rt.api.finishCount({ actorUserId: STAFF.TungAo })).rejects.toThrow(/NO_OPEN_SHIFT/)
+    await rt.api.confirmCount({ shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: [{ denominationSatang: 100, count: 500 }], shownFingerprint: (await rt.api.countSummary(shiftId)).fingerprint, z: null })
+    await expect(rt.api.issueZ({ shiftId, approverUserId: STAFF.DCm, approverPin: '9999', shownFingerprint: 'x', ...settle })).rejects.toThrow()
+    expect(closeWakes()).toBe(1)
+    rt.scheduler.stop()
   })
 })

@@ -30,7 +30,7 @@ export function folderUpTo(lastTag: string): string {
 
 /**
  * review item 7: a real plan-3/4 device — seed + one paid bill with every child row + its VOID_REFUND — built on the
- * pre-0003 schema. `order` goes in as raw SQL (the drizzle table already has the block-2 columns) with a distinct,
+ * pre-0003 schema. `order` (and `shift`) go in as raw SQL (the drizzle tables already have the block-2/3 columns) with a distinct,
  * non-null value in every one of its 22 plan-3/4 columns, so an upgrade that drops or swaps a column cannot hide
  * behind two NULLs; the tables block 2 does not change go through drizzle.
  */
@@ -46,7 +46,9 @@ export async function plan4DeviceWithBills() {
   const sweetId = String(one(raw, `select id from sweetness_level limit 1`)[0]![0])
   db.insert(s.user).values({ id: 'u1', displayName: 'Owner', role: 'owner', pinHash: 'x', isActive: true, createdAt: NOW, updatedAt: NOW, version: 1 }).run()
   db.insert(s.device).values({ id: 'dev-1', name: 'Tablet A', receiptPrefix: 'A', isSellingDevice: true, registeredAt: NOW, updatedAt: NOW }).run()
-  db.insert(s.shift).values({ id: 'shift-1', deviceId: 'dev-1', businessDate: '2026-09-20', status: 'open', openedBy: 'u1', openedAt: NOW, openingFloatSatang: 0 }).run()
+  // raw SQL: the drizzle `shift` already has the block-3 columns (counted_at, sync_mode) this old schema lacks
+  raw.exec(`insert into shift (id, device_id, business_date, status, opened_by, opened_at, opening_float_satang, closed_by, closed_at)
+    values ('shift-1', 'dev-1', '2026-09-20', 'open', 'u1', '${NOW}', 0, null, null)`)
   raw.exec(`insert into customer (id, line_user_id, display_name, picture_url, first_seen_at, last_order_at, is_blocked, updated_at, version)
     values ('cust-1', 'U-line-1', 'ลูกค้า', null, '${NOW}', null, 0, '${NOW}', 1)`)
   raw.exec(`insert into "order" (id, origin, device_id, receipt_no, queue_no, business_date, shift_id, channel_id, customer_id, status,

@@ -1,5 +1,9 @@
 // packages/dayo-mock/src/index.ts — browser-safe entry (no node:*); the Node server lives in server.ts only
 export { mockControl } from './control.js'
-export { createMockDayo, MOCK_API_KEY, pgTimestamp } from './handler.js'
-export { ALL_SCOPES } from './state.js'
-export type { CatalogVariant, MockDayo, MockMode, MockOptions, MockOrderData, MockOverride, MockState, PosCatalogChangedData, PosOrderEdit, StoredOrder } from './state.js'
+export { createMockDayo, DEFAULT_OFF_CATALOG_CAP, isMockOffline, MOCK_API_KEY, MockOfflineError, pgTimestamp } from './handler.js'
+export { chainOf } from './judge-shift.js'
+export { botCashBills, type BotCashBill } from './shift-cash.js'
+export { ALL_SCOPES, BLOCK3_SCOPES } from './state.js'
+export type {
+  CatalogVariant, MockCount, MockDayo, MockMode, MockMovement, MockOptions, MockOrderData, MockOverride, MockShift, MockState, MockZ, PosCatalogChangedData, PosOrderEdit, StoredOrder,
+} from './state.js'
