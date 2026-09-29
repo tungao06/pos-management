@@ -10,6 +10,7 @@ import { insertMovements } from '../db/stock'
 import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import { enqueueCashMovement } from './cash'
+import { notBefore } from './rows'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { getOrder, voidInstant } from './orders'
@@ -32,7 +33,7 @@ async function voidWithStock(tx: RemoteDb, deps: ApiDeps, v: LegacyVoid): Promis
   const refundReference = v.refundReference?.trim() ?? ''
   if (qrRefundSatang > 0 && refundReference === '') throw new PosError('BAD_INPUT', 'a PromptPay void needs the refund transfer reference') // (D48 Q3-15)
 
-  const at = deps.now()
+  const at = notBefore(deps.now(), shift.openedAt) // never before the shift opened (dayo 0066:216 — its refund row)
   await tx.update(s.order).set({ status: 'voided', voidedAt: at }).where(eq(s.order.id, order.id))
 
   let returnedMovementIds: string[] = []
@@ -132,7 +133,8 @@ export async function cancelSale(db: RemoteDb, deps: ApiDeps, input: CancelSaleI
     if (qrRefundSatang > 0 && refundReference === '') throw new PosError('BAD_INPUT', 'a PromptPay void needs the refund transfer reference') // D48 Q3-15
     // ONE void time for the bill, its refund, its events, its queue row and E2 (review item 5: dayo refuses
     // voided_at < sold_at as INVALID; voidInstant already keeps it at or after the latest sale — the max is a guard)
-    const at = Date.parse(now) < Date.parse(order.soldAt) ? order.soldAt : now
+    // … and never before the shift opened: a clock stepped back must not stamp the VOID_REFUND before its shift_open (dayo 0066:216)
+    const at = notBefore(notBefore(now, order.soldAt), shift.openedAt)
     await tx.update(s.order).set({ status: 'voided', voidedAt: at }).where(eq(s.order.id, order.id))
     let cashMovementId: string | null = null
     if (cashRefundSatang > 0) {

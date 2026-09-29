@@ -3,8 +3,12 @@ import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { CashMovementRowData, OrderRowData, ShiftOpenRowData } from '@dayo/contracts'
 import { PosError } from '../src/api/errors'
+import { createPosApi } from '../src/api/pos-api'
+import { createDayoPacer, SYNC_BUDGET_PER_MIN } from '../src/sync/scheduler'
 import { openConnectedApi, STAFF } from './helpers/dayo'
 import { sellCode } from './helpers/db'
+import { createTestLocks } from './helpers/locks'
+import { defaultUnitId, itemId } from './helpers/stock'
 
 const approve = { approverUserId: STAFF.DCm, approverPin: '2222' }
 // Pick<…, 'db'>: the brief's `Awaited<ReturnType<…>>` is the shift-present overload, which a `openShift: false` api is not
@@ -118,6 +122,9 @@ describe('central shifts — beyond the plan (Task 11)', () => {
     await t.db.update(s.outbox).set({ status: 'pending', sentAt: null, resultJson: null }).where(inArray(s.outbox.idempotencyKey, keys))
     await t.api.syncNow()
     expect(await statuses()).toEqual(['sent', 'sent'])
+    // dayo keeps ONE shift and ONE movement: the second send of the same keys added nothing
+    expect(t.mock.shifts()).toHaveLength(1)
+    expect(t.mock.movements()).toHaveLength(1)
   })
 
   it('R2: a shift of this device still counting refuses a new shift (COUNT_PENDING) — nothing written', async () => {
@@ -135,5 +142,111 @@ describe('central shifts — beyond the plan (Task 11)', () => {
     await expect(t.api.recordCashMovement({ actorUserId: STAFF.TungAo, kind: 'PAID_OUT', amountSatang: 2_000, reason: 'ซื้อ\u0007น้ำแข็ง' })).rejects.toMatchObject({ code: 'BAD_INPUT' })
     expect(await t.db.select().from(s.cashMovement).all()).toHaveLength(0)
     expect(await outboxOf(t, 'cash_movement')).toHaveLength(0)
+  })
+})
+
+describe('Task 11 fix round 1', () => {
+  type Api = Awaited<ReturnType<typeof openConnectedApi>>
+  const receiveFromDrawer = async (t: Api, supplier: string) =>
+    t.api.receivePurchase({
+      actorUserId: STAFF.TungAo, supplier, note: '', paidFromDrawer: true, acceptPriceJump: true,
+      lines: [{ itemId: await itemId(t, 'RM-TEA-01'), purchaseUnitId: await defaultUnitId(t, 'RM-TEA-01'), qtyUnitsMilli: 1_000, lineTotalSatang: 7_700 }],
+    })
+
+  it('receivePurchase paid from the drawer of a central shift queues its PAID_OUT under the shift_open', async () => {
+    const t = await openConnectedApi({ block3: true })
+    const p = await receiveFromDrawer(t, 'แม็คโคร')
+    const [row] = await outboxOf(t, 'cash_movement')
+    expect(row).toMatchObject({ status: 'pending', idempotencyKey: `cash_movement:${p.cashMovementId}`, parentKey: `shift_open:${t.shift.id}` })
+    const data = CashMovementRowData.parse(row!.rowJson)
+    expect(data).toMatchObject({ kind: 'PAID_OUT', amount: 77, pos_order_id: null, shift_id: t.shift.id })
+    expect(data.reason).toMatch(/^รับของ/)
+  })
+
+  it('receivePurchase paid from the drawer of a local_only shift stays local_only', async () => {
+    const t = await openConnectedApi({ block3: false })
+    const p = await receiveFromDrawer(t, 'แม็คโคร')
+    const [row] = await outboxOf(t, 'cash_movement')
+    expect(row).toMatchObject({ status: 'local_only', idempotencyKey: `cash_movement:${p.cashMovementId}`, parentKey: null })
+  })
+
+  it('a supplier dayo would refuse (control character) is BAD_INPUT in both modes, before anything is written', async () => {
+    for (const block3 of [true, false]) {
+      const t = await openConnectedApi({ block3 })
+      await expect(receiveFromDrawer(t, 'แม็ค\u0007โคร')).rejects.toMatchObject({ code: 'BAD_INPUT' })
+      expect(await t.db.select().from(s.purchase).all()).toHaveLength(0)
+      expect(await t.db.select().from(s.cashMovement).all()).toHaveLength(0)
+    }
+  })
+
+  it('receivePurchase and cancelSale wake the sender after they commit', async () => {
+    const t = await openConnectedApi({ block3: true })
+    let wakes = 0
+    const api = createPosApi(t.db, { ...t.deps, afterWrite: () => { wakes++ } }, { locks: createTestLocks() })
+    const r = await sellCode({ ...t, api }, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
+    wakes = 0
+    await api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'กดผิด', made: false, refundReference: null })
+    expect(wakes).toBe(1)
+    await receiveFromDrawer({ ...t, api }, 'แม็คโคร')
+    expect(wakes).toBe(2)
+  })
+
+  it('E1 pull before opening: the per-minute budget is full → no E1 request, the shift opens from the stored E1 (local_only)', async () => {
+    const t = await openConnectedApi({ block3: false, openShift: false })
+    t.mock.setBlock3(true)                                      // dayo now supports shifts, but the tablet has no room to ask
+    const pacer = createDayoPacer()
+    const filler = pacer.wrap(async () => new Response(null))
+    for (let i = 0; i < SYNC_BUDGET_PER_MIN; i++) await filler('http://budget.test/')
+    const api = createPosApi(t.db, t.deps, { locks: createTestLocks(), pacer })
+    const before = t.mock.requests().length
+    const sh = await api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    expect(t.mock.requests().length).toBe(before)
+    expect(sh.syncMode).toBe('local_only')
+  })
+
+  it('E1 pull before opening throws → swallowed, the shift still opens from the stored E1', async () => {
+    const t = await openConnectedApi({ block3: false, openShift: false })
+    t.mock.setBlock3(true)
+    const base = t.deps.secrets
+    let calls = 0
+    // call 1 = isDayoLinked of the pre-pull · call 2 = pullCatalog's own config read (throws) · call 3+ = opening itself
+    const secrets = { ...base, getApiKey: async () => { if (++calls === 2) throw new Error('secret store hiccup'); return base.getApiKey() } }
+    const api = createPosApi(t.db, { ...t.deps, secrets }, { locks: createTestLocks() })
+    const before = t.mock.requests().length
+    const sh = await api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    expect(calls).toBeGreaterThanOrEqual(3)
+    expect(t.mock.requests().length).toBe(before)
+    expect(sh.syncMode).toBe('local_only')
+  })
+
+  describe('a clock stepped back after opening never stamps a cash row before its shift opened (dayo 0066:216)', () => {
+    it('PAID_OUT', async () => {
+      const t = await openConnectedApi({ block3: true })
+      t.clock.set('2026-09-25T02:50:00.000Z')                   // 10 minutes before the shift opened
+      const m = await t.api.recordCashMovement({ actorUserId: STAFF.TungAo, kind: 'PAID_OUT', amountSatang: 2_000, reason: 'ซื้อน้ำแข็ง' })
+      expect(m.createdAt).toBe(t.shift.openedAt)
+      expect(CashMovementRowData.parse((await outboxOf(t, 'cash_movement'))[0]!.rowJson).created_at).toBe(t.shift.openedAt)
+    })
+    it('receivePurchase PAID_OUT', async () => {
+      const t = await openConnectedApi({ block3: true })
+      t.clock.set('2026-09-25T02:50:00.000Z')
+      await receiveFromDrawer(t, 'แม็คโคร')
+      expect(CashMovementRowData.parse((await outboxOf(t, 'cash_movement'))[0]!.rowJson).created_at).toBe(t.shift.openedAt)
+    })
+    it('VOID_REFUND', async () => {
+      const t = await openConnectedApi({ block3: true })
+      t.clock.set('2026-09-25T02:50:00.000Z')
+      const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
+      await t.api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, ...approve, reason: 'กดผิด', made: false, refundReference: null })
+      const data = CashMovementRowData.parse((await outboxOf(t, 'cash_movement'))[0]!.rowJson)
+      expect(data).toMatchObject({ kind: 'VOID_REFUND', created_at: t.shift.openedAt })
+      expect(await t.db.select().from(s.cashMovement).all()).toEqual([expect.objectContaining({ createdAt: t.shift.openedAt })])
+    })
+    it('a clock that did not step back keeps its own time', async () => {
+      const t = await openConnectedApi({ block3: true })
+      t.clock.set('2026-09-25T04:00:00.000Z')
+      const m = await t.api.recordCashMovement({ actorUserId: STAFF.TungAo, kind: 'PAID_IN', amountSatang: 1_000, reason: 'แลกเหรียญ' })
+      expect(m.createdAt).toBe('2026-09-25T04:00:00.000Z')
+    })
   })
 })

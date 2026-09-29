@@ -6,7 +6,7 @@ import { enqueueLocalOnly, enqueuePush, shiftParentKey } from '../db/outbox'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { builtRow } from './shift'
+import { builtRow, notBefore } from './rows'
 import { REASON_MAX_LENGTH, type CashMovementDto, type CashMovementInput } from './types'
 
 const MANUAL_KINDS: readonly string[] = ['PAID_IN', 'PAID_OUT', 'DROP']
@@ -54,6 +54,8 @@ export async function insertManualCashMovement(
   if (!Number.isSafeInteger(m.amountSatang) || m.amountSatang <= 0 || m.amountSatang > MAX_CASH_MOVEMENT_SATANG) {
     throw new PosError('BAD_INPUT', `amount must be a whole number of satang from 1 to ${MAX_CASH_MOVEMENT_SATANG}`)
   }
+  const shift = await tx.select({ openedAt: s.shift.openedAt }).from(s.shift).where(eq(s.shift.id, m.shiftId)).get()
+  if (shift === undefined) throw new PosError('NO_OPEN_SHIFT', `shift ${m.shiftId} not found`)
   const row = {
     id: deps.newId(),
     shiftId: m.shiftId,
@@ -62,7 +64,7 @@ export async function insertManualCashMovement(
     orderId: null, // only VOID_REFUND carries an order (D47 item 7 CHECK)
     reason: m.reason,
     createdBy: m.actorId,
-    createdAt: m.at,
+    createdAt: notBefore(m.at, shift.openedAt), // a clock stepped back never stamps it before its shift opened (0066:216)
   } satisfies typeof s.cashMovement.$inferInsert
   await tx.insert(s.cashMovement).values(row)
   await enqueueCashMovement(tx, deps, row)

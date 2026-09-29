@@ -3,7 +3,7 @@ import { adjustStock, discardBase } from './adjust'
 import { login } from './auth'
 import { confirmBackupSaved, exportBackup } from './backup'
 import { pullCatalog } from '../sync/catalog'
-import { createDayoPacer, createSyncScheduler, RATE_WINDOW_MS, SYNC_BUDGET_PER_MIN, type Scheduler } from '../sync/scheduler'
+import { createDayoPacer, createSyncScheduler, RATE_WINDOW_MS, SYNC_BUDGET_PER_MIN, type DayoPacer, type Scheduler } from '../sync/scheduler'
 import { bootstrap, syncStatus } from './bootstrap'
 import { recordCashMovement } from './cash'
 import { listCentralOrdersToday, refreshDayoEdits } from './central-orders'
@@ -35,6 +35,8 @@ export type PosApiOptions = {
   locks?: Parameters<typeof createSyncScheduler>[0]['locks']
   /** Task 21 hotfix 2: told after every scheduler cycle — the Worker passes notifySyncCycleDone (sync/cycle-signal.ts). */
   onCycleDone?: () => void
+  /** Task 11 test seam: the request pacer every dayo request of this PosApi counts in (default: a new one). */
+  pacer?: DayoPacer
 }
 
 /**
@@ -73,7 +75,7 @@ export function createPosApi(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOption
 export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOptions = {}): { api: PosApi; scheduler: Scheduler } {
   const serial = createSerialQueue()
   const auto = opts.autoSync === true
-  const pacer = createDayoPacer(undefined, () => Date.parse(baseDeps.now()))
+  const pacer = opts.pacer ?? createDayoPacer(undefined, () => Date.parse(baseDeps.now()))
   const setupCall = createLimiter(SETUP_CALLS_PER_MIN, () => new PosError('DAYO_UNREACHABLE', `SETUP_RATE_LIMITED: at most ${SETUP_CALLS_PER_MIN} tries a minute — wait a minute`))
   const e3Call = createLimiter(E3_CALLS_PER_MIN, () => new PosError('OFFLINE', `E3_RATE_LIMITED: at most ${E3_CALLS_PER_MIN} a minute — wait a minute`))
   let scheduler: Scheduler | null = null

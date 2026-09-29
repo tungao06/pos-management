@@ -10,6 +10,7 @@ import { currentOpenShift, requireDevice } from './bootstrap'
 import { isDayoLinked } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
+import { builtRow } from './rows'
 import type { OpenShiftInput, QuickOpenShiftInput, ShiftDto } from './types'
 
 /** audit_log action that marks a "เปิดกะด่วน" (spec §4.8 · plan 3 M18 · Q3b-10 · D52). */
@@ -30,19 +31,6 @@ export async function shiftSyncMode(db: RemoteDb, deps: ApiDeps): Promise<ShiftS
   if (!(await isDayoLinked(db, deps))) return 'local_only'
   const sup = await readSupported(db)
   return sup !== null && SHIFT_LANE_KINDS.every((k) => sup.kinds.includes(k)) ? 'central' : 'local_only'
-}
-
-/**
- * A builder of @dayo/domain refuses (throws) a row dayo would reject forever: inside the caller's transaction that
- * rolls the whole write back — surfaced as BAD_INPUT, never as a raw RangeError/ZodError.
- */
-export function builtRow<T>(what: string, build: () => T): T {
-  try {
-    return build()
-  } catch (e) {
-    if (e instanceof PosError) throw e
-    throw new PosError('BAD_INPUT', `${what}: ${e instanceof Error ? e.message.slice(0, 300) : String(e)}`)
-  }
 }
 
 /**
