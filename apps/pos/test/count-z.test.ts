@@ -349,28 +349,43 @@ describe('count and Z — states, PINs, resend (D101 · R2 · R7)', () => {
     await pushOnce(ctx); await pushOnce(ctx)
     expect(await t.db.select().from(s.outbox).where(inArray(s.outbox.status, ['pending', 'dead'])).all()).toEqual([])
   })
-  it('a count taken while the tablet clock was far ahead does not drag later shifts into the future: opening is refused with a clock warning, nothing written (fix round 2)', async () => {
+  it('a count taken while the tablet clock was far ahead: the next shift opens at the device clock and sells; counting it and issuing a Z are refused with a clock warning, nothing written (fix round 3 · rule 5)', async () => {
     const t = await openConnectedApi({ block3: false }) // server and tablet both 2026-09-25T03:00Z
     t.clock.set('2027-09-25T03:00:00.000Z')              // the tablet clock jumps a year ahead…
-    await countAndClose(t, lines(500), owner2)            // …and a count is taken then
+    const a = await t.api.finishCount({ actorUserId: STAFF.TungAo }) // …and a count is taken then (Z left for later)
+    await t.api.confirmCount({ shiftId: a.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, z: null })
     t.clock.set('2026-09-25T03:30:00.000Z')              // set right again
-    const shifts = await t.db.select().from(s.shift).all()
-    const outbox = await t.db.select().from(s.outbox).all()
-    for (const open of [() => t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 0 }), () => t.api.quickOpenShift({ userId: STAFF.TungAo })]) {
-      try { await open(); expect.unreachable() } catch (e) {
+    const clockAhead = async (p: Promise<unknown>) => {
+      try { await p; expect.unreachable() } catch (e) {
         expect(posErrorCode(e)).toBe('BAD_INPUT')
         expect((e as Error).message).toMatch(/^BAD_INPUT: CLOCK_AHEAD: .*นาฬิกา/)
       }
     }
+    // the far-ahead count's own Z: refused, nothing written
+    await clockAhead(t.api.issueZ({ shiftId: a.shiftId, ...owner2, shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, ...settle }))
+    expect(await t.db.select().from(s.zReport).all()).toEqual([])
+    // selling is never blocked: the next shift opens at the device clock, not a year ahead
+    const b = await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    expect(b).toMatchObject({ openedAt: '2026-09-25T03:30:00.000Z', businessDate: '2026-09-25' })
+    const sale = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
+    expect(await t.db.select().from(s.order).where(eq(s.order.id, sale.orderId)).get()).toMatchObject({ soldAt: '2026-09-25T03:30:00.000Z', shiftId: b.id })
+    // counting it is refused (its E4 window would start a year ahead) — the shift stays open, nothing written
+    const shifts = await t.db.select().from(s.shift).all()
+    const audit = await t.db.select().from(s.auditLog).all()
+    await clockAhead(t.api.finishCount({ actorUserId: STAFF.TungAo }))
+    const report = await t.api.shiftReport()
+    await clockAhead(t.api.closeShift({ actorUserId: STAFF.TungAo, ...owner2, countLines: lines(545), shownExpectedCashSatang: report.expectedCashSatang, shownReportFingerprint: report.fingerprint, varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: false }))
     expect(await t.db.select().from(s.shift).all()).toEqual(shifts)
-    expect(await t.db.select().from(s.outbox).all()).toEqual(outbox)
+    expect(await t.db.select().from(s.auditLog).all()).toEqual(audit)
+    expect((await t.api.bootstrap()).openShift?.id).toBe(b.id)
   })
-  it('a clock set back less than 24 h still floors the opening at the last count (fix round 2 keeps round 1)', async () => {
+  it('a clock set back less than 24 h still floors the opening at the last count and the next count 1 ms after it (rounds 1–3)', async () => {
     const t = await openConnectedApi({ block3: false })
     t.clock.set('2026-09-25T20:00:00.000Z') // 17 h ahead of dayo — under the 24 h line
     await countAndClose(t, lines(500), owner2)
     t.clock.set('2026-09-25T03:30:00.000Z')
     expect((await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 0 })).openedAt).toBe('2026-09-25T20:00:00.000Z')
+    expect((await t.api.finishCount({ actorUserId: STAFF.TungAo })).countedAt).toBe('2026-09-25T20:00:00.001Z')
   })
   it("clock set back across midnight after a count: the bill is sold on its shift's day, so its void is the same Thai day and dayo takes both (fix round 2)", async () => {
     const t = await openConnectedApi({ now: '2026-09-25T17:10:00.000Z' }) // 00:10 on the 26th, Bangkok

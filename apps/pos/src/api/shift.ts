@@ -10,7 +10,7 @@ import { currentOpenShift, requireDevice } from './bootstrap'
 import { isDayoLinked } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { builtRow, countFloor, notBefore } from './rows'
+import { builtRow, notBefore, openFloor } from './rows'
 import type { OpenShiftInput, QuickOpenShiftInput, ShiftDto } from './types'
 
 /** audit_log action that marks a "เปิดกะด่วน" (spec §4.8 · plan 3 M18 · Q3b-10 · D52). */
@@ -47,9 +47,9 @@ async function insertOpenShift(tx: RemoteDb, deps: ApiDeps, deviceId: string, us
   if ((await currentOpenShift(tx, deviceId)) !== null) throw new PosError('SHIFT_ALREADY_OPEN', 'close the current shift first')
   // fix round 1 item 1 (security M1): never opened before this device's last count — a clock stepped back must not put
   // the new shift (and its E4 window) inside a window already counted · fix round 2: unless that count is far ahead of
-  // real time (countFloor refuses)
+  // real time — then it opens at the device clock (fix round 3: selling is never blocked)
   const now = deps.now()
-  const lastCount = await countFloor(tx, deviceId, now)
+  const lastCount = await openFloor(tx, deviceId, now)
   const at = lastCount === null ? now : notBefore(now, lastCount)
   const row = {
     id: deps.newId(),

@@ -12,7 +12,7 @@ import { botPreviewKey } from './bot-cash'
 import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { builtRow, notBefore } from './rows'
+import { assertNoFarAheadCount, builtRow, notBefore } from './rows'
 import { PAYMENT_CODE, type CountSummaryDto, type StoredZSnapshot, type UserDto, type ZReportDto, type ZReportSummaryDto, type ZSettle } from './types'
 
 /** audit_log action written when an owner acknowledges a previous Z that fails its hash (Q3b-11 · D53). */
@@ -264,6 +264,7 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
   }
   const countedAt = shift.countedAt
   const deviceId = shift.deviceId
+  await assertNoFarAheadCount(tx, deviceId, deps.now()) // fix round 3: no Z while this device's last count is far ahead
   const earlier = await earlierCountWithoutZ(tx, shift)
   if (earlier !== null) throw new PosError('Z_NOT_READY', earlier) // R7
   if (shift.syncMode === 'central' && summary.bot === null) throw new PosError('BOT_CASH_REQUIRED', shift.id)

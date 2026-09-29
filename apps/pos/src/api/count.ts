@@ -81,9 +81,9 @@ async function freezeOpen(tx: RemoteDb, deps: ApiDeps, shift: ShiftDto, actorId:
   const at = deps.now()
   const later = (a: string, b: string | null): string => (b !== null && Date.parse(b) > Date.parse(a) ? b : a)
   const base = [shift.openedAt, bills[0]?.[0] ?? null, bills[0]?.[1] ?? null, moves[0]?.[0] ?? null].reduce<string>(later, at)
-  // fix round 2: the +1 ms floor over this device's last count only while that count is not far ahead of real time
+  // fix rounds 2–3: 1 ms after this device's last count · a last count far ahead of real time refuses the count (CLOCK_AHEAD)
   const deviceId = (await tx.select({ d: s.shift.deviceId }).from(s.shift).where(eq(s.shift.id, shift.id)).get())!.d
-  const lastCount = await countFloor(tx, deviceId, base)
+  const lastCount = await countFloor(tx, deviceId, at)
   const countedAt = later(base, lastCount === null ? null : new Date(Date.parse(lastCount) + 1).toISOString())
   await tx.update(s.shift).set({ status: 'counting', countedAt }).where(and(eq(s.shift.id, shift.id), eq(s.shift.status, 'open')))
   await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'shift', entityId: shift.id, action: 'count_finished', beforeJson: null, afterJson: { countedAt }, actorUserId: actorId, at })
