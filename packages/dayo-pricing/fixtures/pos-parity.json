@@ -1,6 +1,6 @@
 {
-  "dayo_commit": "4f359320b68e8b4cc7713e4c6b3123615f5cfa7d",
-  "generated_at": "2026-09-28T20:09:37.224Z",
+  "dayo_commit": "12885fe3de42852affe4e478e46f0febe3de0a7d",
+  "generated_at": "2026-09-28T20:20:33.761Z",
   "pricing_files_sha256": {
     "packages/shared/src/money.ts": "cc619ca5d603b591a2e156b810bdef8bc552e525ad5b78bc5ada70a58394daf3",
     "packages/shared/src/promotions.ts": "007526169494c36a3f8367e6aeb855b7d1cfa107be99dc0f807224135b5ff38e",
@@ -10,7 +10,7 @@
     "packages/shared/src/types.ts": "21f74a78803cfe0e49696cc6b637f448072d4ff5890587085ddfc41ef4cb824a",
     "packages/shared/src/time.ts": "e924caa06e0cfa195d9a8086509d33133b2d597964ea34f1237c19e52db6a7c7"
   },
-  "catalog_version": 23,
+  "catalog_version": 27,
   "catalog": {
     "bases": {},
     "sizes": [
@@ -97,7 +97,7 @@
             "qty": 150,
             "unit": "ml",
             "baseId": null,
-            "ingredientId": "94d62a54-d9ba-4b5a-9df7-da9ab7804a5b"
+            "ingredientId": "98865e7d-6c63-4c98-a9e2-48c2d9d5c868"
           }
         ],
         "allowOatMilk": false,
@@ -117,7 +117,7 @@
             "qty": 150,
             "unit": "ml",
             "baseId": null,
-            "ingredientId": "0734d668-77ab-4baf-b5a9-2d4eb62e3dea"
+            "ingredientId": "e7e34200-c17e-44a7-a264-8a2058b5e65a"
           }
         ],
         "allowOatMilk": false,
@@ -137,7 +137,7 @@
             "qty": 200,
             "unit": "ml",
             "baseId": null,
-            "ingredientId": "0734d668-77ab-4baf-b5a9-2d4eb62e3dea"
+            "ingredientId": "e7e34200-c17e-44a7-a264-8a2058b5e65a"
           }
         ],
         "allowOatMilk": false,
@@ -157,13 +157,13 @@
             "qty": 3.5,
             "unit": "g",
             "baseId": null,
-            "ingredientId": "bd1ac8df-fb1c-4cb1-b6cc-270dae484e76"
+            "ingredientId": "09ee6214-8a92-4605-91b8-8ff3a477bf89"
           },
           {
             "qty": 150,
             "unit": "ml",
             "baseId": null,
-            "ingredientId": "00b5fea9-3111-40cb-adad-5508d43d93da"
+            "ingredientId": "020da391-8adc-41b7-b934-56bfdcd2a189"
           }
         ],
         "allowOatMilk": true,
@@ -173,7 +173,7 @@
     ],
     "promotions": [
       {
-        "id": "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+        "id": "7448a897-c97f-40dd-828f-68950c63fc1e",
         "code": "FRIEND",
         "kind": "item_discount",
         "name": "โค้ด FRIEND ลด 10",
@@ -196,53 +196,7 @@
         "requiresCode": true
       },
       {
-        "id": "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-        "code": null,
-        "kind": "item_discount",
-        "name": "ลด 15% ชาเขียว",
-        "endsOn": null,
-        "params": {
-          "percent": 15,
-          "menu_codes": [
-            "Green Tea"
-          ]
-        },
-        "timeTo": null,
-        "isActive": true,
-        "priority": 1,
-        "startsOn": null,
-        "timeFrom": null,
-        "autoApply": true,
-        "stackable": true,
-        "daysOfWeek": null,
-        "channelCodes": [],
-        "requiresCode": false
-      },
-      {
-        "id": "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-        "code": null,
-        "kind": "item_discount",
-        "name": "ลด 33% ชาเขียว",
-        "endsOn": null,
-        "params": {
-          "percent": 33,
-          "menu_codes": [
-            "Green Tea"
-          ]
-        },
-        "timeTo": null,
-        "isActive": true,
-        "priority": 1,
-        "startsOn": null,
-        "timeFrom": null,
-        "autoApply": true,
-        "stackable": true,
-        "daysOfWeek": null,
-        "channelCodes": [],
-        "requiresCode": false
-      },
-      {
-        "id": "47ec6da6-ced9-4a48-a302-6420bbff855d",
+        "id": "e71b8c54-783f-4caa-8b53-ea30c02a9923",
         "code": null,
         "kind": "item_discount",
         "name": "ลด 7% มัตจะลาเต้",
@@ -265,7 +219,7 @@
         "requiresCode": false
       },
       {
-        "id": "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+        "id": "c2baafdf-b3f8-401f-8a40-08615370b307",
         "code": null,
         "kind": "item_discount",
         "name": "ลด 15% ชาไทย",
@@ -288,7 +242,53 @@
         "requiresCode": false
       },
       {
-        "id": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+        "id": "5c2548c7-53e3-4f17-8859-863483c7c557",
+        "code": null,
+        "kind": "item_discount",
+        "name": "ลด 15% ชาเขียว",
+        "endsOn": null,
+        "params": {
+          "percent": 15,
+          "menu_codes": [
+            "Green Tea"
+          ]
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 1,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+        "code": null,
+        "kind": "item_discount",
+        "name": "ลด 33% ชาเขียว",
+        "endsOn": null,
+        "params": {
+          "percent": 33,
+          "menu_codes": [
+            "Green Tea"
+          ]
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 1,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
         "code": null,
         "kind": "item_discount",
         "name": "ชาไทยช่วงเย็นลด 5",
@@ -311,7 +311,7 @@
         "requiresCode": false
       },
       {
-        "id": "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+        "id": "5f535216-2d52-4e52-99c2-0f64583ad4e3",
         "code": null,
         "kind": "item_discount",
         "name": "ชาไทยทาง Grab ลด 3",
@@ -336,7 +336,7 @@
         "requiresCode": false
       },
       {
-        "id": "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+        "id": "c71422d9-8276-49cc-a445-4cc38ab30e5f",
         "code": null,
         "kind": "buy_n_get_m",
         "name": "ชาไทยซื้อ 2 แถม 1",
@@ -360,7 +360,7 @@
         "requiresCode": false
       },
       {
-        "id": "681537ad-5aba-471e-967a-b327a7865f8d",
+        "id": "55db400b-05d7-4e3c-bce2-104217e51539",
         "code": null,
         "kind": "bundle",
         "name": "เซ็ตชาไทย+มัตจะลาเต้ ฿100",
@@ -394,7 +394,7 @@
         "requiresCode": false
       },
       {
-        "id": "63dbd158-4b3e-42c2-a16b-499299f63495",
+        "id": "f3d5de04-ac32-4d42-9365-41a314c36b89",
         "code": null,
         "kind": "bill_discount",
         "name": "ลดบิล 10% (สูงสุด ฿50)",
@@ -414,44 +414,136 @@
         "daysOfWeek": null,
         "channelCodes": [],
         "requiresCode": false
+      },
+      {
+        "id": "b5424925-2d01-44c9-afc6-bfd23894ca55",
+        "code": "TIEA",
+        "kind": "item_discount",
+        "name": "เสมอกัน A (ลด 5)",
+        "endsOn": null,
+        "params": {
+          "menu_codes": [
+            "Thai Tea"
+          ],
+          "amount_baht": 5
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 6,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": false,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+        "code": "TIEZ",
+        "kind": "item_discount",
+        "name": "เสมอกัน Z (ลด 10)",
+        "endsOn": null,
+        "params": {
+          "menu_codes": [
+            "Thai Tea"
+          ],
+          "amount_baht": 10
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 6,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": false,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+        "code": "TIEB",
+        "kind": "item_discount",
+        "name": "เสมอกัน B มีโค้ด (ลด 3)",
+        "endsOn": null,
+        "params": {
+          "menu_codes": [
+            "Thai Tea"
+          ],
+          "amount_baht": 3
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 7,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": false,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "b7bdda4d-474e-458e-9f6e-2c73722de1d1",
+        "code": null,
+        "kind": "item_discount",
+        "name": "เสมอกันไม่มีโค้ด (ลด 8)",
+        "endsOn": null,
+        "params": {
+          "menu_codes": [
+            "Thai Tea"
+          ],
+          "amount_baht": 8
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 7,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": false,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
       }
     ],
     "ingredients": {
-      "00b5fea9-3111-40cb-adad-5508d43d93da": {
-        "id": "00b5fea9-3111-40cb-adad-5508d43d93da",
+      "020da391-8adc-41b7-b934-56bfdcd2a189": {
+        "id": "020da391-8adc-41b7-b934-56bfdcd2a189",
         "code": "RM-020",
         "name": "นมสด",
         "useUnit": "ml"
       },
-      "0734d668-77ab-4baf-b5a9-2d4eb62e3dea": {
-        "id": "0734d668-77ab-4baf-b5a9-2d4eb62e3dea",
-        "code": "BASE-GREEN",
-        "name": "ชาเขียวเบส",
-        "useUnit": "ml"
+      "09ee6214-8a92-4605-91b8-8ff3a477bf89": {
+        "id": "09ee6214-8a92-4605-91b8-8ff3a477bf89",
+        "code": "RM-010",
+        "name": "ผงมัตจะ Excellent",
+        "useUnit": "g"
       },
-      "94d62a54-d9ba-4b5a-9df7-da9ab7804a5b": {
-        "id": "94d62a54-d9ba-4b5a-9df7-da9ab7804a5b",
+      "98865e7d-6c63-4c98-a9e2-48c2d9d5c868": {
+        "id": "98865e7d-6c63-4c98-a9e2-48c2d9d5c868",
         "code": "BASE-THAI",
         "name": "ชาไทยเบส",
         "useUnit": "ml"
       },
-      "aaba3835-05bd-41e3-b9a9-cfcbc52e737b": {
-        "id": "aaba3835-05bd-41e3-b9a9-cfcbc52e737b",
-        "code": "RM-021",
-        "name": "นมโอ๊ต",
-        "useUnit": "ml"
-      },
-      "b3958a8a-fd79-45ab-8549-cc53ad7bff06": {
-        "id": "b3958a8a-fd79-45ab-8549-cc53ad7bff06",
+      "cbf3a1dc-5f2e-4e09-9891-9ec50e75800e": {
+        "id": "cbf3a1dc-5f2e-4e09-9891-9ec50e75800e",
         "code": "RM-012",
         "name": "ผงมัตจะ Isuzu",
         "useUnit": "g"
       },
-      "bd1ac8df-fb1c-4cb1-b6cc-270dae484e76": {
-        "id": "bd1ac8df-fb1c-4cb1-b6cc-270dae484e76",
-        "code": "RM-010",
-        "name": "ผงมัตจะ Excellent",
-        "useUnit": "g"
+      "e7e34200-c17e-44a7-a264-8a2058b5e65a": {
+        "id": "e7e34200-c17e-44a7-a264-8a2058b5e65a",
+        "code": "BASE-GREEN",
+        "name": "ชาเขียวเบส",
+        "useUnit": "ml"
+      },
+      "f612e867-6e76-45b4-bf7f-528d59893841": {
+        "id": "f612e867-6e76-45b4-bf7f-528d59893841",
+        "code": "RM-021",
+        "name": "นมโอ๊ต",
+        "useUnit": "ml"
       }
     },
     "milkOptions": [
@@ -459,7 +551,7 @@
         "code": "fresh",
         "aliases": [],
         "priceAdd": 0,
-        "ingredientId": "00b5fea9-3111-40cb-adad-5508d43d93da"
+        "ingredientId": "020da391-8adc-41b7-b934-56bfdcd2a189"
       },
       {
         "code": "oat",
@@ -467,7 +559,7 @@
           "นมโอ๊ต"
         ],
         "priceAdd": 5,
-        "ingredientId": "aaba3835-05bd-41e3-b9a9-cfcbc52e737b"
+        "ingredientId": "f612e867-6e76-45b4-bf7f-528d59893841"
       }
     ],
     "gradeOptions": [
@@ -479,7 +571,7 @@
         "priceAdd": 0,
         "isDefault": true,
         "multiplier": 1,
-        "ingredientId": "bd1ac8df-fb1c-4cb1-b6cc-270dae484e76"
+        "ingredientId": "09ee6214-8a92-4605-91b8-8ff3a477bf89"
       },
       {
         "code": "Isuzu",
@@ -489,7 +581,7 @@
         "priceAdd": 90,
         "isDefault": false,
         "multiplier": 0.8,
-        "ingredientId": "b3958a8a-fd79-45ab-8549-cc53ad7bff06"
+        "ingredientId": "cbf3a1dc-5f2e-4e09-9891-9ec50e75800e"
       }
     ],
     "paymentMethods": [
@@ -523,15 +615,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -550,13 +646,13 @@
             "unitCost": 0,
             "discountPerCup": 5.25,
             "discountReason": null,
-            "promotionId": "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+            "promotionId": "c2baafdf-b3f8-401f-8a40-08615370b307",
             "lineTotal": 29.75
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+            "promotionId": "c2baafdf-b3f8-401f-8a40-08615370b307",
             "code": null,
             "name": "ลด 15% ชาไทย",
             "kind": "item_discount",
@@ -589,15 +685,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -616,13 +716,13 @@
             "unitCost": 0,
             "discountPerCup": 6.75,
             "discountReason": null,
-            "promotionId": "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+            "promotionId": "5c2548c7-53e3-4f17-8859-863483c7c557",
             "lineTotal": 38.25
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+            "promotionId": "5c2548c7-53e3-4f17-8859-863483c7c557",
             "code": null,
             "name": "ลด 15% ชาเขียว",
             "kind": "item_discount",
@@ -655,15 +755,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -682,13 +786,13 @@
             "unitCost": 0,
             "discountPerCup": 5.95,
             "discountReason": null,
-            "promotionId": "47ec6da6-ced9-4a48-a302-6420bbff855d",
+            "promotionId": "e71b8c54-783f-4caa-8b53-ea30c02a9923",
             "lineTotal": 79.05
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "47ec6da6-ced9-4a48-a302-6420bbff855d",
+            "promotionId": "e71b8c54-783f-4caa-8b53-ea30c02a9923",
             "code": null,
             "name": "ลด 7% มัตจะลาเต้",
             "kind": "item_discount",
@@ -721,15 +825,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -748,13 +856,13 @@
             "unitCost": 0,
             "discountPerCup": 21.45,
             "discountReason": null,
-            "promotionId": "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+            "promotionId": "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
             "lineTotal": 43.55
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+            "promotionId": "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
             "code": null,
             "name": "ลด 33% ชาเขียว",
             "kind": "item_discount",
@@ -787,16 +895,20 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -846,16 +958,20 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -905,15 +1021,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -938,7 +1058,7 @@
         ],
         "promotionsApplied": [
           {
-            "promotionId": "63dbd158-4b3e-42c2-a16b-499299f63495",
+            "promotionId": "f3d5de04-ac32-4d42-9365-41a314c36b89",
             "code": null,
             "name": "ลดบิล 10% (สูงสุด ฿50)",
             "kind": "bill_discount",
@@ -971,15 +1091,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -998,7 +1122,7 @@
             "unitCost": 0,
             "discountPerCup": 35,
             "discountReason": null,
-            "promotionId": "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+            "promotionId": "c71422d9-8276-49cc-a445-4cc38ab30e5f",
             "lineTotal": 0
           },
           {
@@ -1020,7 +1144,7 @@
         ],
         "promotionsApplied": [
           {
-            "promotionId": "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+            "promotionId": "c71422d9-8276-49cc-a445-4cc38ab30e5f",
             "code": null,
             "name": "ชาไทยซื้อ 2 แถม 1",
             "kind": "buy_n_get_m",
@@ -1063,15 +1187,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1090,7 +1218,7 @@
             "unitCost": 0,
             "discountPerCup": 5.83,
             "discountReason": null,
-            "promotionId": "681537ad-5aba-471e-967a-b327a7865f8d",
+            "promotionId": "55db400b-05d7-4e3c-bce2-104217e51539",
             "lineTotal": 29.17
           },
           {
@@ -1106,13 +1234,13 @@
             "unitCost": 0,
             "discountPerCup": 14.17,
             "discountReason": null,
-            "promotionId": "681537ad-5aba-471e-967a-b327a7865f8d",
+            "promotionId": "55db400b-05d7-4e3c-bce2-104217e51539",
             "lineTotal": 70.83
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "681537ad-5aba-471e-967a-b327a7865f8d",
+            "promotionId": "55db400b-05d7-4e3c-bce2-104217e51539",
             "code": null,
             "name": "เซ็ตชาไทย+มัตจะลาเต้ ฿100",
             "kind": "bundle",
@@ -1150,16 +1278,20 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1210,16 +1342,20 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1255,15 +1391,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1314,15 +1454,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1341,13 +1485,13 @@
             "unitCost": 0,
             "discountPerCup": 5,
             "discountReason": null,
-            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+            "promotionId": "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
             "lineTotal": 30
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+            "promotionId": "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
             "code": null,
             "name": "ชาไทยช่วงเย็นลด 5",
             "kind": "item_discount",
@@ -1381,15 +1525,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1408,13 +1556,13 @@
             "unitCost": 0,
             "discountPerCup": 5,
             "discountReason": null,
-            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+            "promotionId": "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
             "lineTotal": 30
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+            "promotionId": "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
             "code": null,
             "name": "ชาไทยช่วงเย็นลด 5",
             "kind": "item_discount",
@@ -1448,15 +1596,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1475,13 +1627,13 @@
             "unitCost": 0,
             "discountPerCup": 5,
             "discountReason": null,
-            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+            "promotionId": "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
             "lineTotal": 30
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+            "promotionId": "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
             "code": null,
             "name": "ชาไทยช่วงเย็นลด 5",
             "kind": "item_discount",
@@ -1515,15 +1667,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1573,16 +1729,20 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1632,16 +1792,20 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1692,15 +1856,19 @@
         ],
         "promoCode": "FRIEND",
         "skipPromotionIds": [
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1719,13 +1887,13 @@
             "unitCost": 0,
             "discountPerCup": 10,
             "discountReason": null,
-            "promotionId": "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+            "promotionId": "7448a897-c97f-40dd-828f-68950c63fc1e",
             "lineTotal": 25
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+            "promotionId": "7448a897-c97f-40dd-828f-68950c63fc1e",
             "code": "FRIEND",
             "name": "โค้ด FRIEND ลด 10",
             "kind": "item_discount",
@@ -1758,15 +1926,19 @@
           }
         ],
         "skipPromotionIds": [
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -1816,16 +1988,20 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -2177,16 +2353,20 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -2222,16 +2402,20 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -2266,15 +2450,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -2324,15 +2512,19 @@
           }
         ],
         "skipPromotionIds": [
-          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
-          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
-          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
-          "47ec6da6-ced9-4a48-a302-6420bbff855d",
-          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
-          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
-          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
-          "681537ad-5aba-471e-967a-b327a7865f8d",
-          "63dbd158-4b3e-42c2-a16b-499299f63495"
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
         ]
       },
       "expected": {
@@ -2351,13 +2543,13 @@
             "unitCost": 0,
             "discountPerCup": 3,
             "discountReason": null,
-            "promotionId": "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+            "promotionId": "5f535216-2d52-4e52-99c2-0f64583ad4e3",
             "lineTotal": 43
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+            "promotionId": "5f535216-2d52-4e52-99c2-0f64583ad4e3",
             "code": null,
             "name": "ชาไทยทาง Grab ลด 3",
             "kind": "item_discount",
@@ -2369,6 +2561,144 @@
         "billDiscountAmount": 0,
         "totalAmount": 43,
         "channelFeeAmount": 12.9,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
+        "warnings": []
+      }
+    },
+    {
+      "spec": "16a",
+      "note": "TIEZ/TIEA priority เท่ากัน ไม่ stackable → code เรียงก่อน (TIEA) ชนะ แม้ TIEZ ถูก import ก่อน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "qty": 1
+          }
+        ],
+        "skipPromotionIds": [
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+          "b7bdda4d-474e-458e-9f6e-2c73722de1d1"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "lines": [
+          {
+            "lineNo": 1,
+            "menuCode": "Thai Tea",
+            "menuNameTh": "ชาไทย",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "unitCost": 0,
+            "discountPerCup": 5,
+            "discountReason": null,
+            "promotionId": "b5424925-2d01-44c9-afc6-bfd23894ca55",
+            "lineTotal": 30
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "promotionId": "b5424925-2d01-44c9-afc6-bfd23894ca55",
+            "code": "TIEA",
+            "name": "เสมอกัน A (ลด 5)",
+            "kind": "item_discount",
+            "discountAmount": 5
+          }
+        ],
+        "itemsSubtotal": 35,
+        "itemsDiscount": 5,
+        "billDiscountAmount": 0,
+        "totalAmount": 30,
+        "channelFeeAmount": 0,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
+        "warnings": []
+      }
+    },
+    {
+      "spec": "16b",
+      "note": "โปรไม่มีโค้ด vs TIEB (มีโค้ด) priority เท่ากัน ไม่ stackable → TIEB (มีโค้ด) ชนะ โค้ด null อยู่ท้ายสุด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "qty": 1
+          }
+        ],
+        "skipPromotionIds": [
+          "7448a897-c97f-40dd-828f-68950c63fc1e",
+          "e71b8c54-783f-4caa-8b53-ea30c02a9923",
+          "c2baafdf-b3f8-401f-8a40-08615370b307",
+          "5c2548c7-53e3-4f17-8859-863483c7c557",
+          "442780a7-fc5d-4925-9d3f-d3fc29b2c02d",
+          "b0f73f0f-8b11-40a6-90e6-d7959522c5ec",
+          "5f535216-2d52-4e52-99c2-0f64583ad4e3",
+          "c71422d9-8276-49cc-a445-4cc38ab30e5f",
+          "55db400b-05d7-4e3c-bce2-104217e51539",
+          "f3d5de04-ac32-4d42-9365-41a314c36b89",
+          "b5424925-2d01-44c9-afc6-bfd23894ca55",
+          "581527f4-ebf1-4b47-88ab-8993d14fda5c"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "lines": [
+          {
+            "lineNo": 1,
+            "menuCode": "Thai Tea",
+            "menuNameTh": "ชาไทย",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "unitCost": 0,
+            "discountPerCup": 3,
+            "discountReason": null,
+            "promotionId": "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+            "lineTotal": 32
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "promotionId": "e1e15195-ca50-4845-87dd-c8c8b45b4945",
+            "code": "TIEB",
+            "name": "เสมอกัน B มีโค้ด (ลด 3)",
+            "kind": "item_discount",
+            "discountAmount": 3
+          }
+        ],
+        "itemsSubtotal": 35,
+        "itemsDiscount": 3,
+        "billDiscountAmount": 0,
+        "totalAmount": 32,
+        "channelFeeAmount": 0,
         "costTotal": 0,
         "grossProfit": null,
         "gpPercent": null,
