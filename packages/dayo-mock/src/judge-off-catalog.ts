@@ -105,7 +105,7 @@ function normalize(d: J): MockOrderData {
     pos_order_id: d['pos_order_id'] as string, receipt_no: d['receipt_no'] as string, queue_no: d['queue_no'] as number, sale_date: d['sale_date'] as string,
     sold_at: d['sold_at'] as string, channel: d['channel'] as string, payment: d['payment'] as string, staff_id: d['staff_id'] as string,
     catalog_version: d['catalog_version'] as number, shift_id: has(d, 'shift_id') ? (d['shift_id'] as string) : null, lines: [], bill_discount: null,
-    promo_code: null, skip_promotion_ids: [], no_promotions: false, note: has(d, 'note') ? (d['note'] as string) : null,
+    promo_code: null, skip_promotion_ids: [], no_promotions: false, note: has(d, 'note') ? (d['note'] as string) : null, manual_promotion_ids: [], manual_promotion_reason: null,
     totals: { items_subtotal: t['items_subtotal'] as number, items_discount: t['items_discount'] as number, bill_discount: t['bill_discount'] as number, total: t['total'] as number },
   }
 }

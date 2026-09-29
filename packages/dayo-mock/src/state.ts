@@ -2,14 +2,17 @@
 import { PosCatalogResponse, supportedOf, type CentralOrder, type DayoEdit, type OrderRowData, type PosCatalogData, type ReceivedRowResult } from '@dayo/contracts'
 import rich from '@dayo/contracts/fixtures/pos-test/e1-catalog-rich.json' with { type: 'json' }
 import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
+import { promotionRow, type PromoRulesOption } from './promo-rules.js'
 
 /**
  * The E1 the mock serves. Its `supported_fields` holds the push field lists only — what judge.ts checks rows against.
  * (E1 of dayo ≥ 0071 also carries `promotion_rule_versions` there as numbers, plan 10 F2; the mock adds that where it
- * builds the answer — plan 10 Task 5.)
+ * builds the answer from `MockState.promoRules` — plan 10 Task 5.) `catalog.promotions` holds the promotions the way
+ * dayo's table does (promotionRow); E1 serves them through promotionsFor.
  */
 export type PosCatalogChangedData = Extract<PosCatalogData, { changed: true }> & { supported_fields: Record<string, string[]> } // not Omit: it drops the known keys of a loose object
 export type CatalogPromotion = PosCatalogChangedData['catalog']['promotions'][number]
+export type PromotionGroup = NonNullable<PosCatalogChangedData['catalog']['promotionGroups']>[number]
 /** One priced menu × size × sweetness row of E1 (contracts `Variant`) — what a size needs before anything can be sold in it. */
 export type CatalogVariant = PosCatalogChangedData['catalog']['variants'][number]
 /** 'offline' = mock.fetch rejects with TypeError('Failed to fetch') — a real network failure for the tablet (the server drops the socket). */
@@ -35,6 +38,11 @@ export type MockOptions = {
   block3?: boolean
   /** Preflight P3: dayo ADR-0069 PHASE 2 on top of phase 1 (implies block3) — order_off_catalog, recompute, prefixes on order rows. */
   block3Phase2?: boolean
+  /**
+   * Plan 10 Task 5: the promotion-rule release the mock plays (promo-rules.ts). Default off = dayo main 12885fe: no
+   * promotion_rule_versions, no manual promotion fields, no promotionGroups, the E1 parameter not read.
+   */
+  promoRules?: PromoRulesOption
 }
 /** The owner's edit/cancel of a POS bill on the dayo web (ADR-0050) — what E3 then reports as `dayo_edit`. */
 export type PosOrderEdit = {
@@ -53,6 +61,13 @@ export type MockDayo = {
   bumpCatalog(mutate?: (c: PosCatalogChangedData) => void): number
   /** dayo_promo_active_at: the promotion is inactive from `at` on; it leaves E1 and the catalog version bumps. Returns the new version. */
   closePromotion(id: string, at: string): number
+  /**
+   * The owner saves the shop's active promotions (and, when given, its groups) on dayo's web: each is stored the dayo way
+   * (promotionRow — the old-shape columns derived from the rule by the vendored promoToLegacy). Bumps catalog_version, returns it.
+   */
+  setPromotions(promotions: readonly CatalogPromotion[], groups?: readonly PromotionGroup[]): number
+  /** dayo moves to another promotion-rule release. Bumps catalog_version (0071 seeds `main`, whose trigger bumps it — 0071:1103-1108,1186), returns it. */
+  setPromoRules(p: PromoRulesOption): number
   editPosOrder(posOrderId: string, edit: PosOrderEdit): void
   seedCentralOrders(orders: CentralOrder[]): void
   preloadAccepted(row: { key: string; kind: 'order'; data: OrderRowData }, result: Record<string, unknown>): void  // as if pushed earlier
@@ -112,6 +127,8 @@ export type MockOrderData = {
   pos_order_id: string; receipt_no: string; queue_no: number; sale_date: string; sold_at: string; channel: string; payment: string; staff_id: string
   catalog_version: number; shift_id: string | null; lines: MockOrderLine[]; bill_discount: { baht: number | null; percent: number | null; reason: string | null } | null
   promo_code: string | null; skip_promotion_ids: string[]; no_promotions: boolean; totals: MockTotals; note: string | null
+  /** 0069: de-duplicated, first seen first (dayo_draft_manual_promotions) · the reason cut by dayo_trim_ws, '' → null (dayo_draft_manual_reason). */
+  manual_promotion_ids: string[]; manual_promotion_reason: string | null
 }
 /**
  * `total` and `data.payment` are what the tablet reported at sale (pos_reported_amounts — frozen, D93); editPosOrder changes
@@ -151,6 +168,7 @@ export type MockState = {
   block3LiveFrom: string | null              // shop_settings.block3_live_from (ADR-0056 rule 12 · D100) — set once
   offCatalogCap: number                       // shop_settings.off_catalog_max_total, baht (D103 · default 3000)
   rejections: Map<string, Set<string>>        // pos_push_rejections: pos_order_id → reasons (0066:993-1002)
+  promoRules: PromoRulesOption                // plan 10 Task 5: the promotion-rule release played
 }
 
 export const variantKey = (code: string, size: string, sweetness: string): string => JSON.stringify([code, size, sweetness])
@@ -193,6 +211,16 @@ export function freshCatalog(): PosCatalogChangedData {
   // E1 `pricing` = the vendored pin: the mock plays a dayo running the exact pricing code the tablet vendored, so a
   // `vendor:update` never needs this fixture's hashes edited by hand (a test wanting a mismatch sets `opts.pricing`
   // or mutates `catalog.pricing`).
-  const fields = Object.fromEntries(Object.entries(supportedOf(d.supported_kinds, d.supported_fields).fields).map(([k, v]) => [k, [...v]]))
-  return { ...structuredClone(d), supported_fields: fields, pricing: { commit: vendor.commit, files_sha256: { ...vendor.files } } }
+  return storedCatalog({ ...d, supported_fields: {}, pricing: { commit: vendor.commit, files_sha256: { ...vendor.files } } }, d.supported_fields)
+}
+
+/**
+ * A catalog as the mock's dayo holds it (a copy): `supported_fields` = the push field lists only (supportedOf — an E1
+ * answer handed in may carry promotion_rule_versions, which the mock re-adds from its promoRules) · each promotion stored
+ * the dayo way (promotionRow). `rawFields` = the E1 supported_fields to read (default: the catalog's own).
+ */
+export function storedCatalog(c: PosCatalogChangedData, rawFields: Readonly<Record<string, unknown>> = c.supported_fields): PosCatalogChangedData {
+  const fields = Object.fromEntries(Object.entries(supportedOf(c.supported_kinds, rawFields).fields).map(([k, v]) => [k, [...v]]))
+  const copy = structuredClone(c)
+  return { ...copy, supported_fields: fields, catalog: { ...copy.catalog, promotions: copy.catalog.promotions.map(promotionRow) } }
 }
