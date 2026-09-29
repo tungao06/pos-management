@@ -1,5 +1,5 @@
 import { laneOf, type DetailPrefix, type PushKind } from '@dayo/contracts'
-import { SCOPE_CLOSABLE_AFTER_MS } from '../sync/push'
+import { SCOPE_CLOSABLE_AFTER_MS, TABLET_OWN_REASONS } from '../sync/push'
 import type { Remedy } from './types'
 
 /*
@@ -20,7 +20,7 @@ export const isReceiptCollision = (detail: string): boolean => RECEIPT_COLLISION
  * Reasons the TABLET wrote itself (ruling R11: "ของเครื่อง") — no verdict of dayo, so never "ปิดเป็นบิลนอกแคตตาล็อก"
  * (dayo's rule: needs a rejection it recorded). '' = an unreadable last_error.
  */
-const TABLET_OWN = new Set(['STUCK', 'ENVELOPE', 'REQUEST_FAILED', 'NO_VERDICT_REPEATED', 'NO_ANSWER', 'DUPLICATE_VERDICT', ''])
+const TABLET_OWN = new Set([...TABLET_OWN_REASONS, ''])
 
 /** spec §6.4 S5 · R5-2 · preflight D7: a shift-kind verdict that says "someone else's data is under this key". */
 export function isShiftConflict(reason: string, prefix: DetailPrefix | null): boolean {

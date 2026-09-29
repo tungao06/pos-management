@@ -348,8 +348,23 @@ describe('owner remedies of block 3 (spec 04 §6.4)', () => {
     expect(await pushOnce(ctx)).toMatchObject({ requests: 0 })
     const [p] = await t.api.listSyncProblems(STAFF.TungAo)
     expect(p).toMatchObject({ kind: 'shift_open', waiting: 'unsupported', remedies: ['EXCLUDE'], blocksLaneRows: 2 })
+    expect((await t.api.syncStatus()).shiftLaneHeld).toEqual({ rows: 3, blockingKey: p!.key, reason: 'unsupported' }) // fix round 1 item 3
     await t.api.excludeFromSync({ ...owner, outboxId: p!.outboxId })
     expect((await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'cash_movement')).all()).map((x) => x.status)).toEqual(['local_only', 'local_only'])
+    expect((await t.api.syncStatus()).shiftLaneHeld).toBeNull()
+  })
+  it('fix round 1 item 4: dayo cannot hand the tablet one of its own reasons — PARENT_REJECTED from dayo is a plain REJECTED with buttons, counted', async () => {
+    for (const reason of ['PARENT_REJECTED', 'STUCK', 'CLOCK_AHEAD', '']) {
+      const { t, p } = await rejected(reason, 'x')
+      expect(p).toMatchObject({ reason: 'REJECTED', remedies: ['RETRY', 'CLOSE_OFF_CATALOG', 'EXCLUDE'] })
+      expect((await t.api.syncStatus()).problemBills).toBe(1)
+    }
+  })
+  it('fix round 1 item 5: an exists: order_no that is not a dayo order number is not taken — no acknowledge, "ปิดไว้ในเครื่อง" only', async () => {
+    const data = { order_no: 'A-000001<x>', version: 1, reported_total: 45, payment_is_cash: false, off_catalog: false }
+    const { t, p } = await rejected('CONFLICT', 'off_catalog_exists: x', data)
+    expect(p).toMatchObject({ central: null, remedies: ['EXCLUDE'] })
+    expect(await refusal(() => t.api.acknowledgeElsewhere({ ...owner, outboxId: p.outboxId }))).toBe('REMEDY_NOT_ALLOWED')
   })
   it('a void queued while its bill\'s order row is closed off-catalog waits for the order_off_catalog row (carried item 3)', async () => {
     const { t, ctx, r, p } = await rejected('INVALID', 'x')

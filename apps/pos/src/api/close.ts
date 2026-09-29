@@ -51,7 +51,10 @@ async function deletedShiftIds(db: RemoteDb, deviceId: string, rows: readonly ZR
   if (last === undefined) return closed.map((c) => c.id) // closed shifts exist, but this device has no Z row at all
   const lastShift = closed.find((c) => c.id === last.shiftId)
   if (lastShift === undefined) return closed.map((c) => c.id) // defensive: the last Z's own shift is not even closed — treat everything as suspect
-  return closed.filter((c) => c.rowid > lastShift.rowid).map((c) => c.id)
+  // Task 14 fix round 1: a shift that HAS its Z row is never "deleted" — after skipCountFloor (9b) Zs go in count order (R7),
+  // which is not always the order the shifts were opened in (a shift opened later may be counted, and closed, first)
+  const withZ = new Set(rows.map((r) => r.shiftId))
+  return closed.filter((c) => c.rowid > lastShift.rowid && !withZ.has(c.id)).map((c) => c.id)
 }
 
 /**

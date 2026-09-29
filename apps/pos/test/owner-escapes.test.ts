@@ -4,7 +4,9 @@ import * as s from '@dayo/db-schema/sqlite'
 import type { CentralOrder } from '@dayo/contracts'
 import { posErrorCode } from '../src/api/errors'
 import { centralContinuation } from '../src/api/central-z'
+import { createPosApi } from '../src/api/pos-api'
 import { deviceLastZNo } from '../src/api/z-rows'
+import { pushOnce, SENT_AFTER_LOCAL_ACTION } from '../src/sync/push'
 import { DAYO_KEYS, writeKey } from '../src/sync/state'
 import { openConnectedApi, STAFF } from './helpers/dayo'
 import { sellCode } from './helpers/db'
@@ -28,7 +30,6 @@ describe('9a — keepShiftLocal: a central shift whose Z can never be issued is 
   it('E4 keeps failing for shift A: the owner keeps A local, A\'s Z issues without dayo, and B\'s Z is no longer held by R7', async () => {
     const t = await openConnectedApi({ block3: true })
     const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
-    const { pushOnce } = await import('../src/sync/push')
     await pushOnce(ctx) // A's shift_open reaches dayo
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
     t.mock.seedCentralOrders([bot('L260925-901', 70, '2026-09-25T03:10:00+00:00')])
@@ -87,6 +88,52 @@ describe('9a — keepShiftLocal: a central shift whose Z can never be issued is 
   })
 })
 
+describe('fix round 1 item 2 — a row closed local while its request is on the wire, and dayo stores it', () => {
+  function onTheWire(t: Awaited<ReturnType<typeof openConnectedApi>>) {
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    let onWire!: () => void
+    const wire = new Promise<void>((r) => { onWire = r })
+    const gated: typeof fetch = async (input, init) => {
+      if (String(input).endsWith('/pos/push')) { onWire(); await gate }
+      return t.mock.fetch(input, init)
+    }
+    const api = createPosApi(t.db, { ...t.deps, fetch: gated })
+    return { api, sync: api.syncNow(), wire, release }
+  }
+  it('keepShiftLocal during the push of its shift_open: dayo accepted it, so the row ends sent and an audit row says it reached dayo after the keep', async () => {
+    const t = await openConnectedApi({ block3: true })
+    const { api, sync, wire, release } = onTheWire(t)
+    await wire
+    const kept = await api.keepShiftLocal({ ...owner, shiftId: t.shift!.id })
+    expect(kept.closedKeys).toEqual([`shift_open:${t.shift!.id}`])
+    release()
+    await sync
+    expect(await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, `shift_open:${t.shift!.id}`)).get()).toMatchObject({ status: 'sent', resultJson: { shift_id: t.shift!.id } })
+    expect(t.mock.shifts().map((x) => x.id)).toEqual([t.shift!.id])
+    expect(await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, SENT_AFTER_LOCAL_ACTION)).all()).toEqual([expect.objectContaining({ entityId: `shift_open:${t.shift!.id}`, afterJson: { status: 'sent', verdict: 'accepted' } })])
+    expect((await t.db.select().from(s.shift).where(eq(s.shift.id, t.shift!.id)).get())?.syncMode).toBe('local_only') // the owner's choice stands for the rows after it
+  })
+  it('EXCLUDE of a far-ahead bill during its push, dayo accepts: the bill is shown as in dayo, never "outside dayo"', async () => {
+    const t = await openConnectedApi({ now: '2026-09-27T03:00:00.000Z' })
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.setNow('2026-09-25T03:00:00.000Z')
+    await pushOnce(ctx) // CLOCK_AHEAD, far ahead: a clock card
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    t.clock.advanceMs(120_000)
+    const { api, sync, wire, release } = onTheWire(t)
+    await wire
+    t.mock.setNow(t.clock.now())                                      // dayo's clock has caught up: it will accept
+    await api.excludeFromSync({ ...owner, outboxId: p!.outboxId })
+    release()
+    await sync
+    expect(await t.db.select().from(s.outbox).where(eq(s.outbox.id, p!.outboxId)).get()).toMatchObject({ status: 'sent' })
+    expect((await t.api.getOrder(r.orderId)).central).toMatchObject({ state: 'sent' })
+    expect(t.mock.orders()).toEqual([expect.objectContaining({ posOrderId: r.orderId, status: 'ok' })])
+  })
+})
+
 describe('9b — skipCountFloor: a count floor poisoned by a far-ahead clock', () => {
   it('the owner skips the far-ahead floor once (PIN + reason + audit, the bot-bill risk named); counting works again', async () => {
     const t = await openConnectedApi({ block3: false })
@@ -99,8 +146,8 @@ describe('9b — skipCountFloor: a count floor poisoned by a far-ahead clock', (
     expect(await code(t.api.skipCountFloor({ ...owner, approverPin: '0000' }))).toBe('PIN_WRONG')
     expect(await code(t.api.skipCountFloor({ ...owner, reason: '' }))).toBe('BAD_INPUT')
     const r = await t.api.skipCountFloor(owner)
-    expect(r).toEqual({ skippedCountedAt: a.countedAt, shiftId: a.shiftId, botBillsRisk: 'double_or_missed' })
-    expect((await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, 'count_floor_skipped')).get())).toMatchObject({ entityId: a.shiftId, actorUserId: STAFF.TungAo, afterJson: { skippedCountedAt: a.countedAt, reason: owner.reason, botBillsRisk: 'double_or_missed' } })
+    expect(r).toEqual({ skipped: [{ countedAt: a.countedAt, shiftId: a.shiftId }], botBillsRisk: 'double_or_missed' })
+    expect((await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, 'count_floor_skipped')).get())).toMatchObject({ entityId: t.device.id, actorUserId: STAFF.TungAo, afterJson: { skipped: [{ countedAt: a.countedAt }], reason: owner.reason, botBillsRisk: 'double_or_missed' } })
     const b = await t.api.finishCount({ actorUserId: STAFF.TungAo })
     expect(b.countedAt).toBe('2026-09-25T04:00:00.000Z')
     expect(await code(t.api.skipCountFloor(owner))).toBe('REMEDY_NOT_ALLOWED') // nothing far ahead left to skip
@@ -109,6 +156,67 @@ describe('9b — skipCountFloor: a count floor poisoned by a far-ahead clock', (
     expect(zb.z?.snapshot?.zNo).toBe(1)
     const za = await t.api.issueZ({ shiftId: a.shiftId, ...owner2, shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, ...settle })
     expect(za.snapshot?.zNo).toBe(2)
+  })
+  it('fix round 1 item 1: two counts taken while the clock was ahead are skipped by ONE owner action — never one left behind', async () => {
+    const t = await openConnectedApi({ block3: false })
+    t.clock.set('2026-09-28T03:00:00.000Z')
+    const a = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    await t.api.confirmCount({ shiftId: a.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, z: null })
+    await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    t.clock.advanceMs(60_000)
+    const b = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    await t.api.confirmCount({ shiftId: b.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(b.shiftId)).fingerprint, z: null })
+    t.clock.set('2026-09-25T04:00:00.000Z')
+    await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    expect(await code(t.api.finishCount({ actorUserId: STAFF.TungAo }))).toBe('BAD_INPUT')
+    expect(await t.api.skipCountFloor(owner)).toEqual({ skipped: [{ countedAt: a.countedAt, shiftId: a.shiftId }, { countedAt: b.countedAt, shiftId: b.shiftId }], botBillsRisk: 'double_or_missed' })
+    expect(await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, 'count_floor_skipped')).all()).toHaveLength(1)
+    const c = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    expect(c.countedAt).toBe('2026-09-25T04:00:00.000Z')
+    expect(await code(t.api.skipCountFloor(owner))).toBe('REMEDY_NOT_ALLOWED')
+    const zc = await t.api.confirmCount({ shiftId: c.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(c.shiftId)).fingerprint, z: settle })
+    const za = await t.api.issueZ({ shiftId: a.shiftId, ...owner2, shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, ...settle })
+    const zb = await t.api.issueZ({ shiftId: b.shiftId, ...owner2, shownFingerprint: (await t.api.countSummary(b.shiftId)).fingerprint, ...settle })
+    expect([zc.z?.snapshot?.zNo, za.snapshot?.zNo, zb.snapshot?.zNo]).toEqual([1, 2, 3])
+  })
+  it('fix round 1 item 1 (central): the far-ahead rows wait as clock cards; one skip lets a new shift count; once real time passes the counts, both Zs go to dayo', async () => {
+    const t = await openConnectedApi({ block3: true })                 // shift A, 2026-09-25T03:00Z, dayo too
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    t.clock.set('2026-09-28T03:00:00.000Z')                            // the tablet clock jumps 3 days; A and B are counted then
+    const a = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    await t.api.confirmCount({ shiftId: a.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, z: null })
+    await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    t.clock.advanceMs(60_000)
+    const b = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    await t.api.confirmCount({ shiftId: b.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(b.shiftId)).fingerprint, z: null })
+    t.clock.set('2026-09-25T04:00:00.000Z')                            // set right
+    t.mock.setNow(t.clock.now())
+    await pushOnce(ctx)
+    const cards = await t.api.listSyncProblems(STAFF.TungAo)
+    // every row stamped while the clock was ahead is a clock card (A's count, B's shift_open and count) — A's count holds the lane
+    expect(cards.map((x) => [x.pushKind, x.shiftId, x.waiting, x.remedies])).toEqual([['cash_count', a.shiftId, 'clock', ['EXCLUDE']], ['shift_open', b.shiftId, 'clock', ['EXCLUDE']], ['cash_count', b.shiftId, 'clock', ['EXCLUDE']]])
+    expect((await t.api.syncStatus()).shiftLaneHeld).toMatchObject({ blockingKey: cards[0]!.key, reason: 'clock' })
+    const c = await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    expect(await code(t.api.finishCount({ actorUserId: STAFF.TungAo }))).toBe('BAD_INPUT')
+    expect((await t.api.skipCountFloor(owner)).skipped.map((x) => x.shiftId)).toEqual([a.shiftId, b.shiftId])
+    await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    await t.api.fetchBotCash(c.id)
+    const zc = await t.api.confirmCount({ shiftId: c.id, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(c.id)).fingerprint, z: settle })
+    expect(zc.z?.snapshot?.zNo).toBe(1)
+    // A's E4 window ends 3 days ahead: not closed in dayo yet — asked again once real time has passed it
+    expect(await code(t.api.fetchBotCash(a.shiftId))).toBe('BAD_INPUT')
+    t.clock.set('2026-09-28T05:00:00.000Z')
+    t.mock.setNow(t.clock.now())
+    await t.api.fetchBotCash(a.shiftId)
+    const za = await t.api.issueZ({ shiftId: a.shiftId, ...owner2, shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, ...settle })
+    await t.api.fetchBotCash(b.shiftId)
+    const zb = await t.api.issueZ({ shiftId: b.shiftId, ...owner2, shownFingerprint: (await t.api.countSummary(b.shiftId)).fingerprint, ...settle })
+    expect([za.snapshot?.zNo, zb.snapshot?.zNo]).toEqual([2, 3])
+    for (let i = 0; i < 4; i++) { await pushOnce(ctx); t.clock.advanceMs(61_000); t.mock.setNow(t.clock.now()) }
+    expect(await t.db.select().from(s.outbox).where(eq(s.outbox.status, 'dead')).all()).toEqual([])
+    expect(await t.db.select().from(s.outbox).where(eq(s.outbox.status, 'pending')).all()).toEqual([])
+    expect(t.mock.zReports().map((z) => z.zNo)).toEqual([1, 2, 3])
+    expect(await t.api.listSyncProblems(STAFF.TungAo)).toEqual([])
   })
   it('nothing to skip while no count is far ahead', async () => {
     const t = await openConnectedApi({ block3: false })

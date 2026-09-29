@@ -3,13 +3,13 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { SHIFT_LANE_KINDS, Text200 } from '@dayo/contracts'
 import { can } from '../app/permissions'
-import { writeKey, readKey } from '../sync/state'
+import { writeKey } from '../sync/state'
 import { requireOwnerPin } from './auth'
 import { botWindowFor } from './bot-cash'
 import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { COUNT_FLOOR_SKIP_KEY, farAheadLastCount } from './rows'
+import { COUNT_FLOOR_SKIP_KEY, farAheadCounts, skippedCounts } from './rows'
 import type { KeepShiftLocalResult, OwnerApproval, SkipCountFloorResult, UserDto } from './types'
 
 /*
@@ -68,23 +68,24 @@ export async function keepShiftLocal(db: RemoteDb, deps: ApiDeps, i: OwnerApprov
 
 /**
  * 9b: a count taken while the tablet clock was far ahead (> 24 h past dayo's time — rows.ts) floors every later count and
- * blocks counting and issuing a Z (BAD_INPUT CLOCK_AHEAD). The owner skips THAT count as a floor, once: sync_state
- * local.count_floor_skip = its counted_at (a different far-ahead count asks again) · audit_log `count_floor_skipped`.
- * The price (botBillsRisk): the E4 windows around the skipped count no longer line up — a bot bill may be counted in two
+ * blocks counting and issuing a Z (BAD_INPUT CLOCK_AHEAD). The owner skips those counts as floors — EVERY far-ahead count
+ * at once (fix round 1 item 1: two counts taken while the clock was ahead must not leave one behind): sync_state
+ * local.count_floor_skip lists them (a count far ahead later asks again) · one audit_log `count_floor_skipped` naming all.
+ * The price (botBillsRisk): the E4 windows around the skipped counts no longer line up — a bot bill may be counted in two
  * Zs, or in none; the screen says so before the PIN.
  */
 export async function skipCountFloor(db: RemoteDb, deps: ApiDeps, i: OwnerApproval): Promise<SkipCountFloorResult> {
   const { approver, reason } = await ownerWithReason(db, deps, i)
   const device = await requireDevice(db)
   const out = await db.transaction(async (tx) => {
-    const far = await farAheadLastCount(tx, device.id, deps.now())
-    if (far === null) throw new PosError('REMEDY_NOT_ALLOWED', 'no count of this device is far ahead of the real time')
-    const previous = await readKey(tx, COUNT_FLOOR_SKIP_KEY)
-    await writeKey(tx, COUNT_FLOOR_SKIP_KEY, far.countedAt)
-    const result: SkipCountFloorResult = { skippedCountedAt: far.countedAt, shiftId: far.shiftId, botBillsRisk: 'double_or_missed' }
+    const far = await farAheadCounts(tx, device.id, deps.now())
+    if (far.length === 0) throw new PosError('REMEDY_NOT_ALLOWED', 'no count of this device is far ahead of the real time')
+    const previous = await skippedCounts(tx)
+    await writeKey(tx, COUNT_FLOOR_SKIP_KEY, JSON.stringify([...new Set([...previous, ...far.map((f) => f.countedAt)])]))
+    const result: SkipCountFloorResult = { skipped: far, botBillsRisk: 'double_or_missed' }
     await tx.insert(s.auditLog).values({
-      id: deps.newId(), entity: 'shift', entityId: far.shiftId, action: 'count_floor_skipped',
-      beforeJson: { countedAt: far.countedAt, previousSkip: previous }, afterJson: { ...result, reason, approvedBy: approver.id }, actorUserId: approver.id, at: deps.now(),
+      id: deps.newId(), entity: 'device', entityId: device.id, action: 'count_floor_skipped',
+      beforeJson: { previousSkips: previous }, afterJson: { ...result, reason, approvedBy: approver.id }, actorUserId: approver.id, at: deps.now(),
     })
     return result
   })

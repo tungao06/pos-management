@@ -36,6 +36,13 @@ export const SCOPE_RETRY_MS = 15 * 60_000
 export const SCOPE_RED_AFTER_MS = 24 * 3_600_000
 export const SCOPE_CLOSABLE_AFTER_MS = 7 * 86_400_000
 
+/** audit_log action: dayo stored a row the owner had closed local_only while its request was on the wire (Task 14 fix round 1). */
+export const SENT_AFTER_LOCAL_ACTION = 'sync_row_reached_dayo_after_local'
+/**
+ * Reasons only the TABLET writes on a row (ruling R11 "ของเครื่อง") — a verdict of dayo carrying one of these is renamed
+ * REJECTED (fix round 1 item 4), so dayo can never park a row as PARENT_REJECTED or pass it off as the tablet's own.
+ */
+export const TABLET_OWN_REASONS: ReadonlySet<string> = new Set(['PARENT_REJECTED', 'STUCK', 'ENVELOPE', 'CLOCK_AHEAD', 'REQUEST_FAILED', 'NO_VERDICT_REPEATED', 'NO_ANSWER', 'DUPLICATE_VERDICT', 'UNSUPPORTED'])
 /** plan 5 fix M-2: only these mean dayo stored the row. */
 const KNOWN_SUCCESS = new Set(['accepted', 'duplicate'])
 const utf8 = new TextEncoder()
@@ -406,9 +413,10 @@ function rejectedResult(data: unknown): Record<string, unknown> | null {
   return { order_no: clipCodePoints(d.data.order_no, ORDER_NO_MAX), version: d.data.version, reported_total: d.data.reported_total, payment_is_cash: d.data.payment_is_cash, off_catalog: d.data.off_catalog }
 }
 
-async function markSent(db: RemoteDb, r: Row, v: ReceivedRowResult, at: string): Promise<void> {
+/** `from` = the status the row must still have (pending; local_only for a verdict that arrived after the owner closed it). */
+async function markSent(db: RemoteDb, r: Row, v: ReceivedRowResult, at: string, from: 'pending' | 'local_only' = 'pending'): Promise<void> {
   const known = knownResult(r.tableName, v.data)
-  await db.update(s.outbox).set({ status: 'sent', sentAt: at, attempts: r.attempts + 1, lastError: null, nextAttemptAt: null, resultJson: known as never }).where(pendingRow(r.id))
+  await db.update(s.outbox).set({ status: 'sent', sentAt: at, attempts: r.attempts + 1, lastError: null, nextAttemptAt: null, resultJson: known as never }).where(and(eq(s.outbox.id, r.id), eq(s.outbox.status, from)))
   if (r.tableName === 'order_off_catalog' && known !== null) { // spec §6.4: the bill now carries dayo's number of its off-catalog bill
     await db.update(s.order).set({ centralOrderNo: known['order_no'] as string }).where(eq(s.order.id, String((r.rowJson as { pos_order_id: string }).pos_order_id)))
     return
@@ -505,13 +513,28 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
     const sentKeys: string[] = []
     for (const r of batch) {
       // review item 3: only a row still pending in THIS transaction is judged — an earlier decision in the batch is never overwritten
-      if ((await tx.select({ status: s.outbox.status }).from(s.outbox).where(eq(s.outbox.id, r.id)).get())?.status !== 'pending') continue
+      const status = (await tx.select({ status: s.outbox.status }).from(s.outbox).where(eq(s.outbox.id, r.id)).get())?.status
       const v = twice.has(r.idempotencyKey) ? undefined : byKey.get(r.idempotencyKey)
+      if (status === 'local_only' && v !== undefined && KNOWN_SUCCESS.has(v.status)) {
+        // Task 14 fix round 1 (item 2 · block-2 ledger ruling 1): the owner closed this row ("ปิดไว้ในเครื่อง", keepShiftLocal)
+        // while a request carrying it was on the wire, and dayo STORED it. The tablet must say so — the money is in dayo —
+        // or the owner may enter it again on the web. The row becomes sent (dayo's data kept as usual), an audit_log row
+        // records that it reached dayo after the close, and a bill closed "ปิดไว้ในเครื่อง" is no longer shown as outside dayo.
+        await markSent(tx, r, v, at, 'local_only')
+        if (r.tableName === 'order' || r.tableName === 'order_off_catalog') await tx.update(s.order).set({ excludedAt: null }).where(eq(s.order.id, String((r.rowJson as { pos_order_id: string }).pos_order_id)))
+        await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'sync_row', entityId: r.idempotencyKey, action: SENT_AFTER_LOCAL_ACTION, beforeJson: { status: 'local_only' }, afterJson: { status: 'sent', verdict: v.status }, actorUserId: null, at })
+        t.sent++
+        continue
+      }
+      if (status !== 'pending') continue
       const prefix = detailPrefix(v?.detail)
       if (v !== undefined && KNOWN_SUCCESS.has(v.status)) { await markSent(tx, r, v, at); sentKeys.push(r.idempotencyKey); t.sent++ }
       else if (v?.status === 'rejected' && v.reason === 'FORBIDDEN' && prefix === 'scope:') { await markScopeWait(tx, r, v, at); t.deferred++ } // not dead: no cascade
       else if (v?.status === 'rejected') {
-        await markDead(tx, r, at, v.reason ?? 'REJECTED', v.detail ?? '', r.attempts + 1, prefix === null ? {} : { prefix }, rejectedResult(v.data))
+        // fix round 1 item 4: a reason the tablet writes itself (PARENT_REJECTED, STUCK, …) is never taken from dayo — it would
+        // hide the row's buttons or its count; it is dayo's plain rejection
+        const reason = v.reason === undefined || v.reason === '' || TABLET_OWN_REASONS.has(v.reason) ? 'REJECTED' : v.reason
+        await markDead(tx, r, at, reason, v.detail ?? '', r.attempts + 1, prefix === null ? {} : { prefix }, rejectedResult(v.data))
         rejectedKeys.push(r.idempotencyKey); t.rejected++
       }
       else if (v?.status === 'deferred') { await markDeferred(tx, deps, r, v, at, sup, answer.value.server_time); t.deferred++ }

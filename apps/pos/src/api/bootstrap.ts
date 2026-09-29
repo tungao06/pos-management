@@ -2,9 +2,9 @@ import { and, asc, count, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { KIND_SCOPE, PUSH_KINDS, SHIFT_LANE_KINDS, type DetailPrefix, type PushKind } from '@dayo/contracts'
-import { readCatalog } from '../sync/catalog'
+import { readCatalog, readSupported } from '../sync/catalog'
 import { maskApiKey } from '../sync/secret-store'
-import { SCOPE_CLOSABLE_AFTER_MS, SCOPE_RED_AFTER_MS } from '../sync/push'
+import { isHeld, SCOPE_CLOSABLE_AFTER_MS, SCOPE_RED_AFTER_MS } from '../sync/push'
 import { CLOCK_WARN_MS, DAYO_KEYS, decodeLastError, readKey, type ApiState } from '../sync/state'
 import { isBackupDue, lastBackupAt, lastBackupZId } from './backup'
 import { readCentralZ } from './central-z'
@@ -154,6 +154,7 @@ export async function syncStatus(db: RemoteDb, deps: ApiDeps): Promise<SyncStatu
     clockFarAheadBills: farAhead[0]?.[0] ?? 0,
     scopeWait: await scopeWaitOf(db, now),
     shiftDataConflict: await hasShiftDataConflict(db),
+    shiftLaneHeld: await shiftLaneHeldOf(db),
     centralMismatchBills: (await db.values<[number]>(sql`select count(*) from "order" where central_mismatch_json is not null`))[0]?.[0] ?? 0,
   }
 }
@@ -186,6 +187,22 @@ export async function shiftsBeforeKeyReplace(db: RemoteDb, shiftIds: readonly st
   if (replaced === null || shiftIds.length === 0) return new Set()
   const rows = await db.select({ id: s.shift.id, openedAt: s.shift.openedAt }).from(s.shift).where(inArray(s.shift.id, [...new Set(shiftIds)])).all()
   return new Set(rows.filter((r) => Date.parse(r.openedAt) < Date.parse(replaced)).map((r) => r.id))
+}
+
+/**
+ * Task 14 fix round 1 item 3 (carried item 6): the strict shift lane stopped behind a row that will not go by itself — dayo
+ * does not support it (UNSUPPORTED / not in E1) or it is > 24 h ahead of dayo's clock (N5). `rows` = that row and every
+ * pending shift-lane row after it · `blockingKey` = the row to close ("ปิดไว้ในเครื่อง" on the problems page).
+ */
+async function shiftLaneHeldOf(db: RemoteDb): Promise<NonNullable<SyncStatusDto['shiftLaneHeld']> | null> {
+  const rows = await db.select().from(s.outbox)
+    .where(and(eq(s.outbox.status, 'pending'), inArray(s.outbox.tableName, [...SHIFT_LANE_KINDS]))).orderBy(asc(s.outbox.createdAt), asc(sql`rowid`)).all()
+  if (rows.length === 0) return null
+  const sup = await readSupported(db)
+  const at = rows.findIndex((r) => decodeLastError(r.lastError).farAhead === true || (sup !== null && isHeld(r, sup)))
+  if (at < 0) return null
+  const r = rows[at]!
+  return { rows: rows.length - at, blockingKey: r.idempotencyKey, reason: decodeLastError(r.lastError).farAhead === true ? 'clock' : 'unsupported' }
 }
 
 /**

@@ -80,6 +80,9 @@ export type SyncStatusDto = {
   shiftDataConflict?: boolean
   /** Task 14 (m2): bills whose "รับทราบ — บิลอยู่ในระบบกลางแล้ว" found dayo's total or cash/non-cash different (red bar). */
   centralMismatchBills?: number
+  /** Task 14 fix round 1 (carried item 6): the shift lane waits behind a row dayo does not support ('unsupported') or one
+   * > 24 h ahead of dayo ('clock') — `rows` = it and every pending shift-lane row after it · `blockingKey` = the row to close. */
+  shiftLaneHeld?: { rows: number; blockingKey: string; reason: 'unsupported' | 'clock' } | null
 }
 export type StaffOptionDto = { id: string; displayName: string; role: UserRole }
 export type DayoProbeInput = { baseUrl: string; apiKey: string }
@@ -405,8 +408,9 @@ export type CountSummaryDto = ShiftReportDto & { countedAt: string; syncMode: Sh
  * count (null = the shift is not counted yet) — the screen warns about both.
  */
 export type KeepShiftLocalResult = { shiftId: string; closedKeys: string[]; sentKeys: string[]; botWindow: { after: string; until: string } | null }
-/** Task 14 · carried item 9b (release gate): the far-ahead count floor the owner skipped — bot bills of the window may be counted twice or missed. */
-export type SkipCountFloorResult = { skippedCountedAt: string; shiftId: string; botBillsRisk: 'double_or_missed' }
+/** Task 14 · carried item 9b (release gate): every far-ahead count floor the owner skipped at once (fix round 1 item 1) — bot
+ * bills of their windows may be counted twice or missed. */
+export type SkipCountFloorResult = { skipped: { countedAt: string; shiftId: string }[]; botBillsRisk: 'double_or_missed' }
 /** What the owner settles when the Z is issued: the reason (asked when |variance| ≥ the threshold, D102), the bank-app QR total, a chain acknowledgement. */
 export type ZSettle = { varianceReason: string | null; bankQrTotalSatang: number | null; acknowledgeZChainBroken: boolean }
 /** D101 step 2/3 · owner PIN · `z` null = count only (offline: no reason asked yet) · `z` set = count and Z in one transaction. */

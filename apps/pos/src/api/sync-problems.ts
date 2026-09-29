@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, isNotNull, like, ne, or, sql } from 'drizzle-orm
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import {
-  ExistsConflictData, laneOf, OrderOffCatalogRowData, OrderRowData, PUSH_KINDS, PushRow, rowKey, SHIFT_LANE_KINDS, Text200,
+  BOT_ORDER_NO_RE, ExistsConflictData, laneOf, OrderOffCatalogRowData, OrderRowData, PUSH_KINDS, PushRow, rowKey, SHIFT_LANE_KINDS, Text200,
   type DetailPrefix, type PushKind, type Supported,
 } from '@dayo/contracts'
 import { buildOffCatalogRowData, CartError, centralDiffSatang, edgeBahtToSatang, findSellableVariant, nextReceiptNo, OffCatalogError } from '@dayo/domain'
@@ -58,7 +58,9 @@ function existsDataOf(r: Row): { orderNo: string; reportedTotalSatang: number; p
   const prefix = prefixOf(r)
   if (e.reason !== 'CONFLICT' || (prefix !== 'exists:' && prefix !== 'off_catalog_exists:')) return null
   const d = ExistsConflictData.safeParse(r.resultJson)
-  if (!d.success) return null
+  // fix round 1 item 5 (security): order_no becomes order.central_order_no — only a real dayo order number (L<yymmdd>-<seq>) is
+  // taken; anything else = data not readable (the owner keeps "ปิดไว้ในเครื่อง")
+  if (!d.success || !BOT_ORDER_NO_RE.test(d.data.order_no)) return null
   try {
     return { orderNo: d.data.order_no, reportedTotalSatang: edgeBahtToSatang(d.data.reported_total), paymentIsCash: d.data.payment_is_cash }
   } catch {
