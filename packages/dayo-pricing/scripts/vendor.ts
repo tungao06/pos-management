@@ -1,4 +1,6 @@
+import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { checkVendor, commitOf, driftAgainst, updateVendor, type VendorJson } from './vendor-lib.js'
 
 const [cmd, repo, ref] = process.argv.slice(2)
@@ -9,6 +11,8 @@ if (cmd === 'check') {
 } else if (cmd === 'update' && repo !== undefined) {
   const v = updateVendor(repo, ref ?? 'HEAD')
   console.log(`vendored ${Object.keys(v.files).length} files + ${Object.keys(v.fixtures).length} golden fixtures from ${v.commit} — now run the golden and parity tests (spec 04 §5.2 layer C)`)
+  // consumers type-check against dist/types (.d.ts), not src: rebuild it now, or they keep checking the old engine
+  execSync('pnpm run build:types', { cwd: fileURLToPath(new URL('..', import.meta.url)), stdio: 'inherit' })
 } else if (cmd === 'drift' && repo !== undefined) {
   const target = ref ?? 'main'
   const problems = driftAgainst(repo, target)
