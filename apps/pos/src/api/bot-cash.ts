@@ -5,9 +5,10 @@ import { BOT_ORDER_NO_RE } from '@dayo/contracts'
 import { edgeBahtToSatang, MAX_Z_BOT_BILLS, sumSatang, type ZBotBill } from '@dayo/domain'
 import { apiBlocked, rateLimitLeft, readDayoConfig, recordDayoFailure, type SyncContext } from '../sync/catalog'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from '../sync/dayo-client'
-import { DAYO_KEYS, extendRateLimit, MAX_BACKOFF_WAIT_MS, readKey, writeKey } from '../sync/state'
+import { DAYO_KEYS, estimatedServerMs, extendRateLimit, MAX_BACKOFF_WAIT_MS, readKey, writeKey } from '../sync/state'
 import { requireDevice } from './bootstrap'
 import { PosError } from './errors'
+import { CLOCK_AHEAD_COUNT } from './rows'
 import type { BotCashDto } from './types'
 
 /** sync_state key of the last good E4 answer of a shift (local only — never sent; deleted when the Z is written). */
@@ -53,6 +54,24 @@ async function blockedError(db: RemoteDb): Promise<PosError> {
 }
 
 const bad = (why: string): PosError => new PosError('DAYO_BAD_RESPONSE', `E4 ${why}`)
+
+/** dayo's own tolerance for a device time ahead of its clock (0066: `v_at > now() + interval '5 minutes'`). */
+export const E4_WINDOW_TOLERANCE_MS = 5 * 60_000
+
+/**
+ * Task 12 carried (security M): E4 answers for bills created up to dayo's time of the answer. A window whose end (this
+ * count's counted_at) is later than that + 5 min is not closed yet — a bot bill created between the answer and
+ * counted_at would be in neither this Z (not listed now) nor the next (its window starts at counted_at). Refused as
+ * BAD_INPUT `CLOCK_AHEAD:` + Thai text (the screen shows the detail), nothing stored; asking again once dayo's time has
+ * passed the count works. E4 carries no server_time (0067): dayo's time is the tablet's estimate at the answer — the
+ * last skew E1/E2 measured while fresh (D106 `estimatedServerMs`), else the device clock.
+ */
+async function assertWindowClosed(db: RemoteDb, until: string, answeredAt: string): Promise<void> {
+  const server = (await estimatedServerMs(db, answeredAt)) ?? Date.parse(answeredAt)
+  if (Date.parse(until) > server + E4_WINDOW_TOLERANCE_MS) {
+    throw new PosError('BAD_INPUT', `${CLOCK_AHEAD_COUNT}: เวลานับเงิน (${until}) ยังไม่ถึงในระบบกลาง (ตอนนี้ประมาณ ${new Date(server).toISOString()}) — นาฬิกาแท็บเล็ตเดินเร็ว บิลบอทที่จะเข้ามาก่อนถึงเวลานั้นจะไม่อยู่ในใบปิดกะใด ตั้งนาฬิกาให้ตรง แล้วรอให้ถึงเวลานับก่อนดึงยอดบิลบอทอีกครั้ง`)
+  }
+}
 
 /**
  * Carried from Task 10 review: E4 is checked here, never trusted — at most 500 bills (dayo refuses a longer Z, R20) ·
@@ -132,8 +151,10 @@ export async function fetchBotCash(ctx: SyncContext, shiftId: string, opts: { be
     })
     throw botCashError(f)
   }
+  const answeredAt = ctx.deps.now()
   const { bills, cashTotalSatang } = checkedBotBills(data, window)
-  const dto: BotCashDto = { shiftId, after: window.after, until: window.until, bills, cashTotalSatang, fetchedAt: ctx.deps.now() }
+  await ctx.serial(() => assertWindowClosed(ctx.db, window.until, answeredAt))
+  const dto: BotCashDto = { shiftId, after: window.after, until: window.until, bills, cashTotalSatang, fetchedAt: answeredAt }
   await ctx.serial(async () => {
     // the shift may have got its Z while the request was out — a stored preview must never outlive the Z
     const now = await ctx.db.select({ status: s.shift.status }).from(s.shift).where(eq(s.shift.id, shiftId)).get()

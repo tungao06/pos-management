@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import { CLOCK_AHEAD_FAR_MS } from '../sync/push'
-import { DAYO_KEYS, readKey } from '../sync/state'
+import { estimatedServerMs } from '../sync/state'
 import { PosError } from './errors'
 
 /**
@@ -34,7 +34,7 @@ export const CLOCK_AHEAD_COUNT = 'CLOCK_AHEAD'
  * and a new count are floored at this device's last counted_at — a clock stepped back must not reopen a window already
  * in a Z. But ONE count taken while the tablet clock was far ahead (say a year) must not drag everything after it:
  * the last count is "far ahead" when it is more than CLOCK_AHEAD_FAR_MS (24 h — the sender's own line) ahead of the
- * estimated server time = the device clock + the last skew dayo reported (the device clock alone when none was measured).
+ * estimated server time = the device clock + the last skew dayo reported, while fresh (D106 — the device clock alone otherwise).
  * - opening a shift (`openFloor`): never refused — selling is never blocked. Floored only when the last count is not far
  *   ahead; far ahead = opened at the device clock.
  * - counting (`countFloor`) and issuing a Z (`assertNoFarAheadCount`): refused while the last count is far ahead (its E4
@@ -46,11 +46,12 @@ async function lastCountOf(db: RemoteDb, deviceId: string): Promise<string | nul
 }
 
 /** Only a last count AFTER the device clock (the clock went back since) can floor anything or overlap an E4 window: one
- * at or before it is never "far ahead" here — so a stale or odd skew can never refuse an ordinary count or Z whose clock simply moved on. */
+ * at or before it is never "far ahead" here — so a stale or odd skew can never refuse an ordinary count or Z whose clock simply moved on.
+ * Task 12 carried (L): the skew counts only while fresh (D106 `estimatedServerMs`, as the same-day void rule) — a stale one
+ * falls back to the device clock. */
 async function farAhead(db: RemoteDb, iso: string, deviceNow: string): Promise<boolean> {
   if (Date.parse(iso) <= Date.parse(deviceNow)) return false
-  const skew = Number((await readKey(db, DAYO_KEYS.clockSkewMs)) ?? Number.NaN)
-  const server = Date.parse(deviceNow) + (Number.isFinite(skew) ? skew : 0)
+  const server = (await estimatedServerMs(db, deviceNow)) ?? Date.parse(deviceNow)
   return Date.parse(iso) - server > CLOCK_AHEAD_FAR_MS
 }
 

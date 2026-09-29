@@ -4,7 +4,7 @@ import * as s from '@dayo/db-schema/sqlite'
 import { bangkokDateOf, rowKey } from '@dayo/contracts'
 import { centralDiffSatang, type PricedPromotion } from '@dayo/domain'
 import { readCatalog, staffDisplayName } from '../sync/catalog'
-import { DAYO_KEYS, decodeLastError, readKey, SKEW_FRESH_MS } from '../sync/state'
+import { decodeLastError, estimatedServerMs } from '../sync/state'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
@@ -120,14 +120,8 @@ function promotionsOf(o: OrderRow): { name: string; discountSatang: number }[] {
 export async function voidInstant(db: RemoteDb, deviceId: string, deviceNow: string): Promise<{ stamp: string; judge: string }> {
   const latest = (await db.select({ v: max(s.order.soldAt) }).from(s.order).where(eq(s.order.deviceId, deviceId)).get())?.v ?? null
   const stamp = latest !== null && Date.parse(latest) > Date.parse(deviceNow) ? latest : deviceNow
-  const skewRaw = await readKey(db, DAYO_KEYS.clockSkewMs)
-  const skew = skewRaw === null ? Number.NaN : Number(skewRaw)
-  const measuredAt = Date.parse((await readKey(db, DAYO_KEYS.clockMeasuredAt)) ?? '')
-  const age = Date.parse(deviceNow) - measuredAt
-  const server = !Number.isFinite(skew) || !Number.isFinite(age) || age > SKEW_FRESH_MS ? Number.NaN
-    : age < 0 ? measuredAt + skew // the clock went back since: never move the estimate back with it
-      : Date.parse(deviceNow) + skew
-  const judge = Number.isFinite(server) && server > Date.parse(stamp) ? new Date(server).toISOString() : stamp
+  const server = await estimatedServerMs(db, deviceNow) // fresh skew only; frozen at the measurement when the clock went back
+  const judge = server !== null && Number.isFinite(server) && server > Date.parse(stamp) ? new Date(server).toISOString() : stamp
   return { stamp, judge }
 }
 
