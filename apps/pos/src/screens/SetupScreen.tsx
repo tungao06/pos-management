@@ -44,6 +44,7 @@ export function SetupScreen(): JSX.Element {
 
   const [target, setTarget] = useState<ConnectFieldsValue>({ baseUrl: defaultBaseUrl(), apiKey: '' })
   const [probed, setProbed] = useState<DayoProbe | null>(null)
+  const [lastZConfirmed, setLastZConfirmed] = useState(false)
   const [prefix, setPrefix] = useState('')
   const [ownerId, setOwnerId] = useState<string | null>(null)
   const [pin, setPin] = useState('')
@@ -60,6 +61,7 @@ export function SetupScreen(): JSX.Element {
   const onProbed = (p: DayoProbe): void => {
     setProbed(p)
     setPrefix(lockedPrefix(p, boot.data?.device?.receiptPrefix) ?? '')
+    setLastZConfirmed(false)
   }
 
   const save = useMutation({
@@ -72,6 +74,9 @@ export function SetupScreen(): JSX.Element {
         ownerPin: pin,
         promptPayId,
         legacyApproval: legacyDevice ? { userId: legacyUserId ?? '', pin: legacyPin } : null,
+        // Task 13 (ruling R9) · Task 16 MERGE GATE: dayo's last Z number as the owner just saw and ticked it — null
+        // (no tick needed) when dayo holds no Z yet.
+        confirmedLastZNo: probed?.lastZNo ?? null,
       }),
     onSuccess: async () => {
       // spec §6.9: persistent storage is asked for once the tablet is actually linked — never before, and its
@@ -107,6 +112,7 @@ export function SetupScreen(): JSX.Element {
     if (pin !== pin2) return setError(TH.errPinMismatch)
     if (!PIN_RE.test(pin)) return setError(TH.errPinFormat)
     if (legacyDevice && legacyUserId === null) return setError(TH.errChooseOwner)
+    if (probed.lastZNo !== null && !lastZConfirmed) return setError(TH.errBadInput)
     save.mutate()
   }
 
@@ -221,13 +227,23 @@ export function SetupScreen(): JSX.Element {
               {TH.setupPromptPayId}
               <input data-testid="setup-promptpay" inputMode="numeric" value={promptPayId} onChange={(e) => setPromptPayId(e.target.value)} required />
             </label>
+            {/* Task 13 (ruling R9) · Task 16 MERGE GATE: the owner checks dayo's own last Z number before the next
+                Z of this device continues from it — without a tick, connecting a key whose shop already has Zs is
+                refused (BAD_INPUT). */}
+            <p data-testid="setup-last-z">{TH.setupLastZ(probed.lastZNo)}</p>
+            {probed.lastZNo !== null && (
+              <label>
+                <input type="checkbox" data-testid="setup-last-z-confirm" checked={lastZConfirmed} onChange={(e) => setLastZConfirmed(e.target.checked)} />
+                {TH.setupConfirmLastZ}
+              </label>
+            )}
             {error !== null && (
               <p role="alert" className="error">
                 {error}
               </p>
             )}
             <div className="actions sticky-foot">
-              <button type="submit" className="primary" data-testid="setup-save" disabled={save.isPending}>
+              <button type="submit" className="primary" data-testid="setup-save" disabled={save.isPending || (probed.lastZNo !== null && !lastZConfirmed)}>
                 {TH.setupSave}
               </button>
             </div>

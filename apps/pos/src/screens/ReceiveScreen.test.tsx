@@ -92,7 +92,7 @@ const REPORT: ShiftReportDto = {
 }
 
 function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
-  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, dayoBaseUrl: 'https://dayo.example/api/v1', staffNeedingPin: [], ownerRecovery: false, sync: HEALTHY_SYNC, countingShift: null, zWaiting: [], ...overrides }
+  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, dayoBaseUrl: 'https://dayo.example/api/v1', staffNeedingPin: [], ownerRecovery: false, sync: HEALTHY_SYNC, countingShift: null, zWaiting: [], centralLastZNo: null, ...overrides }
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

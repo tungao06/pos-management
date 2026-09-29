@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { render as renderBlock3 } from '../test-utils'
 import { renderWithApi } from '../test-utils/render'
+import { TH } from '../ui/th'
+import { user } from './block3-test-fixtures'
 import { SetupScreen } from './SetupScreen'
 
 const KEY = `dayo_${'0123456789abcdef'.repeat(4)}`
-const probe = { clientName: 'แท็บเล็ตขาย 1', lastReceiptNo: 'B-000311', requiredPrefix: 'B', catalogVersion: 42, owners: [{ id: 'o1', displayName: 'TungAo' }, { id: 'o2', displayName: 'DCm' }], pricingMatches: true }
+const probe = { clientName: 'แท็บเล็ตขาย 1', lastReceiptNo: 'B-000311', requiredPrefix: 'B', catalogVersion: 42, owners: [{ id: 'o1', displayName: 'TungAo' }, { id: 'o2', displayName: 'DCm' }], pricingMatches: true, lastZNo: null }
 
 describe('SetupScreen (spec 04 §7 ข้อ 1)', () => {
   it('tests the key with E1, then saves with the chosen owner and the locked prefix', async () => {
@@ -22,7 +25,7 @@ describe('SetupScreen (spec 04 §7 ข้อ 1)', () => {
     fireEvent.change(screen.getByTestId('setup-pin2'), { target: { value: '1111' } })
     fireEvent.change(screen.getByTestId('setup-promptpay'), { target: { value: '0812345678' } })
     fireEvent.click(screen.getByTestId('setup-save'))
-    await waitFor(() => expect(api.connectShop).toHaveBeenCalledWith({ baseUrl: 'https://dayo.example/api/v1', apiKey: KEY, receiptPrefix: 'B', ownerStaffId: 'o1', ownerPin: '1111', promptPayId: '0812345678', legacyApproval: null }))
+    await waitFor(() => expect(api.connectShop).toHaveBeenCalledWith({ baseUrl: 'https://dayo.example/api/v1', apiKey: KEY, receiptPrefix: 'B', ownerStaffId: 'o1', ownerPin: '1111', promptPayId: '0812345678', legacyApproval: null, confirmedLastZNo: null }))
   })
   // controller ruling SECURITY I1 (fix round 1): Chrome ignores autocomplete=off on type="password" inputs inside
   // a form and offers to save them anyway — which would sync the dayo key and PINs to Google Password Manager.
@@ -127,5 +130,39 @@ describe('SetupScreen (spec 04 §7 ข้อ 1)', () => {
     const api = { bootstrap: vi.fn(async () => ({ needsSetup: true, legacyDevice: true, users: [{ id: 'old', displayName: 'TungAo', role: 'owner' }], staffNeedingPin: [] })), probeDayo: vi.fn(async () => ({ ...probe, requiredPrefix: null, lastReceiptNo: null })), connectShop: vi.fn(async () => undefined) }
     renderWithApi(<SetupScreen />, api)
     expect(await screen.findByTestId('setup-legacy-pin')).toBeInTheDocument()
+  })
+
+  // Task 16 (ruling R9): the owner checks dayo's own last Z number before this device's next Z continues from it.
+  // deviation from task-16-brief.md's literal fillAndProbe: `setup-base-url` is a required field of this form —
+  // jsdom's own constraint validation refuses a real "submit" event (userEvent.click on a type="submit" button)
+  // while it is empty, so it must be filled before "setup-save" is clicked (the brief's helper omits this).
+  async function fillAndProbe(api: Record<string, unknown>) {
+    renderBlock3(<SetupScreen />, { api: api as never })
+    await user.type(screen.getByTestId('setup-base-url'), 'https://dayo.example/api/v1')
+    await user.type(screen.getByTestId('setup-api-key'), KEY)
+    await user.click(screen.getByTestId('setup-probe'))
+    await screen.findByTestId('setup-client-name')
+    await user.click(screen.getByTestId('setup-owner-TungAo'))
+    await user.type(screen.getByTestId('setup-prefix'), 'A')
+    await user.type(screen.getByTestId('setup-pin'), '1111')
+    await user.type(screen.getByTestId('setup-pin2'), '1111')
+    await user.type(screen.getByTestId('setup-promptpay'), '0812345678')
+  }
+  it('shows "Z ล่าสุดในระบบกลาง" and needs the owner\'s tick before saving (R9)', async () => {
+    const api = { bootstrap: vi.fn(async () => ({ needsSetup: true, legacyDevice: false, users: [], staffNeedingPin: [] })), probeDayo: vi.fn(async () => ({ ...probe, requiredPrefix: null, lastReceiptNo: null, lastZNo: 41 })), connectShop: vi.fn(async () => undefined) }
+    await fillAndProbe(api)
+    expect(screen.getByTestId('setup-last-z')).toHaveTextContent(TH.setupLastZ(41))
+    expect(screen.getByTestId('setup-save')).toBeDisabled()
+    await user.click(screen.getByTestId('setup-last-z-confirm'))
+    await user.click(screen.getByTestId('setup-save'))
+    await waitFor(() => expect(api.connectShop).toHaveBeenCalledWith(expect.objectContaining({ confirmedLastZNo: 41 })))
+  })
+  it('no Z in dayo: "ยังไม่มี", no tick, confirmedLastZNo: null', async () => {
+    const api = { bootstrap: vi.fn(async () => ({ needsSetup: true, legacyDevice: false, users: [], staffNeedingPin: [] })), probeDayo: vi.fn(async () => ({ ...probe, requiredPrefix: null, lastReceiptNo: null, lastZNo: null })), connectShop: vi.fn(async () => undefined) }
+    await fillAndProbe(api)
+    expect(screen.getByTestId('setup-last-z')).toHaveTextContent(TH.setupLastZ(null))
+    expect(screen.queryByTestId('setup-last-z-confirm')).toBeNull()
+    await user.click(screen.getByTestId('setup-save'))
+    await waitFor(() => expect(api.connectShop).toHaveBeenCalledWith(expect.objectContaining({ confirmedLastZNo: null })))
   })
 })

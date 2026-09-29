@@ -22,6 +22,8 @@ const ORDER: OrderSummaryDto = {
   soldByName: 'DCm',
   central: CENTRAL_NONE,
   dayoEdit: null,
+  offCatalog: false,
+  centralMismatch: null,
 }
 
 function renderOrders(over: FakeApi): void {
@@ -55,5 +57,17 @@ describe('OrdersScreen — every bill says where and by whom (D61), and how dayo
     const refreshDayoEdits = vi.fn(async () => ({ updated: 0 }))
     renderOrders({ refreshDayoEdits })
     await waitFor(() => expect(refreshDayoEdits).toHaveBeenCalled())
+  })
+
+  // Task 16 (spec §6.4)
+  it('shows the off-catalog badge and a central-mismatch chip (block 3)', async () => {
+    renderOrders({
+      listOrders: vi.fn(async () => [
+        { ...ORDER, offCatalog: true, centralMismatch: { orderNo: 'L260925-014', reportedTotalSatang: 4_000, paymentIsCash: false, localTotalSatang: 4_500, localPaymentIsCash: false } },
+      ]),
+    })
+    const row = await screen.findByTestId('order-row-A-000001')
+    expect(row.querySelector('[data-testid="order-off-catalog-badge"]')).not.toBeNull()
+    expect(row.querySelector('[data-testid="order-central-mismatch-badge"]')).not.toBeNull()
   })
 })

@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import type { JSX } from 'react'
 import { can, type PosRole } from '../app/permissions'
-import { useBootstrap } from '../app/queries'
+import { useBootstrap, useSyncStatus } from '../app/queries'
 import { useSession } from '../app/session'
 import type { SyncStatusDto, WaitingZDto } from '../api/types'
 import { formatThaiDate } from '../ui/format'
@@ -94,6 +94,32 @@ export function StatusBannersView({
           {TH.bannerProblems(sync.problemBills)}
         </button>
       )}
+      {/* ก้อน 3 (Task 14 spec §6.2 m1 · R14, owner only): yellow at once, red after 24 h — closable ("ปิดไว้ในเครื่อง")
+          on the problems page after 7 days (that button lives there, not here). */}
+      {isOwner && sync.scopeWait !== null && (
+        <p className={`banner ${sync.scopeWait.red ? 'error' : 'warn'}`} data-testid="banner-scope" data-level={sync.scopeWait.red ? 'error' : 'warn'}>
+          {TH.scopeBanner(sync.scopeWait.scope)}
+        </p>
+      )}
+      {/* S5 · R5-2 · D7 (owner only): a dead shift-lane row says someone else's data is under this key. */}
+      {isOwner && sync.shiftDataConflict && (
+        <p role="alert" className="banner error" data-testid="banner-shift-conflict">
+          {TH.shiftConflictBanner}
+        </p>
+      )}
+      {/* m2 (owner only): "รับทราบ — บิลอยู่ในระบบกลางแล้ว" found dayo's total or cash/non-cash different. */}
+      {isOwner && sync.centralMismatchBills > 0 && (
+        <p role="alert" className="banner error" data-testid="banner-central-mismatch">
+          {TH.centralMismatchBanner}
+        </p>
+      )}
+      {/* carried item 7 (owner only): the strict shift lane stopped behind a row dayo does not support or one
+          > 24 h ahead — "ปิดไว้ในเครื่อง" of that row lives on the problems page. */}
+      {isOwner && sync.shiftLaneHeld !== null && (
+        <button type="button" className="banner error" data-testid="banner-shift-lane-held" onClick={onGoProblems}>
+          {TH.shiftLaneHeldBanner(sync.shiftLaneHeld.rows)}
+        </button>
+      )}
       {sync.pendingBills > 0 && (
         <span className="badge" data-testid="badge-pending">
           {TH.pendingSync(sync.pendingBills)}
@@ -116,12 +142,16 @@ export function StatusBannersView({
  * is known (logged out, or the first bootstrap still loading) — never a flash of a banner with no data behind it. */
 export function StatusBanners(): JSX.Element | null {
   const boot = useBootstrap()
+  const syncStatus = useSyncStatus()
   const { user } = useSession()
   const navigate = useNavigate()
-  if (user === null || boot.data === undefined) return null
+  // Task 16: the dedicated `syncStatus()` poll wins once it has answered — `bootstrap().sync` (Task 14) is the
+  // fallback while it has not (offline first render, or a fake api in a screen test that only stubs `bootstrap`).
+  const sync = syncStatus.data ?? boot.data?.sync
+  if (user === null || boot.data === undefined || sync === undefined) return null
   return (
     <StatusBannersView
-      sync={boot.data.sync}
+      sync={sync}
       role={user.role}
       zWaiting={boot.data.zWaiting}
       onGoStatus={() => void navigate({ to: '/status' })}

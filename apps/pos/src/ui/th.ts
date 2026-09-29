@@ -531,7 +531,16 @@ export const TH = {
   // /sync-problems (owner เท่านั้น — spec §6.4)
   syncProblemsTitle: 'ส่งไม่ผ่าน',
   syncProblemsEmpty: 'ไม่มีรายการส่งไม่ผ่าน',
-  syncProblemKind: { order: 'บิล', order_void: 'ยกเลิกบิล' },
+  // ก้อน 3 (Task 16 · carried item 1): ทุก 7 ชนิดที่ขึ้นหน้านี้ได้ (PushKind) — 2 ชนิดบิลเดิม + 5 ชนิดกะ/เงิน
+  syncProblemKind: {
+    order: 'บิล',
+    order_void: 'ยกเลิกบิล',
+    order_off_catalog: 'บิลนอกแคตตาล็อก',
+    shift_open: 'เปิดกะ',
+    cash_movement: 'เงินเข้า-ออก',
+    cash_count: 'นับเงิน',
+    shift_close: 'ปิดกะ (Z)',
+  },
   syncProblemDetail: (detail: string): string => `เหตุผล: ${detail}`,
   syncProblemClockAheadTag: 'รอเวลา — ยังส่งอยู่ทุก 1 นาที',
   syncProblemClockAheadHint: 'ตั้งนาฬิกาแท็บเล็ตให้ตรง แล้วกด "ส่งตอนนี้"',
@@ -557,6 +566,38 @@ export const TH = {
   remapCodeGradeOnly: 'ระบบกลางไม่รู้จักเกรดของบรรทัดนี้ — เมนู ขนาด และความหวานคงเดิม เปลี่ยนเป็นเกรดเริ่มต้นเท่านั้น',
   remapCodeLineOption: (index: number, code: string, size: string, sweetness: string): string => `บรรทัดที่ ${index} · ${code} ${size} ${sweetness}`,
   remapStaffLabel: 'พนักงานแทน',
+
+  // ก้อน 3 (Task 16 · spec §6.2, §6.4, §6.6 · D97 · ruling R9, R11, R12, R14)
+  remedyCloseOffCatalog: 'ปิดเป็นบิลนอกแคตตาล็อก',
+  remedyAcknowledge: 'รับทราบ — บิลอยู่ในระบบกลางแล้ว',
+  remedyReconfirm: 'เจ้าของยืนยันด้วย PIN ใหม่',
+  remedyExcludeLocal: 'ปิดไว้ในเครื่อง',
+  offCatalogWarning: 'บิลนี้จะเข้าระบบกลางเป็น "บิลนอกแคตตาล็อก": ยอดเงินเท่าเดิม ต้นทุนไม่ทราบ ไม่ตัดสต็อก — ห้ามบันทึกเงินเข้า/ออกเพื่อชดเชย',
+  offCatalogBadge: 'นอกแคตตาล็อก',
+  offCatalogRuleHint: 'ระบบกลางไม่รับบิลนอกแคตตาล็อกใบนี้ (ไม่มีประวัติถูกปฏิเสธ / ก่อนวันเริ่มใช้กะ / เกินเพดานยอด) — ถ้าเกินเพดาน เจ้าของเพิ่มเพดานบนเว็บ dayo แล้วกด "ลองใหม่"',
+  centralMismatchBanner: 'บิลในระบบกลางไม่ตรงกับเครื่อง',
+  centralMismatchLine: (orderNo: string, central: string, local: string): string => `${orderNo}: ระบบกลาง ${central} · เครื่อง ${local}`,
+  shiftConflictBanner: 'ข้อมูลกะชนกับระบบกลาง — แนะนำให้เจ้าของเปลี่ยนกุญแจเครื่อง',
+  scopeBanner: (scope: string): string => `กุญแจเครื่องไม่มีสิทธิ์ ${scope} — เพิ่มสิทธิ์บนเว็บ dayo`,
+  voidRejectedHint: (orderNo: string): string => `ให้เจ้าของยกเลิกบิล ${orderNo} บนเว็บ dayo (พร้อมเหตุผล) แล้วกด "ปิดไว้ในเครื่อง"`,
+  keyReplacedHint: 'กะนี้เริ่มก่อนเปลี่ยนกุญแจเครื่องครั้งล่าสุด — ปิดทีละแถว หรือ "เก็บกะนี้ไว้ในเครื่อง" ทั้งกะ',
+  problemCentralMismatch: 'ยอด/วิธีชำระในระบบกลางไม่ตรงกับเครื่อง',
+  // ก้อน 3: ข้อความของการ์ด "รอ" (waiting) ตาม `SyncProblemDto.waiting`
+  problemWaitingHint: {
+    clock: 'เวลาบิลล้ำเวลาระบบกลางเกิน 24 ชม. — ตั้งนาฬิกาแท็บเล็ตให้ตรง แล้วกด "ส่งตอนนี้"',
+    scope: 'รอสิทธิ์จากระบบกลาง — เพิ่มสิทธิ์บนเว็บ dayo หรือ "ปิดไว้ในเครื่อง" ได้หลัง 7 วัน',
+    unsupported: 'ระบบกลางเลิกรองรับรายการนี้แล้ว — ปิดไว้ในเครื่องเพื่อปลดกะที่ค้างอยู่ข้างหลัง',
+  },
+  blocksLaneRows: (n: number): string => `กะที่รออยู่ข้างหลังแถวนี้ ${n} รายการ`,
+  shiftLaneHeldBanner: (n: number): string => `ช่องกะติดคิว ${n} รายการ — ไปหน้า "ส่งไม่ผ่าน"`,
+  setupLastZ: (n: number | null): string => (n === null ? 'Z ล่าสุดในระบบกลาง: ยังไม่มี' : `Z ล่าสุดในระบบกลาง: ${n}`),
+  setupConfirmLastZ: 'ตรวจแล้ว — ใบปิดกะใบถัดไปของเครื่องนี้จะต่อจากเลขนี้',
+  countNotInDayo: (n: number, voidRefund: string): string => `${n} บิลในใบปิดกะนี้จะไม่ถึงระบบกลาง — คืนเงินบิลยกเลิกในนั้น ${voidRefund} ยังส่งเข้าระบบกลาง`,
+  keepShiftLocalButton: 'เก็บกะนี้ไว้ในเครื่อง',
+  keepShiftLocalWarning: 'ใบปิดกะของกะนี้จะออกในเครื่องเท่านั้น — กะฝั่งระบบกลางยังเปิดอยู่ บิลบอทในช่วงนี้จะไม่อยู่ใน Z ใด และระบบกลางจะเห็นเลข Z ขาดไปหนึ่งใบ',
+  skipCountFloorButton: 'ข้ามการตรวจเวลาที่ล้ำ',
+  skipCountFloorWarning: 'บิลบอทของช่วงเวลานี้อาจถูกนับซ้ำหรือไม่ถูกนับเลย',
+  skipCountFloorDone: (n: number): string => `ข้ามแล้ว ${n} รายการ`,
 
   // fu app-version — เวอร์ชันที่กำลังใช้งาน (/status เต็มบรรทัด, BrandBar ย่อ)
   statusVersionLine: (version: string, commit: string, builtAt: string): string => `เวอร์ชัน v${version} · commit ${commit} · build ${builtAt}`,

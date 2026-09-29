@@ -7,7 +7,7 @@ import { DAYO_KEYS, deleteKey, readKey, writeKey } from '../src/sync/state'
 import { insertLegacyShop, openTestApi, vacuumInto } from './helpers/db'
 import { STAFF } from './helpers/dayo'
 
-const INPUT = { baseUrl: 'http://localhost:8787/api/v1/', apiKey: MOCK_API_KEY, receiptPrefix: 'A', ownerStaffId: STAFF.TungAo, ownerPin: '1111', promptPayId: '0812345678', legacyApproval: null }
+const INPUT = { baseUrl: 'http://localhost:8787/api/v1/', apiKey: MOCK_API_KEY, receiptPrefix: 'A', ownerStaffId: STAFF.TungAo, ownerPin: '1111', promptPayId: '0812345678', legacyApproval: null, confirmedLastZNo: null }
 /** A device set up before block 2's dayo connect flow existed (ruling R7) — one owner, no dayo link yet. Written
  * directly: the old first-run setup API that used to do this was deleted in Task 22. */
 const LEGACY_DEVICE = { deviceName: 'เครื่องเดิม', receiptPrefix: 'A', owners: [{ displayName: 'TungAo', pin: '9999' }], promptPayId: '0812345678' }

@@ -3,7 +3,39 @@ import userEvent from '@testing-library/user-event'
 import { screen } from '@testing-library/react'
 import { vi } from 'vitest'
 import { buildZReport, cashInputsFromMovements, summarizeShiftSales, zReportHash, type ZChainWarning, type ZSnapshot } from '@dayo/domain'
-import type { BotCashDto, CountSummaryDto, UserDto, ZReportDto } from '../api/types'
+import type { BotCashDto, CountSummaryDto, OrderDetailDto, SyncProblemDto, SyncStatusDto, UserDto, ZReportDto } from '../api/types'
+
+/** A healthy, linked sync status (Task 14 block-3 fields included) for the block-3 screen tests that build one by hand. */
+export function status(over: Partial<SyncStatusDto> = {}): SyncStatusDto {
+  return {
+    linked: true, apiState: 'ok', maskedKey: 'dayo_…abcd', baseUrl: 'http://localhost:8787/api/v1', clockSkewMs: 0, clockWarning: false,
+    pricingMismatch: false, pricingCommit: null, catalogVersion: 42, catalogCheckedAt: '2026-09-25T03:00:00.000Z', catalogError: null,
+    lastPushAt: '2026-09-25T03:00:00.000Z', pendingBills: 0, problemBills: 0, oldestPendingAt: null, pendingOver24h: false, priceDiffBills: 0,
+    clockFarAheadBills: 0, scopeWait: null, shiftDataConflict: false, centralMismatchBills: 0, shiftLaneHeld: null, ...over,
+  }
+}
+
+/** A dead `order` row of the "ส่งไม่ผ่าน" page (Task 14 block-3 shape) with `over` laid on top. */
+export function problem(over: Partial<SyncProblemDto> = {}): SyncProblemDto {
+  return {
+    outboxId: 'ob1', key: 'order:o1', kind: 'order', orderId: 'o1', shiftId: 's1', receiptNo: 'A-000001', at: '2026-09-25T03:00:00.000Z', reason: 'UNKNOWN_CODE', detail: 'ไม่พบเมนู',
+    prefix: null, remedies: ['RETRY', 'REMAP_CODE', 'CLOSE_OFF_CATALOG', 'EXCLUDE'], remap: null, remapHint: null, children: [], pushKind: 'order',
+    waiting: null, hint: null, central: null, centralOrderNo: null, blocksLaneRows: 0, ...over,
+  }
+}
+
+/** A paid bill of block 2/3 shape (OrderDetailDto) with `over` laid on top — the full shape lives on `main`; this
+ * mirrors the fields the block-3 screens read. */
+export function detail(over: Partial<OrderDetailDto> = {}): OrderDetailDto {
+  return {
+    id: 'o1', receiptNo: 'A-000001', queueNo: 1, status: 'paid', businessDate: '2026-09-25', soldAt: '2026-09-25T03:00:00.000Z', channelCode: 'store', catalogVersion: 42,
+    subtotalSatang: 4_500, discountSatang: 0, discountReason: null, totalSatang: 4_500, method: 'PROMPTPAY', tenderedSatang: null, changeSatang: null, voidedAt: null, cups: 1,
+    paidAt: '2026-09-25T03:00:00.000Z', payments: [{ method: 'PROMPTPAY', amountSatang: 4_500 }], lines: [], promotions: [], events: [], shiftId: 's1',
+    soldById: 'u1', soldByName: 'TungAo', voidable: true, dayoEdit: null, offCatalog: false, centralMismatch: null,
+    central: { state: 'sent', orderNo: 'L260925-014', computedTotalSatang: 4_500, diffSatang: 0, duplicateOf: [], reason: null, voidState: 'none' },
+    ...over,
+  } as OrderDetailDto
+}
 
 export const SALES_45 = summarizeShiftSales([{ id: 'o1', status: 'paid', subtotalSatang: 4_500, discountSatang: 0, totalSatang: 4_500, payments: [{ method: 'CASH', amountSatang: 4_500 }] }])
 
@@ -34,6 +66,7 @@ export function summary(over: Partial<CountSummaryDto> = {}): CountSummaryDto {
     includesBotCash: true,
     bot: botDto,
     zBlockedBy: null,
+    notInDayo: { bills: 0, voidRefundSatang: 0 },
     ...over,
   }
 }

@@ -27,6 +27,8 @@ const ORDER: OrderDetailDto = {
   soldByName: 'TungAo',
   central: { state: 'legacy', orderNo: null, computedTotalSatang: null, diffSatang: null, duplicateOf: [], reason: null, voidState: 'none' },
   dayoEdit: null,
+  offCatalog: false,
+  centralMismatch: null,
   businessDate: '2026-09-17',
   shiftId: 's1',
   subtotalSatang: 4_500,
@@ -60,6 +62,7 @@ const BOOT: BootstrapState = {
   sync: HEALTHY_SYNC,
   countingShift: null,
   zWaiting: [],
+  centralLastZNo: null,
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

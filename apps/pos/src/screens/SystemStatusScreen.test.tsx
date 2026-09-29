@@ -35,6 +35,7 @@ function bootWithSync(sync: Partial<SyncStatusDto>, overrides: Partial<Bootstrap
     sync: { ...HEALTHY_SYNC, ...sync },
     countingShift: null,
     zWaiting: [],
+    centralLastZNo: null,
     ...overrides,
   }
 }
@@ -95,7 +96,7 @@ describe('SystemStatusScreen (spec §4.3, §6.7, §10.5, §7 ข้อ 1 · D80 
   })
 
   it('shows the "ตั้งกุญแจใหม่" section to the owner only, and lets them probe a new key', async () => {
-    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true }))
+    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true, lastZNo: null }))
     const api = { bootstrap: vi.fn(async () => bootWithSync({})), probeDayo }
     renderStatus(api, 'owner')
     expect(await screen.findByTestId('status-replace-key')).toBeInTheDocument()
@@ -106,7 +107,7 @@ describe('SystemStatusScreen (spec §4.3, §6.7, §10.5, §7 ข้อ 1 · D80 
   })
 
   it('calls replaceApiKey with the owner + PIN once probed and confirmed', async () => {
-    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true }))
+    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true, lastZNo: null }))
     const replaceApiKey = vi.fn(async () => undefined)
     const api = { bootstrap: vi.fn(async () => bootWithSync({})), probeDayo, replaceApiKey }
     renderStatus(api, 'owner')
@@ -135,7 +136,7 @@ describe('SystemStatusScreen (spec §4.3, §6.7, §10.5, §7 ข้อ 1 · D80 
   // SECURITY (fix round 2, parked Low): a blank or malformed PIN must never reach the API — every failed attempt
   // burns one of the login-lockout attempts, so this has to be caught before `replace.mutate()` is ever called.
   it('never calls replaceApiKey with a blank PIN — it is rejected locally first', async () => {
-    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true }))
+    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true, lastZNo: null }))
     const replaceApiKey = vi.fn(async () => undefined)
     const api = { bootstrap: vi.fn(async () => bootWithSync({})), probeDayo, replaceApiKey }
     renderStatus(api, 'owner')
@@ -148,7 +149,7 @@ describe('SystemStatusScreen (spec §4.3, §6.7, §10.5, §7 ข้อ 1 · D80 
   })
 
   it('never calls replaceApiKey with a malformed PIN — it is rejected locally first', async () => {
-    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true }))
+    const probeDayo = vi.fn(async () => ({ clientName: 'DA-YO', lastReceiptNo: null, requiredPrefix: null, catalogVersion: 42, owners: [{ id: 'owner-1', displayName: 'เจ้าของ' }], pricingMatches: true, lastZNo: null }))
     const replaceApiKey = vi.fn(async () => undefined)
     const api = { bootstrap: vi.fn(async () => bootWithSync({})), probeDayo, replaceApiKey }
     renderStatus(api, 'owner')

@@ -152,6 +152,13 @@ export function CountReview({
           <p className="badge" data-testid="count-pending">
             {TH.pendingAtClose(summary.pendingSyncItems)}
           </p>
+          {/* Task 14 · carried item 8: receipts of this shift dayo will never receive — their VOID_REFUND (if any)
+              still goes to dayo (ruling), so the money itself is unaffected; only the bill count is missing there. */}
+          {summary.notInDayo.bills > 0 && (
+            <p className="badge" data-testid="count-not-in-dayo">
+              {TH.countNotInDayo(summary.notInDayo.bills, formatBahtFull(summary.notInDayo.voidRefundSatang))}
+            </p>
+          )}
           {/* fix round 2 item 5: offline (z: null), nothing here is ever sent anywhere — the owner types the
               bank-app figure on `/shift/z/$shiftId` instead, once online and a Z is actually being written. */}
           {online && (

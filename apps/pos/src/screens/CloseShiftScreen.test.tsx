@@ -213,4 +213,13 @@ describe('CloseShiftScreen (D52 Q3b-3 · D101 · D102)', () => {
     await user.click(screen.getByTestId('count-finish'))
     expect(await screen.findByTestId('count-z-blocked-go')).toBeVisible()
   })
+
+  // Task 14 · carried item 8 (Task 16): receipts of this shift dayo will never receive
+  it('shows "N บิลในใบปิดกะนี้จะไม่ถึงระบบกลาง" with the VOID_REFUND of those bills', async () => {
+    const api = fakeApi({ countSummary: vi.fn(async () => summary({ notInDayo: { bills: 2, voidRefundSatang: 3_000 } })) })
+    render(<CloseShiftScreen />, { api, session })
+    await countBaht(615)
+    await user.click(screen.getByTestId('count-finish'))
+    expect(await screen.findByTestId('count-not-in-dayo')).toHaveTextContent(TH.countNotInDayo(2, '฿30.00'))
+  })
 })

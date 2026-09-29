@@ -11,7 +11,7 @@ import { render as renderBlock3 } from '../test-utils'
 import { HEALTHY_SYNC } from '../test-utils/sync-status'
 import { testSellCatalog } from '../test-utils/sell-catalog'
 import { TH } from '../ui/th'
-import { fakeApi, OWNERS } from './block3-test-fixtures'
+import { fakeApi, OWNERS, status } from './block3-test-fixtures'
 import { SellScreen } from './SellScreen'
 import { StatusBanners } from './StatusBanners'
 
@@ -41,6 +41,7 @@ function bootstrapWith(sync: SyncStatusDto, overrides: Partial<BootstrapState> =
     sync,
     countingShift: null,
     zWaiting: [],
+    centralLastZNo: null,
     ...overrides,
   }
 }
@@ -155,5 +156,28 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
     })
     expect(await screen.findByTestId('banner-z-waiting')).toHaveTextContent(TH.zWaitingBanner('25 ก.ย. 2569'))
     expect(screen.getByTestId('z-issue')).toBeVisible()
+  })
+
+  // Task 16 (block 3 · spec §6.2 m1 · S5 · m2): these banners read `api.syncStatus()` on its own poll — `bootstrap`
+  // still supplies `users`/`zWaiting` only (its own `sync` field, when present, is only the fallback).
+  it('scope bar: yellow at first, red after 24 h, owner only (m1)', async () => {
+    const api = { syncStatus: vi.fn(async () => status({ scopeWait: { scope: 'shift:write', since: '2026-09-25T03:00:00.000Z', red: false, closable: false } })), bootstrap: vi.fn(async () => ({ users: OWNERS, zWaiting: [] })) }
+    const { unmount } = renderBlock3(<StatusBanners />, { api, session: { userId: 'u1', role: 'owner' } })
+    expect(await screen.findByTestId('banner-scope')).toHaveAttribute('data-level', 'warn')
+    expect(screen.getByTestId('banner-scope')).toHaveTextContent(TH.scopeBanner('shift:write'))
+    unmount()
+    api.syncStatus.mockResolvedValue(status({ scopeWait: { scope: 'shift:write', since: '2026-09-24T03:00:00.000Z', red: true, closable: false } }))
+    renderBlock3(<StatusBanners />, { api, session: { userId: 'u1', role: 'owner' } })
+    expect(await screen.findByTestId('banner-scope')).toHaveAttribute('data-level', 'error')
+    renderBlock3(<StatusBanners />, { api, session: { userId: 's1', role: 'staff' } })
+    expect(screen.getAllByTestId('banner-scope')).toHaveLength(1) // the staff render adds none
+  })
+  it('shift data conflict and central mismatch are red bars for the owner (S5 · m2)', async () => {
+    renderBlock3(<StatusBanners />, {
+      api: { syncStatus: vi.fn(async () => status({ shiftDataConflict: true, centralMismatchBills: 2 })), bootstrap: vi.fn(async () => ({ users: OWNERS, zWaiting: [] })) },
+      session: { userId: 'u1', role: 'owner' },
+    })
+    expect(await screen.findByTestId('banner-shift-conflict')).toHaveTextContent(TH.shiftConflictBanner)
+    expect(screen.getByTestId('banner-central-mismatch')).toHaveTextContent(TH.centralMismatchBanner)
   })
 })

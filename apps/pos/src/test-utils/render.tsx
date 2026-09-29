@@ -59,10 +59,10 @@ function SignedIn({ session, children }: { session: { userId: string; role: PosR
  * Block 3 screens (Task 15): the same stack `renderWithApi` builds, plus an optional signed-in `session` — most of
  * these screens read `useSession().user` straight away (the actor of `finishCount`/`confirmCount`/`issueZ`).
  */
-export function render(ui: JSX.Element, opts: { api: FakeApi; session?: { userId: string; role: PosRole } }): { queryClient: QueryClient; container: HTMLElement } {
+export function render(ui: JSX.Element, opts: { api: FakeApi; session?: { userId: string; role: PosRole } }): { queryClient: QueryClient; container: HTMLElement; unmount: () => void } {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const inner = opts.session === undefined ? ui : <SignedIn session={opts.session}>{ui}</SignedIn>
-  const { container } = rtlRender(
+  const { container, unmount } = rtlRender(
     <QueryClientProvider client={queryClient}>
       <ApiProvider api={opts.api as unknown as PosApi}>
         <SessionProvider>
@@ -71,5 +71,5 @@ export function render(ui: JSX.Element, opts: { api: FakeApi; session?: { userId
       </ApiProvider>
     </QueryClientProvider>,
   )
-  return { queryClient, container }
+  return { queryClient, container, unmount }
 }
