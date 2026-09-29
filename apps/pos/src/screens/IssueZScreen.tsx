@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
+import { posErrorCode } from '../api/errors'
 import type { CountSummaryDto, IssueZInput } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, issueZKey, useBootstrap, zKey, zListKey } from '../app/queries'
@@ -23,6 +24,8 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
   const owners = (boot.data?.users ?? []).filter((u) => u.role === 'owner')
   const [issued, setIssued] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [chainBroken, setChainBroken] = useState(false)
+  const [chainCentralZNo, setChainCentralZNo] = useState<number | null>(null)
 
   const load = useQuery({
     queryKey: issueZKey(shiftId),
@@ -40,9 +43,27 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
     mutationFn: (input: IssueZInput) => api.issueZ(input),
     onSuccess: async () => {
       setIssued(true)
+      setChainBroken(false)
       await Promise.all([queryClient.invalidateQueries({ queryKey: bootstrapKey }), queryClient.invalidateQueries({ queryKey: zListKey }), queryClient.invalidateQueries({ queryKey: zKey(shiftId) })])
     },
-    onError: (e) => setError(errorMessage(e)),
+    onError: (e) => {
+      // fix round 1 item 2: the same Z_CHAIN_BROKEN acknowledgement CloseShiftScreen offers — an owner who only
+      // ever reaches this screen for a shift stuck waiting online must still be able to clear a broken chain.
+      const code = posErrorCode(e)
+      if (code === 'Z_CHAIN_BROKEN') {
+        const detail = e instanceof Error ? e.message.slice(code.length + 2) : ''
+        // Task 13 (parallel worktree, not merged yet) adds `centralLastZNo?: number | null` to `BootstrapState` —
+        // read defensively so this screen compiles today and picks up the real field once that merges.
+        const centralLastZNo: number | null | undefined = (boot.data as unknown as { centralLastZNo?: number | null | undefined } | undefined)?.centralLastZNo
+        setChainBroken(true)
+        setChainCentralZNo(detail === 'central' && centralLastZNo != null ? centralLastZNo : null)
+        setError(null)
+        return
+      }
+      setChainBroken(false)
+      setError(errorMessage(e))
+      if (code === 'SHIFT_CHANGED') void queryClient.invalidateQueries({ queryKey: issueZKey(shiftId) })
+    },
   })
 
   if (load.isError) {
@@ -51,6 +72,9 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
         <p role="alert" className="error">
           {errorMessage(load.error)}
         </p>
+        <button type="button" data-testid="z-retry" onClick={() => void load.refetch()}>
+          {TH.retry}
+        </button>
       </main>
     )
   }
@@ -67,6 +91,22 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
             {TH.zList}
           </button>
         </div>
+      </main>
+    )
+  }
+
+  // ruling R7: an earlier counted shift of this device still has no Z — this one is refused (Z_NOT_READY) until
+  // that one goes out first. Point straight at it instead of letting the owner discover it only after a PIN.
+  if (summary.zBlockedBy !== null) {
+    return (
+      <main className="page">
+        <h1>{TH.zIssue}</h1>
+        <p role="alert" className="error" data-testid="count-z-blocked">
+          {TH.errZNotReady}
+        </p>
+        <button type="button" data-testid="count-z-blocked-go" onClick={() => void navigate({ to: '/shift/z/$shiftId', params: { shiftId: summary.zBlockedBy! } })}>
+          {TH.zBlockedGo}
+        </button>
       </main>
     )
   }
@@ -97,7 +137,14 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
         confirmLabel={TH.zIssue}
         busy={issueZ.isPending}
         error={error}
-        onSubmit={(pin, approverUserId, reason) => {
+        extraWarning={
+          chainBroken && (
+            <p role="alert" className="error" data-testid="close-chain-broken">
+              {chainCentralZNo !== null ? TH.zChainCentral(chainCentralZNo) : TH.zChainAck}
+            </p>
+          )
+        }
+        onSubmit={({ pin, approverUserId, reason, bankQrTotalSatang }) => {
           setError(null)
           issueZ.mutate({
             shiftId,
@@ -105,8 +152,8 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
             approverPin: pin,
             shownFingerprint: summary.fingerprint,
             varianceReason: reason,
-            bankQrTotalSatang: null,
-            acknowledgeZChainBroken: false,
+            bankQrTotalSatang,
+            acknowledgeZChainBroken: chainBroken,
           })
         }}
       />

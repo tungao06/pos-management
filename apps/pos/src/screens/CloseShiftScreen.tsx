@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState, type JSX } from 'react'
-import { CASH_DENOMINATIONS_SATANG, type CashCountLine } from '@dayo/domain'
 import { posErrorCode } from '../api/errors'
 import type { ConfirmCountInput } from '../api/types'
 import { useApi } from '../app/api-context'
@@ -30,10 +29,14 @@ export function CloseShiftScreen(): JSX.Element {
 
   const [shiftId, setShiftId] = useState<string | null>(null)
   const [counted, setCounted] = useState(false) // finishCount already ran (this session, or resumed from `countingShift`)
-  const [lines, setLines] = useState<CashCountLine[]>(() => CASH_DENOMINATIONS_SATANG.map((d) => ({ denominationSatang: d, count: 0 })))
+  // fix round 1 item 6 (D52 · old `setShown(null)` behaviour): true right after finishCount lands and after a
+  // SHIFT_CHANGED refusal, until the owner presses "นับเสร็จ" again — `summary` below is forced back to null while
+  // this is true, so the expected cash/variance never show a figure that might already be stale.
+  const [blind, setBlind] = useState(false)
   const [chainBroken, setChainBroken] = useState(false)
   const [chainCentralZNo, setChainCentralZNo] = useState<number | null>(null)
   const [confirmError, setConfirmError] = useState<string | null>(null)
+  const [botCashError, setBotCashError] = useState<string | null>(null)
   const [savedOffline, setSavedOffline] = useState<string | null>(null) // the shiftId of a count confirmed offline (z: null)
   // SHIFT_CHANGED (D54): bumped to remount `CountReview` fresh (`key`) — the typed count, chosen approver and
   // reason are all discarded, same as the old screen's "count again, blind" (review kept this behaviour deliberately).
@@ -52,8 +55,10 @@ export function CloseShiftScreen(): JSX.Element {
   const finish = useMutation({
     mutationFn: () => api.finishCount({ actorUserId: user?.id ?? '' }),
     onSuccess: (r) => {
+      setConfirmError(null)
       setShiftId(r.shiftId)
       setCounted(true)
+      setBlind(false)
     },
     onError: (e) => setConfirmError(errorMessage(e)),
   })
@@ -64,17 +69,21 @@ export function CloseShiftScreen(): JSX.Element {
     enabled: shiftId !== null,
   })
 
-  // ladder item 1: a central shift whose stored E4 answer does not cover this count yet tries fetchBotCash once —
-  // its own outcome never chooses the path (review item 1 of Task 12): only the countSummary read right after does.
+  // ladder item 1 · fix round 1 item 8: a central shift whose stored E4 answer does not cover this count yet tries
+  // fetchBotCash once — its own outcome never chooses the path (review item 1 of Task 12): only the countSummary
+  // read right after does. But a failure worth telling the owner about (DAYO_BAD_RESPONSE, CLOCK_AHEAD, a far-ahead
+  // count, …) must not be swallowed the way a plain OFFLINE is — that one alone means "count without bot cash" is
+  // the expected, silent path.
   useEffect(() => {
     const s = summaryQuery.data
     if (s === undefined || shiftId === null || triedBotCash.current === shiftId) return
     if (s.syncMode === 'central' && !s.includesBotCash) {
       triedBotCash.current = shiftId
-      void api
+      api
         .fetchBotCash(shiftId)
-        .catch(() => undefined)
-        .then(() => queryClient.invalidateQueries({ queryKey: countSummaryKey(shiftId) }))
+        .then(() => setBotCashError(null))
+        .catch((e: unknown) => setBotCashError(posErrorCode(e) === 'OFFLINE' ? null : errorMessage(e)))
+        .finally(() => void queryClient.invalidateQueries({ queryKey: countSummaryKey(shiftId) }))
     }
   }, [summaryQuery.data, shiftId, api, queryClient])
 
@@ -111,7 +120,11 @@ export function CloseShiftScreen(): JSX.Element {
         void queryClient.invalidateQueries({ queryKey: bootstrapKey })
       }
       if (code === 'SHIFT_CHANGED' && shiftId !== null) {
-        setResetNonce((n) => n + 1) // review: count again, blind — the typed count and PIN attempt are discarded
+        // fix round 1 items 5 · 6: the owner never saw these new figures — go fully blind again (hide
+        // expected/variance, drop the stale count and PIN) until "นับเสร็จ" is pressed once more, against a
+        // freshly reloaded summary.
+        setResetNonce((n) => n + 1)
+        setBlind(true)
         void queryClient.invalidateQueries({ queryKey: countSummaryKey(shiftId) })
       }
     },
@@ -133,7 +146,23 @@ export function CloseShiftScreen(): JSX.Element {
     )
   }
 
-  const summary = summaryQuery.data ?? null
+  // fix round 1 item 7: a countSummary refusal (SHIFT_NOT_COUNTING after some other tab closed it, a transient
+  // read failure, …) gets its own message and a retry, instead of the review silently staying blank forever.
+  if (summaryQuery.isError) {
+    return (
+      <main className="page">
+        <h1>{TH.closeTitle}</h1>
+        <p role="alert" className="error">
+          {errorMessage(summaryQuery.error)}
+        </p>
+        <button type="button" data-testid="count-summary-retry" onClick={() => void summaryQuery.refetch()}>
+          {TH.retry}
+        </button>
+      </main>
+    )
+  }
+
+  const summary = blind ? null : (summaryQuery.data ?? null)
   const online = summary !== null && summary.zBlockedBy === null && (summary.includesBotCash || summary.syncMode === 'local_only')
 
   return (
@@ -149,9 +178,22 @@ export function CloseShiftScreen(): JSX.Element {
           {TH.cartNotEmpty}
         </p>
       )}
+      {counted && (
+        <p className="badge" data-testid="count-frozen">
+          {TH.countFrozen}
+        </p>
+      )}
       {summary !== null && summary.zBlockedBy !== null && (
         <p role="alert" className="error" data-testid="count-z-blocked">
           {TH.errZNotReady}
+          <button type="button" data-testid="count-z-blocked-go" onClick={() => void navigate({ to: '/shift/z/$shiftId', params: { shiftId: summary.zBlockedBy! } })}>
+            {TH.zBlockedGo}
+          </button>
+        </p>
+      )}
+      {botCashError !== null && (
+        <p role="alert" className="error" data-testid="count-bot-cash-error">
+          {botCashError}
         </p>
       )}
       <CountReview
@@ -160,7 +202,6 @@ export function CloseShiftScreen(): JSX.Element {
         online={online}
         editable
         countedSatang={0}
-        onLinesChange={setLines}
         owners={(boot.data?.users ?? []).filter((u) => u.role === 'owner')}
         confirmLabel={online ? TH.countConfirmOnline : TH.countConfirmOffline}
         busy={confirm.isPending}
@@ -173,21 +214,29 @@ export function CloseShiftScreen(): JSX.Element {
           )
         }
         finishSlot={
-          !counted && (
+          (!counted || blind) && (
             <div className="actions sticky-foot">
               <button
                 type="button"
                 className="primary"
                 data-testid="count-finish"
-                disabled={finish.isPending || cart.state.lines.length > 0}
-                onClick={() => finish.mutate()}
+                disabled={(!counted && finish.isPending) || (blind && summaryQuery.isFetching) || cart.state.lines.length > 0}
+                onClick={() => {
+                  if (!counted) {
+                    finish.mutate()
+                    return
+                  }
+                  // review already re-fetched (the SHIFT_CHANGED handler above invalidated it) — this only lifts
+                  // the blind curtain back up, never re-runs finishCount on an already-counting shift.
+                  setBlind(false)
+                }}
               >
                 {TH.countFinish}
               </button>
             </div>
           )
         }
-        onSubmit={(pin, approverUserId, reason) => {
+        onSubmit={({ pin, approverUserId, reason, bankQrTotalSatang, lines }) => {
           if (shiftId === null || summary === null) return
           confirm.mutate({
             shiftId,
@@ -196,7 +245,7 @@ export function CloseShiftScreen(): JSX.Element {
             approverPin: pin,
             countLines: lines,
             shownFingerprint: summary.fingerprint,
-            z: online ? { varianceReason: reason, bankQrTotalSatang: null, acknowledgeZChainBroken: chainBroken } : null,
+            z: online ? { varianceReason: reason, bankQrTotalSatang, acknowledgeZChainBroken: chainBroken } : null,
           })
         }}
       />

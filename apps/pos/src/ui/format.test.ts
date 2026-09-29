@@ -30,8 +30,9 @@ describe('formatThaiDate', () => {
     expect(formatThaiDate('2026-09-25')).toBe('25 ก.ย. 2569')
     expect(formatThaiDate('2026-01-01')).toBe('1 ม.ค. 2569')
   })
-  it('rejects anything not YYYY-MM-DD', () => {
-    expect(() => formatThaiDate('2026-09-25T00:00:00Z')).toThrow()
-    expect(() => formatThaiDate('bad')).toThrow()
+  it('returns the raw text unchanged for anything not YYYY-MM-DD (fix round 1 item 11: never crash the banner)', () => {
+    expect(formatThaiDate('2026-09-25T00:00:00Z')).toBe('2026-09-25T00:00:00Z')
+    expect(formatThaiDate('bad')).toBe('bad')
+    expect(formatThaiDate('2026-13-01')).toBe('2026-13-01') // no such month
   })
 })

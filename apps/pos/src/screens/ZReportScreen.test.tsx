@@ -92,6 +92,8 @@ describe('ZReportScreen', () => {
     renderZReport('s1', { getZReport: vi.fn(async () => ({ ...old, snapshot: snap }) as ZReportDto) })
     expect(await screen.findByTestId('z-report')).toBeVisible()
     expect(screen.queryByTestId('z-bot-window')).toBeNull()
+    // fix round 1 item 13: a Z with no bot window at all (ruling R6, or predates block 3) is labelled local-only
+    expect(screen.getByTestId('z-local-only')).toHaveTextContent(TH.zLocalOnly)
   })
 
   it('a Z continued from dayo names the central Z (R9)', async () => {
@@ -99,5 +101,17 @@ describe('ZReportScreen', () => {
       getZReport: vi.fn(async () => zDto({ zNo: 42, chainWarning: { ...CHAIN_WARNING, brokenShiftId: 'central', centralLastZ: { zNo: 41, hash: 'ab'.repeat(32) } } })),
     })
     expect(await screen.findByTestId('z-central-continued')).toHaveTextContent('41')
+  })
+
+  it('fix round 1 item 12: a bot bill order_no is sanitized before it reaches the screen (control chars stripped, capped at 32)', async () => {
+    // buildZReport (domain) refuses a bad order_no outright — this simulates a hand-edited/legacy row that skipped
+    // that check, the same idiom the "before block 3" test above uses (mutate the stored snapshot, not `zDto`'s input).
+    const dirty = `L260925-901‮${'x'.repeat(50)}`
+    const dto = zDto({ botWindow: { after: '2026-09-24T17:00:00.000Z', until: '2026-09-25T05:00:00.000Z' }, botBills: [{ orderNo: 'L260925-901', version: 1, source: 'line', soldAt: null, totalSatang: 7_000, createdByName: null }] })
+    const snap = { ...dto.snapshot!, botBills: [{ ...dto.snapshot!.botBills![0]!, orderNo: dirty }] }
+    renderZReport('s1', { getZReport: vi.fn(async () => ({ ...dto, snapshot: snap })) })
+    const clean = dirty.replace(/\p{C}/gu, '').slice(0, 32)
+    expect(await screen.findByTestId(`z-bot-bill-${clean}`)).toHaveTextContent(clean)
+    expect(screen.queryByTestId(`z-bot-bill-${dirty}`)).toBeNull()
   })
 })

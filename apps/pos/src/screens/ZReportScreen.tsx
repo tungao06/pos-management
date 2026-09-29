@@ -123,20 +123,30 @@ export function ZReportScreen({ shiftId }: { shiftId: string }): JSX.Element {
         </tbody>
       </table>
       <VoidList voids={snap.voids} p="z" />
-      {snap.botWindow != null && (
+      {snap.botWindow != null ? (
         <p className="badge" data-testid="z-bot-window">
           {TH.zBotWindow(TIME.format(new Date(snap.botWindow.after)), TIME.format(new Date(snap.botWindow.until)))}
+        </p>
+      ) : (
+        // ruling R6: a Z with no bot window at all was a local-only shift's (or predates block 3) — never sent.
+        <p className="badge" data-testid="z-local-only">
+          {TH.zLocalOnly}
         </p>
       )}
       {botBills.length > 0 && (
         <section>
           <h2>{TH.countBotCash(botBills.length)}</h2>
           <ul className="list">
-            {botBills.map((b) => (
-              <li key={b.orderNo} data-testid={`z-bot-bill-${b.orderNo}`}>
-                {b.orderNo} · {formatBahtFull(b.totalSatang)}
-              </li>
-            ))}
+            {botBills.map((b) => {
+              // fix round 1 item 12 (same idiom as ui/errors.ts M2): dayo's own order_no, sanitized before it ever
+              // reaches the screen or a data-testid — a bidi override or other control character must not land here.
+              const orderNo = b.orderNo.replace(/\p{C}/gu, '').slice(0, 32)
+              return (
+                <li key={b.orderNo} data-testid={`z-bot-bill-${orderNo}`}>
+                  {orderNo} · {formatBahtFull(b.totalSatang)}
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}

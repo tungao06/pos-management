@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { render } from '../test-utils'
 import { TH } from '../ui/th'
@@ -28,5 +28,49 @@ describe('IssueZScreen (D101 step 3)', () => {
     expect(await screen.findByTestId('z-retry')).toBeVisible()
     expect(screen.queryByTestId('count-confirm')).toBeNull()
     expect(screen.getByText(TH.errBotCashRequired)).toBeVisible()
+  })
+
+  it('fix round 1 item 1: sends the bank-app total typed here too', async () => {
+    const api = fakeApi()
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    await screen.findByTestId('count-expected')
+    await user.type(screen.getByTestId('count-bank-qr'), '10')
+    await pickOwnerAndPin('TungAo', '1111')
+    await user.click(screen.getByTestId('count-confirm'))
+    expect(api.issueZ).toHaveBeenCalledWith(expect.objectContaining({ bankQrTotalSatang: 1_000 }))
+  })
+
+  it('fix round 1 item 2 (+security): Z_CHAIN_BROKEN "central" warns, a second PIN acknowledges and retries', async () => {
+    const issueZ = vi.fn().mockRejectedValueOnce(new Error('Z_CHAIN_BROKEN: central')).mockResolvedValueOnce({ id: 'z1', shiftId: 's1', createdAt: 'x', hash: 'h', hashOk: true, snapshot: null })
+    const api = fakeApi({
+      issueZ,
+      bootstrap: vi.fn(async () => ({ users: [{ id: 'u1', displayName: 'TungAo', role: 'owner' }], countingShift: null, zWaiting: [], centralLastZNo: 7 })),
+    })
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('TungAo', '1111')
+    await user.click(screen.getByTestId('count-confirm'))
+    expect(await screen.findByText(TH.zChainCentral(7))).toBeVisible()
+    await pickOwnerAndPin('TungAo', '1111')
+    await user.click(screen.getByTestId('count-confirm'))
+    await waitFor(() => expect(issueZ).toHaveBeenLastCalledWith(expect.objectContaining({ acknowledgeZChainBroken: true })))
+  })
+
+  it('fix round 1 item 9: zBlockedBy points at the earlier shift before any PIN is asked (ruling R7)', async () => {
+    const api = fakeApi({ countSummary: vi.fn(async () => summary({ zBlockedBy: 's0' })) })
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    expect(await screen.findByTestId('count-z-blocked-go')).toBeVisible()
+    expect(screen.queryByTestId('count-confirm')).toBeNull()
+  })
+
+  it('fix round 1 item 10: load.isError shows a retry button', async () => {
+    const countSummary = vi.fn(async () => {
+      throw new Error('SHIFT_NOT_COUNTING: s1')
+    })
+    const api = fakeApi({ countSummary })
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    expect(await screen.findByTestId('z-retry')).toBeVisible()
+    await user.click(screen.getByTestId('z-retry'))
+    await waitFor(() => expect(countSummary).toHaveBeenCalledTimes(2))
   })
 })

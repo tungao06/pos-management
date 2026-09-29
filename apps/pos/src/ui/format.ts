@@ -61,17 +61,21 @@ export function parseQtyInput(text: string): number | null {
 
 const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 
-/** 'YYYY-MM-DD' → "25 ก.ย. 2569" (D101 zWaitingBanner) — day · Thai month short · พ.ศ. (ค.ศ. + 543), no time zone
- * math: a business date is already a plain calendar date, never an instant. */
+/**
+ * 'YYYY-MM-DD' → "25 ก.ย. 2569" (D101 zWaitingBanner) — day · Thai month short · พ.ศ. (ค.ศ. + 543), no time zone
+ * math: a business date is already a plain calendar date, never an instant. Fix round 1 item 11: this feeds the
+ * global "ใบปิดกะ … รอออนไลน์" banner on every screen — a business date this cannot parse (a hand-edited row, a
+ * shape this device has never seen) must never crash that banner. Returns the raw text unchanged instead.
+ */
 export function formatThaiDate(ymd: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd)
-  if (!m) throw new RangeError(`formatThaiDate: not a YYYY-MM-DD date: ${ymd}`)
+  if (!m) return ymd
   const y = m[1]!
   const mo = m[2]!
   const d = m[3]!
   const day = Number(d)
   const month = THAI_MONTHS[Number(mo) - 1]
-  if (month === undefined) throw new RangeError(`formatThaiDate: bad month in ${ymd}`)
+  if (month === undefined) return ymd
   const be = Number(y) + 543
   return `${day} ${month} ${be}`
 }
