@@ -120,7 +120,9 @@ describe('append-only ledger tables (M6)', () => {
       // block 3 (D101 · R2): the shift lifecycle guards
       const shiftGuards = ['shift_status_forward_only', 'shift_counted_at_once', 'cash_movement_open_shift_only', 'order_open_shift_only', 'shift_sync_mode_one_way', 'shift_sync_mode_valid']
       // final fix S4: a sent / closed_off_catalog outbox row's data is frozen (spec §6.1)
-      expect(names).toEqual([...appendOnly, ...shiftGuards, 'outbox_row_json_frozen'].sort())
+      // plan 10 T6 (Q1 = ข): a ฿0 payment belongs to a ฿0 bill only (0007 rebuilt payment — it had no trigger to carry over)
+      const zeroBill = ['payment_zero_only_zero_bill', 'payment_zero_only_zero_bill_on_update', 'order_total_keeps_zero_payment']
+      expect(names).toEqual([...appendOnly, ...shiftGuards, 'outbox_row_json_frozen', ...zeroBill].sort())
     })
     for (const t of APPEND_ONLY) {
       it(`${t}: UPDATE and DELETE are rejected`, () => {

@@ -186,7 +186,9 @@ export const payment = sqliteTable('payment', {
   createdAt: text('created_at').notNull(),
 }, (t) => [
   index('payment_order_idx').on(t.orderId),
-  check('payment_amount_positive_ck', sql`${t.amountSatang} > 0`),
+  // plan 10 T6 (owner Q1 = ข): a bill a promotion brings to ฿0 is paid with a ฿0 row. Never negative; ฿0 only for a bill whose
+  // total_satang is 0 — triggers payment_zero_only_zero_bill(_on_update) and order_total_keeps_zero_payment (0007_zero_total_promo_bill).
+  check('payment_amount_nonneg_ck', sql`${t.amountSatang} >= 0`),
 ])
 
 export const discount = sqliteTable('discount', {

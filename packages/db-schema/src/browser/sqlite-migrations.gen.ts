@@ -187,9 +187,27 @@ export const SQLITE_MIGRATIONS: readonly BundledMigration[] = [
     "bps": true,
     "folderMillis": 1790654480696,
     "hash": "5002ef1fa71e94b0e0444b7e84905d33ca3030074bfe232582d86a59b5afe076"
+  },
+  {
+    "tag": "0007_zero_total_promo_bill",
+    "sql": [
+      "-- plan 10 T6 (owner answer Q1 = ข): a bill a promotion brings to ฿0 is still a paid bill with a ฿0 payment row. SQLite\n-- cannot change a CHECK in place, so `payment` is rebuilt (drizzle-kit's recreate) with amount_satang >= 0; a ฿0 row is\n-- allowed only for a bill whose total_satang is 0 (triggers below). Nothing else is touched: `payment` had no trigger\n-- before this migration, no table has a foreign key to it, and its one index is recreated with the same SQL.\nPRAGMA foreign_keys=OFF;",
+      "\nCREATE TABLE `__new_payment` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`order_id` text NOT NULL,\n\t`method` text NOT NULL,\n\t`amount_satang` integer NOT NULL,\n\t`tendered_satang` integer,\n\t`change_satang` integer,\n\t`reference` text,\n\t`verify_status` text NOT NULL,\n\t`created_by` text NOT NULL,\n\t`created_at` text NOT NULL,\n\tFOREIGN KEY (`order_id`) REFERENCES `order`(`id`) ON UPDATE no action ON DELETE no action,\n\tCONSTRAINT \"payment_amount_nonneg_ck\" CHECK(\"__new_payment\".\"amount_satang\" >= 0)\n);\n",
+      "\n-- rowid is copied too (drizzle-kit leaves it out): every row keeps its rowid, so rowid order stays the order rows were written.\nINSERT INTO `__new_payment`(\"rowid\", \"id\", \"order_id\", \"method\", \"amount_satang\", \"tendered_satang\", \"change_satang\", \"reference\", \"verify_status\", \"created_by\", \"created_at\") SELECT \"rowid\", \"id\", \"order_id\", \"method\", \"amount_satang\", \"tendered_satang\", \"change_satang\", \"reference\", \"verify_status\", \"created_by\", \"created_at\" FROM `payment`;",
+      "\nDROP TABLE `payment`;",
+      "\nALTER TABLE `__new_payment` RENAME TO `payment`;",
+      "\nPRAGMA foreign_keys=ON;",
+      "\nCREATE INDEX `payment_order_idx` ON `payment` (`order_id`);",
+      "\n-- A ฿0 payment belongs to a ฿0 bill only. A bill that cannot be found (foreign keys are off during migrations) is not read as ฿0.\nCREATE TRIGGER `payment_zero_only_zero_bill` BEFORE INSERT ON `payment`\nWHEN NEW.`amount_satang` = 0 AND (SELECT `total_satang` FROM `order` WHERE `id` = NEW.`order_id`) IS NOT 0\nBEGIN SELECT RAISE(ABORT, '฿0 payment only for a bill whose total is 0 (plan 10 Q1)'); END;\n",
+      "\nCREATE TRIGGER `payment_zero_only_zero_bill_on_update` BEFORE UPDATE OF `amount_satang`, `order_id` ON `payment`\nWHEN NEW.`amount_satang` = 0 AND (SELECT `total_satang` FROM `order` WHERE `id` = NEW.`order_id`) IS NOT 0\nBEGIN SELECT RAISE(ABORT, '฿0 payment only for a bill whose total is 0 (plan 10 Q1)'); END;\n",
+      "\n-- …and from the bill's side: the total of a bill that holds a ฿0 payment cannot move off 0 (the tablet never rewrites a total).\nCREATE TRIGGER `order_total_keeps_zero_payment` BEFORE UPDATE OF `total_satang` ON `order`\nWHEN NEW.`total_satang` IS NOT 0 AND EXISTS (SELECT 1 FROM `payment` WHERE `order_id` = NEW.`id` AND `amount_satang` = 0)\nBEGIN SELECT RAISE(ABORT, '฿0 payment only for a bill whose total is 0 (plan 10 Q1)'); END;\n"
+    ],
+    "bps": true,
+    "folderMillis": 1790705034901,
+    "hash": "826ed7819da630e791a74db0ee0aaa9719e0abafcb340a73679f999c64a28251"
   }
 ]
 
 /** Tables and triggers that migrateSqlite leaves in a fresh database. */
 export const SQLITE_TABLES: readonly string[] = ["audit_log","bom","bom_line","cash_count","cash_movement","category","channel","customer","dayo_catalog","device","discount","equipment","item","item_cost_state","order","order_event","order_item","order_line","order_payment_intent","outbox","payment","price","product","product_variant","production_batch","purchase","purchase_line","purchase_unit","recipe","recipe_line","setting","shift","size","stock_adjustment","stock_count","stock_count_line","stock_movement","sweetness_level","sync_state","user","z_report"]
-export const SQLITE_TRIGGERS: readonly string[] = ["cash_count_no_delete","cash_count_no_update","cash_movement_no_delete","cash_movement_no_update","cash_movement_open_shift_only","order_event_no_delete","order_event_no_update","order_item_no_delete","order_item_no_update","order_open_shift_only","outbox_row_json_frozen","shift_counted_at_once","shift_status_forward_only","shift_sync_mode_one_way","shift_sync_mode_valid","stock_movement_no_delete","stock_movement_no_update","z_report_no_delete","z_report_no_update"]
+export const SQLITE_TRIGGERS: readonly string[] = ["cash_count_no_delete","cash_count_no_update","cash_movement_no_delete","cash_movement_no_update","cash_movement_open_shift_only","order_event_no_delete","order_event_no_update","order_item_no_delete","order_item_no_update","order_open_shift_only","order_total_keeps_zero_payment","outbox_row_json_frozen","payment_zero_only_zero_bill","payment_zero_only_zero_bill_on_update","shift_counted_at_once","shift_status_forward_only","shift_sync_mode_one_way","shift_sync_mode_valid","stock_movement_no_delete","stock_movement_no_update","z_report_no_delete","z_report_no_update"]
