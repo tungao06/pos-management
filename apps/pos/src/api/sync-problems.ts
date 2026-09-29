@@ -336,7 +336,8 @@ export async function listSyncProblems(db: RemoteDb, actorUserId: string): Promi
     // `remap` exactly when REMAP_CODE is offered; the hint of a dead UNKNOWN_CODE row no remap can fix
     const scope = r.status === 'dead' ? remapScopeDto(r) : { remap: null, remapHint: null }
     return {
-      outboxId: r.id, key: r.idempotencyKey, kind: r.tableName as PushKind, orderId: orderIdOf(r), receiptNo: receipts.get(orderIdOf(r)) ?? null, at: r.createdAt, reason: e.reason, detail: e.detail, remedies,
+      // PAGE_KINDS lists only the bill kinds · Task 14 widens SyncProblemDto.kind to PushKind
+      outboxId: r.id, key: r.idempotencyKey, kind: r.tableName as 'order' | 'order_void', orderId: orderIdOf(r), receiptNo: receipts.get(orderIdOf(r)) ?? null, at: r.createdAt, reason: e.reason, detail: e.detail, remedies,
       remap: remedies.includes('REMAP_CODE') ? scope.remap : null, remapHint: scope.remapHint, children: [],
     }
   }
