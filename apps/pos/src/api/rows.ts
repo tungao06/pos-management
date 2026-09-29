@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import { CLOCK_AHEAD_FAR_MS } from '../sync/push'
-import { estimatedServerMs } from '../sync/state'
+import { estimatedServerMs, readKey } from '../sync/state'
 import { centralContinuation } from './central-z'
 import { PosError } from './errors'
 
@@ -43,7 +43,9 @@ export const CLOCK_AHEAD_COUNT = 'CLOCK_AHEAD'
  *   it (PIN + reason + audit) is Task 14's.
  */
 async function lastCountOf(db: RemoteDb, deviceId: string): Promise<string | null> {
-  const local = (await db.values<[string | null]>(sql`select max(counted_at) from shift where device_id = ${deviceId} and counted_at is not null`))[0]?.[0] ?? null
+  // Task 14 · carried item 9b: a far-ahead count the owner chose to skip (skipCountFloor) floors nothing any more
+  const skipped = await readKey(db, COUNT_FLOOR_SKIP_KEY)
+  const local = (await db.values<[string | null]>(sql`select max(counted_at) from shift where device_id = ${deviceId} and counted_at is not null and counted_at is not ${skipped}`))[0]?.[0] ?? null
   // Task 13 (ruling R9 · spec §13.8 R5-1): on the R9 path dayo's last Z (until = its count) is this key's last count too —
   // the first central Z's window starts there (bot-cash.ts centralWindowStart), so no count may land at or before it
   const central = await centralContinuation(db, deviceId)
@@ -81,4 +83,18 @@ export async function countFloor(db: RemoteDb, deviceId: string, deviceNow: stri
 /** Issuing a Z: refused while this device's last count is far ahead. */
 export async function assertNoFarAheadCount(db: RemoteDb, deviceId: string, deviceNow: string): Promise<void> {
   await countFloor(db, deviceId, deviceNow)
+}
+
+/**
+ * sync_state key (local only, never sent): the counted_at of the far-ahead count the owner skipped (Task 14 · carried item
+ * 9b · skipCountFloor) — that one count floors nothing any more; a different far-ahead count asks again.
+ */
+export const COUNT_FLOOR_SKIP_KEY = 'local.count_floor_skip'
+
+/** The far-ahead last count of this device (the one countFloor refuses on), or null. */
+export async function farAheadLastCount(db: RemoteDb, deviceId: string, deviceNow: string): Promise<{ countedAt: string; shiftId: string } | null> {
+  const last = await lastCountOf(db, deviceId)
+  if (last === null || !(await farAhead(db, last, deviceNow))) return null
+  const shift = (await db.values<[string]>(sql`select id from shift where device_id = ${deviceId} and counted_at = ${last} limit 1`))[0]?.[0]
+  return shift === undefined ? null : { countedAt: last, shiftId: shift } // a floor from dayo's last Z (R9) is never far ahead (centralZOfAnswer)
 }

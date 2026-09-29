@@ -3,7 +3,7 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import {
   CashCountAcceptedData, CashMovementAcceptedData, clipCodePoints, detailPrefix, ExistsConflictData, isRowSupported, laneOf, MAX_DETAIL_CODE_POINTS, MAX_PUSH_BODY_BYTES, MAX_PUSH_ROWS,
-  OffCatalogAcceptedData, OrderAcceptedData, OrderVoidAcceptedData, PUSH_KINDS, SHIFT_LANE_KINDS, ShiftCloseAcceptedData, ShiftOpenAcceptedData,
+  OffCatalogAcceptedData, OrderAcceptedData, OrderVoidAcceptedData, PUSH_KINDS, rowKey, SHIFT_LANE_KINDS, ShiftCloseAcceptedData, ShiftOpenAcceptedData,
   type PushRequest, type ReceivedRowResult, type Supported,
 } from '@dayo/contracts'
 import { edgeBahtToSatang } from '@dayo/domain'
@@ -109,7 +109,7 @@ async function parentStateOf(db: RemoteDb, key: string): Promise<ParentState> {
 }
 
 /** Held = not sent and not counted: dayo does not list its kind/fields, or answered UNSUPPORTED under this same list. */
-function isHeld(r: { tableName: string; rowJson: unknown; lastError: string | null }, sup: Supported): boolean {
+export function isHeld(r: { tableName: string; rowJson: unknown; lastError: string | null }, sup: Supported): boolean {
   const last = decodeLastError(r.lastError)
   return !isRowSupported(r.tableName, r.rowJson as Record<string, unknown>, sup) || (last.reason === 'UNSUPPORTED' && last.supportedHash === hashOf(sup))
 }
@@ -212,10 +212,20 @@ async function pickPass(db: RemoteDb, nowIso: string, sup: Supported, size: numb
       continue
     }
     if (r.parentKey !== null) {
-      const st = await parentStateOf(db, r.parentKey)
+      let st = await parentStateOf(db, r.parentKey)
+      if (st === 'closed_off_catalog') {
+        // carried item 3 · spec §4.10 (แถวแม่ถูกปิด): the new parent of a bill's void is its order_off_catalog row. closeOffCatalog
+        // moves every child in its own transaction; this catches a void queued under the old parent (an older build) — the same
+        // UPDATE, and to one of the two parents enqueuePush allows. No such row = the bill will never be sent: local_only.
+        const moved = r.tableName === 'order_void' ? rowKey('order_off_catalog', String((r.rowJson as { pos_order_id: string }).pos_order_id)) : null
+        st = moved === null ? 'missing' : await parentStateOf(db, moved)
+        if (moved === null || st === 'missing') { await db.update(s.outbox).set({ status: 'local_only', nextAttemptAt: null }).where(pendingRow(r.id)); decided.add(r.id); continue }
+        await db.update(s.outbox).set({ parentKey: moved }).where(pendingRow(r.id))
+        r.parentKey = moved
+        q.parentKey = moved
+      }
       if (st === 'dead') { await markDead(db, r, nowIso, 'PARENT_REJECTED', `แถวแม่ ${r.parentKey} ส่งไม่ผ่าน`); decided.add(r.id); continue }
       if (st === 'local_only') { await db.update(s.outbox).set({ status: 'local_only', nextAttemptAt: null }).where(pendingRow(r.id)); decided.add(r.id); continue }
-      // 'closed_off_catalog': the child waits — Task 14 moves its parent_key to the order_off_catalog row
       parents.set(r.parentKey, st)
     }
     const unsupported = isHeld(r, sup)

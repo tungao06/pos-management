@@ -1,8 +1,8 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { Text200 } from '@dayo/contracts'
-import { buildCashCountRowData, cashVarianceSatang, tallyCashCount, varianceNeedsReason } from '@dayo/domain'
+import { buildCashCountRowData, cashVarianceSatang, sumSatang, tallyCashCount, varianceNeedsReason } from '@dayo/domain'
 import { enqueueLocalOnly, enqueuePush, shiftParentKey } from '../db/outbox'
 import { requireOwnerPin } from './auth'
 import { botWindowFor, readBotPreview } from './bot-cash'
@@ -64,7 +64,21 @@ async function summarize(db: RemoteDb, shift: ShiftRow): Promise<CountSummaryDto
   const window = shift.syncMode === 'central' ? await botWindowFor(db, { id: shift.id, deviceId: shift.deviceId, businessDate: shift.businessDate, countedAt: shift.countedAt }) : null
   const bot = window === null ? null : await readBotPreview(db, shift.id, window)
   const report = await buildShiftReport(db, toDto(shift), shift.countedAt, bot)
-  return { ...report, countedAt: shift.countedAt, syncMode: shift.syncMode, includesBotCash: bot !== null, bot, zBlockedBy: await earlierCountWithoutZ(db, shift) }
+  return { ...report, countedAt: shift.countedAt, syncMode: shift.syncMode, includesBotCash: bot !== null, bot, zBlockedBy: await earlierCountWithoutZ(db, shift), notInDayo: await notInDayoOf(db, shift.id) }
+}
+
+/**
+ * Task 14 (carried item 8): the receipts of this shift dayo will never receive — the owner closed the bill "ปิดไว้ในเครื่อง"
+ * (order.excluded_at), or a plan-3 bill (no sold_at) — and the cash refunds of those that were cancelled: their VOID_REFUND
+ * is still sent with the shift (ruling), so dayo's Z shows a refund of a bill it does not have. Display only.
+ */
+async function notInDayoOf(db: RemoteDb, shiftId: string): Promise<{ bills: number; voidRefundSatang: number }> {
+  const bills = await db.select({ id: s.order.id }).from(s.order)
+    .where(and(eq(s.order.shiftId, shiftId), isNotNull(s.order.receiptNo), inArray(s.order.status, ['paid', 'voided']), or(isNull(s.order.soldAt), isNotNull(s.order.excludedAt)))).all()
+  if (bills.length === 0) return { bills: 0, voidRefundSatang: 0 }
+  const refunds = await db.select({ amount: s.cashMovement.amountSatang }).from(s.cashMovement)
+    .where(and(eq(s.cashMovement.shiftId, shiftId), eq(s.cashMovement.kind, 'VOID_REFUND'), inArray(s.cashMovement.orderId, bills.map((b) => b.id)))).all()
+  return { bills: bills.length, voidRefundSatang: sumSatang(refunds.map((r) => r.amount)) }
 }
 
 /**

@@ -1,15 +1,17 @@
 import { and, asc, count, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { PUSH_KINDS } from '@dayo/contracts'
+import { KIND_SCOPE, PUSH_KINDS, SHIFT_LANE_KINDS, type DetailPrefix, type PushKind } from '@dayo/contracts'
 import { readCatalog } from '../sync/catalog'
 import { maskApiKey } from '../sync/secret-store'
-import { CLOCK_WARN_MS, DAYO_KEYS, readKey, type ApiState } from '../sync/state'
+import { SCOPE_CLOSABLE_AFTER_MS, SCOPE_RED_AFTER_MS } from '../sync/push'
+import { CLOCK_WARN_MS, DAYO_KEYS, decodeLastError, readKey, type ApiState } from '../sync/state'
 import { isBackupDue, lastBackupAt, lastBackupZId } from './backup'
 import { readCentralZ } from './central-z'
 import { isDayoLinked, ownerRecoveryAllowed, storedBaseUrl } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
+import { hintFor, isShiftConflict } from './problem-rules'
 import { staffNeedingPin } from './staff'
 import type { BootstrapState, DeviceDto, ShiftDto, SyncStatusDto, UserDto, WaitingZDto } from './types'
 
@@ -85,9 +87,13 @@ export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
   return r[0]?.[0] ?? 0
 }
 
-/** Items with a dead E2 row (dayo refused it for good, or it was stuck) — the "มีปัญหา" count of spec §12. */
+/**
+ * Items with a dead E2 row (dayo refused it for good, or it was stuck) — the "มีปัญหา" count of spec §12, shift-lane rows
+ * included (Task 14 · carried item 2). One problem per ROOT cause: a row parked PARENT_REJECTED is counted through its dead
+ * parent, never on its own (a rejected shift_open with its cash rows = 1).
+ */
 export async function countSyncProblems(db: RemoteDb): Promise<number> {
-  const r = await db.values<[number]>(sql`select count(distinct ${SYNC_ITEM}) from outbox where status = 'dead' and ${SYNC_ITEM_KINDS}`)
+  const r = await db.values<[number]>(sql`select count(distinct ${SYNC_ITEM}) from outbox where status = 'dead' and ${SYNC_ITEM_KINDS} and not (json_valid(last_error) and json_extract(last_error, '$.reason') = 'PARENT_REJECTED')`)
   return r[0]?.[0] ?? 0
 }
 
@@ -125,7 +131,7 @@ export async function syncStatus(db: RemoteDb, deps: ApiDeps): Promise<SyncStatu
     .where(and(eq(s.outbox.status, 'pending'), inArray(s.outbox.tableName, [...PUSH_KINDS]))).orderBy(asc(s.outbox.createdAt)).limit(1).get()
   const diff = await db.select({ n: count() }).from(s.order)
     .where(and(isNotNull(s.order.centralComputedTotalSatang), ne(s.order.centralComputedTotalSatang, s.order.totalSatang))).get()
-  const farAhead = await db.values<[number]>(sql`select count(distinct json_extract(row_json, '$.pos_order_id')) from outbox where status = 'pending' and table_name in ('order', 'order_void') and json_extract(last_error, '$.farAhead') = 1`)
+  const farAhead = await db.values<[number]>(sql`select count(distinct ${SYNC_ITEM}) from outbox where status = 'pending' and ${SYNC_ITEM_KINDS} and json_valid(last_error) and json_extract(last_error, '$.farAhead') = 1`)
   const version = await db.select({ v: s.dayoCatalog.catalogVersion }).from(s.dayoCatalog).where(eq(s.dayoCatalog.id, 'current')).get()
   return {
     linked: key !== null && baseUrl !== null,
@@ -146,7 +152,58 @@ export async function syncStatus(db: RemoteDb, deps: ApiDeps): Promise<SyncStatu
     pendingOver24h: oldest !== undefined && now - Date.parse(oldest.createdAt) > PENDING_WARN_AFTER_MS,
     priceDiffBills: diff?.n ?? 0,
     clockFarAheadBills: farAhead[0]?.[0] ?? 0,
+    scopeWait: await scopeWaitOf(db, now),
+    shiftDataConflict: await hasShiftDataConflict(db),
+    centralMismatchBills: (await db.values<[number]>(sql`select count(*) from "order" where central_mismatch_json is not null`))[0]?.[0] ?? 0,
   }
+}
+
+/**
+ * Task 14 (spec §6.2 m1 · R14): the row waiting longest for a scope this key lacks (FORBIDDEN scope: — pending, retried every
+ * 15 min): yellow at once, red after 24 h, "ปิดไว้ในเครื่อง" after 7 days.
+ */
+async function scopeWaitOf(db: RemoteDb, nowMs: number): Promise<NonNullable<SyncStatusDto['scopeWait']> | null> {
+  const rows = await db.select({ kind: s.outbox.tableName, lastError: s.outbox.lastError }).from(s.outbox)
+    .where(and(eq(s.outbox.status, 'pending'), inArray(s.outbox.tableName, [...PUSH_KINDS]), sql`json_valid(${s.outbox.lastError}) and json_extract(${s.outbox.lastError}, '$.prefix') = 'scope:'`)).all()
+  let oldest: { kind: PushKind; since: string } | null = null
+  for (const r of rows) {
+    const since = decodeLastError(r.lastError).scopeSince
+    if (since === undefined || !(PUSH_KINDS as readonly string[]).includes(r.kind)) continue
+    if (oldest === null || Date.parse(since) < Date.parse(oldest.since)) oldest = { kind: r.kind as PushKind, since }
+  }
+  if (oldest === null) return null
+  const waited = nowMs - Date.parse(oldest.since)
+  return { scope: KIND_SCOPE[oldest.kind], since: oldest.since, red: waited > SCOPE_RED_AFTER_MS, closable: waited >= SCOPE_CLOSABLE_AFTER_MS }
+}
+
+/** The moment the key was last replaced on this tablet (audit_log api_key_replaced), or null. */
+export async function lastKeyReplaceAt(db: RemoteDb): Promise<string | null> {
+  return (await db.values<[string | null]>(sql`select max(at) from audit_log where action = 'api_key_replaced'`))[0]?.[0] ?? null
+}
+/** The shifts whose rows began under a key replaced since (carried item 7). */
+export async function shiftsBeforeKeyReplace(db: RemoteDb, shiftIds: readonly string[]): Promise<Set<string>> {
+  const replaced = await lastKeyReplaceAt(db)
+  if (replaced === null || shiftIds.length === 0) return new Set()
+  const rows = await db.select({ id: s.shift.id, openedAt: s.shift.openedAt }).from(s.shift).where(inArray(s.shift.id, [...new Set(shiftIds)])).all()
+  return new Set(rows.filter((r) => Date.parse(r.openedAt) < Date.parse(replaced)).map((r) => r.id))
+}
+
+/**
+ * Task 14 (S5 · R5-2 · preflight D7): a dead shift-lane row whose verdict says someone else's data is under this key —
+ * the red bar "ข้อมูลกะชนกับระบบกลาง — ตรวจกุญแจเครื่อง". A shift begun under a key the owner replaced since is not that
+ * (carried item 7 — hint key_replaced on the problems page).
+ */
+async function hasShiftDataConflict(db: RemoteDb): Promise<boolean> {
+  const rows = await db.select({ kind: s.outbox.tableName, lastError: s.outbox.lastError, rowJson: s.outbox.rowJson }).from(s.outbox)
+    .where(and(eq(s.outbox.status, 'dead'), inArray(s.outbox.tableName, [...SHIFT_LANE_KINDS]))).all()
+  const conflicts = rows.map((r) => ({ r, e: decodeLastError(r.lastError) })).filter(({ e }) => isShiftConflict(e.reason, (e.prefix as DetailPrefix | undefined) ?? null))
+  if (conflicts.length === 0) return false
+  const shiftIds = conflicts.map(({ r }) => (r.rowJson as { shift_id?: unknown }).shift_id).filter((x): x is string => typeof x === 'string')
+  const old = await shiftsBeforeKeyReplace(db, shiftIds)
+  return conflicts.some(({ r, e }) => {
+    const hint = hintFor({ kind: r.kind as PushKind, dead: true, reason: e.reason, prefix: (e.prefix as DetailPrefix | undefined) ?? null, shiftOpenedBeforeKeyReplace: old.has(String((r.rowJson as { shift_id?: unknown }).shift_id)) })
+    return hint === 'shift_conflict'
+  })
 }
 
 export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapState> {
