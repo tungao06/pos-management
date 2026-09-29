@@ -325,8 +325,9 @@ const BOT_BILL_VERSION_MAX = 2_147_483_647
  * precision so comparing them with Date.parse is exact. */
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|\+00:00)$/
 
-/** Security fix round 1 (L-1): the form above, and a real calendar instant (Date.parse alone rolls 30 Feb or 24:00 over). */
-function isoUtcMs(iso: unknown, name: string): number {
+/** Security fix round 1 (L-1): the form above, and a real calendar instant (Date.parse alone rolls 30 Feb or 24:00 over).
+ * Exported for the E2 row builders (shift-rows.ts) — one check of instants for the Z and the rows built from it. */
+export function isoUtcMs(iso: unknown, name: string): number {
   const t = typeof iso === 'string' && ISO_UTC.test(iso) ? Date.parse(iso) : Number.NaN
   if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 19) !== (iso as string).slice(0, 19)) {
     throw new RangeError(`${name} is not an ISO UTC instant (YYYY-MM-DDTHH:MM:SS[.mmm]Z or +00:00)`)

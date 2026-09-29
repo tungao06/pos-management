@@ -2,7 +2,7 @@ import type { OrderRowData } from '@dayo/contracts'
 import { edgeBahtToSatang, edgeSatangToBaht } from './money-edge.js'
 import { CartError, type BillDiscountDraft, type CartDraft, type CartLineDraft, type PricedCart } from './price-cart.js'
 
-export type OrderRowInput = { posOrderId: string; receiptNo: string; queueNo: number; staffId: string; catalogVersion: number; cart: CartDraft; priced: PricedCart; note: string | null }
+export type OrderRowInput = { posOrderId: string; receiptNo: string; queueNo: number; staffId: string; catalogVersion: number; shiftId: string | null; cart: CartDraft; priced: PricedCart; note: string | null }
 
 /** The size goes as is: priceCart already refused any size that is not an active size of catalog.sizes (ADR-0054). */
 function lineToRow(l: CartLineDraft): OrderRowData['lines'][number] {
@@ -33,7 +33,7 @@ export function buildOrderRowData(i: OrderRowInput): OrderRowData {
     payment: i.cart.paymentCode,
     staff_id: i.staffId,
     catalog_version: i.catalogVersion,
-    shift_id: null, // block 2: always null (spec §4.5 shift_id)
+    shift_id: i.shiftId, // block 3: the shift id of a central shift, null for a local-only one (spec §4.5 shift_id · §4.10 ข้อ 4)
     lines: i.cart.lines.map(lineToRow),
     bill_discount: billToRow(i.cart.billDiscount),
     promo_code: i.cart.promoCode,
