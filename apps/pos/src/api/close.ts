@@ -15,7 +15,7 @@ import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { assertNoFarAheadCount, builtRow, notBefore } from './rows'
 import { PAYMENT_CODE, type CountSummaryDto, type StoredZSnapshot, type UserDto, type ZReportDto, type ZReportSummaryDto, type ZSettle } from './types'
-import { deviceZRows, expectedZNoGap, raiseDeviceZHigh, readCentralZFloor, safeBoolOrNull, safeIntOrNull, safeStrOrNull, toLenientEntry, toZReportDto, tryParseJson, type ZRawRow } from './z-rows'
+import { deviceZRows, expectedZNoGap, floorWithinReach, raiseDeviceZHigh, readCentralZFloor, safeBoolOrNull, safeIntOrNull, safeStrOrNull, toLenientEntry, toZReportDto, tryParseJson, type ZRawRow } from './z-rows'
 
 /** audit_log action written when an owner acknowledges a previous Z that fails its hash (Q3b-11 · D53). */
 export const Z_CHAIN_ACK_ACTION = 'z_chain_broken_ack'
@@ -51,7 +51,10 @@ async function deletedShiftIds(db: RemoteDb, deviceId: string, rows: readonly ZR
   if (last === undefined) return closed.map((c) => c.id) // closed shifts exist, but this device has no Z row at all
   const lastShift = closed.find((c) => c.id === last.shiftId)
   if (lastShift === undefined) return closed.map((c) => c.id) // defensive: the last Z's own shift is not even closed — treat everything as suspect
-  return closed.filter((c) => c.rowid > lastShift.rowid).map((c) => c.id)
+  // Task 14 fix round 1: a shift that HAS its Z row is never "deleted" — after skipCountFloor (9b) Zs go in count order (R7),
+  // which is not always the order the shifts were opened in (a shift opened later may be counted, and closed, first)
+  const withZ = new Set(rows.map((r) => r.shiftId))
+  return closed.filter((c) => c.rowid > lastShift.rowid && !withZ.has(c.id)).map((c) => c.id)
 }
 
 /**
@@ -189,7 +192,8 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
   const lastHealthy = last !== undefined && lastDto !== null && lastDto.hashOk && lastSnapshot !== null && lastGrand !== null && lastGrand >= 0
   const lastZNo = lastSnapshot !== null ? safeIntOrNull(lastSnapshot.zNo) : null
   const expectedGap = expectedZNoGap(rows)
-  const centralFloor = await readCentralZFloor(tx) // fix round 2: the zNo that continued dayo's numbering (0 = never)
+  // fix round 2: the zNo that continued dayo's numbering (0 = never) — Task 14 · carried item 10: only within reach of the rows
+  const centralFloor = floorWithinReach(await readCentralZFloor(tx), rows)
   const unacknowledgedZNoGap = lastHealthy && (lastZNo === null || lastZNo - rows.length !== expectedGap)
 
   let prev: { zNo: number; grandTotalSatang: number } | null = null

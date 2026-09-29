@@ -1,13 +1,14 @@
-import { and, asc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import {
   CashCountAcceptedData, CashMovementAcceptedData, clipCodePoints, detailPrefix, ExistsConflictData, isRowSupported, laneOf, MAX_DETAIL_CODE_POINTS, MAX_PUSH_BODY_BYTES, MAX_PUSH_ROWS,
-  OffCatalogAcceptedData, OrderAcceptedData, OrderVoidAcceptedData, PUSH_KINDS, SHIFT_LANE_KINDS, ShiftCloseAcceptedData, ShiftOpenAcceptedData,
+  OffCatalogAcceptedData, OrderAcceptedData, OrderVoidAcceptedData, PUSH_KINDS, rowKey, SHIFT_LANE_KINDS, ShiftCloseAcceptedData, ShiftOpenAcceptedData,
   type PushRequest, type ReceivedRowResult, type Supported,
 } from '@dayo/contracts'
 import { edgeBahtToSatang } from '@dayo/domain'
 import type { ApiDeps } from '../api/deps'
+import { enqueuePush } from '../db/outbox'
 import { apiBlocked, readDayoConfig, readSupported, recordDayoFailure, type SyncContext } from './catalog'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure, type Timed } from './dayo-client'
 import { createLanePicker, type ParentState } from './lanes'
@@ -36,6 +37,13 @@ export const SCOPE_RETRY_MS = 15 * 60_000
 export const SCOPE_RED_AFTER_MS = 24 * 3_600_000
 export const SCOPE_CLOSABLE_AFTER_MS = 7 * 86_400_000
 
+/** audit_log action: dayo stored a row the owner had closed local_only while its request was on the wire (Task 14 fix round 1). */
+export const SENT_AFTER_LOCAL_ACTION = 'sync_row_reached_dayo_after_local'
+/**
+ * Reasons only the TABLET writes on a row (ruling R11 "ของเครื่อง") — a verdict of dayo carrying one of these is renamed
+ * REJECTED (fix round 1 item 4), so dayo can never park a row as PARENT_REJECTED or pass it off as the tablet's own.
+ */
+export const TABLET_OWN_REASONS: ReadonlySet<string> = new Set(['PARENT_REJECTED', 'STUCK', 'ENVELOPE', 'CLOCK_AHEAD', 'REQUEST_FAILED', 'NO_VERDICT_REPEATED', 'NO_ANSWER', 'DUPLICATE_VERDICT', 'UNSUPPORTED'])
 /** plan 5 fix M-2: only these mean dayo stored the row. */
 const KNOWN_SUCCESS = new Set(['accepted', 'duplicate'])
 const utf8 = new TextEncoder()
@@ -109,7 +117,7 @@ async function parentStateOf(db: RemoteDb, key: string): Promise<ParentState> {
 }
 
 /** Held = not sent and not counted: dayo does not list its kind/fields, or answered UNSUPPORTED under this same list. */
-function isHeld(r: { tableName: string; rowJson: unknown; lastError: string | null }, sup: Supported): boolean {
+export function isHeld(r: { tableName: string; rowJson: unknown; lastError: string | null }, sup: Supported): boolean {
   const last = decodeLastError(r.lastError)
   return !isRowSupported(r.tableName, r.rowJson as Record<string, unknown>, sup) || (last.reason === 'UNSUPPORTED' && last.supportedHash === hashOf(sup))
 }
@@ -212,10 +220,20 @@ async function pickPass(db: RemoteDb, nowIso: string, sup: Supported, size: numb
       continue
     }
     if (r.parentKey !== null) {
-      const st = await parentStateOf(db, r.parentKey)
+      let st = await parentStateOf(db, r.parentKey)
+      if (st === 'closed_off_catalog') {
+        // carried item 3 · spec §4.10 (แถวแม่ถูกปิด): the new parent of a bill's void is its order_off_catalog row. closeOffCatalog
+        // moves every child in its own transaction; this catches a void queued under the old parent (an older build) — the same
+        // UPDATE, and to one of the two parents enqueuePush allows. No such row = the bill will never be sent: local_only.
+        const moved = r.tableName === 'order_void' ? rowKey('order_off_catalog', String((r.rowJson as { pos_order_id: string }).pos_order_id)) : null
+        st = moved === null ? 'missing' : await parentStateOf(db, moved)
+        if (moved === null || st === 'missing') { await db.update(s.outbox).set({ status: 'local_only', nextAttemptAt: null }).where(pendingRow(r.id)); decided.add(r.id); continue }
+        await db.update(s.outbox).set({ parentKey: moved }).where(pendingRow(r.id))
+        r.parentKey = moved
+        q.parentKey = moved
+      }
       if (st === 'dead') { await markDead(db, r, nowIso, 'PARENT_REJECTED', `แถวแม่ ${r.parentKey} ส่งไม่ผ่าน`); decided.add(r.id); continue }
       if (st === 'local_only') { await db.update(s.outbox).set({ status: 'local_only', nextAttemptAt: null }).where(pendingRow(r.id)); decided.add(r.id); continue }
-      // 'closed_off_catalog': the child waits — Task 14 moves its parent_key to the order_off_catalog row
       parents.set(r.parentKey, st)
     }
     const unsupported = isHeld(r, sup)
@@ -396,9 +414,10 @@ function rejectedResult(data: unknown): Record<string, unknown> | null {
   return { order_no: clipCodePoints(d.data.order_no, ORDER_NO_MAX), version: d.data.version, reported_total: d.data.reported_total, payment_is_cash: d.data.payment_is_cash, off_catalog: d.data.off_catalog }
 }
 
-async function markSent(db: RemoteDb, r: Row, v: ReceivedRowResult, at: string): Promise<void> {
+/** `from` = the status the row must still have (pending; local_only for a verdict that arrived after the owner closed it). */
+async function markSent(db: RemoteDb, r: Row, v: ReceivedRowResult, at: string, from: 'pending' | 'local_only' = 'pending'): Promise<void> {
   const known = knownResult(r.tableName, v.data)
-  await db.update(s.outbox).set({ status: 'sent', sentAt: at, attempts: r.attempts + 1, lastError: null, nextAttemptAt: null, resultJson: known as never }).where(pendingRow(r.id))
+  await db.update(s.outbox).set({ status: 'sent', sentAt: at, attempts: r.attempts + 1, lastError: null, nextAttemptAt: null, resultJson: known as never }).where(and(eq(s.outbox.id, r.id), eq(s.outbox.status, from)))
   if (r.tableName === 'order_off_catalog' && known !== null) { // spec §6.4: the bill now carries dayo's number of its off-catalog bill
     await db.update(s.order).set({ centralOrderNo: known['order_no'] as string }).where(eq(s.order.id, String((r.rowJson as { pos_order_id: string }).pos_order_id)))
     return
@@ -495,13 +514,37 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
     const sentKeys: string[] = []
     for (const r of batch) {
       // review item 3: only a row still pending in THIS transaction is judged — an earlier decision in the batch is never overwritten
-      if ((await tx.select({ status: s.outbox.status }).from(s.outbox).where(eq(s.outbox.id, r.id)).get())?.status !== 'pending') continue
+      const status = (await tx.select({ status: s.outbox.status }).from(s.outbox).where(eq(s.outbox.id, r.id)).get())?.status
       const v = twice.has(r.idempotencyKey) ? undefined : byKey.get(r.idempotencyKey)
+      if (status === 'local_only' && v !== undefined && KNOWN_SUCCESS.has(v.status)) {
+        // Task 14 fix round 1 (item 2 · block-2 ledger ruling 1): the owner closed this row ("ปิดไว้ในเครื่อง", keepShiftLocal)
+        // while a request carrying it was on the wire, and dayo STORED it. The tablet must say so — the money is in dayo —
+        // or the owner may enter it again on the web. The row becomes sent (dayo's data kept as usual), an audit_log row
+        // records that it reached dayo after the close, and a bill closed "ปิดไว้ในเครื่อง" is no longer shown as outside dayo.
+        await markSent(tx, r, v, at, 'local_only')
+        let previousExcludedAt: string | null = null
+        let restored: string[] = []
+        let queuedVoid: string | null = null
+        if (r.tableName === 'order' || r.tableName === 'order_off_catalog') {
+          const orderId = String((r.rowJson as { pos_order_id: string }).pos_order_id)
+          previousExcludedAt = (await tx.select({ x: s.order.excludedAt }).from(s.order).where(eq(s.order.id, orderId)).get())?.x ?? null
+          await tx.update(s.order).set({ excludedAt: null }).where(eq(s.order.id, orderId))
+          restored = await restoreExcludedChildren(tx, r, orderId) // fix round 2: its void must reach dayo too
+          queuedVoid = await queueMissingVoid(tx, deps, r, orderId, at) // fix round 3: a void cancelSale did not queue (the bill was excluded then)
+        }
+        await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'sync_row', entityId: r.idempotencyKey, action: SENT_AFTER_LOCAL_ACTION, beforeJson: { status: 'local_only', excludedAt: previousExcludedAt }, afterJson: { status: 'sent', verdict: v.status, restoredChildren: restored, queuedVoid }, actorUserId: null, at })
+        t.sent++
+        continue
+      }
+      if (status !== 'pending') continue
       const prefix = detailPrefix(v?.detail)
       if (v !== undefined && KNOWN_SUCCESS.has(v.status)) { await markSent(tx, r, v, at); sentKeys.push(r.idempotencyKey); t.sent++ }
       else if (v?.status === 'rejected' && v.reason === 'FORBIDDEN' && prefix === 'scope:') { await markScopeWait(tx, r, v, at); t.deferred++ } // not dead: no cascade
       else if (v?.status === 'rejected') {
-        await markDead(tx, r, at, v.reason ?? 'REJECTED', v.detail ?? '', r.attempts + 1, prefix === null ? {} : { prefix }, rejectedResult(v.data))
+        // fix round 1 item 4: a reason the tablet writes itself (PARENT_REJECTED, STUCK, …) is never taken from dayo — it would
+        // hide the row's buttons or its count; it is dayo's plain rejection
+        const reason = v.reason === undefined || v.reason === '' || TABLET_OWN_REASONS.has(v.reason) ? 'REJECTED' : v.reason
+        await markDead(tx, r, at, reason, v.detail ?? '', r.attempts + 1, prefix === null ? {} : { prefix }, rejectedResult(v.data))
         rejectedKeys.push(r.idempotencyKey); t.rejected++
       }
       else if (v?.status === 'deferred') { await markDeferred(tx, deps, r, v, at, sup, answer.value.server_time); t.deferred++ }
@@ -519,6 +562,49 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
     return { ...t, released }
   })
 }
+
+/**
+ * Task 14 fix round 2: dayo stored a bill the owner had just closed "ปิดไว้ในเครื่อง" — the children that close took along
+ * (listed in the EXCLUDED_FROM_SYNC event of this very row) come back to the queue: its void must reach dayo too, or dayo
+ * counts a cancelled bill as a sale. Only those still local_only and still waiting on THIS row — a void the owner closed on
+ * its own, or one moved to another parent, stays as it is (enqueuePush's parent rules are untouched). Shift-lane rows are
+ * never restored: a shift kept local stays local (keepShiftLocal · R19). Returns their keys.
+ */
+async function restoreExcludedChildren(tx: RemoteDb, r: Row, orderId: string): Promise<string[]> {
+  const events = await tx.select({ payload: s.orderEvent.payloadJson }).from(s.orderEvent)
+    .where(and(eq(s.orderEvent.orderId, orderId), eq(s.orderEvent.type, 'EXCLUDED_FROM_SYNC'))).orderBy(desc(s.orderEvent.seq)).all()
+  const ev = events.map((e) => e.payload as { key?: unknown; children?: unknown }).find((p) => p.key === r.idempotencyKey)
+  const listed = Array.isArray(ev?.children) ? ev.children.filter((k): k is string => typeof k === 'string') : []
+  if (listed.length === 0) return []
+  const kids = await tx.select({ id: s.outbox.id, key: s.outbox.idempotencyKey }).from(s.outbox)
+    .where(and(inArray(s.outbox.idempotencyKey, listed), eq(s.outbox.tableName, 'order_void'), eq(s.outbox.parentKey, r.idempotencyKey), eq(s.outbox.status, 'local_only'))).all()
+  if (kids.length === 0) return []
+  await tx.update(s.outbox).set({ status: 'pending', attempts: 0, deadAt: null, nextAttemptAt: null, lastError: null })
+    .where(and(inArray(s.outbox.id, kids.map((k) => k.id)), eq(s.outbox.status, 'local_only')))
+  return kids.map((k) => k.key)
+}
+
+/**
+ * Task 14 fix round 3 (ruling option ก): the bill was cancelled here AFTER the owner closed it "ปิดไว้ในเครื่อง" — cancelSale
+ * then queues no order_void (an excluded bill has no central void) — and dayo stored the bill all the same. Its void is
+ * queued now, in the same transaction, exactly as cancelSale builds it (the VOIDED event: who, the owner who approved,
+ * the reason · voided_at = the bill's voided_at), under this row as its parent (enqueuePush's parent rule), so dayo does
+ * not keep a cancelled bill as a sale. Nothing when the bill is not voided, has no sold_at, or already has a void row.
+ * Returns the queued key, or null.
+ */
+async function queueMissingVoid(tx: RemoteDb, deps: ApiDeps, r: Row, orderId: string, at: string): Promise<string | null> {
+  const order = await tx.select().from(s.order).where(eq(s.order.id, orderId)).get()
+  if (order === undefined || order.status !== 'voided' || order.voidedAt === null || order.soldAt === null) return null
+  const key = rowKey('order_void', orderId)
+  if ((await tx.select({ id: s.outbox.id }).from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get()) !== undefined) return null
+  const voided = await tx.select().from(s.orderEvent).where(and(eq(s.orderEvent.orderId, orderId), eq(s.orderEvent.type, 'VOIDED'))).orderBy(desc(s.orderEvent.seq)).limit(1).get()
+  const p = (voided?.payloadJson ?? {}) as { reason?: unknown; approvedBy?: unknown }
+  if (voided === undefined || typeof p.reason !== 'string') return null
+  const data = { pos_order_id: orderId, voided_at: order.voidedAt, staff_id: voided.actorId, approved_by: typeof p.approvedBy === 'string' ? p.approvedBy : null, reason: p.reason }
+  await enqueuePush(tx, { kind: 'order_void', id: orderId, data, parentKey: r.idempotencyKey }, notBeforeIso(at, order.voidedAt), deps.newId)
+  return key
+}
+const notBeforeIso = (a: string, b: string): string => (Date.parse(a) < Date.parse(b) ? b : a)
 
 /**
  * One call of the sender (item 8 — the states it moves through):

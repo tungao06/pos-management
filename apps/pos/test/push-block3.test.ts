@@ -263,14 +263,17 @@ describe('pushOnce — block 3 lanes and verdicts (spec 04 §6.2 · §4.10)', ()
     expect(sent).not.toContain(`order_off_catalog:${bill.orderId}`)
     expect(await row(t, `order_off_catalog:${bill.orderId}`)).toMatchObject({ status: 'pending', attempts: 0, lastError: null })
   })
-  it('a void of a bill closed as off-catalog waits (Task 14 moves its parent to the order_off_catalog row)', async () => {
+  it('a void of a bill closed as off-catalog is never sent under the closed row: with no order_off_catalog row to wait for, it stays on the tablet (Task 14 · carried item 3)', async () => {
+    // Task 14 changed this T10 expectation ("waits"): closeOffCatalog moves every void to the order_off_catalog row in its own
+    // transaction and the sender moves a late one the same way (sync-problems-block3.test.ts) — a closed order row with NO such
+    // row (a hand-edited file) means the bill will never reach dayo, so its void is local_only (spec §4.10: "no longer sent")
     const { t, ctx, sent } = await ready()
     const bill = await sellOne(t)
     await t.db.update(s.outbox).set({ status: 'closed_off_catalog' }).where(eq(s.outbox.idempotencyKey, `order:${bill.orderId}`))
     await t.api.cancelSale({ orderId: bill.orderId, actorUserId: STAFF.TungAo, approverUserId: STAFF.DCm, approverPin: '2222', reason: 'กดผิด', made: false, refundReference: 'K1' })
     await pushOnce(ctx)
     expect(sent).not.toContain(`order_void:${bill.orderId}`)
-    expect(await row(t, `order_void:${bill.orderId}`)).toMatchObject({ status: 'pending', attempts: 0 })
+    expect(await row(t, `order_void:${bill.orderId}`)).toMatchObject({ status: 'local_only', attempts: 0 })
   })
   it('an accepted order_off_catalog stores dayo\'s order number on the bill', async () => {
     const { t, ctx } = await connect({ block3: true, block3Phase2: true })

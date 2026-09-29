@@ -1,7 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { recomputeZChainLenient, zReportHash, type LenientZEntry, type SalesSummary } from '@dayo/domain'
+import { MAX_ZNO_LIST_LENGTH, recomputeZChainLenient, zReportHash, type LenientZEntry, type SalesSummary } from '@dayo/domain'
 import { DAYO_KEYS, readKey, writeKey } from '../sync/state'
 import type { StoredZSnapshot, ZReportDto } from './types'
 
@@ -140,11 +140,21 @@ export function expectedZNoGap(rows: readonly ZRawRow[]): number {
  * writeZ name the broken row) — never lower it back under dayo's last Z.
  */
 export async function deviceLastZNo(db: RemoteDb, deviceId: string): Promise<number> {
-  const high = await readDeviceZHigh(db) // fix round 2: never below the highest number this device issued
   const rows = await deviceZRows(db, deviceId)
+  const high = floorWithinReach(await readDeviceZHigh(db), rows) // fix round 2: never below the highest number this device issued
   if (rows.length === 0) return high
   const lenient = recomputeZChainLenient([...rows].reverse().map(toLenientEntry))
   return Math.max(high, lenient.maxStoredZNo, rows.length + expectedZNoGap(rows))
+}
+
+/**
+ * Task 14 · carried item 10 (T13 ruling, R2-2 style): a stored Z-number floor (device_z_high, central_z_floor) is trusted only
+ * up to what the Z rows can prove — their count + the gap already acknowledged + MAX_ZNO_LIST_LENGTH. Every real floor is
+ * within that (each Z row raises both sides by one; a continuation records its jump as the gap); a hand-edited sync_state
+ * pushed out of reach (to int4 max, say) is ignored (0) instead of dragging every later Z number out of range.
+ */
+export function floorWithinReach(floor: number, rows: readonly ZRawRow[]): number {
+  return floor <= rows.length + expectedZNoGap(rows) + MAX_ZNO_LIST_LENGTH ? floor : 0
 }
 
 /** dayo z_reports.z_no is an int4: a high-water above this would push every later Z out of range (never trusted). */

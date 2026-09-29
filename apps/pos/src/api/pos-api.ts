@@ -25,7 +25,8 @@ import { shiftReport } from './shift-report'
 import { setStaffPin } from './staff'
 import { closeStockCount, getOpenStockCount, removeCountLine, saveCountLine, startStockCount } from './stock-count'
 import { stockOverview } from './stock-overview'
-import { excludeFromSync, exportSyncRow, listPriceDiffs, listSyncProblems, remapCode, remapStaff, renumberReceipt, retrySyncRow } from './sync-problems'
+import { keepShiftLocal, skipCountFloor } from './owner-escapes'
+import { acknowledgeElsewhere, closeOffCatalog, excludeFromSync, exportSyncRow, listPriceDiffs, listSyncProblems, reconfirmOwner, remapCode, remapStaff, renumberReceipt, retrySyncRow } from './sync-problems'
 import type { PosApi } from './types'
 import { cancelSale } from './void'
 
@@ -175,13 +176,19 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     // and writes the outbox through (`serial` above) — so a remedy never interleaves with a push decision on the same
     // row. A verdict of a request already on the wire meets the remedy's result, and applyVerdicts judges only rows
     // still pending (test/sync-problems.test.ts "never interleave").
-    listSyncProblems: (actorUserId) => serial(() => listSyncProblems(db, actorUserId)),
+    listSyncProblems: (actorUserId) => serial(() => listSyncProblems(db, deps, actorUserId)),
     retrySyncRow: (input) => serial(() => retrySyncRow(db, deps, input)),
     renumberReceipt: (input) => serial(() => renumberReceipt(db, deps, input)),
     remapCode: (input) => serial(() => remapCode(db, deps, input)),
     remapStaff: (input) => serial(() => remapStaff(db, deps, input)),
     excludeFromSync: (input) => serial(() => excludeFromSync(db, deps, input)),
     exportSyncRow: (input) => serial(() => exportSyncRow(db, input)),
+    // Task 14 (block 3 · spec 04 §6.4): the same serial queue as the sender — see above
+    closeOffCatalog: (input) => serial(() => closeOffCatalog(db, deps, input)),
+    acknowledgeElsewhere: (input) => serial(() => acknowledgeElsewhere(db, deps, input)),
+    reconfirmOwner: (input) => serial(() => reconfirmOwner(db, deps, input)),
+    keepShiftLocal: (input) => serial(() => keepShiftLocal(db, deps, input)),
+    skipCountFloor: (input) => serial(() => skipCountFloor(db, deps, input)),
     listPriceDiffs: (actorUserId) => serial(() => listPriceDiffs(db, actorUserId)),
     // E3: network OUTSIDE the serial queue (its reads and writes are inside) — sales keep going; own cap under 60/min
     listCentralOrdersToday: () => listCentralOrdersToday({ db, deps, serial }, { beforeRequest: e3Call }),

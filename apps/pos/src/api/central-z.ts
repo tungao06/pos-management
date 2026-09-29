@@ -4,7 +4,7 @@ import * as s from '@dayo/db-schema/sqlite'
 import { IsoReceived } from '@dayo/contracts'
 import { DAYO_AHEAD_TOLERANCE_MS, DAYO_KEYS, deleteKey, readKey, writeKey } from '../sync/state'
 import { PosError } from './errors'
-import { deviceLastZNo, readDeviceZHigh } from './z-rows'
+import { deviceLastZNo, readCentralZFloor, readDeviceZHigh } from './z-rows'
 
 /**
  * Task 13 · spec 04 §4.4 ข้อ 6 · §6.6 · §13.8 R5-1 · ruling R9 · D55: the key's last Z as dayo holds it (E1 client.last_z_no /
@@ -90,6 +90,7 @@ export async function centralContinuation(db: RemoteDb, deviceId: string): Promi
   if (central === null) return null
   if ((await readKey(db, DAYO_KEYS.lastZContinued)) === String(central.lastZNo)) return null
   if ((await readDeviceZHigh(db)) >= central.lastZNo) return null // fix round 2: this device already issued that number or later
+  if ((await readCentralZFloor(db)) > central.lastZNo) return null // Task 14 · carried item 10: a Z of this device already continued at or past it
   return central.lastZNo > (await deviceLastZNo(db, deviceId)) ? central : null
 }
 

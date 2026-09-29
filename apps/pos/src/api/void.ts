@@ -149,7 +149,9 @@ export async function cancelSale(db: RemoteDb, deps: ApiDeps, input: CancelSaleI
     if (order.excludedAt === null) {
       // created_at = the void time too: the row is never older than its bill's row (the sender reads the queue in created_at order)
       const data = { pos_order_id: order.id, voided_at: at, staff_id: actor.id, approved_by: approver.id, reason }
-      await enqueuePush(tx, { kind: 'order_void', id: order.id, data, parentKey: rowKey('order', order.id) }, at, deps.newId)
+      // spec §4.10: a bill the owner closed off-catalog is sent as its order_off_catalog row — its void waits for that one (Task 14 · carried item 3)
+      const parentKey = rowKey(order.offCatalogAt !== null ? 'order_off_catalog' : 'order', order.id)
+      await enqueuePush(tx, { kind: 'order_void', id: order.id, data, parentKey }, at, deps.newId)
     }
   })
   deps.afterWrite?.()

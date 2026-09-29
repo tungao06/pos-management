@@ -64,7 +64,8 @@ describe('owner remedies (spec 04 §6.4)', () => {
   })
   it('lists the problem with the allowed buttons only', async () => {
     const { p } = await rejectedBill('CONFLICT', 'เลขใบเสร็จ A-000001 ถูกใช้แล้ว')
-    expect(p).toMatchObject({ kind: 'order', receiptNo: 'A-000001', reason: 'CONFLICT', remedies: ['RETRY', 'RENUMBER'] })
+    // Task 14 (plan 09 · spec §6.4 review item 2): every dead order row but PARENT_REJECTED also ends with EXCLUDE — this block-2 mock advertises no order_off_catalog, so no CLOSE_OFF_CATALOG (ruling P2)
+    expect(p).toMatchObject({ kind: 'order', receiptNo: 'A-000001', reason: 'CONFLICT', remedies: ['RETRY', 'RENUMBER', 'EXCLUDE'] })
   })
   it('CONFLICT → a new receipt number, same key, then accepted', async () => {
     const { t, ctx, r, p } = await rejectedBill('CONFLICT', COLLISION)
@@ -148,13 +149,15 @@ describe('owner remedies (spec 04 §6.4)', () => {
   })
   it('a payment remap keeps the kind of money collected: a QR bill cannot become cash', async () => {
     const { t, ctx, p } = await rejectedBill('UNKNOWN_CODE', UNKNOWN.payment('old_qr'), (d) => { d.payment = 'old_qr' })
-    try { await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'payment', code: 'cash' } }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('BAD_INPUT') }
+    // Task 14 (§4.10 การคิดซ้ำ ข้อ 7 · plan 09 Interfaces): a payment that would change the side of the money is REMEDY_NOT_ALLOWED (was BAD_INPUT)
+    try { await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'payment', code: 'cash' } }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('REMEDY_NOT_ALLOWED') }
     await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'payment', code: 'qr' } })
     expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
   })
   it('CONFLICT because this key was already stored with other data: RETRY only, no new receipt number (fix round 1 item 4)', async () => {
     const { t, p } = await rejectedBill('CONFLICT', 'key นี้เคยบันทึกสำเร็จด้วยข้อมูลอื่นแล้ว')
-    expect(p.remedies).toEqual(['RETRY'])
+    // Task 14 (plan 09 · spec §6.4 review item 2): every dead order row but PARENT_REJECTED also ends with EXCLUDE — this block-2 mock advertises no order_off_catalog, so no CLOSE_OFF_CATALOG (ruling P2)
+    expect(p.remedies).toEqual(['RETRY', 'EXCLUDE'])
     try { await t.api.renumberReceipt({ ...owner, outboxId: p.outboxId }); expect.unreachable() } catch (e) { expect(posErrorCode(e)).toBe('REMEDY_NOT_ALLOWED') }
   })
   it('UNKNOWN_STAFF on a void\'s approver: the approver is replaced, the seller stays', async () => {
@@ -197,7 +200,8 @@ describe('owner remedies (spec 04 §6.4)', () => {
     const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     await t.db.update(s.outbox).set({ status: 'dead', deadAt: t.clock.now(), attempts: 3, lastError: encodeLastError('REQUEST_FAILED', 'HTTP 500') }).where(eq(s.outbox.idempotencyKey, `order:${r.orderId}`))
     const [p] = await t.api.listSyncProblems(STAFF.TungAo)
-    expect(p).toMatchObject({ kind: 'order', orderId: r.orderId, reason: 'REQUEST_FAILED', detail: 'HTTP 500', remedies: ['RETRY'], children: [] })
+    // Task 14 (plan 09 · spec §6.4 review item 2): every dead order row but PARENT_REJECTED also ends with EXCLUDE — this block-2 mock advertises no order_off_catalog, so no CLOSE_OFF_CATALOG (ruling P2)
+    expect(p).toMatchObject({ kind: 'order', orderId: r.orderId, reason: 'REQUEST_FAILED', detail: 'HTTP 500', remedies: ['RETRY', 'EXCLUDE'], children: [] })
     await t.api.retrySyncRow({ ...owner, outboxId: p!.outboxId })
     expect(await t.db.select().from(s.outbox).where(eq(s.outbox.id, p!.outboxId)).get()).toMatchObject({ status: 'pending', attempts: 0 })
   })
@@ -266,20 +270,21 @@ describe('remapCode follows dayo\'s own UNKNOWN_CODE detail, not the tablet\'s c
     await patchRow(t, `order:${r.orderId}`, retiredMenu)
     await pushOnce(ctx) // judged like dayo: UNKNOWN_CODE 'ไม่พบเมนู "Retired Menu"'
     const [p] = await t.api.listSyncProblems(STAFF.TungAo)
-    expect(p).toMatchObject({ reason: 'UNKNOWN_CODE', detail: UNKNOWN.menu('Retired Menu'), remedies: ['RETRY', 'REMAP_CODE'] })
+    // Task 14 (plan 09 · spec §6.4 review item 2): every dead order row but PARENT_REJECTED also ends with EXCLUDE — this block-2 mock advertises no order_off_catalog, so no CLOSE_OFF_CATALOG (ruling P2)
+    expect(p).toMatchObject({ reason: 'UNKNOWN_CODE', detail: UNKNOWN.menu('Retired Menu'), remedies: ['RETRY', 'REMAP_CODE', 'EXCLUDE'] })
     await t.api.remapCode({ ...owner, outboxId: p!.outboxId, target: { field: 'line', lineIndex: 0, code: 'Thai Tea', size: '16 oz', sweetness: '50%' } })
     expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
   })
   it('a detail the tablet does not recognise names nothing: RETRY only, and remapCode is refused', async () => {
     for (const detail of ['x', 'not_found: ไม่พบขนาดแก้วนี้ในร้านค่ะ', UNKNOWN.oat /* a remap cannot change the milk */, 'ไม่พบเมนู "Retired Me']) {
       const { t, p } = await rejectedSale(detail, { patch: retiredMenu })
-      expect(p.remedies).toEqual(['RETRY'])
+      expect(p.remedies).toEqual(['RETRY', 'EXCLUDE']) // Task 14: EXCLUDE last on every dead order row (review item 2)
       await refused(() => t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'line', lineIndex: 0, code: 'Thai Tea', size: '16 oz', sweetness: '50%' } }), 'REMEDY_NOT_ALLOWED')
     }
   })
   it('a detail that names a value the row does not carry names nothing: RETRY only', async () => {
     const { p } = await rejectedSale(UNKNOWN.channel('grab')) // the row's channel is 'store'
-    expect(p.remedies).toEqual(['RETRY'])
+    expect(p.remedies).toEqual(['RETRY', 'EXCLUDE']) // Task 14: EXCLUDE last on every dead order row (review item 2)
   })
   it('the disabled-channel gap: dayo rejected a LINE, so a channel missing from the latest catalog (disabled in dayo, still accepted there) stays as it is', async () => {
     const { t, p } = await rejectedSale(UNKNOWN.menu('Retired Menu'), { patch: (d) => { retiredMenu(d); closedChannel(d) } })
@@ -291,7 +296,7 @@ describe('remapCode follows dayo\'s own UNKNOWN_CODE detail, not the tablet\'s c
   })
   it('a stale local catalog no longer blocks the fix: dayo named a channel the tablet still lists — it may move, never to the same code', async () => {
     const { t, ctx, p } = await rejectedSale(UNKNOWN.channel('store'))
-    expect(p.remedies).toEqual(['RETRY', 'REMAP_CODE'])
+    expect(p.remedies).toEqual(['RETRY', 'REMAP_CODE', 'EXCLUDE']) // Task 14: EXCLUDE last on every dead order row (review item 2)
     await refused(() => t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'channel', code: 'store' } }), 'BAD_INPUT')
     await refused(() => t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'line', lineIndex: 0, code: 'Thai Tea', size: '16 oz', sweetness: '50%' } }), 'BAD_INPUT')
     await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'channel', code: 'grab' } })
@@ -327,7 +332,7 @@ describe('remapCode follows dayo\'s own UNKNOWN_CODE detail, not the tablet\'s c
   })
   it('dayo refused the payment "cash" itself: a cash bill has no remap target — RETRY only, with a hint to restore cash on the dayo web (fix round: code Low 2)', async () => {
     const { t, p } = await rejectedSale(UNKNOWN.payment('cash'), { payment: { method: 'CASH', tenderedSatang: 5_000 } })
-    expect(p.remedies).toEqual(['RETRY'])
+    expect(p.remedies).toEqual(['RETRY', 'EXCLUDE']) // Task 14: EXCLUDE last on every dead order row (review item 2)
     expect(p.remap).toBeNull()
     expect(p.remapHint).toMatch(/เงินสด.*cash.*เว็บ.*ลองใหม่/su)
     try {
@@ -357,7 +362,8 @@ describe('remapCode follows dayo\'s own UNKNOWN_CODE detail, not the tablet\'s c
   it('a cash bill cannot move to a method whose name merely mentions cash ("ไม่ใช่เงินสด") — only to \'cash\' (item 1)', async () => {
     const { t, p } = await rejectedSale(UNKNOWN.payment('old_cash'), { payment: { method: 'CASH', tenderedSatang: 5_000 }, patch: (d) => { d.payment = 'old_cash' } })
     await addPaymentMethods(t, [{ code: 'not_cash', name: 'ไม่ใช่เงินสด', aliases: ['ไม่ใช่เงินสด', 'not cash'] }])
-    for (const code of ['not_cash', 'qr']) await refused(() => t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'payment', code } }), 'BAD_INPUT')
+    // Task 14 (§4.10 ข้อ 7): leaving the cash side is REMEDY_NOT_ALLOWED (was BAD_INPUT)
+    for (const code of ['not_cash', 'qr']) await refused(() => t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'payment', code } }), 'REMEDY_NOT_ALLOWED')
     await t.api.remapCode({ ...owner, outboxId: p.outboxId, target: { field: 'payment', code: 'cash' } })
     expect((await rowOf(t, p.outboxId)).rowJson).toMatchObject({ payment: 'cash' })
   })

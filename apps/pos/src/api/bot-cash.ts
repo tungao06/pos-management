@@ -7,7 +7,7 @@ import { apiBlocked, rateLimitLeft, readDayoConfig, recordDayoFailure, type Sync
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from '../sync/dayo-client'
 import { DAYO_AHEAD_TOLERANCE_MS, DAYO_KEYS, estimatedServerMs, extendRateLimit, MAX_BACKOFF_WAIT_MS, readKey, writeKey } from '../sync/state'
 import { requireDevice } from './bootstrap'
-import { assertCountAfterCentralZ, centralWindowStart } from './central-z'
+import { assertCountAfterCentralZ, centralWindowStart, readCentralZ } from './central-z'
 import { PosError } from './errors'
 import { CLOCK_AHEAD_COUNT } from './rows'
 import type { BotCashDto } from './types'
@@ -32,7 +32,12 @@ export async function botWindowFor(db: RemoteDb, shift: { id: string; deviceId: 
   const prev = await db.select({ c: s.shift.countedAt }).from(s.shift)
     .where(and(eq(s.shift.deviceId, shift.deviceId), isNotNull(s.shift.countedAt), lt(s.shift.countedAt, shift.countedAt)))
     .orderBy(desc(s.shift.countedAt)).limit(1).get()
-  return { after: prev?.c ?? thaiMidnightUtc(shift.businessDate), until: shift.countedAt }
+  const after = prev?.c ?? thaiMidnightUtc(shift.businessDate)
+  // Task 14 (9a): a count taken before dayo's last Z of this key (COUNT_BEFORE_CENTRAL_Z) whose shift the owner kept local
+  // is not a window start — the next window never reaches back into that Z (bot cash counted twice); it starts at its until
+  const cz = await readCentralZ(db)
+  if (cz !== null && Date.parse(cz.lastZUntil) > Date.parse(after) && Date.parse(cz.lastZUntil) < Date.parse(shift.countedAt)) return { after: cz.lastZUntil, until: shift.countedAt }
+  return { after, until: shift.countedAt }
 }
 
 /** Review item 9: only a network failure is OFFLINE (the screen then offers the offline count); everything else says what it is. */
