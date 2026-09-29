@@ -1,9 +1,9 @@
 {
   "name": "err-404-unknown-path",
-  "spec": "04 §4.1 ทุกคำตอบใต้ /api/v1/* มีหัว CORS — รวม path ที่ไม่มี (route กันตก)",
+  "spec": "04 §4.1 ทุกคำตอบใต้ /api/v1/* มีหัว CORS — รวม path ที่ไม่มี (route กันตก) · path ที่ dayo ไม่มีจริง (shift-cash มีแล้วตั้งแต่ 0067 — แผน 09 Task 7)",
   "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
   "rpc": {},
-  "request": { "method": "GET", "path": "/api/v1/pos/shift-cash?after=2026-09-25T00:00:00.000Z", "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001" } },
+  "request": { "method": "GET", "path": "/api/v1/pos/no-such-route?after=2026-09-25T00:00:00.000Z", "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001" } },
   "response": {
     "status": 404,
     "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },

@@ -1,0 +1,67 @@
+{
+  "name": "e2-shift-close-z-no-taken",
+  "spec": "04 §4.10 ลำดับ z_no ข้อ 1: เลขใบปิดกะซ้ำกับใบที่ key นี้มีแล้ว (รวมใบที่ถูกกัก) → rejected CONFLICT \"z_no_taken:\" + S5 (0066:524-527) · สถานะก่อน: e2-shift-close-accepted (Z เลข 1) + กะ 5a5a…0002 เปิด 12:06Z นับ 12:08Z ฿500",
+  "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
+  "rpc": {
+    "api_authenticate": {
+      "ok": true,
+      "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c",
+      "shop_id": "11111111-2222-4333-8444-555555555555",
+      "name": "แท็บเล็ตขาย 1",
+      "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write", "shift:write"]
+    },
+    "api_pos_push": "@data"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/pos/push",
+    "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001", "Content-Type": "application/json" },
+    "body": {
+      "device_time": "2026-09-25T12:10:00.000Z",
+      "rows": [
+        {
+          "key": "shift_close:5a5a5a5a-0000-4000-8000-000000000002",
+          "kind": "shift_close",
+          "data": {
+            "shift_id": "5a5a5a5a-0000-4000-8000-000000000002",
+            "count_id": "7c7c7c7c-0000-4000-8000-000000000002",
+            "closed_by": "7d0c2f6e-3b1a-4c55-9a0e-1f2b3c4d5e6f",
+            "closed_at": "2026-09-25T12:09:00.000Z",
+            "variance_reason": null,
+            "z_report": {
+              "z_no": 1,
+              "hash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+              "prev_hash": null,
+              "variance_alert": 20,
+              "chain_warning": false,
+              "cash": { "opening_float": 500, "pos_cash_sales": 0, "void_refunds": 0, "paid_in": 0, "paid_out": 0, "drops": 0, "drawer_expenses": 0, "bot_cash": 0 },
+              "counted": 500,
+              "bot_window": { "after": "2026-09-25T12:00:00.000Z", "until": "2026-09-25T12:08:00.000Z" },
+              "movement_ids": [],
+              "bot_bills": [],
+              "pos_bills": []
+            }
+          }
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
+    "body": {
+      "ok": true,
+      "data": {
+        "server_time": "2026-09-25T12:10:00.410+00:00",
+        "results": [
+          {
+            "key": "shift_close:5a5a5a5a-0000-4000-8000-000000000002",
+            "status": "rejected",
+            "reason": "CONFLICT",
+            "detail": "z_no_taken: เลขใบปิดกะนี้ถูกใช้แล้วในเครื่องนี้"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -103,7 +103,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     const tooBig = 'invalid: body ต้องเป็น JSON ไม่เกิน 256 KB'
     if (isPush && Number(req.headers.get('content-length') ?? '0') > MAX_PUSH_BODY_BYTES) return err(422, 'DY422', tooBig, h) // before the key (push route.ts)
     if (s.mode === 'unauthorized' || req.headers.get('authorization') !== `Bearer ${s.apiKey}`) return err(401, 'DY401', 'invalid_key: API key ไม่ถูกต้องหรือถูกปิดใช้งาน', h)
-    // E4 exists only on a block 3 dayo (0067): the block-2 mock keeps answering its path 404 like block-2 dayo (err-404-unknown-path)
+    // E4 exists only on a block 3 dayo (0067): the block-2 mock keeps answering its path 404 like block-2 dayo (fixture e4-shift-cash)
     const isShiftCash = s.block3 && req.method === 'GET' && url.pathname === '/api/v1/pos/shift-cash'
     const required = req.method === 'GET' && url.pathname === '/api/v1/pos/catalog' ? E1_SCOPES
       : isPush ? ['orders:write'] : (req.method === 'GET' && url.pathname === '/api/v1/orders') || isShiftCash ? ['orders:read'] : []
