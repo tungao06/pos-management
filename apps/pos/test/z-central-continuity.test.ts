@@ -231,11 +231,30 @@ describe('Task 13 fix round 1 — a continuation is used once; a count before da
     const rows = await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'shift_close')).all()
     expect(ShiftCloseRowData.parse(rows[1]!.rowJson).z_report).toMatchObject({ z_no: 43, prev_hash: z42.hash })
   })
-  it('even with Z 42\'s own number unreadable, the used continuation does not come back (the marker)', async () => {
+  it('even with Z 42\'s own number unreadable, the used continuation does not come back (the marker) and the lenient path goes on at 43, not 2 (fix round 2 b)', async () => {
     const { t, z42 } = await afterZ42()
     breakZ(t, '$.zNo', 'x')
-    const e = await expectCode((await countedCentral(t))(false), 'Z_CHAIN_BROKEN')
+    const confirm = await countedCentral(t)
+    const e = await expectCode(confirm(false), 'Z_CHAIN_BROKEN')
     expect(String(e)).toContain(z42.shiftId)
+    expect((await confirm(true)).z?.snapshot).toMatchObject({ zNo: 43, botWindow: { after: z42.snapshot!.botWindow!.until }, chainWarning: { brokenShiftId: z42.shiftId } })
+  })
+  it('Z 42 unsent, replaceApiKey (dayo still at 41) clears the marker, then Z 42\'s number becomes unreadable: the high-water keeps R9 shut — Z_CHAIN_BROKEN names Z 42\'s shift, the next Z is 43, its window starts at 42\'s until (fix round 2 a)', async () => {
+    const { t, z42 } = await afterZ42()
+    await t.api.replaceApiKey({ ...target, approverUserId: STAFF.TungAo, approverPin: '1111' })
+    expect([await readKey(t.db, DAYO_KEYS.lastZNo), await readKey(t.db, DAYO_KEYS.lastZContinued), await readKey(t.db, DAYO_KEYS.deviceZHigh), await readKey(t.db, DAYO_KEYS.centralZFloor)]).toEqual(['41', null, '42', '42'])
+    breakZ(t, '$.zNo', 'x')
+    const confirm = await countedCentral(t)
+    expect((await t.api.countSummary((await t.api.bootstrap()).countingShift!.shiftId)).bot).toMatchObject({ after: z42.snapshot!.botWindow!.until })
+    const e = await expectCode(confirm(false), 'Z_CHAIN_BROKEN')
+    expect(String(e)).toContain(z42.shiftId)
+    expect(String(e)).not.toContain('central')
+    const z43 = (await confirm(true)).z!
+    expect(z43.snapshot).toMatchObject({ zNo: 43, botWindow: { after: z42.snapshot!.botWindow!.until }, chainWarning: { brokenShiftId: z42.shiftId } })
+    expect(z43.snapshot!.chainWarning).not.toHaveProperty('centralLastZ')
+    const rows = await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'shift_close')).all()
+    expect(ShiftCloseRowData.parse(rows[1]!.rowJson).z_report).toMatchObject({ z_no: 43, prev_hash: z42.hash })
+    expect(await readKey(t.db, DAYO_KEYS.deviceZHigh)).toBe('43')
   })
   it('the marker is cleared by a new E1 read (replaceApiKey, dayo still at 41), yet the rows keep the path closed: 43 again', async () => {
     const { t, z42 } = await afterZ42()

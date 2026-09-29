@@ -42,6 +42,12 @@ export const DAYO_KEYS = {
   lastZHash: 'dayo.last_z_hash',
   lastZUntil: 'dayo.last_z_until',
   lastZContinued: 'dayo.last_z_continued', // fix round 1: last_z_no a Z of this device has already continued (used once)
+  // fix round 2: the highest zNo this device ever issued — written by writeZ in the Z's own transaction, NEVER cleared (not
+  // by storeCentralZ, replaceApiKey or recoverOwner): no hand-edit or unreadable Z row can lower this device's last Z below it
+  deviceZHigh: 'dayo.device_z_high',
+  // fix round 2: the zNo of the Z that continued dayo's numbering (R9) — never cleared; floors the lenient numbering of close.ts
+  // (D54's reuse of a deleted Z's number stays for the device's own chain, never below a number continued from dayo)
+  centralZFloor: 'dayo.central_z_floor',
 } as const
 export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled' | 'bad_base_url'
 

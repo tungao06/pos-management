@@ -2,6 +2,7 @@ import { desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { recomputeZChainLenient, zReportHash, type LenientZEntry, type SalesSummary } from '@dayo/domain'
+import { DAYO_KEYS, readKey, writeKey } from '../sync/state'
 import type { StoredZSnapshot, ZReportDto } from './types'
 
 /*
@@ -139,8 +140,39 @@ export function expectedZNoGap(rows: readonly ZRawRow[]): number {
  * writeZ name the broken row) — never lower it back under dayo's last Z.
  */
 export async function deviceLastZNo(db: RemoteDb, deviceId: string): Promise<number> {
+  const high = await readDeviceZHigh(db) // fix round 2: never below the highest number this device issued
   const rows = await deviceZRows(db, deviceId)
-  if (rows.length === 0) return 0
+  if (rows.length === 0) return high
   const lenient = recomputeZChainLenient([...rows].reverse().map(toLenientEntry))
-  return Math.max(lenient.maxStoredZNo, rows.length + expectedZNoGap(rows))
+  return Math.max(high, lenient.maxStoredZNo, rows.length + expectedZNoGap(rows))
+}
+
+/** dayo z_reports.z_no is an int4: a high-water above this would push every later Z out of range (never trusted). */
+const MAX_TRUSTED_Z_HIGH = 2_147_483_646
+
+/**
+ * Task 13 fix round 2 (security M): the highest zNo this device ever issued (sync_state dayo.device_z_high), or 0.
+ * Unlike the Z rows it survives a hand-edit of snapshot_json and is never cleared by a new E1 read, so a Z that
+ * continued dayo's numbering keeps the R9 path shut for good and floors the lenient numbering (close.ts). A value that
+ * is not a whole number in 1..int4−1 (a hand-edited sync_state) is ignored — it could otherwise block every Z.
+ */
+export async function readDeviceZHigh(db: RemoteDb): Promise<number> {
+  return readZNoKey(db, DAYO_KEYS.deviceZHigh)
+}
+
+/** Task 13 fix round 2: the zNo of the Z that continued dayo's numbering (sync_state dayo.central_z_floor), or 0 — same rules. */
+export async function readCentralZFloor(db: RemoteDb): Promise<number> {
+  return readZNoKey(db, DAYO_KEYS.centralZFloor)
+}
+
+async function readZNoKey(db: RemoteDb, key: string): Promise<number> {
+  const raw = await readKey(db, key)
+  if (raw === null || !/^[1-9][0-9]{0,9}$/.test(raw)) return 0
+  const n = Number(raw)
+  return n <= MAX_TRUSTED_Z_HIGH ? n : 0
+}
+
+/** In writeZ's transaction: raise the high-water to `zNo` (never lower it). */
+export async function raiseDeviceZHigh(tx: RemoteDb, zNo: number): Promise<void> {
+  if (zNo > (await readDeviceZHigh(tx))) await writeKey(tx, DAYO_KEYS.deviceZHigh, String(zNo))
 }

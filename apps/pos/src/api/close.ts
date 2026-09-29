@@ -15,7 +15,7 @@ import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { assertNoFarAheadCount, builtRow, notBefore } from './rows'
 import { PAYMENT_CODE, type CountSummaryDto, type StoredZSnapshot, type UserDto, type ZReportDto, type ZReportSummaryDto, type ZSettle } from './types'
-import { deviceZRows, expectedZNoGap, safeBoolOrNull, safeIntOrNull, safeStrOrNull, toLenientEntry, toZReportDto, tryParseJson, type ZRawRow } from './z-rows'
+import { deviceZRows, expectedZNoGap, raiseDeviceZHigh, readCentralZFloor, safeBoolOrNull, safeIntOrNull, safeStrOrNull, toLenientEntry, toZReportDto, tryParseJson, type ZRawRow } from './z-rows'
 
 /** audit_log action written when an owner acknowledges a previous Z that fails its hash (Q3b-11 · D53). */
 export const Z_CHAIN_ACK_ACTION = 'z_chain_broken_ack'
@@ -67,9 +67,10 @@ async function deletedShiftIds(db: RemoteDb, deviceId: string, rows: readonly ZR
  * `writeZ` records `zNoGap` = the new Z's zNo − (row count + 1) = this − row count, which is >= `expectedGap`.
  * Falls back to the row count if the sum is not a safe integer (only a forged `zNoGap` near 2^53 gets there).
  */
-function lenientPrevZNo(rows: readonly ZRawRow[], expectedGap: number): number {
+function lenientPrevZNo(rows: readonly ZRawRow[], expectedGap: number, floor: number): number {
   const carried = rows.length + expectedGap
-  const base = Number.isSafeInteger(carried + 1) ? carried : rows.length
+  // fix round 2: never below the Z that continued dayo's numbering (D54's reuse of a deleted Z's number stays above it)
+  const base = Math.max(Number.isSafeInteger(carried + 1) ? carried : rows.length, floor)
   const stored = rows[0] !== undefined ? toLenientEntry(rows[0]).zNo : null
   return stored !== null && stored <= rows.length + MAX_ZNO_LIST_LENGTH ? Math.max(base, stored) : base
 }
@@ -188,6 +189,7 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
   const lastHealthy = last !== undefined && lastDto !== null && lastDto.hashOk && lastSnapshot !== null && lastGrand !== null && lastGrand >= 0
   const lastZNo = lastSnapshot !== null ? safeIntOrNull(lastSnapshot.zNo) : null
   const expectedGap = expectedZNoGap(rows)
+  const centralFloor = await readCentralZFloor(tx) // fix round 2: the zNo that continued dayo's numbering (0 = never)
   const unacknowledgedZNoGap = lastHealthy && (lastZNo === null || lastZNo - rows.length !== expectedGap)
 
   let prev: { zNo: number; grandTotalSatang: number } | null = null
@@ -235,8 +237,9 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
       // Q3b-18 · D55: a trustworthy last Z chains from ITS OWN zNo/grand (frozen truthfully, the missing Z's net
       // included); only an untrustworthy one falls back to the lenient recompute (Q3b-16 · D54). A last Z claiming fewer
       // Zs than there are rows (review R4-1) goes the lenient way too — its gap would be negative forever.
-      const trustLast = lastHealthy && lastSnapshot !== null && lastZNo !== null && lastZNo >= rows.length
-      prev = trustLast ? { zNo: lastZNo, grandTotalSatang: lastSnapshot.grandTotalSatang } : { zNo: lenientPrevZNo(rows, expectedGap), grandTotalSatang: lenient.grandTotalSatang }
+      // fix round 2: a last Z below the number continued from dayo is not trusted either — that number was used
+      const trustLast = lastHealthy && lastSnapshot !== null && lastZNo !== null && lastZNo >= rows.length && lastZNo >= centralFloor
+      prev = trustLast ? { zNo: lastZNo, grandTotalSatang: lastSnapshot.grandTotalSatang } : { zNo: lenientPrevZNo(rows, expectedGap, centralFloor), grandTotalSatang: lenient.grandTotalSatang }
       const storedGrand = trustLast ? lastGrand : last !== undefined ? safeIntOrNull((tryParseJson(last.snapshotText) as { grandTotalSatang?: unknown } | undefined)?.grandTotalSatang) : null
       chainWarning = {
         brokenShiftId: deletedIds[0] ?? last!.shiftId,
@@ -293,6 +296,7 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
   // z_report is append-only (trigger) and unique per shift: a second Z of the same shift cannot happen.
   const zRow = { id: deps.newId(), shiftId: shift.id, snapshotJson: z.snapshot, hash: z.hash, createdAt: at } satisfies typeof s.zReport.$inferInsert
   await tx.insert(s.zReport).values(zRow)
+  await raiseDeviceZHigh(tx, z.snapshot.zNo) // fix round 2: the high-water, in the Z's own transaction
   if (shift.syncMode === 'central') {
     const posBills = await zPosBills(tx, shift.id)
     const movementIds = (await tx.select({ id: s.cashMovement.id }).from(s.cashMovement).where(eq(s.cashMovement.shiftId, shift.id)).orderBy(asc(s.cashMovement.createdAt), asc(s.cashMovement.id)).all()).map((m) => m.id)
