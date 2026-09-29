@@ -105,6 +105,53 @@ describe('sync scheduler (spec 04 §6.2)', () => {
     expect(pushCalls()).toBe(2)
     expect((await outboxRow()).status).toBe('sent')
   })
+  // Task 17 fix round 2 item 2a (L): the scope-wait clear shares the exact same 30 s token as the ordinary
+  // failure-backoff clear (fix round 1 item 3) — a second manual press right after the first must not clear it
+  // again either, same as the pre-existing "ส่งตอนนี้ clears the failure backoff at most once per 30 s" test above.
+  it('a second manual press within 30 s does not clear a scope-wait row again (shared N4 token, Task 17 fix round 2 item 2a)', async () => {
+    const t = await openConnectedApi({ block3: true, openShift: false })
+    t.mock.setScopes(['catalog:read', 'staff:read', 'orders:read', 'orders:write']) // no shift:write, kept missing throughout
+    await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    const pushCalls = () => t.mock.requests().filter((r) => r.path === '/api/v1/pos/push').length
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn(), monoMs: () => Date.parse(t.clock.now()) })
+
+    await sch.runNow() // first attempt: nothing to clear yet — parked as scope-wait, no token spent
+    expect(pushCalls()).toBe(1)
+    await sch.runNow() // manual again, immediately: the FIRST real clear (token spent) — resent, FORBIDDEN scope: again
+    expect(pushCalls()).toBe(2)
+    await sch.runNow() // manual again within 30 s: the token is on cooldown — not cleared, no new request
+    expect(pushCalls()).toBe(2)
+
+    t.clock.advanceMs(MANUAL_CLEAR_GAP_MS)
+    await sch.runNow() // 30 s later: the token is available again
+    expect(pushCalls()).toBe(3)
+  })
+  // Task 17 fix round 2 item 2b (L): `clearScopeWait` only ever touches rows whose `lastError.prefix` is literally
+  // `scope:` (apps/pos/src/sync/push.ts) — a manual wake that DOES have a real scope-wait row to clear (so
+  // `clearScopeWait` actually runs) must still leave a CLOCK_AHEAD row and an ordinary deferred/backoff row
+  // exactly where they were, never resending either early.
+  it('a manual wake that clears a real scope-wait row still leaves a CLOCK_AHEAD row and an ordinary deferred/backoff row untouched (Task 17 fix round 2 item 2b)', async () => {
+    const t = await openConnectedApi({ block3: true, openShift: false })
+    t.mock.setScopes(['catalog:read', 'staff:read', 'orders:read', 'orders:write']) // no shift:write — the shift row becomes a real scope-wait
+    await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    // sellCode never reads t.shift — same cast as push-block3.test.ts's own sellOne (t here has shift: null
+    // statically, since openShift:false, even though `t.api.openShift` above opened one for real).
+    const clockAhead = await sellCode(t as unknown as Parameters<typeof sellCode>[0], [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    const busy = await sellCode(t as unknown as Parameters<typeof sellCode>[0], [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.override({ match: { key: `order:${clockAhead.orderId}` }, verdict: { status: 'deferred', reason: 'CLOCK_AHEAD', detail: 'x' }, times: 1 })
+    t.mock.override({ match: { key: `order:${busy.orderId}` }, verdict: { status: 'deferred', reason: 'BUSY', detail: 'lock' }, times: 1 })
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+
+    await sch.runNow() // first attempt: shift row parked as scope-wait; both bills deferred with their own backoff
+    const rowOf = async (key: string) => (await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get())!
+    const before = { clockAhead: (await rowOf(`order:${clockAhead.orderId}`)).nextAttemptAt, busy: (await rowOf(`order:${busy.orderId}`)).nextAttemptAt }
+    expect(before.clockAhead).not.toBeNull()
+    expect(before.busy).not.toBeNull()
+
+    await sch.runNow() // manual again: a REAL scope-wait row exists now — clearScopeWait runs — but only for it
+    const after = { clockAhead: (await rowOf(`order:${clockAhead.orderId}`)).nextAttemptAt, busy: (await rowOf(`order:${busy.orderId}`)).nextAttemptAt }
+    expect(after).toEqual(before) // neither bill's own wait was touched
+  })
   it('online wakes it at once; a second wake during a cycle runs one more cycle, never two in parallel', async () => {
     const t = await openConnectedApi()
     const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })

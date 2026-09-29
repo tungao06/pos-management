@@ -213,7 +213,10 @@ export function IssueZGate({ shiftId }: { shiftId: string }): JSX.Element {
   if (boot.data === undefined && lockedForThis === null) return <main className="page">{TH.loading}</main>
   const found = waiting ?? lockedForThis
   if (found === null) return <main className="page">{TH.errZNotFound}</main>
-  return <IssueZScreen shiftId={shiftId} countedSatang={found.countedSatang} />
+  // fix round 2 item 1 (M): `IssueZScreen`'s OWN state (issued, error, zBlockedPermanently, zClockAheadBlocked,
+  // chainBroken, skipResult, botCashError, …) is not `IssueZGate`'s to reset — without `key`, moving A→B (no
+  // remount) kept every one of those flags from A showing under B. `key={shiftId}` forces a fresh mount per shift.
+  return <IssueZScreen key={shiftId} shiftId={shiftId} countedSatang={found.countedSatang} />
 }
 function IssueZRoute(): JSX.Element {
   const { shiftId } = useParams({ from: '/shift/z/$shiftId' })
