@@ -1,18 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate, useParams } from '@tanstack/react-router'
+import { useNavigate } from '@tanstack/react-router'
 import type { JSX, ReactNode } from 'react'
 import { useApi } from '../app/api-context'
 import { useBootstrap, zKey } from '../app/queries'
 import { errorMessage } from '../ui/errors'
-import { formatBaht } from '../ui/format'
+import { formatBaht, formatBahtFull } from '../ui/format'
 import { TH } from '../ui/th'
 import { DrawerTable, QrTable, SalesTable, VoidList } from './ShiftFigures'
 
 const DATE_TIME = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' })
+const TIME = new Intl.DateTimeFormat('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' })
 
-/** A frozen Z report exactly as stored (spec §4.8) — shown on screen, never recomputed (Q3b-5 · D52). */
-export function ZReportScreen(): JSX.Element {
-  const { shiftId } = useParams({ from: '/z/$shiftId' })
+/** A frozen Z report exactly as stored (spec §4.8) — shown on screen, never recomputed (Q3b-5 · D52). `shiftId` is a
+ * prop (not `useParams` here) so the screen renders the same way under a real route or a bare test render — the
+ * route (`router.tsx`) reads its own `$shiftId` param and passes it down. */
+export function ZReportScreen({ shiftId }: { shiftId: string }): JSX.Element {
   const api = useApi()
   const navigate = useNavigate()
   const boot = useBootstrap()
@@ -66,8 +68,10 @@ export function ZReportScreen(): JSX.Element {
     )
   }
   const snap = z.data.snapshot
+  const botBills = snap.botBills ?? []
+  const centralLastZ = snap.chainWarning?.brokenShiftId === 'central' ? snap.chainWarning.centralLastZ ?? null : null
   return (
-    <main className="page">
+    <main className="page" data-testid="z-report">
       <h1>
         {TH.zTitle} · {snap.businessDate}
         {snap.openedQuick && <span className="badge"> · {TH.quickOpenBadge}</span>}
@@ -80,6 +84,9 @@ export function ZReportScreen(): JSX.Element {
         <p role="alert" className="error" data-testid="z-chain-warning">
           {TH.zChainWarning}
         </p>
+      )}
+      {centralLastZ !== null && (
+        <p data-testid="z-central-continued">{TH.zCentralContinued(centralLastZ.zNo)}</p>
       )}
       {backupDueBlock}
       <SalesTable sales={snap.sales} p="z" />
@@ -116,6 +123,23 @@ export function ZReportScreen(): JSX.Element {
         </tbody>
       </table>
       <VoidList voids={snap.voids} p="z" />
+      {snap.botWindow != null && (
+        <p className="badge" data-testid="z-bot-window">
+          {TH.zBotWindow(TIME.format(new Date(snap.botWindow.after)), TIME.format(new Date(snap.botWindow.until)))}
+        </p>
+      )}
+      {botBills.length > 0 && (
+        <section>
+          <h2>{TH.countBotCash(botBills.length)}</h2>
+          <ul className="list">
+            {botBills.map((b) => (
+              <li key={b.orderNo} data-testid={`z-bot-bill-${b.orderNo}`}>
+                {b.orderNo} · {formatBahtFull(b.totalSatang)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {actions}
     </main>
   )

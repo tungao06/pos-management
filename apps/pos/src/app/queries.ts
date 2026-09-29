@@ -9,6 +9,9 @@ export const orderKey = (orderId: string) => ['order', orderId] as const
 export const zListKey = ['z-list'] as const
 export const zKey = (shiftId: string) => ['z', shiftId] as const
 export const shiftReportKey = ['shift-report'] as const
+/** D101 · block 3 count/Z screens (Task 15). */
+export const countSummaryKey = (shiftId: string) => ['count-summary', shiftId] as const
+export const issueZKey = (shiftId: string) => ['issue-z', shiftId] as const
 export const stockKey = ['stock'] as const
 export const stockCountKey = ['stock-count'] as const
 export const centralOrdersKey = ['central-orders'] as const

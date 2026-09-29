@@ -58,3 +58,20 @@ export function parseQtyInput(text: string): number | null {
   if (!m) return null
   return Number(m[1]) * 1000 + Number((m[2] ?? '').padEnd(3, '0'))
 }
+
+const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+
+/** 'YYYY-MM-DD' → "25 ก.ย. 2569" (D101 zWaitingBanner) — day · Thai month short · พ.ศ. (ค.ศ. + 543), no time zone
+ * math: a business date is already a plain calendar date, never an instant. */
+export function formatThaiDate(ymd: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd)
+  if (!m) throw new RangeError(`formatThaiDate: not a YYYY-MM-DD date: ${ymd}`)
+  const y = m[1]!
+  const mo = m[2]!
+  const d = m[3]!
+  const day = Number(d)
+  const month = THAI_MONTHS[Number(mo) - 1]
+  if (month === undefined) throw new RangeError(`formatThaiDate: bad month in ${ymd}`)
+  const be = Number(y) + 543
+  return `${day} ${month} ${be}`
+}

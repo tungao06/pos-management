@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from '@tanstack/react-router'
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider, useParams } from '@tanstack/react-router'
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import type { JSX } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BootstrapState, PosApi, ZReportDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { HEALTHY_SYNC } from '../test-utils/sync-status'
+import { CHAIN_WARNING, zDto } from './block3-test-fixtures'
 import { TH } from '../ui/th'
 import { ZReportScreen } from './ZReportScreen'
 
@@ -29,9 +31,14 @@ const bootstrap: BootstrapState = {
   zWaiting: [],
 }
 
+function ZReportRoute(): JSX.Element {
+  const { shiftId } = useParams({ from: '/z/$shiftId' })
+  return <ZReportScreen shiftId={shiftId} />
+}
+
 function renderZReport(shiftId: string, api: Partial<PosApi>): void {
   const rootRoute = createRootRoute()
-  const zReportRoute = createRoute({ getParentRoute: () => rootRoute, path: '/z/$shiftId', component: ZReportScreen })
+  const zReportRoute = createRoute({ getParentRoute: () => rootRoute, path: '/z/$shiftId', component: ZReportRoute })
   const zListRoute = createRoute({ getParentRoute: () => rootRoute, path: '/z', component: () => null })
   const backupRoute = createRoute({ getParentRoute: () => rootRoute, path: '/backup', component: () => null })
   const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => null })
@@ -60,5 +67,37 @@ describe('ZReportScreen', () => {
     expect(hash.textContent).toContain(TH.zHashBad)
     // no snapshot-derived figures crash the screen
     expect(screen.queryByTestId('z-counted')).toBeNull()
+  })
+
+  it('a block 3 Z lists its bot bills and the window', async () => {
+    renderZReport('s1', {
+      getZReport: vi.fn(async () =>
+        zDto({
+          botWindow: { after: '2026-09-24T17:00:00.000Z', until: '2026-09-25T05:00:00.000Z' },
+          botBills: [{ orderNo: 'L260925-901', version: 1, source: 'line', soldAt: null, totalSatang: 7_000, createdByName: null }],
+          cash: { openingFloatSatang: 50_000, cashSalesSatang: 4_500, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 7_000 },
+        }),
+      ),
+    })
+    expect(await screen.findByTestId('z-bot-bill-L260925-901')).toHaveTextContent('70.00')
+    expect(screen.getByTestId('z-bot-window')).toHaveTextContent('00:00')
+  })
+
+  it('a Z from before block 3 (no botBills/botWindow/botCashSatang) still renders', async () => {
+    const old = zDto()
+    const snap = { ...old.snapshot! } as Record<string, unknown>
+    delete snap['botBills']
+    delete snap['botWindow']
+    delete (snap['cash'] as Record<string, unknown>)['botCashSatang']
+    renderZReport('s1', { getZReport: vi.fn(async () => ({ ...old, snapshot: snap }) as ZReportDto) })
+    expect(await screen.findByTestId('z-report')).toBeVisible()
+    expect(screen.queryByTestId('z-bot-window')).toBeNull()
+  })
+
+  it('a Z continued from dayo names the central Z (R9)', async () => {
+    renderZReport('s1', {
+      getZReport: vi.fn(async () => zDto({ zNo: 42, chainWarning: { ...CHAIN_WARNING, brokenShiftId: 'central', centralLastZ: { zNo: 41, hash: 'ab'.repeat(32) } } })),
+    })
+    expect(await screen.findByTestId('z-central-continued')).toHaveTextContent('41')
   })
 })

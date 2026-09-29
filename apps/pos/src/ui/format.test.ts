@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatBaht, parseBahtInput } from './format'
+import { formatBaht, formatThaiDate, parseBahtInput } from './format'
 
 describe('formatBaht', () => {
   it('hides zero satang, keeps two digits otherwise, groups thousands', () => {
@@ -22,5 +22,16 @@ describe('parseBahtInput', () => {
   })
   it('rejects anything else', () => {
     for (const bad of ['', 'abc', '1.234', '-5', '1,000', '45.', '.5']) expect(parseBahtInput(bad)).toBeNull()
+  })
+})
+
+describe('formatThaiDate', () => {
+  it('formats a business date as day · Thai short month · พ.ศ.', () => {
+    expect(formatThaiDate('2026-09-25')).toBe('25 ก.ย. 2569')
+    expect(formatThaiDate('2026-01-01')).toBe('1 ม.ค. 2569')
+  })
+  it('rejects anything not YYYY-MM-DD', () => {
+    expect(() => formatThaiDate('2026-09-25T00:00:00Z')).toThrow()
+    expect(() => formatThaiDate('bad')).toThrow()
   })
 })
