@@ -21,8 +21,10 @@ export type PaymentMethod = z.infer<typeof PaymentMethod>
 export const VerifyStatus = z.enum(['manual', 'verified', 'pending'])
 export type VerifyStatus = z.infer<typeof VerifyStatus>
 
-// plan 3 events + block-2 owner remedies of the "ส่งไม่ผ่าน" page (spec 04 §6.4) — all go into the device hash chain
-export const EventType = z.enum(['CREATED', 'LINE_ADDED', 'LINE_REMOVED', 'DISCOUNT_APPLIED', 'PAYMENT_CLAIMED', 'PAID', 'READY', 'PICKED_UP', 'CANCELLED', 'REJECTED', 'VOIDED', 'STOCK_DEDUCTED', 'STOCK_RETURNED', 'NOTE', 'RECEIPT_RENUMBERED', 'CODE_REMAPPED', 'STAFF_REMAPPED', 'EXCLUDED_FROM_SYNC'])
+// plan 3 events + block-2 owner remedies of the "ส่งไม่ผ่าน" page (spec 04 §6.4) — all go into the device hash chain.
+// Block 3 (spec 04 §6.4): CLOSED_OFF_CATALOG = the owner closed the bill as an off-catalog bill (order_off_catalog) ·
+// DELIVERED_ELSEWHERE = dayo already has this bill from another key/device (the row is done, nothing more to send).
+export const EventType = z.enum(['CREATED', 'LINE_ADDED', 'LINE_REMOVED', 'DISCOUNT_APPLIED', 'PAYMENT_CLAIMED', 'PAID', 'READY', 'PICKED_UP', 'CANCELLED', 'REJECTED', 'VOIDED', 'STOCK_DEDUCTED', 'STOCK_RETURNED', 'NOTE', 'RECEIPT_RENUMBERED', 'CODE_REMAPPED', 'STAFF_REMAPPED', 'EXCLUDED_FROM_SYNC', 'CLOSED_OFF_CATALOG', 'DELIVERED_ELSEWHERE'])
 export type EventType = z.infer<typeof EventType>
 
 export const ActorType = z.enum(['user', 'customer', 'system'])
@@ -39,8 +41,20 @@ export type UserRole = z.infer<typeof UserRole>
 export const AdjustReason = z.enum(['WASTE', 'EXPIRED', 'TRIAL', 'GIVEAWAY', 'OTHER'])
 export type AdjustReason = z.infer<typeof AdjustReason>
 
-export const ShiftStatus = z.enum(['open', 'closed'])
+/**
+ * shift.status (ruling R2 · D101): open → counting → counted → closed, forward only (DB trigger on the tablet).
+ * `counting` = the drawer count has started: no more bills or cash movements · `counted` = the count is saved
+ * (shift.counted_at set once) · `closed` = the Z is written.
+ */
+export const ShiftStatus = z.enum(['open', 'counting', 'counted', 'closed'])
 export type ShiftStatus = z.infer<typeof ShiftStatus>
+
+/**
+ * shift.sync_mode (ruling R1): `central` = the shift and its cash rows go to dayo (shift lane) · `local_only` = never
+ * sent — every shift that existed before block 3, and shifts opened while dayo could not take shift kinds.
+ */
+export const ShiftSyncMode = z.enum(['central', 'local_only'])
+export type ShiftSyncMode = z.infer<typeof ShiftSyncMode>
 
 export const CountStatus = z.enum(['open', 'closed'])
 export type CountStatus = z.infer<typeof CountStatus>
@@ -56,7 +70,8 @@ export type CashMovementKind = z.infer<typeof CashMovementKind>
  * outbox.status on the device (spec 04 §6.1). `pending` = waiting or retrying · `sent` = dayo accepted it (or answered
  * duplicate) · `dead` = on the "ส่งไม่ผ่าน" page (rejected, STUCK, ENVELOPE, PARENT_REJECTED) — never retried
  * automatically, the owner presses "ลองใหม่" · `local_only` = never sent: rows of the plan-3/4 format, shift/cash rows
- * of block 2, and rows the owner closed as "นอกระบบกลาง".
+ * of block 2, and rows the owner closed as "นอกระบบกลาง" · `closed_off_catalog` (block 3, spec 04 §6.1) = the order row
+ * the owner closed as an off-catalog bill — its `order_off_catalog` row carries it now, this one is never sent again.
  */
-export const OutboxStatus = z.enum(['pending', 'sent', 'dead', 'local_only'])
+export const OutboxStatus = z.enum(['pending', 'sent', 'dead', 'local_only', 'closed_off_catalog'])
 export type OutboxStatus = z.infer<typeof OutboxStatus>

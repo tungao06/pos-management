@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { ActorType, CashMovementKind, type DayoEdit, EventType, OrderOrigin, OrderStatus, PaymentMethod, ShiftStatus, VerifyStatus } from '@dayo/contracts'
+import { ActorType, CashMovementKind, type DayoEdit, EventType, OrderOrigin, OrderStatus, PaymentMethod, ShiftStatus, ShiftSyncMode, VerifyStatus } from '@dayo/contracts'
 import { check, index, sqliteTable, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { bool, id, int, json, text, textEnum } from './columns.js'
 import { channel, customer, device, productVariant, recipe, sweetnessLevel, user } from './reference.js'
@@ -14,9 +14,17 @@ export const shift = sqliteTable('shift', {
   openingFloatSatang: int('opening_float_satang').notNull(),
   closedBy: text('closed_by').references(() => user.id),
   closedAt: text('closed_at'),
+  // block 3 (tablet only — pg untouched, D59). status: open → counting → counted → closed, forward only (ruling R2 ·
+  // trigger shift_status_forward_only). A shift that is not open takes no bill and no cash movement (D101 · triggers
+  // order_open_shift_only / cash_movement_open_shift_only).
+  countedAt: text('counted_at'),                   // D101: when the count started — set once (trigger shift_counted_at_once)
+  // ruling R1: 'central' = the shift and its cash rows go to dayo · 'local_only' = never sent (every pre-block-3 shift)
+  syncMode: textEnum('sync_mode', ShiftSyncMode).notNull().default('local_only'),
 }, (t) => [
   // D47 item 6: at most one open shift per device.
   uniqueIndex('shift_open_uq').on(t.deviceId).where(sql`status = 'open'`),
+  // ruling R2: at most one shift per device is being counted.
+  uniqueIndex('shift_counting_uq').on(t.deviceId).where(sql`status = 'counting'`),
 ])
 
 export const cashMovement = sqliteTable('cash_movement', {
@@ -46,7 +54,13 @@ export const cashCount = sqliteTable('cash_count', {
   linesJson: json('lines_json').notNull(),          // [{ denominationSatang, count }]
   countedBy: text('counted_by').notNull().references(() => user.id),
   createdAt: text('created_at').notNull(),
-}, (t) => [index('cash_count_shift_idx').on(t.shiftId)])
+  // block 3 (tablet only). Append-only (triggers cash_count_no_update/_no_delete) and one count per shift (D101).
+  countedAt: text('counted_at'),                   // = shift.counted_at — the instant the drawer was counted (E2 cash_count.counted_at)
+  includesBotCash: bool('includes_bot_cash').notNull().default(false), // ruling R5: the expected cash included dayo's bot cash (E4)
+}, (t) => [
+  index('cash_count_shift_idx').on(t.shiftId),
+  uniqueIndex('cash_count_shift_uq').on(t.shiftId),
+])
 
 export const zReport = sqliteTable('z_report', {
   id: id(),
@@ -94,6 +108,10 @@ export const order = sqliteTable('order', {
   // E3 dayo_edit of this bill (ADR-0050): the owner's latest edit/cancel on the dayo web, null = none. Display only —
   // total_satang, payment and status stay what was collected here (spec 04 §4.6 · owner decision O1 pending).
   centralDayoEditJson: json('central_dayo_edit_json').$type<DayoEdit | null>(),
+  // block 3 (spec 04 §6.4): the owner closed this bill as an off-catalog bill (badge "นอกแคตตาล็อก"), null = not closed
+  offCatalogAt: text('off_catalog_at'),
+  // block 3: dayo's answer about this bill disagrees with what was collected here (red bar) — display only, null = agrees
+  centralMismatchJson: json('central_mismatch_json').$type<CentralMismatch | null>(),
 }, (t) => [
   unique().on(t.deviceId, t.receiptNo),
   // D47 item 5: the queue number is unique per device per business day (not globally).
@@ -108,6 +126,9 @@ export const order = sqliteTable('order', {
   check('order_discount_le_subtotal_ck', sql`${t.discountSatang} <= ${t.subtotalSatang}`),
   check('order_channel_ck', sql`${t.channelId} is not null or ${t.channelCode} is not null`),
 ])
+
+/** What dayo reported for a bill against what the tablet collected (order.central_mismatch_json). Money in satang. */
+export type CentralMismatch = { orderNo: string; reportedTotalSatang: number; paymentIsCash: boolean; localTotalSatang: number; localPaymentIsCash: boolean }
 
 export const orderLine = sqliteTable('order_line', {
   id: id(),
