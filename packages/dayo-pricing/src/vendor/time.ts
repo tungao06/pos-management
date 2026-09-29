@@ -48,6 +48,11 @@ export function dayDiff(a: string, b: string): number {
   return Math.round((tb - ta) / 86400e3);
 }
 
+/** วันที่ yyyy-mm-dd บวก n วัน (ปฏิทิน UTC — ไม่ขึ้นกับ timezone ของเครื่อง) */
+export function addDays(day: string, n: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
+}
+
 /** เลขวันในสัปดาห์ 0=อาทิตย์ … 6=เสาร์ ของวันที่ yyyy-mm-dd (ไม่ขึ้นกับ timezone ของเครื่อง) */
 export function dayOfWeek(day: string): number {
   return new Date(`${day}T00:00:00Z`).getUTCDay();
