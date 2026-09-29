@@ -2,11 +2,10 @@ import { and, eq, notInArray } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { clipCodePoints, PosOrderCatalog as PosOrderCatalogSchema, PROMO_RULE_VERSIONS_KEY, StaffEntry, supportedOf, UserRole, type PosCatalogLooseData, type PosOrderCatalogParsed, type Supported } from '@dayo/contracts'
-import { toPricingCatalog, type PosOrderCatalog } from '@dayo/domain'
+import { checkCatalogRules, TABLET_PROMO_RULE_VERSION, toPricingCatalog, type PosOrderCatalog } from '@dayo/domain'
 import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 import type { ApiDeps } from '../api/deps'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from './dayo-client'
-import { checkCatalogRules, TABLET_PROMO_RULE_VERSION } from './promo-rules-stub'
 import { API_DISABLED_RETRY_MS, backoffMs, DAYO_KEYS, deleteKey, extendRateLimit, MAX_BACKOFF_WAIT_MS, RATE_LIMIT_DEFAULT_MS, readKey, recordServerTime, writeKey } from './state'
 
 export type SyncContext = { db: RemoteDb; deps: ApiDeps; serial: <T>(fn: () => Promise<T>) => Promise<T> }

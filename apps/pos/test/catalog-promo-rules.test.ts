@@ -4,11 +4,11 @@ import * as s from '@dayo/db-schema/sqlite'
 import { MOCK_API_KEY } from '@dayo/dayo-mock'
 import { loadContractFixture } from '@dayo/contracts/fixture-files'
 import { PROMO_RULE_VERSIONS } from '@dayo/dayo-pricing'
+import { TABLET_PROMO_RULE_VERSION } from '@dayo/domain'
 import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 import { pullCatalog, readCatalog, readSupported } from '../src/sync/catalog'
 import { createDayoClient } from '../src/sync/dayo-client'
 import { isHeld } from '../src/sync/push'
-import { TABLET_PROMO_RULE_VERSION } from '../src/sync/promo-rules-stub'
 import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
 import { openTestApi } from './helpers/db'
 
@@ -161,10 +161,10 @@ describe('R6: a catalog fetched with another rule version', () => {
 
 describe('R12: a catalog whose promotion rules the tablet cannot use is refused whole — staff still follow dayo', () => {
   const broken: [string, (d: E1Data) => void, RegExp][] = [
-    ['a groupCode missing from promotionGroups', (d) => { d.catalog!.promotions[2]!.groupCode = 'ghost' }, /ghost/],
-    ['a rule whose v is below what its reward needs (validatePromoRule)', (d) => { (d.catalog!.promotions[2]!.rule as { v: number }).v = 1 }, /v: ต้องเป็น 2/],
-    ['a time window on day 7 (validateTimeWindows)', (d) => { d.catalog!.promotions[4]!.timeWindows = [{ days: [7], from: null, to: null }] }, /days/],
-    ['no promotionGroups at all while a promotion names a group other than main', (d) => { delete d.catalog!.promotionGroups }, /stack/],
+    ['a groupCode missing from promotionGroups', (d) => { d.catalog!.promotions[2]!.groupCode = 'ghost' }, /: groupCode "ghost" is not a group of the catalog/],
+    ['a rule whose v is below what its reward needs (validatePromoRule)', (d) => { (d.catalog!.promotions[2]!.rule as { v: number }).v = 1 }, /: v: ต้องเป็น 2/],
+    ['a time window on day 7 (validateTimeWindows)', (d) => { d.catalog!.promotions[4]!.timeWindows = [{ days: [7], from: null, to: null }] }, /\.days: ต้องเป็นรายการเลข 0–6/],
+    ['no promotionGroups at all while a promotion names a group other than main', (d) => { delete d.catalog!.promotionGroups }, /: groupCode "stack" is not a group of the catalog/],
   ]
   it.each(broken)('%s', async (_name, breakIt, detail) => {
     const { ctx, t, dayo } = await linked(dataOf('e1-catalog-changed-old-dayo'))
