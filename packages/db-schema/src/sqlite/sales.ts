@@ -186,9 +186,13 @@ export const payment = sqliteTable('payment', {
   createdAt: text('created_at').notNull(),
 }, (t) => [
   index('payment_order_idx').on(t.orderId),
-  // plan 10 T6 (owner Q1 = ข): a bill a promotion brings to ฿0 is paid with a ฿0 row. Never negative; ฿0 only for a bill whose
-  // total_satang is 0 — triggers payment_zero_only_zero_bill(_on_update) and order_total_keeps_zero_payment (0007_zero_total_promo_bill).
-  check('payment_amount_nonneg_ck', sql`${t.amountSatang} >= 0`),
+  // plan 10 T6 (owner Q1 = ข): a bill a promotion brings to ฿0 is paid with a ฿0 row. Whole satang (a stored integer, never
+  // text or real), never negative; ฿0 only for a bill whose total_satang is 0 — triggers payment_zero_only_zero_bill(_on_update),
+  // order_total_keeps_zero_payment and order_insert_keeps_zero_payment (0007_zero_total_promo_bill).
+  // NOTE: those triggers make `payment` and `order` name each other, so a drizzle-kit rebuild (__new_… → DROP → RENAME) of
+  // EITHER table fails at the RENAME ("error in trigger …: no such table"). A migration that rebuilds one of them must DROP the
+  // four triggers first and CREATE them again after the RENAME — test/zero-bill.test.ts shows the recipe.
+  check('payment_amount_nonneg_ck', sql`typeof(${t.amountSatang}) = 'integer' and ${t.amountSatang} >= 0`),
 ])
 
 export const discount = sqliteTable('discount', {

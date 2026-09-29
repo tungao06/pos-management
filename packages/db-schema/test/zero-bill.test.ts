@@ -17,7 +17,7 @@ import { folderUpTo, NOW, one, plan4DeviceWithBills } from './plan4-device.js'
 const journal = JSON.parse(readFileSync(join(SQLITE_MIGRATIONS_FOLDER, 'meta', '_journal.json'), 'utf8')) as { entries: { tag: string }[] }
 const THIS = journal.entries.find((e) => e.tag.endsWith('_zero_total_promo_bill'))!
 const BEFORE = journal.entries[journal.entries.indexOf(THIS) - 1]!.tag
-const NEW_TRIGGERS = ['order_total_keeps_zero_payment', 'payment_zero_only_zero_bill', 'payment_zero_only_zero_bill_on_update']
+const NEW_TRIGGERS = ['order_insert_keeps_zero_payment', 'order_total_keeps_zero_payment', 'payment_zero_only_zero_bill', 'payment_zero_only_zero_bill_on_update']
 const ZERO_REFUSED = /฿0 payment only for a bill whose total is 0/
 
 /** Every table, index and trigger except `payment` and its own objects — the migration must leave these byte for byte. */
@@ -51,12 +51,16 @@ let seq = 0
 /** A paid block-2 bill on shift-1. `total` = what the customer paid; a ฿0 bill is a full promotion discount. */
 function insertBill(raw: Database, o: { subtotal: number; discount: number }): string {
   const n = ++seq
-  raw.run(`insert into "order" (id, origin, device_id, receipt_no, queue_no, business_date, shift_id, channel_id, channel_code, payment_code, status,
-      subtotal_satang, discount_satang, total_satang, vat_satang, cost_satang, created_by_type, created_by_id, created_at, paid_at, sold_at, catalog_version)
-    values ('o-${n}', 'device', 'dev-1', 'A-${String(n).padStart(6, '0')}', ${n}, '2026-09-30', 'shift-1', null, 'store', 'cash', 'paid',
-      ${o.subtotal}, ${o.discount}, ${o.subtotal - o.discount}, 0, 0, 'user', 'u1', '${NOW}', '${NOW}', '${NOW}', 31)`)
+  raw.run(billSql('insert', n, o))
   return `o-${n}`
 }
+/** The INSERT of bill `o-<n>` — also as `insert or replace` / `replace` of an existing bill (same id, receipt and queue number). */
+const billSql = (verb: string, n: number, o: { subtotal: number; discount: number; note?: string }) =>
+  `${verb} into "order" (id, origin, device_id, receipt_no, queue_no, business_date, shift_id, channel_id, channel_code, payment_code, status,
+      subtotal_satang, discount_satang, total_satang, vat_satang, cost_satang, note, created_by_type, created_by_id, created_at, paid_at, sold_at, catalog_version)
+    values ('o-${n}', 'device', 'dev-1', 'A-${String(n).padStart(6, '0')}', ${n}, '2026-09-30', 'shift-1', null, 'store', 'cash', 'paid',
+      ${o.subtotal}, ${o.discount}, ${o.subtotal - o.discount}, 0, 0, ${o.note === undefined ? 'null' : `'${o.note}'`}, 'user', 'u1', '${NOW}', '${NOW}', '${NOW}', 31)`
+const billNo = (id: string) => Number(id.slice(2))
 const insertPayment = (raw: Database, o: { id: string; orderId: string; amount: number }) =>
   raw.run(`insert into payment (id, order_id, method, amount_satang, tendered_satang, change_satang, reference, verify_status, created_by, created_at)
     values ('${o.id}', '${o.orderId}', 'CASH', ${o.amount}, ${o.amount}, 0, null, 'manual', 'u1', '${NOW}')`)
@@ -109,11 +113,12 @@ describe('0007 migration: a ฿0 payment for a ฿0 bill (plan 10 T6 · Q1 = ข
     const objectsAfter = nonTableObjects(raw)
     expect(objectsAfter.filter((o) => objectsBefore.some((b) => b[1] === o[1]))).toEqual(objectsBefore) // payment_order_idx and every old trigger, same SQL
     expect(objectsAfter.filter((o) => !objectsBefore.some((b) => b[1] === o[1])).map((o) => `${String(o[0])} ${String(o[1])} on ${String(o[2])}`)).toEqual([
-      'trigger order_total_keeps_zero_payment on order', 'trigger payment_zero_only_zero_bill on payment', 'trigger payment_zero_only_zero_bill_on_update on payment',
+      'trigger order_insert_keeps_zero_payment on order', 'trigger order_total_keeps_zero_payment on order',
+      'trigger payment_zero_only_zero_bill on payment', 'trigger payment_zero_only_zero_bill_on_update on payment',
     ])
     expect(one(raw, `select name, sql from sqlite_master where type = 'table' and name <> 'payment' order by name`)).toEqual(tableSqlBefore)
     const paymentSql = String(one(raw, `select sql from sqlite_master where name = 'payment'`)[0]![0])
-    expect(paymentSql).toMatch(/CONSTRAINT "payment_amount_nonneg_ck" CHECK\("payment"\."amount_satang" >= 0\)/)
+    expect(paymentSql).toMatch(/CONSTRAINT "payment_amount_nonneg_ck" CHECK\(typeof\("payment"\."amount_satang"\) = 'integer' and "payment"\."amount_satang" >= 0\)/)
     expect(paymentSql).not.toMatch(/payment_amount_positive_ck/)
     expect(one(raw, `PRAGMA foreign_key_check`)).toEqual([])
     expect(one(raw, `PRAGMA foreign_keys`)).toEqual([[1]])
@@ -162,6 +167,27 @@ describe('0007 migration: a ฿0 payment for a ฿0 bill (plan 10 T6 · Q1 = ข
       }
     } finally {
       rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('a payment amount that is not whole satang (text or real — the old > 0 CHECK let them in) stops the upgrade loudly: nothing changes, nothing is lost', async () => {
+    for (const bad of [`'4500x'`, '0.5']) {
+      const raw = await deviceOn(BEFORE)
+      const bill = insertBill(raw, { subtotal: 4500, discount: 0 })
+      raw.run(`insert into payment (id, order_id, method, amount_satang, tendered_satang, change_satang, reference, verify_status, created_by, created_at)
+        values ('p-bad', '${bill}', 'CASH', ${bad}, null, null, null, 'manual', 'u1', '${NOW}')`)
+      const before = dump(raw)
+      const schemaBefore = one(raw, `select type, name, sql from sqlite_master order by type, name`)
+      const applied = one(raw, `select count(*) from __drizzle_migrations`)
+      expect(applied).toEqual([[journal.entries.indexOf(THIS)]])
+      let failure: unknown = null
+      try { migrateSqlite(drizzle(raw), folderUpTo(THIS.tag)) } catch (e) { failure = e }
+      expect(failure, bad).toBeInstanceOf(Error) // drizzle wraps the driver error ("Failed to run the query …") and keeps it as `cause`
+      expect(String((failure as Error).cause), bad).toMatch(/CHECK constraint failed: payment_amount_nonneg_ck/)
+      expect(dump(raw), bad).toEqual(before) // the device stays on block 3 with every row — never a money value rewritten or dropped
+      expect(one(raw, `select type, name, sql from sqlite_master order by type, name`), bad).toEqual(schemaBefore)
+      expect(one(raw, `select count(*) from __drizzle_migrations`), bad).toEqual(applied) // 0007 is not marked applied: the next start tries again
+      expect(one(raw, `PRAGMA foreign_keys`)).toEqual([[1]])
     }
   })
 })
@@ -248,5 +274,106 @@ describe('฿0 payment only for a ฿0 bill (plan 10 T6 · Q1 = ข)', () => {
     insertPayment(raw, { id: 'p0', orderId: free, amount: 0 })
     drizzle(raw).update(s.order).set({ offCatalogAt: NOW }).where(eq(s.order.id, free)).run()
     expect(one(raw, `select off_catalog_at from "order" where id = '${free}'`)).toEqual([[NOW]])
+  })
+
+  it('an amount must be stored as whole satang: text and real are refused; values SQLite turns into an integer are stored as one (fix round 1)', async () => {
+    const raw = await deviceOn()
+    const bill = insertBill(raw, { subtotal: 4500, discount: 0 })
+    for (const bad of [`'0x'`, `'4500x'`, `'abc'`, '0.5', '4500.5', `x'00'`]) {
+      expect(() => insertPayment(raw, { id: 'bad', orderId: bill, amount: bad as unknown as number }), bad).toThrow(/CHECK constraint failed: payment_amount_nonneg_ck/)
+    }
+    insertPayment(raw, { id: 'p-text', orderId: bill, amount: `'4500'` as unknown as number }) // INTEGER affinity stores these as integers
+    insertPayment(raw, { id: 'p-real', orderId: bill, amount: '4500.0' as unknown as number })
+    expect(one(raw, `select id, amount_satang, typeof(amount_satang) from payment order by id`)).toEqual([['p-real', 4500, 'integer'], ['p-text', 4500, 'integer']])
+    expect(() => raw.run(`update payment set amount_satang = 0.5 where id = 'p-real'`)).toThrow(/CHECK constraint failed: payment_amount_nonneg_ck/)
+    expect(() => raw.run(`update payment set amount_satang = '0x' where id = 'p-real'`)).toThrow(/CHECK constraint failed: payment_amount_nonneg_ck/)
+    expect(() => raw.run(`update payment set amount_satang = null where id = 'p-real'`)).toThrow(/NOT NULL/)
+    const free = insertBill(raw, { subtotal: 4500, discount: 4500 })
+    expect(() => insertPayment(raw, { id: 'z-text', orderId: free, amount: `'0x'` as unknown as number })).toThrow(/CHECK constraint failed: payment_amount_nonneg_ck/)
+    expect(() => insertPayment(raw, { id: 'z-real', orderId: free, amount: '0.0001' as unknown as number })).toThrow(/CHECK constraint failed: payment_amount_nonneg_ck/)
+    expect(paymentIds(raw)).toEqual([['p-real', 4500], ['p-text', 4500]])
+  })
+
+  it('INSERT OR REPLACE / REPLACE of a bill cannot move the total of a bill with a ฿0 payment off ฿0 — foreign keys on or off (fix round 1)', async () => {
+    for (const fk of ['ON', 'OFF']) {
+      const raw = await deviceOn()
+      raw.run(`PRAGMA foreign_keys = ${fk}`)
+      const free = insertBill(raw, { subtotal: 4500, discount: 4500 })
+      insertPayment(raw, { id: 'p0', orderId: free, amount: 0 })
+      const before = one(raw, `select * from "order"`)
+      for (const verb of ['insert or replace', 'replace']) {
+        expect(() => raw.run(billSql(verb, billNo(free), { subtotal: 4500, discount: 0 })), `${verb} fk ${fk}`).toThrow(ZERO_REFUSED)
+        expect(() => raw.run(billSql(verb, billNo(free), { subtotal: 4500, discount: 1 })), `${verb} fk ${fk}`).toThrow(ZERO_REFUSED)
+      }
+      expect(one(raw, `select * from "order"`), fk).toEqual(before)
+      raw.run(billSql('insert or replace', billNo(free), { subtotal: 4500, discount: 4500, note: 'ยังฟรี' })) // still ฿0: fine
+      expect(one(raw, `select id, total_satang, note from "order"`), fk).toEqual([[free, 0, 'ยังฟรี']])
+      expect(paymentIds(raw), fk).toEqual([['p0', 0]])
+      // and the payment side: REPLACE of a payment runs the insert guard
+      const bill = insertBill(raw, { subtotal: 4500, discount: 0 })
+      insertPayment(raw, { id: 'p', orderId: bill, amount: 4500 })
+      expect(() => raw.run(`insert or replace into payment (id, order_id, method, amount_satang, tendered_satang, change_satang, reference, verify_status, created_by, created_at)
+        values ('p', '${bill}', 'CASH', 0, 0, 0, null, 'manual', 'u1', '${NOW}')`), fk).toThrow(ZERO_REFUSED)
+      expect(() => raw.run(`insert or replace into payment (id, order_id, method, amount_satang, tendered_satang, change_satang, reference, verify_status, created_by, created_at)
+        values ('p0', '${bill}', 'CASH', 0, 0, 0, null, 'manual', 'u1', '${NOW}')`), fk).toThrow(ZERO_REFUSED)
+      expect(paymentIds(raw), fk).toEqual([['p', 4500], ['p0', 0]])
+    }
+  })
+
+  it('the sale writes in its order — bill first, then its items, then the ฿0 payment — through drizzle (sale.ts order · fix round 1)', async () => {
+    const raw = await deviceOn()
+    const d = drizzle(raw)
+    d.insert(s.order).values({
+      id: 'sale-0', origin: 'device', deviceId: 'dev-1', receiptNo: 'A-000900', queueNo: 900, businessDate: '2026-09-30', shiftId: 'shift-1', channelId: null,
+      channelCode: 'store', paymentCode: 'cash', status: 'paid', subtotalSatang: 4500, discountSatang: 4500, totalSatang: 0, vatSatang: 0, costSatang: 0,
+      createdByType: 'user', createdById: 'u1', createdAt: NOW, paidAt: NOW, soldAt: NOW, catalogVersion: 31, pricingJson: { cart: {}, priced: {} },
+    }).run()
+    d.insert(s.orderItem).values({ id: 'oi-0', orderId: 'sale-0', lineNo: 1, menuCode: 'TT01', menuNameTh: 'ชาไทย', size: '16 oz', sweetness: '100%', milk: 'fresh', grade: null,
+      qty: 1, unitPriceSatang: 4500, discountPerCupSatang: 4500, discountReason: null, promotionId: '00000000-0000-4000-8000-000000000001', lineTotalSatang: 0 }).run()
+    d.insert(s.payment).values({ id: 'pay-0', orderId: 'sale-0', method: 'CASH', amountSatang: 0, tenderedSatang: 0, changeSatang: 0, reference: null, verifyStatus: 'manual', createdBy: 'u1', createdAt: NOW }).run()
+    expect(one(raw, `select o.id, o.total_satang, p.amount_satang from "order" o join payment p on p.order_id = o.id`)).toEqual([['sale-0', 0, 0]])
+  })
+
+  it('rebuilding payment later works only the way the 0007 NOTE says: drop the four triggers, rebuild, create them again (fix round 1)', async () => {
+    const raw = await deviceOn()
+    const free = insertBill(raw, { subtotal: 4500, discount: 4500 })
+    const bill = insertBill(raw, { subtotal: 4500, discount: 0 })
+    insertPayment(raw, { id: 'p0', orderId: free, amount: 0 })
+    insertPayment(raw, { id: 'p', orderId: bill, amount: 4500 })
+    const paymentBefore = one(raw, `select rowid, * from payment order by rowid`)
+    const triggerSql = one(raw, `select name, sql from sqlite_master where type = 'trigger' and name in (${NEW_TRIGGERS.map((n) => `'${n}'`).join(', ')}) order by name`)
+    expect(triggerSql.map((r) => r[0])).toEqual(NEW_TRIGGERS)
+    const tableSql = String(one(raw, `select sql from sqlite_master where name = 'payment'`)[0]![0])
+    const newTable = tableSql.replace(/^CREATE TABLE [`"]payment[`"]/, 'CREATE TABLE `__new_payment`').replaceAll('"payment".', '"__new_payment".')
+    expect(newTable).not.toBe(tableSql)
+    const cols = one(raw, `select name from pragma_table_info('payment') order by cid`).map((r) => `"${String(r[0])}"`).join(', ')
+    // drizzle-kit's recreate, as it would generate it for a later change of payment
+    const rebuild = [newTable, `INSERT INTO \`__new_payment\`("rowid", ${cols}) SELECT "rowid", ${cols} FROM \`payment\``, 'DROP TABLE `payment`',
+      'ALTER TABLE `__new_payment` RENAME TO `payment`', 'CREATE INDEX `payment_order_idx` ON `payment` (`order_id`)']
+    raw.run('PRAGMA foreign_keys = OFF')
+    // as generated: the RENAME fails, because order_total_keeps_zero_payment on `order` names the dropped `payment`
+    raw.run('BEGIN')
+    expect(() => { for (const q of rebuild) raw.run(q) }).toThrow(/error in trigger order_(insert|total)_keeps_zero_payment: no such table: main\.payment/)
+    raw.run('ROLLBACK')
+    // the NOTE's recipe: drop the four triggers, rebuild, create them again
+    raw.run('BEGIN')
+    for (const n of NEW_TRIGGERS) raw.run(`DROP TRIGGER \`${n}\``)
+    for (const q of rebuild) raw.run(q)
+    for (const [, q] of triggerSql) raw.run(String(q))
+    raw.run('COMMIT')
+    raw.run('PRAGMA foreign_keys = ON')
+    expect(one(raw, `select rowid, * from payment order by rowid`)).toEqual(paymentBefore)
+    expect(one(raw, `select name, sql from sqlite_master where type = 'trigger' and name in (${NEW_TRIGGERS.map((n) => `'${n}'`).join(', ')}) order by name`)).toEqual(triggerSql)
+    expect(() => insertPayment(raw, { id: 'p1', orderId: bill, amount: 0 })).toThrow(ZERO_REFUSED)
+    expect(() => raw.run(`update "order" set total_satang = 1, subtotal_satang = 4501 where id = '${free}'`)).toThrow(ZERO_REFUSED)
+    expect(one(raw, `PRAGMA foreign_key_check`)).toEqual([])
+    // the same holds for a rebuild of `order`: payment_zero_only_zero_bill names it
+    raw.run('PRAGMA foreign_keys = OFF')
+    raw.run('BEGIN')
+    expect(() => { raw.run('CREATE TABLE `__new_order` AS SELECT * FROM `order`'); raw.run('DROP TABLE `order`'); raw.run('ALTER TABLE `__new_order` RENAME TO `order`') })
+      .toThrow(/error in trigger payment_zero_only_zero_bill(_on_update)?: no such table: main\.order/)
+    raw.run('ROLLBACK')
+    raw.run('PRAGMA foreign_keys = ON')
+    expect(one(raw, `select count(*) from "order"`)).toEqual([[2]])
   })
 })

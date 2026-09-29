@@ -3794,7 +3794,7 @@
       "checkConstraints": {
         "payment_amount_nonneg_ck": {
           "name": "payment_amount_nonneg_ck",
-          "value": "\"payment\".\"amount_satang\" >= 0"
+          "value": "typeof(\"payment\".\"amount_satang\") = 'integer' and \"payment\".\"amount_satang\" >= 0"
         }
       }
     },
