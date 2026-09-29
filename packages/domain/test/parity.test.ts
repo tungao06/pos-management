@@ -34,7 +34,7 @@ function paritySuite(file: string, isReal: boolean, expectedCases: number): void
   const refuses = isReal ? TABLET_REFUSES : new Map<string, { code: CartErrorCode; why: string }>()
 
   describe(isReal
-    ? `parity layer C (spec 04 §5.2) — dayo export ${parity.dayo_commit.slice(0, 7)}: POS wrapper vs dayo SHARED code on dayo's sample catalog, not SQL (SQL parity is proven by real bills in T23) · ${noTime.length} of ${parity.cases.length} cases without saleTime — time-bound promos not exercised${noTime.length > 0 ? ` (${noTime.map((c) => c.spec).join(' ')})` : ''}`
+    ? `parity layer C (spec 04 §5.2) — dayo export ${parity.dayo_commit.slice(0, 7)}: POS wrapper vs dayo's real SQL pricing (api_pos_catalog + quote_order) on dayo's sample catalog · ${noTime.length} of ${parity.cases.length} cases without saleTime — time-bound promos not exercised${noTime.length > 0 ? ` (${noTime.map((c) => c.spec).join(' ')})` : ''}`
     : 'parity layer C (spec 04 §5.2) — POS SEED: wrapper check only, NOT the block-2 gate', () => {
     it('the fixture was made with the vendored pricing version (same text: dayo\'s export may hash its CRLF checkout, the vendored rule hashes LF)', () => {
       expect(Object.keys(parity.pricing_files_sha256).sort()).toEqual(Object.keys(vendor.files).sort())
