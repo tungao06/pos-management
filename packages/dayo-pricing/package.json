@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./VENDOR.json": "./VENDOR.json" },
+  "exports": { ".": { "types": "./dist/types/index.d.ts", "default": "./src/index.ts" }, "./VENDOR.json": "./VENDOR.json" },
   "scripts": {
     "test": "vitest run",
+    "build:types": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "vendor:check": "tsx scripts/vendor.ts check",
     "vendor:update": "tsx scripts/vendor.ts update",
