@@ -2,12 +2,13 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import { adjustStock, discardBase } from './adjust'
 import { login } from './auth'
 import { confirmBackupSaved, exportBackup } from './backup'
-import { createDayoPacer, createSyncScheduler, RATE_WINDOW_MS, type Scheduler } from '../sync/scheduler'
+import { pullCatalog } from '../sync/catalog'
+import { createDayoPacer, createSyncScheduler, RATE_WINDOW_MS, SYNC_BUDGET_PER_MIN, type Scheduler } from '../sync/scheduler'
 import { bootstrap, syncStatus } from './bootstrap'
 import { recordCashMovement } from './cash'
 import { listCentralOrdersToday, refreshDayoEdits } from './central-orders'
 import { closeShift, getZReport, listZReports } from './close'
-import { connectShop, probeDayo, recoverOwner, replaceApiKey } from './connect'
+import { connectShop, isDayoLinked, probeDayo, recoverOwner, replaceApiKey } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { loadDrinkCatalog } from './drink-catalog'
@@ -89,10 +90,26 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
   const sch = createSyncScheduler({ db, deps, serial, pacer, ...(opts.timers === undefined ? {} : { timers: opts.timers }), ...(opts.locks === undefined ? {} : { locks: opts.locks }), ...(opts.onCycleDone === undefined ? {} : { onCycleDone: opts.onCycleDone }) })
   scheduler = sch
   const wake = (reason: 'before_shift' | 'before_close'): void => { if (auto) sch.kick(reason) }
+  /**
+   * Ruling R1 · spec 04 §6.5 "ก่อนเปิดกะ": a linked tablet pulls E1 before opening a shift, so a dayo that has just started
+   * to support the shift kinds is seen and the new shift is central. Network OUTSIDE the serial queue (its reads and
+   * writes are inside); any outcome — offline, failed, blocked, E1's own backoff or 429 wait, even a throw — only means
+   * the shift is decided from the last stored E1: opening is never stopped, and never waits longer than the client's
+   * own timeout. It draws on the sender's share of the per-minute budget: no room left = no pull.
+   */
+  const pullBeforeShift = async (): Promise<void> => {
+    try {
+      if (!(await serial(() => isDayoLinked(db, deps)))) return
+      if (pacer.waitFor(1, SYNC_BUDGET_PER_MIN) > 0) return
+      await pullCatalog({ db, deps, serial })
+    } catch {
+      // R1: never blocks the shift — the last stored E1 decides
+    }
+  }
   const api: PosApi = {
     bootstrap: () => serial(() => bootstrap(db, deps)),
     login: (userId, pin) => serial(() => login(db, deps, userId, pin)),
-    openShift: async (input) => { const r = await serial(() => openShift(db, deps, input)); wake('before_shift'); return r },
+    openShift: async (input) => { await pullBeforeShift(); const r = await serial(() => openShift(db, deps, input)); wake('before_shift'); return r },
     loadDrinkCatalog: () => serial(() => loadDrinkCatalog(db)),
     loadSellCatalog: () => serial(() => loadSellCatalog(db, deps)),
     recordSale: (input) => serial(() => recordSale(db, deps, input)),
@@ -100,7 +117,7 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     getOrder: (orderId) => serial(() => getOrder(db, deps, orderId)),
     promptPayForAmount: (amountSatang) => serial(() => promptPayForAmount(db, deps, amountSatang)),
     cancelSale: (input) => serial(() => cancelSale(db, deps, input)),
-    quickOpenShift: async (input) => { const r = await serial(() => quickOpenShift(db, deps, input)); wake('before_shift'); return r },
+    quickOpenShift: async (input) => { await pullBeforeShift(); const r = await serial(() => quickOpenShift(db, deps, input)); wake('before_shift'); return r },
     recordCashMovement: (input) => serial(() => recordCashMovement(db, deps, input)),
     shiftReport: () => serial(() => shiftReport(db, deps)),
     // spec §6.2 "ก่อนปิดกะ": the wake comes only once the input and the PIN passed (fix round 1 item 4). Its reads and

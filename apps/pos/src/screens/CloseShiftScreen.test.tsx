@@ -22,7 +22,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => ({
 afterEach(() => cleanup())
 
 const OWNER: UserDto = { id: 'u1', displayName: 'TungAo', role: 'owner' }
-const SHIFT = { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T01:00:00.000Z', openedBy: 'u1', openingFloatSatang: 50_000 }
+const SHIFT = { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T01:00:00.000Z', openedBy: 'u1', openingFloatSatang: 50_000, syncMode: 'local_only' as const }
 const REPORT: ShiftReportDto = {
   shift: { ...SHIFT, openedByName: 'TungAo', openedQuick: false },
   generatedAt: '2026-09-17T13:00:00.000Z',

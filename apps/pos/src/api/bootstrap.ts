@@ -35,7 +35,7 @@ export async function currentOpenShift(db: RemoteDb, deviceId: string): Promise<
     .orderBy(desc(s.shift.openedAt))
     .limit(1)
     .get()
-  return row ? { id: row.id, businessDate: row.businessDate, openedAt: row.openedAt, openedBy: row.openedBy, openingFloatSatang: row.openingFloatSatang } : null
+  return row ? { id: row.id, businessDate: row.businessDate, openedAt: row.openedAt, openedBy: row.openedBy, openingFloatSatang: row.openingFloatSatang, syncMode: row.syncMode } : null
 }
 
 /** Active users with a PIN — in the order of dayo's staff list (E1) when there is one (owners first there), else by creation. */
@@ -50,18 +50,25 @@ export async function listActiveUsers(db: RemoteDb): Promise<UserDto[]> {
 }
 
 /**
- * D50 Q3-26 in block 2 (spec 04 §6.1, §12 "ยังไม่ส่ง N รายการ"): bills, not outbox rows — an order and its order_void
- * count once (both carry the bill's pos_order_id). local_only rows (shift, cash, count, Z) never count; stock is not
- * queued at all.
+ * What one "ยังไม่ส่ง" / "มีปัญหา" item is (D50 Q3-26 · spec 04 §6.1, §12): a bill-lane row counts by its bill
+ * (`pos_order_id` — an order, its order_void and an off-catalog replacement are ONE bill); a shift-lane row counts on
+ * its own key (one per shift_open / cash_movement / cash_count / shift_close).
+ */
+const SYNC_ITEM = sql`case when table_name in ('shift_open', 'cash_movement', 'cash_count', 'shift_close') then idempotency_key else json_extract(row_json, '$.pos_order_id') end`
+const SYNC_ITEM_KINDS = sql`table_name in ('order', 'order_void', 'order_off_catalog', 'shift_open', 'cash_movement', 'cash_count', 'shift_close')`
+
+/**
+ * The "ยังไม่ส่ง N รายการ" badge (D50 Q3-26): pending rows only — local_only (shifts that never reach dayo, block-2
+ * shift/Z rows), closed_off_catalog, sent and dead rows never count; stock is not queued at all.
  */
 export async function countPendingSyncItems(db: RemoteDb): Promise<number> {
-  const r = await db.values<[number]>(sql`select count(distinct json_extract(row_json, '$.pos_order_id')) from outbox where status = 'pending' and table_name in ('order', 'order_void')`)
+  const r = await db.values<[number]>(sql`select count(distinct ${SYNC_ITEM}) from outbox where status = 'pending' and ${SYNC_ITEM_KINDS}`)
   return r[0]?.[0] ?? 0
 }
 
-/** Bills with a dead E2 row (dayo refused it for good, or it was stuck) — the "มีปัญหา" count of spec §12. */
+/** Items with a dead E2 row (dayo refused it for good, or it was stuck) — the "มีปัญหา" count of spec §12. */
 export async function countSyncProblems(db: RemoteDb): Promise<number> {
-  const r = await db.values<[number]>(sql`select count(distinct json_extract(row_json, '$.pos_order_id')) from outbox where status = 'dead' and table_name in ('order', 'order_void')`)
+  const r = await db.values<[number]>(sql`select count(distinct ${SYNC_ITEM}) from outbox where status = 'dead' and ${SYNC_ITEM_KINDS}`)
   return r[0]?.[0] ?? 0
 }
 
