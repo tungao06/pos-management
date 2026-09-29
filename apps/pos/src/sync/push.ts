@@ -8,6 +8,7 @@ import {
 } from '@dayo/contracts'
 import { edgeBahtToSatang } from '@dayo/domain'
 import type { ApiDeps } from '../api/deps'
+import { enqueuePush } from '../db/outbox'
 import { apiBlocked, readDayoConfig, readSupported, recordDayoFailure, type SyncContext } from './catalog'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure, type Timed } from './dayo-client'
 import { createLanePicker, type ParentState } from './lanes'
@@ -523,13 +524,15 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
         await markSent(tx, r, v, at, 'local_only')
         let previousExcludedAt: string | null = null
         let restored: string[] = []
+        let queuedVoid: string | null = null
         if (r.tableName === 'order' || r.tableName === 'order_off_catalog') {
           const orderId = String((r.rowJson as { pos_order_id: string }).pos_order_id)
           previousExcludedAt = (await tx.select({ x: s.order.excludedAt }).from(s.order).where(eq(s.order.id, orderId)).get())?.x ?? null
           await tx.update(s.order).set({ excludedAt: null }).where(eq(s.order.id, orderId))
           restored = await restoreExcludedChildren(tx, r, orderId) // fix round 2: its void must reach dayo too
+          queuedVoid = await queueMissingVoid(tx, deps, r, orderId, at) // fix round 3: a void cancelSale did not queue (the bill was excluded then)
         }
-        await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'sync_row', entityId: r.idempotencyKey, action: SENT_AFTER_LOCAL_ACTION, beforeJson: { status: 'local_only', excludedAt: previousExcludedAt }, afterJson: { status: 'sent', verdict: v.status, restoredChildren: restored }, actorUserId: null, at })
+        await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'sync_row', entityId: r.idempotencyKey, action: SENT_AFTER_LOCAL_ACTION, beforeJson: { status: 'local_only', excludedAt: previousExcludedAt }, afterJson: { status: 'sent', verdict: v.status, restoredChildren: restored, queuedVoid }, actorUserId: null, at })
         t.sent++
         continue
       }
@@ -580,6 +583,28 @@ async function restoreExcludedChildren(tx: RemoteDb, r: Row, orderId: string): P
     .where(and(inArray(s.outbox.id, kids.map((k) => k.id)), eq(s.outbox.status, 'local_only')))
   return kids.map((k) => k.key)
 }
+
+/**
+ * Task 14 fix round 3 (ruling option ก): the bill was cancelled here AFTER the owner closed it "ปิดไว้ในเครื่อง" — cancelSale
+ * then queues no order_void (an excluded bill has no central void) — and dayo stored the bill all the same. Its void is
+ * queued now, in the same transaction, exactly as cancelSale builds it (the VOIDED event: who, the owner who approved,
+ * the reason · voided_at = the bill's voided_at), under this row as its parent (enqueuePush's parent rule), so dayo does
+ * not keep a cancelled bill as a sale. Nothing when the bill is not voided, has no sold_at, or already has a void row.
+ * Returns the queued key, or null.
+ */
+async function queueMissingVoid(tx: RemoteDb, deps: ApiDeps, r: Row, orderId: string, at: string): Promise<string | null> {
+  const order = await tx.select().from(s.order).where(eq(s.order.id, orderId)).get()
+  if (order === undefined || order.status !== 'voided' || order.voidedAt === null || order.soldAt === null) return null
+  const key = rowKey('order_void', orderId)
+  if ((await tx.select({ id: s.outbox.id }).from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get()) !== undefined) return null
+  const voided = await tx.select().from(s.orderEvent).where(and(eq(s.orderEvent.orderId, orderId), eq(s.orderEvent.type, 'VOIDED'))).orderBy(desc(s.orderEvent.seq)).limit(1).get()
+  const p = (voided?.payloadJson ?? {}) as { reason?: unknown; approvedBy?: unknown }
+  if (voided === undefined || typeof p.reason !== 'string') return null
+  const data = { pos_order_id: orderId, voided_at: order.voidedAt, staff_id: voided.actorId, approved_by: typeof p.approvedBy === 'string' ? p.approvedBy : null, reason: p.reason }
+  await enqueuePush(tx, { kind: 'order_void', id: orderId, data, parentKey: r.idempotencyKey }, notBeforeIso(at, order.voidedAt), deps.newId)
+  return key
+}
+const notBeforeIso = (a: string, b: string): string => (Date.parse(a) < Date.parse(b) ? b : a)
 
 /**
  * One call of the sender (item 8 — the states it moves through):

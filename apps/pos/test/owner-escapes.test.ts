@@ -111,7 +111,7 @@ describe('fix round 1 item 2 — a row closed local while its request is on the 
     await sync
     expect(await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, `shift_open:${t.shift!.id}`)).get()).toMatchObject({ status: 'sent', resultJson: { shift_id: t.shift!.id } })
     expect(t.mock.shifts().map((x) => x.id)).toEqual([t.shift!.id])
-    expect(await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, SENT_AFTER_LOCAL_ACTION)).all()).toEqual([expect.objectContaining({ entityId: `shift_open:${t.shift!.id}`, beforeJson: { status: 'local_only', excludedAt: null }, afterJson: { status: 'sent', verdict: 'accepted', restoredChildren: [] } })])
+    expect(await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, SENT_AFTER_LOCAL_ACTION)).all()).toEqual([expect.objectContaining({ entityId: `shift_open:${t.shift!.id}`, beforeJson: { status: 'local_only', excludedAt: null }, afterJson: { status: 'sent', verdict: 'accepted', restoredChildren: [], queuedVoid: null } })])
     expect((await t.db.select().from(s.shift).where(eq(s.shift.id, t.shift!.id)).get())?.syncMode).toBe('local_only') // the owner's choice stands for the rows after it
   })
   it('EXCLUDE of a far-ahead bill during its push, dayo accepts: the bill is shown as in dayo, never "outside dayo"', async () => {
@@ -176,7 +176,7 @@ describe('fix round 2 — a bill EXCLUDEd while on the wire that dayo stores: it
     expect(await status(t, `order:${r.orderId}`)).toBe('sent')
     expect(await status(t, `order_void:${r.orderId}`)).not.toBe('local_only')
     expect(await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, SENT_AFTER_LOCAL_ACTION)).all()).toEqual([expect.objectContaining({
-      beforeJson: { status: 'local_only', excludedAt: expect.any(String) }, afterJson: { status: 'sent', verdict: 'accepted', restoredChildren: [`order_void:${r.orderId}`] },
+      beforeJson: { status: 'local_only', excludedAt: expect.any(String) }, afterJson: { status: 'sent', verdict: 'accepted', restoredChildren: [`order_void:${r.orderId}`], queuedVoid: null },
     })])
     await pushOnce(ctx)
     expect(await status(t, `order_void:${r.orderId}`)).toBe('sent')
@@ -212,6 +212,95 @@ describe('fix round 2 — a bill EXCLUDEd while on the wire that dayo stores: it
     release()
     await sync
     expect([await status(t, `order:${r.orderId}`), await status(t, `order_void:${r.orderId}`)]).toEqual(['sent', 'local_only'])
+  })
+})
+
+describe('fix round 3 — the bill is cancelled AFTER the owner closed it locally, while its request is still on the wire', () => {
+  function onTheWire(t: Awaited<ReturnType<typeof openConnectedApi>>) {
+    let release!: () => void
+    const gate = new Promise<void>((r) => { release = r })
+    let onWire!: () => void
+    const wire = new Promise<void>((r) => { onWire = r })
+    let first = true
+    const gated: typeof fetch = async (input, init) => {
+      if (String(input).endsWith('/pos/push') && first) { first = false; onWire(); await gate }
+      return t.mock.fetch(input, init)
+    }
+    const api = createPosApi(t.db, { ...t.deps, fetch: gated })
+    return { api, sync: api.syncNow(), wire, release }
+  }
+  type Api = ReturnType<typeof createPosApi>
+  const cancel = (api: Api, orderId: string) =>
+    api.cancelSale({ orderId, actorUserId: STAFF.TungAo, approverUserId: STAFF.DCm, approverPin: '2222', reason: 'ลูกค้ายกเลิก', made: false, refundReference: null })
+  const rowOf = async (t: Awaited<ReturnType<typeof openConnectedApi>>, key: string) => t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get()
+
+  it('order row: dayo stores the bill → the void cancelSale could not queue is queued now (from the VOIDED event) → dayo ends cancelled', async () => {
+    const t = await openConnectedApi({ now: '2026-09-27T03:00:00.000Z' })
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
+    t.mock.setNow('2026-09-25T03:00:00.000Z')
+    await pushOnce(ctx) // CLOCK_AHEAD, far ahead: a clock card
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    t.clock.advanceMs(120_000)
+    const { api, sync, wire, release } = onTheWire(t)
+    await wire
+    t.mock.setNow(t.clock.now())                                      // dayo will accept the bill
+    await api.excludeFromSync({ ...owner, outboxId: p!.outboxId })    // the owner closes it first…
+    await cancel(api, r.orderId)                                      // …then staff cancel it: no order_void (the bill was excluded)
+    expect(await rowOf(t, `order_void:${r.orderId}`)).toBeUndefined()
+    release()
+    await sync
+    const order = (await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())!
+    expect(await rowOf(t, `order_void:${r.orderId}`)).toMatchObject({ parentKey: `order:${r.orderId}`, rowJson: { voided_at: order.voidedAt, staff_id: STAFF.TungAo, approved_by: STAFF.DCm, reason: 'ลูกค้ายกเลิก' } })
+    expect(await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, SENT_AFTER_LOCAL_ACTION)).all()).toEqual([expect.objectContaining({ afterJson: expect.objectContaining({ queuedVoid: `order_void:${r.orderId}` }) })])
+    await pushOnce(ctx)
+    expect(await rowOf(t, `order_void:${r.orderId}`)).toMatchObject({ status: 'sent' })
+    expect(t.mock.orders()).toEqual([expect.objectContaining({ posOrderId: r.orderId, status: 'cancelled' })])
+    expect((await t.api.getOrder(r.orderId)).central).toMatchObject({ state: 'sent', voidState: 'sent' })
+  })
+  it('order_off_catalog row: the same — the void waits for the off-catalog row and dayo ends cancelled', async () => {
+    const t = await openConnectedApi({ now: '2026-09-27T03:00:00.000Z', block3: true, block3Phase2: true })
+    t.mock.setBlock3LiveFrom('2026-09-01')
+    t.mock.setNow('2026-09-27T03:00:00.000Z')
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
+    t.mock.override({ match: { key: `order:${r.orderId}` }, verdict: { status: 'rejected', reason: 'INVALID', detail: 'x' }, times: 1 })
+    await pushOnce(ctx)
+    await t.api.closeOffCatalog({ ...owner, outboxId: (await t.api.listSyncProblems(STAFF.TungAo))[0]!.outboxId })
+    t.mock.setNow('2026-09-25T03:00:00.000Z')
+    t.clock.advanceMs(1_000)
+    await pushOnce(ctx) // the off-catalog row: CLOCK_AHEAD, far ahead
+    const p = (await t.api.listSyncProblems(STAFF.TungAo)).find((x) => x.key === `order_off_catalog:${r.orderId}`)!
+    expect(p).toMatchObject({ waiting: 'clock', remedies: ['EXCLUDE'] })
+    t.clock.advanceMs(120_000)
+    const { api, sync, wire, release } = onTheWire(t)
+    await wire
+    t.mock.setNow(t.clock.now())
+    await api.excludeFromSync({ ...owner, outboxId: p.outboxId })
+    await cancel(api, r.orderId)
+    release()
+    await sync
+    expect(await rowOf(t, `order_off_catalog:${r.orderId}`)).toMatchObject({ status: 'sent' })
+    expect(await rowOf(t, `order_void:${r.orderId}`)).toMatchObject({ parentKey: `order_off_catalog:${r.orderId}` })
+    await pushOnce(ctx)
+    expect(t.mock.orders().find((o) => o.posOrderId === r.orderId)).toMatchObject({ status: 'cancelled' })
+  })
+  it('listPriceDiffs: a void closed locally of a bill that reached dayo as off-catalog is "void only on the tablet" (fix round 3 item 2)', async () => {
+    const t = await openConnectedApi({ block3: true, block3Phase2: true })
+    t.mock.setBlock3LiveFrom('2026-09-01')
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
+    t.mock.override({ match: { key: `order:${r.orderId}` }, verdict: { status: 'rejected', reason: 'INVALID', detail: 'x' }, times: 1 })
+    await pushOnce(ctx)
+    await t.api.closeOffCatalog({ ...owner, outboxId: (await t.api.listSyncProblems(STAFF.TungAo))[0]!.outboxId })
+    await pushOnce(ctx)
+    expect(await rowOf(t, `order_off_catalog:${r.orderId}`)).toMatchObject({ status: 'sent' })
+    await t.api.cancelSale({ orderId: r.orderId, actorUserId: STAFF.TungAo, approverUserId: STAFF.DCm, approverPin: '2222', reason: 'x', made: false, refundReference: 'K' })
+    t.mock.override({ match: { key: `order_void:${r.orderId}` }, verdict: { status: 'rejected', reason: 'FORBIDDEN', detail: 'rule: วันยกเลิกไม่ตรงวันขาย' }, times: 1 })
+    await pushOnce(ctx)
+    const v = (await t.api.listSyncProblems(STAFF.TungAo)).find((x) => x.key === `order_void:${r.orderId}`)!
+    await t.api.excludeFromSync({ ...owner, outboxId: v.outboxId })
+    expect(await t.api.listPriceDiffs(STAFF.TungAo)).toEqual([expect.objectContaining({ kind: 'void_local_only', orderId: r.orderId })])
   })
 })
 

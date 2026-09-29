@@ -583,8 +583,9 @@ export async function listPriceDiffs(db: RemoteDb, actorUserId: string): Promise
     .where(and(listed, isNotNull(s.order.centralComputedTotalSatang), ne(s.order.centralComputedTotalSatang, s.order.totalSatang))).all()
   const localVoids = await db.select({ data: s.outbox.rowJson }).from(s.outbox).where(and(eq(s.outbox.tableName, 'order_void'), eq(s.outbox.status, 'local_only'))).all()
   const voidIds = [...new Set(localVoids.map((r) => String((r.data as { pos_order_id: string }).pos_order_id)))]
+  // Task 14 fix round 3: the bill reached dayo as its order row OR as its order_off_catalog row
   const sentIds = voidIds.length === 0 ? [] : (await db.select({ data: s.outbox.rowJson }).from(s.outbox)
-    .where(and(inArray(s.outbox.idempotencyKey, voidIds.map((id) => rowKey('order', id))), eq(s.outbox.status, 'sent'))).all())
+    .where(and(inArray(s.outbox.idempotencyKey, voidIds.flatMap((id) => [rowKey('order', id), rowKey('order_off_catalog', id)])), eq(s.outbox.status, 'sent'))).all())
     .map((r) => String((r.data as { pos_order_id: string }).pos_order_id))
   const voidOnly = sentIds.length === 0 ? [] : await db.select().from(s.order).where(and(listed, eq(s.order.status, 'voided'), inArray(s.order.id, sentIds))).all()
   type Bill = typeof s.order.$inferSelect
