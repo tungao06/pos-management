@@ -334,7 +334,9 @@ export type StoredZSnapshot = Omit<ZSnapshot, Block3ZField | 'cash'> & Partial<P
 /** E4 as the tablet keeps it (spec §4.10): the bot/web cash bills of (after, until], until = the shift's counted_at. */
 export type BotCashDto = { shiftId: string; after: string; until: string; bills: ZBotBill[]; cashTotalSatang: number; fetchedAt: string }
 /** The count review screen: the shift's figures at counted_at, with the stored E4 bot cash when there is one (includesBotCash). */
-export type CountSummaryDto = ShiftReportDto & { countedAt: string; syncMode: ShiftSyncMode; includesBotCash: boolean; bot: BotCashDto | null }
+/** zBlockedBy (ruling R7): the id of an earlier counted shift of this device still waiting for its Z — while set, a Z of
+ * this shift is refused (Z_NOT_READY): the screen confirms the count only (z: null) and points at that shift first. */
+export type CountSummaryDto = ShiftReportDto & { countedAt: string; syncMode: ShiftSyncMode; includesBotCash: boolean; bot: BotCashDto | null; zBlockedBy: string | null }
 /** What the owner settles when the Z is issued: the reason (asked when |variance| ≥ the threshold, D102), the bank-app QR total, a chain acknowledgement. */
 export type ZSettle = { varianceReason: string | null; bankQrTotalSatang: number | null; acknowledgeZChainBroken: boolean }
 /** D101 step 2/3 · owner PIN · `z` null = count only (offline: no reason asked yet) · `z` set = count and Z in one transaction. */

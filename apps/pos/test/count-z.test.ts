@@ -4,6 +4,7 @@ import * as s from '@dayo/db-schema/sqlite'
 import { CashCountRowData, ShiftCloseRowData, type CentralOrder } from '@dayo/contracts'
 import { posErrorCode } from '../src/api/errors'
 import { pushOnce } from '../src/sync/push'
+import { LOCAL_DEVICE_KEY } from '../src/api/bootstrap'
 import { openConnectedApi, STAFF } from './helpers/dayo'
 import { sellCode } from './helpers/db'
 import { countAndClose } from './helpers/shift'
@@ -146,6 +147,8 @@ describe('count and Z (D101 · spec 04 §6.8 · §4.10)', () => {
     t.clock.advanceMs(3_600_000)
     const b = await t.api.finishCount({ actorUserId: STAFF.TungAo })
     sum = await t.api.countSummary(b.shiftId)
+    expect(sum.zBlockedBy).toBe(a.shiftId) // R7: the screen knows a Z of b would be refused now
+    expect((await t.api.countSummary(a.shiftId)).zBlockedBy).toBeNull()
     await t.api.confirmCount({ shiftId: b.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: sum.fingerprint, z: null })
     await t.api.fetchBotCash(b.shiftId)
     const sb = await t.api.countSummary(b.shiftId)
@@ -153,6 +156,7 @@ describe('count and Z (D101 · spec 04 §6.8 · §4.10)', () => {
     await t.api.fetchBotCash(a.shiftId)
     const za = await t.api.issueZ({ shiftId: a.shiftId, ...owner2, shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, ...settle, varianceReason: 'บิลบอทรวมแล้ว' })
     expect(await t.api.fetchBotCash(b.shiftId)).toMatchObject({ after: a.countedAt, until: b.countedAt })
+    expect((await t.api.countSummary(b.shiftId)).zBlockedBy).toBeNull()
     const zb = await t.api.issueZ({ shiftId: b.shiftId, ...owner2, shownFingerprint: (await t.api.countSummary(b.shiftId)).fingerprint, ...settle })
     const close = ShiftCloseRowData.parse((await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, `shift_close:${b.shiftId}`)).get())!.rowJson)
     expect(close.z_report).toMatchObject({ z_no: 2, prev_hash: za.hash, bot_window: { after: a.countedAt } })
@@ -186,7 +190,7 @@ describe('E4 answers are checked before they count (carried: never trust cash_to
       ['total', () => ({ bills: [e4Bill('L260925-901', 70, '2026-09-25T04:00:00.000+00:00')], cash_total: 700 })],
       ['order_no', () => ({ bills: [e4Bill('X-1', 70, '2026-09-25T04:00:00.000+00:00')], cash_total: 70 })],
       ['duplicate', () => ({ bills: [e4Bill('L260925-901', 35, '2026-09-25T04:00:00.000+00:00'), e4Bill('L260925-901', 35, '2026-09-25T04:00:00.000+00:00')], cash_total: 70 })],
-      ['after', (after) => ({ bills: [e4Bill('L260925-901', 70, after)], cash_total: 70 })],                                 // (after — open
+      ['after', (after) => ({ bills: [e4Bill('L260925-901', 70, new Date(Date.parse(after) - 1).toISOString())], cash_total: 70 })], // before after
       ['until', (_a, until) => ({ bills: [e4Bill('L260925-901', 70, new Date(Date.parse(until) + 1).toISOString())], cash_total: 70 })],
       ['decimals', () => ({ bills: [e4Bill('L260925-901', 70.001, '2026-09-25T04:00:00.000+00:00')], cash_total: 70.001 })],
       ['version', () => ({ bills: [{ ...e4Bill('L260925-901', 70, '2026-09-25T04:00:00.000+00:00'), version: 0 }], cash_total: 70 })],
@@ -199,12 +203,22 @@ describe('E4 answers are checked before they count (carried: never trust cash_to
       expect(await t.api.countSummary(shiftId)).toMatchObject({ includesBotCash: false, bot: null }) // the screen goes the offline way
     }
   })
-  it('a bill sold exactly at until counts; a web bill dayo gave no sold_at (a back-dated entry) counts too', async () => {
+  it('a bill sold exactly at until counts, and one printed exactly at after (dayo prints sold_at in ms, filters created_at in µs — 0067:65); a web bill dayo gave no sold_at (a back-dated entry) counts too', async () => {
     const { t } = await centralShift()
     const { shiftId, countedAt } = await t.api.finishCount({ actorUserId: STAFF.TungAo })
-    fakeE4(t, (_a, until) => ({ bills: [e4Bill('L260925-901', 70, until.replace('Z', '+00:00')), e4Bill('L260924-777', 30.5, null)], cash_total: 100.5 }))
+    fakeE4(t, (after, until) => ({ bills: [e4Bill('L260925-901', 70, until.replace('Z', '+00:00')), e4Bill('L260924-900', 5, after.replace('Z', '+00:00')), e4Bill('L260924-777', 30.5, null)], cash_total: 105.5 }))
     const dto = await t.api.fetchBotCash(shiftId)
-    expect(dto).toMatchObject({ until: countedAt, cashTotalSatang: 10_050, bills: [{ orderNo: 'L260925-901', totalSatang: 7_000 }, { orderNo: 'L260924-777', soldAt: null, totalSatang: 3_050 }] })
+    expect(dto).toMatchObject({ until: countedAt, cashTotalSatang: 10_550, bills: [{ orderNo: 'L260925-901', totalSatang: 7_000 }, { orderNo: 'L260924-900', totalSatang: 500 }, { orderNo: 'L260924-777', soldAt: null, totalSatang: 3_050 }] })
+  })
+  it("E4 of another device's shift (a restored file) is refused — SHIFT_NOT_COUNTING, no request", async () => {
+    const { t } = await centralShift()
+    const { shiftId } = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    const at = t.clock.now()
+    await t.db.insert(s.device).values({ id: 'other-device', name: 'อีกเครื่อง', receiptPrefix: 'B', isSellingDevice: true, registeredAt: at, version: 1, updatedAt: at })
+    await t.db.update(s.syncState).set({ value: 'other-device' }).where(eq(s.syncState.key, LOCAL_DEVICE_KEY))
+    const before = t.mock.requests().length
+    await expectCode(t.api.fetchBotCash(shiftId), 'SHIFT_NOT_COUNTING')
+    expect(t.mock.requests()).toHaveLength(before)
   })
   it('a stored preview that is unreadable or for another window is ignored (never trusted over a fresh E4)', async () => {
     const { t } = await centralShift()
@@ -313,6 +327,26 @@ describe('count and Z — states, PINs, resend (D101 · R2 · R7)', () => {
     expect(rows.every((x) => x.createdAt === countedAt)).toBe(true)
     t.clock.set(countedAt)
     await pushOnce(ctx)
+    expect(await t.db.select().from(s.outbox).where(inArray(s.outbox.status, ['pending', 'dead'])).all()).toEqual([])
+  })
+  it("the clock steps back after a Z: the next shift opens and counts after it, so its E4 window starts at the first Z's until and no bot bill is counted twice (fix round 1 · security M1)", async () => {
+    const { t, ctx } = await centralShift() // bot bill L260925-901 at 04:00Z · clock 05:00Z
+    const a = await countAndClose(t, lines(615), owner2)
+    const aUntil = a.z!.snapshot!.botWindow!.until
+    expect(a.z!.snapshot!.botBills!.map((b) => b.orderNo)).toEqual(['L260925-901'])
+    t.clock.set('2026-09-25T04:30:00.000Z') // 30 minutes back: after the bot bill, before a's count — without the fix b's window would be (00:00, 04:30] and hold it again
+    const b = await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    expect(b.openedAt).toBe(aUntil) // never before the last count
+    const { shiftId, countedAt } = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    expect(countedAt).toBe(new Date(Date.parse(aUntil) + 1).toISOString())
+    const bot2 = await t.api.fetchBotCash(shiftId)
+    expect(bot2).toMatchObject({ after: aUntil, until: countedAt, bills: [], cashTotalSatang: 0 })
+    const sum = await t.api.countSummary(shiftId)
+    const r = await t.api.confirmCount({ shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: sum.fingerprint, z: settle })
+    expect(r.z!.snapshot!.botBills).toEqual([])
+    const sent = (await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'shift_close')).all()).map((x) => ShiftCloseRowData.parse(x.rowJson).z_report.bot_bills.map((bb) => bb.order_no))
+    expect(sent.flat()).toEqual(['L260925-901'])
+    await pushOnce(ctx); await pushOnce(ctx)
     expect(await t.db.select().from(s.outbox).where(inArray(s.outbox.status, ['pending', 'dead'])).all()).toEqual([])
   })
   it('closeShift (one step) stays for local-only shifts; a central shift must go the count way (BOT_CASH_REQUIRED, nothing written)', async () => {

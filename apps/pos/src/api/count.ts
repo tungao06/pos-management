@@ -64,19 +64,25 @@ async function summarize(db: RemoteDb, shift: ShiftRow): Promise<CountSummaryDto
   const window = shift.syncMode === 'central' ? await botWindowFor(db, { id: shift.id, deviceId: shift.deviceId, businessDate: shift.businessDate, countedAt: shift.countedAt }) : null
   const bot = window === null ? null : await readBotPreview(db, shift.id, window)
   const report = await buildShiftReport(db, toDto(shift), shift.countedAt, bot)
-  return { ...report, countedAt: shift.countedAt, syncMode: shift.syncMode, includesBotCash: bot !== null, bot }
+  return { ...report, countedAt: shift.countedAt, syncMode: shift.syncMode, includesBotCash: bot !== null, bot, zBlockedBy: await earlierCountWithoutZ(db, shift) }
 }
 
 /**
  * D101 step 1 · R3, inside the caller's transaction: the open shift becomes 'counting' with counted_at set once — never
  * before the shift opened nor before any of its receipts, voids or cash movements (a device clock stepped back must not
- * leave a row of the shift after its count: dayo 0066:216-222, spec §4.10 pos_bills sold_at ≤ counted_at).
+ * leave a row of the shift after its count: dayo 0066:216-222, spec §4.10 pos_bills sold_at ≤ counted_at) — and always
+ * at least 1 ms after every earlier count of this device (fix round 1 item 1 · security M1): the E4 window of a count
+ * starts at the previous count, so a clock stepped back would otherwise open a window that overlaps one already in a
+ * Z and count the same bot bill twice.
  */
 async function freezeOpen(tx: RemoteDb, deps: ApiDeps, shift: ShiftDto, actorId: string): Promise<string> {
   const bills = await tx.values<[string | null, string | null]>(sql`select max(coalesce(sold_at, paid_at, created_at)), max(voided_at) from "order" where shift_id = ${shift.id} and receipt_no is not null`)
   const moves = await tx.values<[string | null]>(sql`select max(created_at) from cash_movement where shift_id = ${shift.id}`)
+  const counts = await tx.values<[string | null]>(sql`select max(counted_at) from shift where device_id = (select device_id from shift where id = ${shift.id}) and counted_at is not null`)
+  const lastCount = counts[0]?.[0] ?? null
+  const afterLastCount = lastCount === null ? null : new Date(Date.parse(lastCount) + 1).toISOString()
   const at = deps.now()
-  const countedAt = [shift.openedAt, bills[0]?.[0] ?? null, bills[0]?.[1] ?? null, moves[0]?.[0] ?? null].reduce<string>((a, b) => (b !== null && Date.parse(b) > Date.parse(a) ? b : a), at)
+  const countedAt = [shift.openedAt, bills[0]?.[0] ?? null, bills[0]?.[1] ?? null, moves[0]?.[0] ?? null, afterLastCount].reduce<string>((a, b) => (b !== null && Date.parse(b) > Date.parse(a) ? b : a), at)
   await tx.update(s.shift).set({ status: 'counting', countedAt }).where(and(eq(s.shift.id, shift.id), eq(s.shift.status, 'open')))
   await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'shift', entityId: shift.id, action: 'count_finished', beforeJson: null, afterJson: { countedAt }, actorUserId: actorId, at })
   return countedAt

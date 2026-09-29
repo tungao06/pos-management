@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { SHIFT_LANE_KINDS, type ShiftSyncMode } from '@dayo/contracts'
@@ -10,7 +10,7 @@ import { currentOpenShift, requireDevice } from './bootstrap'
 import { isDayoLinked } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { builtRow } from './rows'
+import { builtRow, notBefore } from './rows'
 import type { OpenShiftInput, QuickOpenShiftInput, ShiftDto } from './types'
 
 /** audit_log action that marks a "เปิดกะด่วน" (spec §4.8 · plan 3 M18 · Q3b-10 · D52). */
@@ -45,7 +45,10 @@ async function insertOpenShift(tx: RemoteDb, deps: ApiDeps, deviceId: string, us
   const counting = await tx.select({ id: s.shift.id }).from(s.shift).where(and(eq(s.shift.deviceId, deviceId), eq(s.shift.status, 'counting'))).get()
   if (counting !== undefined) throw new PosError('COUNT_PENDING', counting.id)
   if ((await currentOpenShift(tx, deviceId)) !== null) throw new PosError('SHIFT_ALREADY_OPEN', 'close the current shift first')
-  const at = deps.now()
+  // fix round 1 item 1 (security M1): never opened before this device's last count — a clock stepped back must not put
+  // the new shift (and its E4 window) inside a window already counted
+  const lastCount = (await tx.values<[string | null]>(sql`select max(counted_at) from shift where device_id = ${deviceId} and counted_at is not null`))[0]?.[0] ?? null
+  const at = lastCount === null ? deps.now() : notBefore(deps.now(), lastCount)
   const row = {
     id: deps.newId(),
     deviceId,

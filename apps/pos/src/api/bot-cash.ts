@@ -2,10 +2,11 @@ import { and, desc, eq, isNotNull, lt } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { BOT_ORDER_NO_RE } from '@dayo/contracts'
-import { edgeBahtToSatang, MAX_Z_BOT_BILLS, type ZBotBill } from '@dayo/domain'
+import { edgeBahtToSatang, MAX_Z_BOT_BILLS, sumSatang, type ZBotBill } from '@dayo/domain'
 import { apiBlocked, rateLimitLeft, readDayoConfig, recordDayoFailure, type SyncContext } from '../sync/catalog'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from '../sync/dayo-client'
 import { DAYO_KEYS, extendRateLimit, MAX_BACKOFF_WAIT_MS, readKey, writeKey } from '../sync/state'
+import { requireDevice } from './bootstrap'
 import { PosError } from './errors'
 import type { BotCashDto } from './types'
 
@@ -56,9 +57,11 @@ const bad = (why: string): PosError => new PosError('DAYO_BAD_RESPONSE', `E4 ${w
 /**
  * Carried from Task 10 review: E4 is checked here, never trusted — at most 500 bills (dayo refuses a longer Z, R20) ·
  * every order_no as dayo's bot_bills check wants it (preflight D5) · no bill twice · version an int4 ≥ 1 · each sold_at
- * (when dayo has one) in (after, until] · every total and the sum through edgeBahtToSatang, and the sum must equal
- * cash_total — the tablet's own sum is what counts. dayo filters on created_at; its bot/web bills get sold_at = now() in
- * the same transaction (0052:1058) or null for a back-dated entry, so a null sold_at cannot be checked and is taken.
+ * (when dayo has one) in [after, until] · every total and the sum through edgeBahtToSatang, and the sum must equal
+ * cash_total — the tablet's own sum is what counts. dayo filters on created_at ∈ (after, until] in µs; its bot/web bills
+ * get sold_at = now() in the same transaction (0051:1058) or null for a back-dated entry, so a null sold_at cannot be
+ * checked and is taken · E4 prints sold_at truncated to ms (0067:65): a bill created 0.5 ms after `after` reads as
+ * exactly `after`, so the lower bound is inclusive here (fix round 1 item 3).
  * Any failure = DAYO_BAD_RESPONSE: nothing is stored and the screen stays on the count-without-bot-cash path.
  */
 export function checkedBotBills(data: { bills: readonly { order_no: string; version: number; source: string; sold_at: string | null; total: number; created_by_name: string | null }[]; cash_total: number }, window: { after: string; until: string }): { bills: ZBotBill[]; cashTotalSatang: number } {
@@ -66,7 +69,6 @@ export function checkedBotBills(data: { bills: readonly { order_no: string; vers
   const afterMs = Date.parse(window.after)
   const untilMs = Date.parse(window.until)
   const seen = new Set<string>()
-  let sum = 0
   const bills: ZBotBill[] = []
   for (const b of data.bills) {
     if (!BOT_ORDER_NO_RE.test(b.order_no)) throw bad(`order_no ${JSON.stringify(b.order_no.slice(0, 40))} is not a bot bill number`)
@@ -75,16 +77,16 @@ export function checkedBotBills(data: { bills: readonly { order_no: string; vers
     if (!Number.isSafeInteger(b.version) || b.version < 1 || b.version > VERSION_MAX) throw bad(`${b.order_no} version ${b.version}`)
     if (b.sold_at !== null) {
       const t = Date.parse(b.sold_at)
-      if (!(t > afterMs && t <= untilMs)) throw bad(`${b.order_no} sold_at ${b.sold_at} is outside (${window.after}, ${window.until}]`)
+      if (!(t >= afterMs && t <= untilMs)) throw bad(`${b.order_no} sold_at ${b.sold_at} is outside [${window.after}, ${window.until}]`)
     }
     let totalSatang: number
     try { totalSatang = edgeBahtToSatang(b.total) } catch { throw bad(`${b.order_no} total ${b.total}`) }
-    sum += totalSatang
-    if (!Number.isSafeInteger(sum)) throw bad('Σ bills overflows')
     bills.push({ orderNo: b.order_no, version: b.version, source: b.source, soldAt: b.sold_at, totalSatang, createdByName: b.created_by_name })
   }
   let cashTotalSatang: number
   try { cashTotalSatang = edgeBahtToSatang(data.cash_total) } catch { throw bad(`cash_total ${data.cash_total}`) }
+  const sum = sumSatang(bills.map((b) => b.totalSatang))
+  if (!Number.isSafeInteger(sum)) throw bad('Σ bills overflows')
   if (sum !== cashTotalSatang) throw bad(`cash_total ${cashTotalSatang} satang ≠ Σ bills ${sum}`)
   return { bills, cashTotalSatang: sum }
 }
@@ -98,6 +100,7 @@ export async function fetchBotCash(ctx: SyncContext, shiftId: string, opts: { be
   const { cfg, window } = await ctx.serial(async () => {
     const shift = await ctx.db.select().from(s.shift).where(eq(s.shift.id, shiftId)).get()
     if (shift === undefined || shift.countedAt === null || (shift.status !== 'counting' && shift.status !== 'counted')) throw new PosError('SHIFT_NOT_COUNTING', shiftId)
+    if (shift.deviceId !== (await requireDevice(ctx.db)).id) throw new PosError('SHIFT_NOT_COUNTING', shiftId) // another device's shift (a restored file)
     if (shift.syncMode !== 'central') throw new PosError('BAD_INPUT', 'a local-only shift has no bot cash (ruling R6)')
     const c = await readDayoConfig(ctx.db, ctx.deps)
     if (c === null) throw new PosError('OFFLINE', 'not linked')
@@ -156,16 +159,15 @@ export async function readBotPreview(db: RemoteDb, shiftId: string, window: { af
   const p = v as Record<string, unknown>
   if (p['shiftId'] !== shiftId || p['after'] !== window.after || p['until'] !== window.until || !isStr(p['fetchedAt']) || !isInt(p['cashTotalSatang']) || !Array.isArray(p['bills'])) return null
   const bills: ZBotBill[] = []
-  let sum = 0
   for (const x of p['bills'] as unknown[]) {
     if (typeof x !== 'object' || x === null) return null
     const b = x as Record<string, unknown>
     if (!isStr(b['orderNo']) || !isInt(b['version']) || !isStr(b['source']) || !isInt(b['totalSatang']) || b['totalSatang'] < 0) return null
     if (b['soldAt'] !== null && !isStr(b['soldAt'])) return null
     if (b['createdByName'] !== null && !isStr(b['createdByName'])) return null
-    sum += b['totalSatang']
     bills.push({ orderNo: b['orderNo'], version: b['version'], source: b['source'], soldAt: b['soldAt'] as string | null, totalSatang: b['totalSatang'], createdByName: b['createdByName'] as string | null })
   }
+  const sum = sumSatang(bills.map((b) => b.totalSatang)) // each already a safe integer ≥ 0
   if (!Number.isSafeInteger(sum) || sum !== p['cashTotalSatang']) return null
   return { shiftId, after: window.after, until: window.until, bills, cashTotalSatang: sum, fetchedAt: p['fetchedAt'] }
 }
