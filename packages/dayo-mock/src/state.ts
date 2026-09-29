@@ -1,9 +1,14 @@
 // packages/dayo-mock/src/state.ts — no node:* imports (the tablet's jsdom tests load this package)
-import { PosCatalogResponse, type CentralOrder, type DayoEdit, type OrderRowData, type PosCatalogData, type ReceivedRowResult } from '@dayo/contracts'
+import { PosCatalogResponse, supportedOf, type CentralOrder, type DayoEdit, type OrderRowData, type PosCatalogData, type ReceivedRowResult } from '@dayo/contracts'
 import rich from '@dayo/contracts/fixtures/pos-test/e1-catalog-rich.json' with { type: 'json' }
 import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 
-export type PosCatalogChangedData = Extract<PosCatalogData, { changed: true }>
+/**
+ * The E1 the mock serves. Its `supported_fields` holds the push field lists only — what judge.ts checks rows against.
+ * (E1 of dayo ≥ 0071 also carries `promotion_rule_versions` there as numbers, plan 10 F2; the mock adds that where it
+ * builds the answer — plan 10 Task 5.)
+ */
+export type PosCatalogChangedData = Extract<PosCatalogData, { changed: true }> & { supported_fields: Record<string, string[]> } // not Omit: it drops the known keys of a loose object
 export type CatalogPromotion = PosCatalogChangedData['catalog']['promotions'][number]
 /** One priced menu × size × sweetness row of E1 (contracts `Variant`) — what a size needs before anything can be sold in it. */
 export type CatalogVariant = PosCatalogChangedData['catalog']['variants'][number]
@@ -188,5 +193,6 @@ export function freshCatalog(): PosCatalogChangedData {
   // E1 `pricing` = the vendored pin: the mock plays a dayo running the exact pricing code the tablet vendored, so a
   // `vendor:update` never needs this fixture's hashes edited by hand (a test wanting a mismatch sets `opts.pricing`
   // or mutates `catalog.pricing`).
-  return { ...structuredClone(d), pricing: { commit: vendor.commit, files_sha256: { ...vendor.files } } }
+  const fields = Object.fromEntries(Object.entries(supportedOf(d.supported_kinds, d.supported_fields).fields).map(([k, v]) => [k, [...v]]))
+  return { ...structuredClone(d), supported_fields: fields, pricing: { commit: vendor.commit, files_sha256: { ...vendor.files } } }
 }

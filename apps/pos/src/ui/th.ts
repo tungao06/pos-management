@@ -613,4 +613,22 @@ export const TH = {
 
   // fu app-version — เวอร์ชันที่กำลังใช้งาน (/status เต็มบรรทัด, BrandBar ย่อ)
   statusVersionLine: (version: string, commit: string, builtAt: string): string => `เวอร์ชัน v${version} · commit ${commit} · build ${builtAt}`,
+
+  // แผน 10 T0 — โปรโมชันเลือกเอง + แคตตาล็อกรุ่นใหม่ (spec §5.1, owner Q1=ข, Q3=ก, ADR-0072)
+  errManualReasonRequired: 'ต้องใส่เหตุผลก่อนชำระ เมื่อเลือกโปรโมชันเอง',
+  errManualPromoUnsupported: 'ระบบกลางรุ่นนี้ยังไม่รองรับการเลือกโปรโมชันเอง',
+  // ต่างจาก errDiscountTooBig (ส่วนลดต้องน้อยกว่ายอดรวม) — นี่คือกรณีส่วนลดกรอกเองทำให้ยอดเหลือ 0 บาทพอดี
+  errZeroTotalNotAllowed: 'ส่วนลดทำให้ยอดเหลือ 0 บาท ขายไม่ได้ — ลดส่วนลดหรือลบบรรทัดก่อน',
+  manualPromos: 'โปรโมชันที่เลือกเอง',
+  manualReason: 'เหตุผลที่เลือกโปรนี้เอง',
+  manualReasonHint: 'ต้องใส่เหตุผลก่อนชำระ ถ้าเลือกโปรโมชันเอง',
+  promoModeAuto: 'อัตโนมัติ',
+  promoModeCode: 'รหัสโปร',
+  promoModeManual: 'เลือกเอง',
+  // Q3=(ก): ป้ายอ่านอย่างเดียว — แท็บเล็ตไม่นับจำนวนครั้งที่ใช้ (ADR-0072 ข้อ 2)
+  promoLimitInfo: (n: number, perDay: boolean): string => (perDay ? `จำกัด ${n} ครั้ง/วัน` : `จำกัด ${n} ครั้ง`),
+  promoRuleBehind: 'ระบบกลางมีโปรรุ่นใหม่กว่าแอปนี้',
+  promoWarnings: 'คำเตือนโปรโมชัน',
+  // owner Q1=(ข): บิล 0 บาทจากโปรโมชันขายได้ แต่รับเงินสดเท่านั้น
+  zeroBillCashOnly: 'บิลนี้ยอด 0 บาทจากโปรโมชัน — รับชำระด้วยเงินสดเท่านั้น',
 } as const
