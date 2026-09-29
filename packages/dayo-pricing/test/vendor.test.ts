@@ -29,8 +29,8 @@ describe('vendored dayo pricing (spec 04 §5.1, D72)', () => {
     expect([...VENDORED].sort()).toEqual(['cost', 'fmt', 'money', 'promoRule', 'promotions', 'shopSettings', 'time', 'types'].map((n) => `packages/shared/src/${n}.ts`))
     expect(Object.keys(pin.files).sort()).toEqual([...VENDORED].sort())
   })
-  it('pins dayo main f4cda56 (owner answer Q5, 30 Sep 2026)', () => {
-    expect(pin.commit).toBe('f4cda56f7b3515cbb3ea3f301e8461f6c720b7f4')
+  it('pins dayo 7a90847, the deployed commit dayo\'s owner exported pos-parity.json at (owner Q5 f4cda56 · plan 10 T4 re-pin: same pricing bytes)', () => {
+    expect(pin.commit).toBe('7a90847c0a0e85c439082079c35119436a5f7f1d')
   })
   it('pins dayo\'s golden promo-rule fixtures in VENDOR.json.fixtures: every *.json plus load.ts (R1)', () => {
     const keys = Object.keys(pin.fixtures ?? {})

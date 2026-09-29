@@ -14,20 +14,18 @@ import { PROMO, promoRulesCatalog } from './fixtures/promo-rules-catalog.js'
 const MATCHA_NO_TIME = { saleDate: '2026-09-25', channelCode: 'store', lines: [{ code: 'Matcha Latte', qty: 1 }] }
 
 describe('priceParityCase (dayo parity export only — never the sale path)', () => {
-  it('without allowMissingSaleTime a case with no saleTime stays an error (R15)', () => {
-    expect(() => priceParityCase(MATCHA_NO_TIME, POS_CATALOG)).toThrow(/NO_SALE_TIME/)
-  })
-  it('with allowMissingSaleTime the draft reaching dayo\'s code has no saleTime and the sale date of the case', () => {
-    const p = priceParityCase(MATCHA_NO_TIME, POS_CATALOG, { allowMissingSaleTime: true })
-    expect(p.draft.saleTime).toBeUndefined()
-    expect([p.saleDate, p.saleTime]).toEqual(['2026-09-25', ''])
-    const { saleTime: _t, ...noTime } = toOrderDraft(cartFromOrderDraft({ ...MATCHA_NO_TIME, saleTime: '12:00' }, POS_CATALOG).cart, POS_CATALOG, p.soldAt)
-    expect(p.totalSatang).toBe(edgeBahtToSatang(computeOrder(noTime, withZeroCosts(POS_CATALOG)).totalAmount))
+  it('a case with no saleTime is an error, with no way around it (R15 · gap G1: dayo\'s export gives every case a time)', () => {
+    expect(() => priceParityCase(MATCHA_NO_TIME, POS_CATALOG)).toThrow(/^NO_SALE_TIME/)
+    expect(() => priceParityCase(MATCHA_NO_TIME, POS_CATALOG, { dayoOnlyExhausted: true })).toThrow(/^NO_SALE_TIME/)
+    // @ts-expect-error allowMissingSaleTime is gone (G1): a timeless dayo case is compared at the engine layer only
+    expect(() => priceParityCase(MATCHA_NO_TIME, POS_CATALOG, { allowMissingSaleTime: true })).toThrow(/^NO_SALE_TIME/)
   })
   it('a case with a time prices exactly like priceCart at that time', () => {
     const draft = { ...MATCHA_NO_TIME, saleTime: '15:00' }
     const { cart, soldAt } = cartFromOrderDraft(draft, POS_CATALOG)
-    expect(priceParityCase(draft, POS_CATALOG, { allowMissingSaleTime: true })).toEqual(priceCart(cart, POS_CATALOG, soldAt))
+    const p = priceParityCase(draft, POS_CATALOG)
+    expect(p).toEqual(priceCart(cart, POS_CATALOG, soldAt))
+    expect(p.totalSatang).toBe(edgeBahtToSatang(computeOrder(toOrderDraft(cart, POS_CATALOG, soldAt), withZeroCosts(POS_CATALOG)).totalAmount))
   })
 })
 

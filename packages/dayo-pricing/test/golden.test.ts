@@ -20,7 +20,7 @@ import type { ImportPayload, PromoRule, PromoTemplate, Promotion, PromotionKind,
 
 /**
  * Cases per file at the pinned commit. A re-vendor that drops cases fails here loudly; one that adds cases updates
- * this table on purpose. `skipped` = cases without `expected` (none at f4cda56) — counted, never skipped silently.
+ * this table on purpose. `skipped` = cases without `expected` (none at the pin) — counted, never skipped silently.
  */
 const EXPECTED_CASES: Record<string, { cases: number; skipped: number }> = {
   'legacy-bill.json': { cases: 18, skipped: 0 },
