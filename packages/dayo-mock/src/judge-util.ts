@@ -4,7 +4,7 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import { bangkokDateOf } from '@dayo/contracts'
-import type { MockState } from './state.js'
+import type { MockState, StoredOrder } from './state.js'
 
 export const FIVE_MIN = 5 * 60_000
 export const DAY = 86_400_000
@@ -52,5 +52,15 @@ export const thaiDate = (t: number): string => bangkokDateOf(new Date(t).toISOSt
 export const minusDays = (d: string, n: number): string => new Date(Date.parse(`${d}T00:00:00Z`) - n * DAY).toISOString().slice(0, 10)
 const canonical = (v: unknown): string => JSON.stringify(v, (_, x: unknown) => (isObj(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x))
 export const hashOf = (data: unknown): string => bytesToHex(sha256(utf8ToBytes(canonical(data))))
+/** create_order's counter (0008_orders_rpc.sql:1127): `L<yymmdd>-<seq ≥ 3 digits>` per sale_date — order and order_off_catalog share it. */
+export function issueOrderNo(s: MockState, saleDate: string): string {
+  const n = s.seq.get(saleDate) ?? 1
+  s.seq.set(saleDate, n + 1)
+  return `L${saleDate.slice(2).replaceAll('-', '')}-${n < 1000 ? String(n).padStart(3, '0') : String(n)}`
+}
+/** `data` of a CONFLICT exists: / off_catalog_exists: (spec §4.10 m2): the reported (frozen) total and cash side of the bill. */
+export function existsData(o: StoredOrder): Record<string, unknown> {
+  return { order_no: o.orderNo, version: o.version, reported_total: o.total, payment_is_cash: o.data?.payment === 'cash', off_catalog: o.offCatalog }
+}
 /** E1 staff = active + removed = dayo_pos_staff_ok. */
 export const staffOk = (s: MockState, id: string): boolean => s.catalog.staff.some((x) => x.id === id)

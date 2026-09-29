@@ -4,11 +4,15 @@
 // DYPV0 and its savepoint undoes the row); any other exception reaches the handler, which makes it this row's
 // deferred SERVER_ERROR (dayo_pos_map_error). State changes only after every check passed.
 // Block 3 (dayo main 12885fe · 0066_pos_push_shift_kinds.sql): dayo_pos_push_row (0066:614-718) adds the per-row shift:write
-// step, the id field per kind and key_changed: of the shift kinds; dayo_pos_dispatch sends the four shift kinds to judge-shift.ts.
+// step, the id field per kind and key_changed: of the shift kinds; dayo_pos_dispatch sends the four shift kinds to judge-shift.ts;
+// api_pos_push records every rejected `order` row in pos_push_rejections (0066:993-1002). Phase 2 (not shipped — preflight P3):
+// order_off_catalog (judge-off-catalog.ts), off_catalog_exists: on order rows, and the recompute of every Z (recompute.ts).
 import { clipCodePoints, fieldsUsed, KIND_ID_FIELD, type PushKind, type ReceivedRowResult } from '@dayo/contracts'
 import { computedTotalAt } from './reprice.js'
+import { judgeOffCatalog } from './judge-off-catalog.js'
 import { conflictShiftOf, flagConflict, judgeCashCount, judgeCashMovement, judgeShiftClose, judgeShiftOpen, SHIFT_KINDS } from './judge-shift.js'
-import { DAY, defer, FIVE_MIN, has, hashOf, isInt, isMoney, isObj, isPct, isText, isUuid, minusDays, reject, staffOk, thaiDate, ts, utcZ, Verdict, ymd, type J } from './judge-util.js'
+import { DAY, defer, existsData, FIVE_MIN, has, hashOf, isInt, isMoney, isObj, isPct, isText, isUuid, issueOrderNo, minusDays, reject, staffOk, thaiDate, ts, utcZ, Verdict, ymd, type J } from './judge-util.js'
+import { recomputeAll } from './recompute.js'
 import { variantKey, type MockOrderData, type MockOrderLine, type MockOverride, type MockState, type StoredOrder } from './state.js'
 
 const KEY_RE = /^[a-z][a-z_]{0,39}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -16,6 +20,9 @@ const RECEIPT_RE = /^[A-Z]{1,3}-[0-9]{6}$/
 /** Text Postgres jsonb cannot hold: a lone UTF-16 surrogate or U+0000 (both fail `p_body::jsonb`). */
 // eslint-disable-next-line no-control-regex
 const JSONB_UNSTORABLE_RE = /[\ud800-\udfff\u0000]/u
+/** Rule 6 of the recompute (spec 04 §4.10): an accepted row of these kinds may change a Z. */
+const RECOMPUTE_KINDS: ReadonlySet<string> = new Set(['order', 'order_void', 'order_off_catalog', 'cash_movement', 'shift_close'])
+const REASON_CODE_RE = /^[A-Z_]{1,40}$/
 
 /**
  * api_pos_push casts the whole body to jsonb before it looks at any row (0052:735-739), so ONE lone surrogate or NUL in
@@ -42,12 +49,30 @@ export function bodyJsonbRefuses(body: unknown): boolean {
 /** `testRaise` = header x-dayo-test-raise (dayo 0052:556-566): "XX000:<key>" makes that row raise XX000. */
 export function judgeRow(s: MockState, raw: unknown, now: number, testRaise: string | null = null): ReceivedRowResult {
   const keyOut = isObj(raw) && typeof raw['key'] === 'string' ? clipCodePoints(raw['key'], 200) : null // dayo main 0052_pos_push.sql:748: null when the sent key is not a string
+  let result: ReceivedRowResult
   try {
-    return pushRow(s, raw, now, testRaise)
+    result = pushRow(s, raw, now, testRaise)
   } catch (e) {
     if (!(e instanceof Verdict)) throw e
-    return { key: keyOut, status: e.status, reason: e.reason, detail: clipCodePoints(e.detail, 500), ...(e.data === undefined ? {} : { data: e.data }) }
+    result = { key: keyOut, status: e.status, reason: e.reason, detail: clipCodePoints(e.detail, 500), ...(e.data === undefined ? {} : { data: e.data }) }
   }
+  recordRejection(s, raw, result)
+  return result
+}
+
+/**
+ * pos_push_rejections (0066:993-1002 · dayo phase 1), outside the row's savepoint: a `rejected` row whose `kind` (read from
+ * the row, not the key) is 'order' with a uuid pos_order_id and an A–Z/_ reason — a test override's verdict too. Every
+ * reason is kept once (unique (api_client_id, pos_order_id, reason)). A block-2 dayo (before 0066) has no such table.
+ */
+function recordRejection(s: MockState, raw: unknown, r: ReceivedRowResult): void {
+  if (!s.block3 || r.status !== 'rejected' || !isObj(raw) || raw['kind'] !== 'order' || !isObj(raw['data'])) return
+  const id = raw['data']['pos_order_id']
+  const reason = (r as { reason?: unknown }).reason
+  if (!isUuid(id) || typeof reason !== 'string' || !REASON_CODE_RE.test(reason)) return
+  const reasons = s.rejections.get(id) ?? new Set<string>()
+  reasons.add(reason)
+  s.rejections.set(id, reasons)
 }
 
 function pushRow(s: MockState, raw: unknown, now: number, testRaise: string | null): ReceivedRowResult {
@@ -87,6 +112,7 @@ function pushRow(s: MockState, raw: unknown, now: number, testRaise: string | nu
   }
   const result = judgeKind(s, kind, key, data, now)
   s.keys.set(key, { hash, result: { ...result, status: 'accepted' } }) // only accepted/duplicate reach this line
+  if (result.status === 'accepted' && RECOMPUTE_KINDS.has(kind)) recomputeAll(s) // a no-op on a phase-1 mock
   return result
 }
 
@@ -99,7 +125,9 @@ function judgeKind(s: MockState, kind: string, key: string, d: J, now: number): 
     case 'cash_movement': return judgeCashMovement(s, key, d, now)
     case 'cash_count': return judgeCashCount(s, key, d, now)
     case 'shift_close': return judgeShiftClose(s, key, d, now)
-    default: return defer('UNSUPPORTED', 'ชนิดแถวนี้ระบบกลางยังไม่รองรับ') // order_off_catalog (phase 2) is judged from Task 8 on
+    case 'order_off_catalog': if (s.block3Phase2) return judgeOffCatalog(s, key, d, now) // dayo phase 2 only (preflight P3)
+      return defer('UNSUPPORTED', 'ชนิดแถวนี้ระบบกลางยังไม่รองรับ')
+    default: return defer('UNSUPPORTED', 'ชนิดแถวนี้ระบบกลางยังไม่รองรับ')
   }
 }
 
@@ -169,6 +197,8 @@ function judgeOrder(s: MockState, key: string, d: J, now: number): ReceivedRowRe
 
   // ── de-duplication (2): same pos_order_id = duplicate · same receipt, other pos_order_id = CONFLICT ──
   const existing = s.orders.get(o.pos_order_id)
+  // phase 2 (§4.10 order_off_catalog rule 2): the bill is an off-catalog bill now → never a duplicate of this order row
+  if (existing?.offCatalog === true) reject('CONFLICT', `off_catalog_exists: ${existing.orderNo}`, existsData(existing))
   if (existing !== undefined) return { key, status: 'duplicate', data: orderData(s, existing, []) }
   // the receipt_taken: prefix of a bill row is dayo phase 2 (0066:5 · preflight D3) — phase 1 keeps the block-2 text
   if (s.receipts.has(o.receipt_no)) reject('CONFLICT', `${s.block3Phase2 ? 'receipt_taken: ' : ''}เลขใบเสร็จ ${o.receipt_no} ถูกใช้กับบิลอื่นของเครื่องนี้แล้ว`)
@@ -176,13 +206,11 @@ function judgeOrder(s: MockState, key: string, d: J, now: number): ReceivedRowRe
   // ── save (dayo create_order: re-quote at sold_at · freeze · amount_mismatch · pos_computed_total) ──
   if (s.mode === 'force_row_error') throw new Error('force_row_error') // the business step fails after every check above
   const computed = computedTotalAt(s, o, soldAt)
-  const n = s.seq.get(o.sale_date) ?? 1
   const stored: StoredOrder = {
-    orderNo: `L${o.sale_date.slice(2).replaceAll('-', '')}-${n < 1000 ? String(n).padStart(3, '0') : String(n)}`, posOrderId: o.pos_order_id, receiptNo: o.receipt_no,
-    saleDate: o.sale_date, soldAt: o.sold_at, total: o.totals.total, status: 'ok', version: 1, staffId: o.staff_id, data: o,
+    orderNo: issueOrderNo(s, o.sale_date), posOrderId: o.pos_order_id, receiptNo: o.receipt_no,
+    saleDate: o.sale_date, soldAt: o.sold_at, total: o.totals.total, status: 'ok', version: 1, staffId: o.staff_id, data: o, offCatalog: false,
     computedTotal: computed, amountMismatch: Math.abs(o.totals.total - computed) > 1, createdAt: now, updatedAt: null, dayoEdit: null,
   }
-  s.seq.set(o.sale_date, n + 1)
   s.orders.set(stored.posOrderId, stored)
   s.receipts.set(stored.receiptNo, stored.posOrderId)
   return { key, status: 'accepted', data: orderData(s, stored, []) }

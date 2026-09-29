@@ -65,6 +65,14 @@ export type MockDayo = {
   counts(): MockCount[]
   /** The LIVE state objects (not copies) — a test may edit one to pin a rule no push can reach; nothing else may. */
   zReports(): MockZ[]
+  /** shop_settings.block3_live_from (D100): shift_open sets it once; a test (or the owner's web edit) sets it directly. */
+  setBlock3LiveFrom(d: string | null): void
+  /** shop_settings.off_catalog_max_total in baht (D103 · default ฿3,000). */
+  setOffCatalogCap(baht: number): void
+  /** pos_push_rejections (0065:184-193 · dayo phase 1): every reason an `order` row of each bill was rejected with, in order seen. */
+  rejections(): { posOrderId: string; reasons: string[] }[]
+  /** Phase 2 only (a no-op on a phase-1 mock): judges every Z again, oldest number first — runs by itself after each accepted row that can change one. */
+  recomputeAll(): void
   /** A Z another install of this key sent earlier (reinstall tests — R9): counts for rules 0–5 and E1 last_z_*. */
   preloadZ(z: { zNo: number; hash: string; countedAt: string }): void
   /** Shift data-conflict flags (S5) the mock raised, as `<kind>:<shift id>` — kind 'key_changed' | 'counted' | 'z_no_taken' | 'z_no_ceiling' | 'counted_mismatch'. */
@@ -80,14 +88,15 @@ export type MockMovement = { id: string; shiftId: string; kind: 'PAID_IN' | 'PAI
 export type MockCount = { id: string; shiftId: string; counted: number; countedBy: string; countedAt: number }
 /**
  * dayo `z_reports` (0065) as the mock keeps it. first_of_key / quarantined / chain_break are dayo phase 1 (0066:528-550) ·
- * notes, chainMismatch, recomputeStatus, detail and missing model the phase-2 recompute (spec 04 §4.10 rules 3-after, 4, 6) —
- * never on the wire (dayo has no API that returns a Z), only read by mock tests.
+ * notes, chainMismatch, recomputeStatus, detail and missing model the phase-2 recompute (spec 04 §4.10 rules 1–7) — never on
+ * the wire (dayo has no API that returns a Z), only read by mock tests. On a phase-1 mock they stay empty and
+ * recomputeStatus stays null, as dayo main 12885fe leaves recompute_status (preflight P1/P3).
  */
 export type MockZ = {
   shiftId: string; zNo: number; hash: string; prevHash: string | null; after: number; countedAt: number; wire: Record<string, unknown>
   firstOfKey: boolean                                // rule 2: the key had no Z when this one arrived
   quarantined: boolean                               // §13.8 R5-3: failed rule 5 (replay / out-of-order low z_no) — never "the previous Z" of anyone
-  chainBreak: boolean; notes: string[]; chainMismatch: string[]; recomputeStatus: 'waiting_bills' | 'matched' | 'mismatch'; detail: string[]
+  chainBreak: boolean; notes: string[]; chainMismatch: string[]; recomputeStatus: 'waiting_bills' | 'matched' | 'mismatch' | null; detail: string[]
   missing: { posOrderIds: string[]; movementIds: string[]; voidOrderIds: string[] }
 }
 
@@ -99,9 +108,13 @@ export type MockOrderData = {
   catalog_version: number; shift_id: string | null; lines: MockOrderLine[]; bill_discount: { baht: number | null; percent: number | null; reason: string | null } | null
   promo_code: string | null; skip_promotion_ids: string[]; no_promotions: boolean; totals: MockTotals; note: string | null
 }
+/**
+ * `total` and `data.payment` are what the tablet reported at sale (pos_reported_amounts — frozen, D93); editPosOrder changes
+ * `data.totals` only. `offCatalog` = an order_off_catalog bill (phase 2): `data.lines` is [] (no order_items in dayo).
+ */
 export type StoredOrder = {
   orderNo: string; posOrderId: string; receiptNo: string; saleDate: string; soldAt: string; total: number; status: 'ok' | 'cancelled'; version: number
-  staffId: string | null; data: MockOrderData | null
+  staffId: string | null; data: MockOrderData | null; offCatalog: boolean
   computedTotal: number; amountMismatch: boolean; createdAt: number; updatedAt: number | null; dayoEdit: DayoEdit | null
 }
 /**
@@ -131,6 +144,8 @@ export type MockState = {
   preloadedZ: { zNo: number; hash: string; countedAt: number } | null
   conflicts: string[]
   block3LiveFrom: string | null              // shop_settings.block3_live_from (ADR-0056 rule 12 · D100) — set once
+  offCatalogCap: number                       // shop_settings.off_catalog_max_total, baht (D103 · default 3000)
+  rejections: Map<string, Set<string>>        // pos_push_rejections: pos_order_id → reasons (0066:993-1002)
 }
 
 export const variantKey = (code: string, size: string, sweetness: string): string => JSON.stringify([code, size, sweetness])

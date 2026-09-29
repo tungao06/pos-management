@@ -38,12 +38,12 @@ export function conflictShiftOf(s: MockState, kind: string, d: J): string | null
 }
 
 /** spec §4.10 time: the row's main time > server + 5 min = CLOCK_AHEAD · older than server − 60 days = INVALID (0066:88-95). */
-function checkTime(t: number, now: number, name: string): void {
+export function checkTime(t: number, now: number, name: string): void {
   if (t > now + FIVE_MIN) defer('CLOCK_AHEAD', `${name} ${utcZ(t)} เกินเวลาเซิร์ฟเวอร์`)
   if (t < now - 60 * DAY) reject('INVALID', `${name} ${utcZ(t)} ย้อนหลังเกิน 60 วัน`)
 }
 /** dayo_pos_owner_active_at (0065:346) simplified (m6): the owner's status now, not at the row's time. */
-const ownerActive = (s: MockState, id: string): boolean => s.catalog.staff.some((x) => x.id === id && x.role === 'owner' && x.active)
+export const ownerActive = (s: MockState, id: string): boolean => s.catalog.staff.some((x) => x.id === id && x.role === 'owner' && x.active)
 const countOf = (s: MockState, shiftId: string): MockCount | undefined => [...s.counts.values()].find((c) => c.shiftId === shiftId)
 const failRowError = (s: MockState): void => { if (s.mode === 'force_row_error') throw new Error('force_row_error') } // the business step fails after every check
 /** btrim(text) — dayo stores reasons trimmed of spaces. */
@@ -205,7 +205,7 @@ export function judgeShiftClose(s: MockState, key: string, d: J, now: number): R
   failRowError(s)
   const z: MockZ = {
     shiftId, zNo, hash: zr['hash'] as string, prevHash: (zr['prev_hash'] as string | null), after, countedAt: count.countedAt, wire: zr,
-    firstOfKey, quarantined, chainBreak: false, notes: [], chainMismatch: [], recomputeStatus: 'waiting_bills', detail: [],
+    firstOfKey, quarantined, chainBreak: false, notes: [], chainMismatch: [], recomputeStatus: null, detail: [], // phase 2: judge.ts runs recomputeAll next
     missing: { posOrderIds: [], movementIds: [], voidOrderIds: [] },
   }
   Object.assign(z, chainOf(s, z))
@@ -264,11 +264,16 @@ function zGate(s: MockState, shiftId: string, zNo: number, countedAt: number): {
 }
 
 /**
- * Rules 2–5 as a pure function of the stored Zs (Task 8 re-runs it for rule 6). The quarantine is read, never set or cleared.
- * chainBreak = dayo phase 1 exactly (0066:540-542: quarantined, or the Z numbered z−1 has another hash). chainMismatch/notes
- * (rule 3's `after`, rule 4) are dayo PHASE 2 (0066:21) — mock-only diagnostics, never on the wire.
+ * Rules 2–5 as a pure function of the stored Zs (recomputeAll re-runs it for rule 6 on phase 2). The quarantine is read, never
+ * set or cleared. chainBreak = dayo phase 1 exactly (0066:540-542: quarantined, or the Z numbered z−1 has another hash).
+ * chainMismatch/notes (rule 3's `after`, rule 4) are dayo PHASE 2 (0066:21) — empty on a phase-1 mock (preflight P3).
  */
 export function chainOf(s: MockState, z: MockZ): Pick<MockZ, 'chainBreak' | 'notes' | 'chainMismatch'> {
+  const full = chainRules(s, z)
+  return s.block3Phase2 ? full : { chainBreak: full.chainBreak, notes: [], chainMismatch: [] }
+}
+
+function chainRules(s: MockState, z: MockZ): Pick<MockZ, 'chainBreak' | 'notes' | 'chainMismatch'> {
   const out = { chainBreak: false, notes: [] as string[], chainMismatch: [] as string[] }
   if (z.quarantined) return { chainBreak: true, notes: [], chainMismatch: ['Z เลขต่ำผิดลำดับเวลา (เล่นซ้ำ)'] } // rule 5 (sticky, R5-3)
   if (z.firstOfKey) return out // rule 2

@@ -1,5 +1,7 @@
 // z_no order and the Z chain (spec 04 §4.10 rules 0–6 + §13.8 R5-3) · dayo main 0066:519-550 (phase 1: rules 0, 1, 2, 3
 // prev_hash, 5) · rule 3's `after` and rule 4 are dayo phase 2 — mock-only diagnostics (chainMismatch/notes), never on the wire.
+// newMock() is a PHASE 2 mock (Task 8 · preflight P3/D2): on a phase-1 mock chainMismatch/notes stay empty and recomputeStatus
+// null — recompute.test.ts pins that.
 // E1 last_z_until comes in dayo's `…mmm+00:00` form (0067:155 · preflight P7/D8).
 import { describe, expect, it } from 'vitest'
 import { MOCK_API_KEY } from '../src/index'
