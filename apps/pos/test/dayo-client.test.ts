@@ -13,6 +13,31 @@ async function failureOf(p: Promise<unknown>) { try { await p; return null } cat
 afterEach(() => { vi.useRealTimers() })
 
 describe('dayo client (spec 04 §4.1, §6.3)', () => {
+  it('shiftCash asks E4 with after/until and parses the bills', async () => {
+    const mock = createMockDayo({ now: '2026-09-25T12:10:00.000Z', block3: true })
+    mock.seedCentralOrders([{ order_no: 'L260925-901', sale_date: '2026-09-25', status: 'ok', source: 'line', external_ref: null, version: 1, channel: 'line', payment: 'cash', totals: { items_subtotal: 70, items_discount: 0, bill_discount: 0, total: 70 }, amount_mismatch: false, updated_at: '2026-09-25T04:00:00+00:00', sold_at: '2026-09-25T04:00:00+00:00' }])
+    const c = createDayoClient({ baseUrl: 'http://localhost:8787/api/v1', apiKey: MOCK_API_KEY, fetch: mock.fetch, nowMs: () => Date.parse('2026-09-25T12:10:00.000Z') })
+    const r = await c.shiftCash({ after: '2026-09-24T17:00:00.000Z', until: '2026-09-25T12:00:00.000Z' })
+    expect(r.value).toMatchObject({ cash_total: 70, bills: [{ order_no: 'L260925-901', total: 70 }] })
+    expect(mock.requests().at(-1)).toMatchObject({ path: '/api/v1/pos/shift-cash', status: 200 })
+  })
+  it('shiftCash sends after/until URL-encoded and the key only in the Authorization header', async () => {
+    const seen: { url: string; auth: string | null }[] = []
+    const mock = createMockDayo({ now: '2026-09-25T12:10:00.000Z', block3: true })
+    const spy: typeof fetch = async (input, init) => { seen.push({ url: String(input), auth: new Headers(init?.headers).get('authorization') }); return mock.fetch(input, init) }
+    const c = createDayoClient({ baseUrl: 'http://localhost:8787/api/v1', apiKey: MOCK_API_KEY, fetch: spy, nowMs: () => 0 })
+    await c.shiftCash({ after: '2026-09-24T17:00:00.000+07:00', until: '2026-09-25T12:00:00.000Z' })
+    expect(seen[0]!.url).toBe('http://localhost:8787/api/v1/pos/shift-cash?after=2026-09-24T17%3A00%3A00.000%2B07%3A00&until=2026-09-25T12%3A00%3A00.000Z')
+    expect(seen[0]!.url).not.toContain(MOCK_API_KEY)
+    expect(seen[0]!.auth).toBe(`Bearer ${MOCK_API_KEY}`)
+  })
+  it('shiftCash: a block-2 dayo without E4 is api_disabled (404); an unreadable answer is bad_response', async () => {
+    const old = createDayoClient({ baseUrl: 'http://localhost:8787/api/v1', apiKey: MOCK_API_KEY, fetch: createMockDayo({ now: '2026-09-25T12:10:00.000Z' }).fetch, nowMs: () => 0 })
+    expect(await failureOf(old.shiftCash({ after: '2026-09-24T17:00:00.000Z', until: '2026-09-25T12:00:00.000Z' }))).toEqual({ kind: 'api_disabled' })
+    const bad: typeof fetch = async () => new Response(JSON.stringify({ ok: true, data: { bills: [{ order_no: 'L1' }], cash_total: -1 } }), { status: 200 })
+    const c = createDayoClient({ baseUrl: 'http://localhost:8787/api/v1', apiKey: MOCK_API_KEY, fetch: bad, nowMs: () => 0 })
+    expect((await failureOf(c.shiftCash({ after: '2026-09-24T17:00:00.000Z', until: '2026-09-25T12:00:00.000Z' })))?.kind).toBe('bad_response')
+  })
   it('reads E1 and reports when the request left and the answer came', async () => {
     const { c } = client()
     const r = await c.getCatalog(0)

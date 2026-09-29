@@ -1,7 +1,7 @@
 import { eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { clipCodePoints } from '@dayo/contracts'
+import { clipCodePoints, DETAIL_PREFIXES } from '@dayo/contracts'
 
 /** Every sync_state key of block 2 — local only, never in the outbox, no secret among them (the key is in IndexedDB). */
 export const DAYO_KEYS = {
@@ -92,7 +92,12 @@ export async function recordServerTime(db: RemoteDb, serverTimeIso: string, sent
  * whatever happened to its charge — at most once per OWN_FAILURE_EVERY_MS (ownFailedAt = the last counted one); STUCK at
  * STUCK_AFTER_ATTEMPTS. Any verdict from dayo (a 200) starts it again.
  */
-export type LastErrorExtra = { supportedHash?: string; farAhead?: true; noVerdict?: number; requestFailed?: true; ownFailures?: number; ownFailedAt?: string }
+/**
+ * Block 3 (Task 10): prefix = the fixed `detail` prefix of dayo's verdict (spec §4.10 — the tablet decides from it only) ·
+ * scopeSince = when this row was FIRST answered FORBIDDEN `scope:` (spec §6.2 m1: red banner after 24 h, "ปิดไว้ในเครื่อง"
+ * after 7 days — kept across its 15-minute retries).
+ */
+export type LastErrorExtra = { supportedHash?: string; farAhead?: true; noVerdict?: number; requestFailed?: true; ownFailures?: number; ownFailedAt?: string; scopeSince?: string; prefix?: string }
 /** final review I2: however often a wake clears the backoff, a row's own failures count at most once per 5 minutes. */
 export const OWN_FAILURE_EVERY_MS = 5 * 60_000
 export function encodeLastError(reason: string, detail: string, extra: LastErrorExtra = {}): string {
@@ -103,8 +108,8 @@ export function decodeLastError(raw: string | null): { reason: string; detail: s
   try {
     const parsed: unknown = JSON.parse(raw)
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { reason: '', detail: raw }
-    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown; noVerdict?: unknown; requestFailed?: unknown; ownFailures?: unknown; ownFailedAt?: unknown }
-    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}), ...(typeof p.noVerdict === 'number' && Number.isSafeInteger(p.noVerdict) && p.noVerdict > 0 ? { noVerdict: p.noVerdict } : {}), ...(p.requestFailed === true ? { requestFailed: true as const } : {}), ...(typeof p.ownFailures === 'number' && Number.isSafeInteger(p.ownFailures) && p.ownFailures > 0 ? { ownFailures: p.ownFailures } : {}), ...(typeof p.ownFailedAt === 'string' && Number.isFinite(Date.parse(p.ownFailedAt)) ? { ownFailedAt: p.ownFailedAt } : {}) }
+    const p = parsed as { reason?: unknown; detail?: unknown; supportedHash?: unknown; farAhead?: unknown; noVerdict?: unknown; requestFailed?: unknown; ownFailures?: unknown; ownFailedAt?: unknown; scopeSince?: unknown; prefix?: unknown }
+    return { reason: typeof p.reason === 'string' ? p.reason : '', detail: typeof p.detail === 'string' ? p.detail : '', ...(typeof p.supportedHash === 'string' ? { supportedHash: p.supportedHash } : {}), ...(p.farAhead === true ? { farAhead: true as const } : {}), ...(typeof p.noVerdict === 'number' && Number.isSafeInteger(p.noVerdict) && p.noVerdict > 0 ? { noVerdict: p.noVerdict } : {}), ...(p.requestFailed === true ? { requestFailed: true as const } : {}), ...(typeof p.ownFailures === 'number' && Number.isSafeInteger(p.ownFailures) && p.ownFailures > 0 ? { ownFailures: p.ownFailures } : {}), ...(typeof p.ownFailedAt === 'string' && Number.isFinite(Date.parse(p.ownFailedAt)) ? { ownFailedAt: p.ownFailedAt } : {}), ...(typeof p.scopeSince === 'string' && Number.isFinite(Date.parse(p.scopeSince)) ? { scopeSince: p.scopeSince } : {}), ...(typeof p.prefix === 'string' && (DETAIL_PREFIXES as readonly string[]).includes(p.prefix) ? { prefix: p.prefix } : {}) }
   } catch {
     return { reason: '', detail: raw }
   }
