@@ -51,6 +51,10 @@ export type PosErrorCode =
   | 'DAYO_Z_STATE_INVALID' // §4.4 ข้อ 6: client.last_z_no/last_z_hash/last_z_until unreadable — detail = the raw last_z_no
   | 'Z_TOO_LARGE' // R20: > 2000 POS bills / > 500 bot bills / > 500 cash movements in one Z
   | 'OFF_CATALOG_NOT_POSSIBLE' // R10/R11: this bill cannot be closed as off-catalog (use "ปิดไว้ในเครื่อง")
+  // plan 10 T0 — manual promotions + rule-engine catalogs (spec 04 §5.1, owner answers Q1/Q3, ADR-0072)
+  | 'MANUAL_REASON_REQUIRED' // reason_required: prefix on E2's rejected INVALID — a manual promotion was chosen with no reason
+  | 'MANUAL_PROMO_UNSUPPORTED' // dayo's catalog does not carry manual_promotion_ids yet (old dayo) — never send one
+  | 'ZERO_TOTAL_NOT_ALLOWED' // owner Q1=(ข): a ฿0 total from a manual discount — distinct from a promotion's own ฿0 (cash only)
 
 /** Comlink forwards only name/message/stack, so the code travels as a "CODE: " message prefix. */
 export class PosError extends Error {
