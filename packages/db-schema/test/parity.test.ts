@@ -15,7 +15,12 @@ const SQLITE_ONLY_COLUMNS = new Set([
   'order.central_order_no', 'order.central_computed_total_satang', 'order.central_amount_mismatch', 'order.central_duplicate_of_json',
   'order.central_dayo_edit_json',
   'outbox.next_attempt_at', 'outbox.parent_key', 'outbox.result_json',
+  // block 3 (0006_block3_shift_cash): the shift lifecycle and the count live on the tablet — pg untouched
+  'shift.counted_at', 'shift.sync_mode', 'cash_count.counted_at', 'cash_count.includes_bot_cash',
+  'order.off_catalog_at', 'order.central_mismatch_json',
 ])
+/** Block 3 indexes on the tablet only (one counting shift per device · one count per shift). Keys are "table.index". */
+const SQLITE_ONLY_INDEXES = new Set(['shift.shift_counting_uq', 'cash_count.cash_count_shift_uq'])
 /** Nullable on the tablet since block 2 (a block-2 bill has channel_code instead). */
 const DIVERGED_NOT_NULL = new Set(['order.channel_id'])
 const PG_ONLY = new Set(['idempotency_record', 'invariant_run'])
@@ -75,7 +80,9 @@ function shapeOfSqlite(t: SQLiteTable): Shape {
   }
   const fks = c.foreignKeys.map((fk) => { const r = fk.reference(); return `${r.columns.map((x) => x.name).join(',')}->${sqliteConfig(r.foreignTable as SQLiteTable).name}.${r.foreignColumns.map((x) => x.name).join(',')}` }).sort()
   const uniques = c.uniqueConstraints.map((u) => u.columns.map((x) => x.name).join(',')).sort()
-  const indexes = c.indexes.map((i) => indexShape(i as IndexLike, (w) => sqliteDialect.sqlToQuery(w).sql)).sort()
+  const indexes = c.indexes
+    .filter((i) => !SQLITE_ONLY_INDEXES.has(`${c.name}.${(i as IndexLike).config.name ?? ''}`))
+    .map((i) => indexShape(i as IndexLike, (w) => sqliteDialect.sqlToQuery(w).sql)).sort()
   return { columns, fks, uniques, indexes }
 }
 

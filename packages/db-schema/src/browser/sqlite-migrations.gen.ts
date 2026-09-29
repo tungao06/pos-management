@@ -159,9 +159,36 @@ export const SQLITE_MIGRATIONS: readonly BundledMigration[] = [
     "bps": true,
     "folderMillis": 1790357711385,
     "hash": "34c7b939d3682f17660d8bb8ae16bfe803df4de9396883d3e82c620c44f3ac78"
+  },
+  {
+    "tag": "0006_block3_shift_cash",
+    "sql": [
+      "ALTER TABLE `cash_count` ADD `counted_at` text;",
+      "\nALTER TABLE `cash_count` ADD `includes_bot_cash` integer DEFAULT false NOT NULL;",
+      "\nCREATE UNIQUE INDEX `cash_count_shift_uq` ON `cash_count` (`shift_id`);",
+      "\nALTER TABLE `order` ADD `off_catalog_at` text;",
+      "\nALTER TABLE `order` ADD `central_mismatch_json` text;",
+      "\nALTER TABLE `shift` ADD `counted_at` text;",
+      "\nALTER TABLE `shift` ADD `sync_mode` text DEFAULT 'local_only' NOT NULL;",
+      "\nCREATE UNIQUE INDEX `shift_counting_uq` ON `shift` (`device_id`) WHERE status = 'counting';",
+      "\n-- block 3 (spec 04 §4.10 rule 4 · ruling R1): every shift from before this migration never reached dayo — local_only for good.\nUPDATE `shift` SET `sync_mode` = 'local_only';\n",
+      "\nUPDATE `shift` SET `counted_at` = (SELECT min(`created_at`) FROM `cash_count` WHERE `cash_count`.`shift_id` = `shift`.`id`) WHERE `status` = 'closed';\n",
+      "\nUPDATE `cash_count` SET `counted_at` = `created_at`;\n",
+      "\nCREATE TRIGGER `cash_count_no_update` BEFORE UPDATE ON `cash_count` BEGIN SELECT RAISE(ABORT, 'cash_count is append-only: UPDATE rejected'); END;\n",
+      "\nCREATE TRIGGER `cash_count_no_delete` BEFORE DELETE ON `cash_count` BEGIN SELECT RAISE(ABORT, 'cash_count is append-only: DELETE rejected'); END;\n",
+      "\nCREATE TRIGGER `shift_status_forward_only` BEFORE UPDATE OF `status` ON `shift`\nWHEN NEW.`status` NOT IN ('open', 'counting', 'counted', 'closed')\n  OR (CASE NEW.`status` WHEN 'open' THEN 0 WHEN 'counting' THEN 1 WHEN 'counted' THEN 2 ELSE 3 END) < (CASE OLD.`status` WHEN 'open' THEN 0 WHEN 'counting' THEN 1 WHEN 'counted' THEN 2 ELSE 3 END)\n  OR (NEW.`status` IN ('counting', 'counted') AND NEW.`counted_at` IS NULL)\nBEGIN SELECT RAISE(ABORT, 'shift.status only moves forward: open → counting → counted → closed; counting and counted need counted_at (D101)'); END;\n",
+      "\nCREATE TRIGGER `shift_sync_mode_one_way` BEFORE UPDATE OF `sync_mode` ON `shift`\nWHEN NEW.`sync_mode` NOT IN ('central','local_only') OR (OLD.`sync_mode` = 'local_only' AND NEW.`sync_mode` <> 'local_only')\nBEGIN SELECT RAISE(ABORT, 'shift.sync_mode only moves central → local_only (R1 · R19)'); END;\n",
+      "\nCREATE TRIGGER `shift_sync_mode_valid` BEFORE INSERT ON `shift` WHEN NEW.`sync_mode` NOT IN ('central','local_only')\nBEGIN SELECT RAISE(ABORT, 'shift.sync_mode must be central or local_only (R1)'); END;\n",
+      "\nCREATE TRIGGER `shift_counted_at_once` BEFORE UPDATE OF `counted_at` ON `shift` WHEN OLD.`counted_at` IS NOT NULL AND NEW.`counted_at` IS NOT OLD.`counted_at`\nBEGIN SELECT RAISE(ABORT, 'shift.counted_at is set once (D101)'); END;\n",
+      "\nCREATE TRIGGER `cash_movement_open_shift_only` BEFORE INSERT ON `cash_movement` WHEN (SELECT `status` FROM `shift` WHERE `id` = NEW.`shift_id`) IS NOT 'open'\nBEGIN SELECT RAISE(ABORT, 'cash_movement needs an open shift (D101: a counted shift takes no more cash movements)'); END;\n",
+      "\nCREATE TRIGGER `order_open_shift_only` BEFORE INSERT ON `order` WHEN NEW.`shift_id` IS NOT NULL AND (SELECT `status` FROM `shift` WHERE `id` = NEW.`shift_id`) IS NOT 'open'\nBEGIN SELECT RAISE(ABORT, 'a bill needs an open shift (D101)'); END;\n"
+    ],
+    "bps": true,
+    "folderMillis": 1790654480696,
+    "hash": "d0f7011c3fce1603659f039b4ae106ae02de6daf58352dde75b3bac4dc169bb5"
   }
 ]
 
 /** Tables and triggers that migrateSqlite leaves in a fresh database. */
 export const SQLITE_TABLES: readonly string[] = ["audit_log","bom","bom_line","cash_count","cash_movement","category","channel","customer","dayo_catalog","device","discount","equipment","item","item_cost_state","order","order_event","order_item","order_line","order_payment_intent","outbox","payment","price","product","product_variant","production_batch","purchase","purchase_line","purchase_unit","recipe","recipe_line","setting","shift","size","stock_adjustment","stock_count","stock_count_line","stock_movement","sweetness_level","sync_state","user","z_report"]
-export const SQLITE_TRIGGERS: readonly string[] = ["cash_movement_no_delete","cash_movement_no_update","order_event_no_delete","order_event_no_update","order_item_no_delete","order_item_no_update","stock_movement_no_delete","stock_movement_no_update","z_report_no_delete","z_report_no_update"]
+export const SQLITE_TRIGGERS: readonly string[] = ["cash_count_no_delete","cash_count_no_update","cash_movement_no_delete","cash_movement_no_update","cash_movement_open_shift_only","order_event_no_delete","order_event_no_update","order_item_no_delete","order_item_no_update","order_open_shift_only","shift_counted_at_once","shift_status_forward_only","shift_sync_mode_one_way","shift_sync_mode_valid","stock_movement_no_delete","stock_movement_no_update","z_report_no_delete","z_report_no_update"]

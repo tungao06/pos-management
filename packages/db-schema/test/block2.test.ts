@@ -32,7 +32,7 @@ describe('block 2 local schema (spec 04 §6.1)', () => {
     const childrenBefore = UNTOUCHED_BILL_TABLES.map((t) => one(raw, `select * from "${t}" order by id`))
     const outboxCols = selectList(one(raw, `select name from pragma_table_info('outbox') where name <> 'status' order by cid`).map((r) => String(r[0])))
     const outboxBefore = one(raw, `select ${outboxCols} from outbox order by id`)
-    migrateSqlite(db, SQLITE_MIGRATIONS_FOLDER) // 0003 rebuilds "order" (channel_id becomes nullable) — must not lose children
+    migrateSqlite(db, folderUpTo('0005_order_central_dayo_edit')) // 0003 rebuilds "order" (channel_id becomes nullable) — must not lose children; block 3 is block3.test.ts
     expect(counts(raw)).toEqual(before)
     expect(one(raw, `select ${selectList(oldCols)} from "order"`)).toEqual(orderBefore)
     expect(one(raw, `select ${selectList(orderColumns(raw).filter((c) => !oldCols.includes(c)))} from "order"`)[0]!.every((v) => v === null)).toBe(true) // block-2 columns start empty
@@ -89,7 +89,7 @@ describe('block 2 local schema (spec 04 §6.1)', () => {
     expect(oldCols).not.toContain('central_dayo_edit_json')
     const rowsBefore = one(raw, `select ${selectList(oldCols)} from "order" order by id`)
     const nonTablesBefore = schemaObjects(raw).filter(([type]) => type !== 'table')
-    migrateSqlite(db, SQLITE_MIGRATIONS_FOLDER)
+    migrateSqlite(db, folderUpTo('0005_order_central_dayo_edit')) // up to 0005 only — block 3 (0006) is block3.test.ts
     expect([...counts(raw), ['order_item', orderItemCount(raw)]]).toEqual(before)
     expect(one(raw, `select ${selectList(oldCols)} from "order" order by id`)).toEqual(rowsBefore)
     expect(orderColumns(raw)).toEqual([...oldCols, 'central_dayo_edit_json']) // appended by ADD COLUMN — no table rebuild
