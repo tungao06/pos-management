@@ -13,6 +13,7 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.{ts,tsx}', 'test/**/*.test.{ts,tsx}'],
     setupFiles: ['./vitest.setup.ts'],
-    testTimeout: 30_000,
+    testTimeout: 120_000, // Cloudflare's CI machine (D107) is far slower than a dev machine
+    hookTimeout: 120_000,
   },
 })
