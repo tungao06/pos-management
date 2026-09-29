@@ -20,7 +20,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
     expect(x.shift).toMatchObject({ id: t.shift.id, openedByName: 'TungAo', openedQuick: false, openingFloatSatang: 50_000 })
     expect(x.generatedAt).toBe('2026-09-17T03:01:00.000Z')
     expect(x.sales).toEqual({ orderCount: 3, voidCount: 2, grossSalesSatang: 18_500, discountSatang: 500, voidedSatang: 14_000, netSalesSatang: 4_000, cashSalesSatang: 13_000, qrSalesSatang: 5_000, qrRefundedSatang: 5_000, qrNetSatang: 0 })
-    expect(x.cash).toEqual({ openingFloatSatang: 50_000, cashSalesSatang: 13_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0 })
+    expect(x.cash).toEqual({ openingFloatSatang: 50_000, cashSalesSatang: 13_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 })
     expect(x.expectedCashSatang).toBe(52_000)
     expect(x.varianceAlertSatang).toBe(2_000) // spec §3.1 default — no setting row yet
     expect(x.cashMovements.map((m) => [m.kind, m.amountSatang])).toEqual([
@@ -51,7 +51,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
     const x = await t.api.shiftReport()
     // m-3: every zero, not only orderCount/expectedCashSatang/voids
     expect(x.sales).toEqual({ orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 })
-    expect(x.cash).toEqual({ openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 })
+    expect(x.cash).toEqual({ openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 })
     expect(x.expectedCashSatang).toBe(50_000)
     expect(x.cashMovements).toEqual([])
     expect(x.voids).toEqual([])
@@ -80,7 +80,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
     let x = await t.api.shiftReport()
     expect(x.shift.id).toBe(shift2.id)
     expect(x.sales).toEqual({ orderCount: 1, voidCount: 0, grossSalesSatang: 4_500, discountSatang: 0, voidedSatang: 0, netSalesSatang: 4_500, cashSalesSatang: 4_500, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 })
-    expect(x.cash).toEqual({ openingFloatSatang: 10_000, cashSalesSatang: 4_500, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 })
+    expect(x.cash).toEqual({ openingFloatSatang: 10_000, cashSalesSatang: 4_500, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 })
     expect(x.expectedCashSatang).toBe(14_500) // ฿100 float + ฿45 cash — not ฿520 + ฿45
 
     // (b) a discounted cash bill and a discounted QR bill, both voided, plus a paid-in and a drop
@@ -109,7 +109,7 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
       qrNetSatang: 0,
     })
     // cash.voidRefundsSatang: only the cash bill's VOID_REFUND (its discounted total, ฿80, counted once) — D36
-    expect(x.cash).toEqual({ openingFloatSatang: 10_000, cashSalesSatang: 12_500, voidRefundsSatang: 8_000, paidInSatang: 1_000, paidOutSatang: 0, dropsSatang: 3_000 })
+    expect(x.cash).toEqual({ openingFloatSatang: 10_000, cashSalesSatang: 12_500, voidRefundsSatang: 8_000, paidInSatang: 1_000, paidOutSatang: 0, dropsSatang: 3_000, drawerExpensesSatang: 0, botCashSatang: 0 })
     // expected = 10,000 + 12,500 − 8,000 + 1,000 − 0 − 3,000 = 12,500
     expect(x.expectedCashSatang).toBe(12_500)
     // clock: 03:00:00 (open) → +60s in sellVoidScenario (shift 1) → +60s just above → 03:02:00
@@ -138,6 +138,9 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
         closedAt: '2026-09-17T03:02:00.000Z',
         closedBy: t.owner.id,
         countedBy: t.owner.id,
+        countedAt: '2026-09-17T03:02:00.000Z',
+        botWindow: null,
+        botBills: [],
         sales: x.sales,
         cash: x.cash,
         countLines,
@@ -168,5 +171,11 @@ describe('shiftReport — X report (spec §4.8: live, any time, writes nothing)'
     const t = await openReadyApi()
     await t.db.insert(s.setting).values({ key: 'cash.variance_alert_satang', valueJson: 5_000, effectiveFrom: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', version: 1 })
     expect((await t.api.shiftReport()).varianceAlertSatang).toBe(5_000)
+  })
+
+  it('a setting of 0 is used as 1 satang, so a perfect count never needs a reason (ruling R4)', async () => {
+    const t = await openReadyApi()
+    await t.db.insert(s.setting).values({ key: 'cash.variance_alert_satang', valueJson: 0, effectiveFrom: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', version: 1 })
+    expect((await t.api.shiftReport()).varianceAlertSatang).toBe(1)
   })
 })

@@ -14,8 +14,14 @@ import { assertSafeInt } from './money.js'
  * - `paidOutSatang` — sum of `cash_movement` rows of kind PAID_OUT (entered by a person, e.g. buying ice).
  *   Void refunds are never PAID_OUT rows (D36), so this is simply every PAID_OUT row of the shift.
  * - `dropsSatang` — sum of `cash_movement` rows of kind DROP (cash removed to the safe).
+ * - `drawerExpensesSatang` — spec 04 §4.10 `cash.drawer_expenses`: expenses paid from the drawer. Always 0 in block 3
+ *   (block 4 fills it); never produced by `cashInputsFromMovements`.
+ * - `botCashSatang` — Σ bot/web cash bills E4 returned for the window (after, counted_at]. 0 until the Z is issued
+ *   (D68), then set once by `withBotCash`; never produced by `cashInputsFromMovements`.
  *
- * expected = opening + cash_sales − void_refunds + paid_in − paid_out − drops
+ * spec 04 §4.10 R-m1 — dayo's formula (`dayo_z_expected`, migration 0065), same terms in the same order:
+ * expected = opening + cash_sales − void_refunds + paid_in − paid_out − drops − drawer_expenses + bot_cash
+ * It may be negative (D54 Q3b-14).
  */
 export type CashInputs = {
   openingFloatSatang: number
@@ -24,10 +30,23 @@ export type CashInputs = {
   paidInSatang: number
   paidOutSatang: number
   dropsSatang: number
+  /** spec 04 §4.10 cash.drawer_expenses — always 0 in block 3 (block 4 fills it). */
+  drawerExpensesSatang: number
+  /** Σ bot/web cash bills of the E4 window (after, counted_at] — 0 until the Z is issued (D68). */
+  botCashSatang: number
 }
 
 export function expectedCashSatang(x: CashInputs): number {
-  return x.openingFloatSatang + x.cashSalesSatang - x.voidRefundsSatang + x.paidInSatang - x.paidOutSatang - x.dropsSatang
+  return (
+    x.openingFloatSatang +
+    x.cashSalesSatang -
+    x.voidRefundsSatang +
+    x.paidInSatang -
+    x.paidOutSatang -
+    x.dropsSatang -
+    x.drawerExpensesSatang +
+    x.botCashSatang
+  )
 }
 
 function assertNonNegInt(n: number, name: string): void {
@@ -46,7 +65,16 @@ export function cashInputsFromMovements(
 ): CashInputs {
   assertNonNegInt(openingFloatSatang, 'openingFloatSatang')
   assertNonNegInt(cashSalesSatang, 'cashSalesSatang')
-  const x: CashInputs = { openingFloatSatang, cashSalesSatang, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+  const x: CashInputs = {
+    openingFloatSatang,
+    cashSalesSatang,
+    voidRefundsSatang: 0,
+    paidInSatang: 0,
+    paidOutSatang: 0,
+    dropsSatang: 0,
+    drawerExpensesSatang: 0,
+    botCashSatang: 0,
+  }
   for (const m of movements) {
     assertSafeInt(m.amountSatang, 'amountSatang')
     if (m.amountSatang <= 0) throw new RangeError(`cash movement amount must be > 0, got ${m.amountSatang}`)
@@ -58,6 +86,21 @@ export function cashInputsFromMovements(
   }
   for (const [k, v] of Object.entries(x)) assertSafeInt(v, k) // M-1
   return x
+}
+
+/** D68 · spec §6.8: the bot/web cash bills E4 returned for (after, counted_at] — added once, when the Z is issued. */
+export function withBotCash(x: CashInputs, botCashSatang: number): CashInputs {
+  assertNonNegInt(botCashSatang, 'botCashSatang')
+  return { ...x, botCashSatang }
+}
+
+/** spec §4.10: variance = counted − expected (negative = short). The one formula; buildZReport uses it too. */
+export function cashVarianceSatang(countedSatang: number, expectedSatang: number): number {
+  assertNonNegInt(countedSatang, 'countedSatang')
+  assertSafeInt(expectedSatang, 'expectedSatang') // may be negative (D54 Q3b-14)
+  const v = countedSatang - expectedSatang
+  assertSafeInt(v, 'cashVarianceSatang')
+  return v
 }
 
 /** One order of the shift that got a receipt number: paid, or paid and voided later (spec §4.3 keeps it in gross). */
@@ -176,11 +219,20 @@ export function tallyCashCount(lines: readonly CashCountLine[]): { lines: CashCo
 /** spec §3.1 setting `cash.variance_alert_satang` default (฿20). */
 export const DEFAULT_VARIANCE_ALERT_SATANG = 2_000
 
-/** spec §4.8: a shortage or overage strictly greater than the alert threshold needs a reason. */
+/** R4: the threshold actually used — a setting of 0 would ask for a reason (and alert dayo) on a perfect count. */
+export const MIN_VARIANCE_ALERT_SATANG = 1
+
+export function effectiveVarianceAlertSatang(settingSatang: number): number {
+  assertNonNegInt(settingSatang, 'settingSatang')
+  return Math.max(MIN_VARIANCE_ALERT_SATANG, settingSatang)
+}
+
+/** D102 (amends D98): one rule on the tablet and at dayo — a shortage or overage of at least the threshold needs a reason. */
 export function varianceNeedsReason(varianceSatang: number, alertSatang: number): boolean {
   assertSafeInt(varianceSatang, 'varianceSatang')
-  assertNonNegInt(alertSatang, 'alertSatang')
-  return Math.abs(varianceSatang) > alertSatang
+  assertSafeInt(alertSatang, 'alertSatang')
+  if (alertSatang < MIN_VARIANCE_ALERT_SATANG) throw new RangeError(`alertSatang must be >= ${MIN_VARIANCE_ALERT_SATANG}, got ${alertSatang}`)
+  return Math.abs(varianceSatang) >= alertSatang
 }
 
 /** A voided receipt as frozen into the Z report — the daily void report (D50 Q3-22). Names are frozen too. */
@@ -247,7 +299,16 @@ export type ZChainWarning = {
    * existed keeps its shape and hash; a safe integer >= 0 when present.
    */
   zNoGap?: number
+  /** R9: this Z continues the key's numbering from dayo (E1 client.last_z_no/last_z_hash) after a reinstall.
+   * Optional so a warning frozen before this field existed keeps its shape and hash; when present, zNo >= 1 and
+   * a 64-char lowercase hex hash. */
+  centralLastZ?: { zNo: number; hash: string }
 }
+
+/** One bot/web cash bill as E4 returned it (spec §4.10 bot_bills) — frozen into the Z. */
+export type ZBotBill = { orderNo: string; version: number; source: string; soldAt: string | null; totalSatang: number; createdByName: string | null }
+/** spec §4.10 bot_window: the E4 window (after, until], until = the Z's countedAt. */
+export type ZBotWindow = { after: string; until: string }
 
 export type ZInput = {
   shiftId: string
@@ -264,6 +325,12 @@ export type ZInput = {
   closedBy: string
   /** The signed-in user who counted the drawer. */
   countedBy: string
+  /** D101: the instant "นับเสร็จ" was pressed — the shift took no bill or cash movement after it. */
+  countedAt: string
+  /** spec §4.10 E4 window (after, until = countedAt]; null for a local-only shift (ruling R6). */
+  botWindow: ZBotWindow | null
+  /** The bot/web cash bills of that window, frozen as E4 returned them (spec §4.10 bot_bills). */
+  botBills: ZBotBill[]
   sales: SalesSummary
   cash: CashInputs
   countLines: CashCountLine[]
@@ -427,8 +494,9 @@ export function recomputeZChainLenient(entries: readonly LenientZEntry[]): Lenie
 /**
  * Frozen Z report: computed once at shift close, never recomputed (spec §4.8). Refuses an inconsistent input
  * (Plan 1 notes §4): sales relations, cash sales on both sides, the count total, the void list (count, total, cash
- * voids = VOID_REFUND rows, QR voids = QR refunded), and a missing reason when the variance is above the alert
- * threshold. Z(n).grand = Z(n−1).grand + net of this shift, chained on `zNo` (the previous Z's snapshot), never on the
+ * voids = VOID_REFUND rows, QR voids = QR refunded), a missing reason when the variance is at or above the alert
+ * threshold (D102), times out of order (opened ≤ counted ≤ closed, D101), and bot bills that do not match the bot
+ * window or `cash.botCashSatang` (spec §4.10). Z(n).grand = Z(n−1).grand + net of this shift, chained on `zNo` (the previous Z's snapshot), never on the
  * clock — a device clock can be wrong and later corrected. With a `chainWarning`, `prev` is the recomputed chain.
  */
 export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatang: number } | null): { snapshot: ZSnapshot; hash: string } {
@@ -493,13 +561,43 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     }
     if (w.zNoGap !== undefined) assertNonNegInt(w.zNoGap, 'chainWarning.zNoGap') // 2026-09-21 · D55 (review R4-1, R4-2)
   }
+  const ms = (iso: string, name: string): number => {
+    const t = Date.parse(iso)
+    if (Number.isNaN(t)) throw new RangeError(`${name} is not an instant`)
+    return t
+  }
+  if (ms(input.countedAt, 'countedAt') < ms(input.openedAt, 'openedAt')) throw new RangeError('countedAt must not be before openedAt (D101)')
+  if (ms(input.closedAt, 'closedAt') < ms(input.countedAt, 'countedAt')) throw new RangeError('closedAt must not be before countedAt (spec §4.10 shift_close)')
+  const seenBot = new Set<string>()
+  let botSum = 0
+  for (const b of input.botBills) {
+    if (b.orderNo.trim() === '') throw new RangeError('bot bill needs an orderNo')
+    if (seenBot.has(b.orderNo)) throw new RangeError(`bot bill ${b.orderNo} counted twice`)
+    seenBot.add(b.orderNo)
+    assertNonNegInt(b.totalSatang, `bot bill ${b.orderNo} totalSatang`)
+    assertSafeInt(b.version, `bot bill ${b.orderNo} version`)
+    botSum += b.totalSatang
+  }
+  if (input.botWindow === null) {
+    if (input.botBills.length > 0 || input.cash.botCashSatang !== 0) throw new RangeError('bot bills need a bot window (ruling R6: a local-only Z has none)')
+  } else {
+    if (input.botWindow.until !== input.countedAt) throw new RangeError('botWindow.until must equal countedAt (spec §4.10 bot_window)')
+    if (ms(input.botWindow.after, 'botWindow.after') >= ms(input.botWindow.until, 'botWindow.until')) throw new RangeError('botWindow.after must be before until')
+  }
+  assertSafeInt(botSum, 'Σ botBills.totalSatang') // M-1
+  if (botSum !== input.cash.botCashSatang) throw new RangeError('Σ botBills.totalSatang must equal cash.botCashSatang (spec §4.10 bot_bills)')
+  if (input.varianceAlertSatang < MIN_VARIANCE_ALERT_SATANG) throw new RangeError('varianceAlertSatang must be >= 1 satang (ruling R4)')
+  const cz = input.chainWarning?.centralLastZ
+  if (cz !== undefined) {
+    assertSafeInt(cz.zNo, 'chainWarning.centralLastZ.zNo')
+    if (cz.zNo < 1 || !/^[0-9a-f]{64}$/.test(cz.hash)) throw new RangeError('chainWarning.centralLastZ needs zNo >= 1 and a 64-hex hash')
+  }
   const expected = expectedCashSatang(input.cash)
   assertSafeInt(expected, 'expectedCashSatang') // M-1
-  const variance = input.countedCashSatang - expected
-  assertSafeInt(variance, 'cashVarianceSatang') // M-1
+  const variance = cashVarianceSatang(input.countedCashSatang, expected) // spec §4.10: the one formula
   const reason = input.varianceReason?.trim() ?? ''
   if (varianceNeedsReason(variance, input.varianceAlertSatang) && reason === '') {
-    throw new RangeError('a cash variance above the alert threshold needs a reason (spec §4.8)')
+    throw new RangeError('a cash variance at or above the alert threshold needs a reason (D102)')
   }
   const qrDifference = input.bankQrTotalSatang === null ? null : input.bankQrTotalSatang - input.sales.qrNetSatang
   if (qrDifference !== null) assertSafeInt(qrDifference, 'qrDifferenceSatang') // M-1
@@ -517,6 +615,9 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     closedAt: input.closedAt,
     closedBy: input.closedBy,
     countedBy: input.countedBy,
+    countedAt: input.countedAt,
+    botWindow: input.botWindow,
+    botBills: input.botBills,
     sales: input.sales,
     cash: input.cash,
     countLines: tally.lines,

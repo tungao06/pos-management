@@ -23,7 +23,7 @@ import {
   type ZInput,
 } from '../src/shift.js'
 
-const cash: CashInputs = { openingFloatSatang: 100_000, cashSalesSatang: 523_000, voidRefundsSatang: 4_500, paidInSatang: 0, paidOutSatang: 20_000, dropsSatang: 300_000 }
+const cash: CashInputs = { openingFloatSatang: 100_000, cashSalesSatang: 523_000, voidRefundsSatang: 4_500, paidInSatang: 0, paidOutSatang: 20_000, dropsSatang: 300_000, drawerExpensesSatang: 0, botCashSatang: 0 }
 
 describe('expectedCashSatang', () => {
   it('opening + cash sales − void refunds + paid in − paid out − drops (D36)', () => {
@@ -31,7 +31,7 @@ describe('expectedCashSatang', () => {
   })
 
   it('each input moves expected cash by exactly its own amount, in its own direction', () => {
-    const base: CashInputs = { openingFloatSatang: 0, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const base: CashInputs = { openingFloatSatang: 0, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 }
     expect(expectedCashSatang({ ...base, openingFloatSatang: 1 })).toBe(1)
     expect(expectedCashSatang({ ...base, cashSalesSatang: 1 })).toBe(1)
     expect(expectedCashSatang({ ...base, voidRefundsSatang: 1 })).toBe(-1)
@@ -41,7 +41,7 @@ describe('expectedCashSatang', () => {
   })
 
   it('a voided 45-baht cash bill: sale counted in cash sales, refund counted once as VOID_REFUND', () => {
-    const x: CashInputs = { openingFloatSatang: 100_000, cashSalesSatang: 4_500, voidRefundsSatang: 4_500, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const x: CashInputs = { openingFloatSatang: 100_000, cashSalesSatang: 4_500, voidRefundsSatang: 4_500, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 }
     expect(expectedCashSatang(x)).toBe(100_000)
   })
 })
@@ -55,7 +55,7 @@ describe('cashInputsFromMovements', () => {
       { kind: 'PAID_OUT', amountSatang: 500 },
       { kind: 'DROP', amountSatang: 30_000 },
     ])
-    expect(x).toEqual({ openingFloatSatang: 50_000, cashSalesSatang: 9_000, voidRefundsSatang: 4_500, paidInSatang: 10_000, paidOutSatang: 2_500, dropsSatang: 30_000 })
+    expect(x).toEqual({ openingFloatSatang: 50_000, cashSalesSatang: 9_000, voidRefundsSatang: 4_500, paidInSatang: 10_000, paidOutSatang: 2_500, dropsSatang: 30_000, drawerExpensesSatang: 0, botCashSatang: 0 })
   })
 
   it('refuses a zero, negative or fractional amount', () => {
@@ -158,13 +158,13 @@ describe('tallyCashCount / varianceNeedsReason', () => {
     expect(() => tallyCashCount([{ denominationSatang: 100, count: 100_000 }])).toThrow(RangeError)
   })
 
-  it('needs a reason only when the shortage or overage is strictly above the threshold (spec §4.8)', () => {
-    expect(varianceNeedsReason(2_000, 2_000)).toBe(false)
-    expect(varianceNeedsReason(-2_000, 2_000)).toBe(false)
-    expect(varianceNeedsReason(2_001, 2_000)).toBe(true)
-    expect(varianceNeedsReason(-2_001, 2_000)).toBe(true)
-    expect(varianceNeedsReason(0, 0)).toBe(false)
-    expect(varianceNeedsReason(1, 0)).toBe(true)
+  it('needs a reason when the shortage or overage is at or above the threshold (D102, amends D98)', () => {
+    expect(varianceNeedsReason(2_000, 2_000)).toBe(true)
+    expect(varianceNeedsReason(-2_000, 2_000)).toBe(true)
+    expect(varianceNeedsReason(1_999, 2_000)).toBe(false)
+    expect(varianceNeedsReason(0, 1)).toBe(false)
+    expect(varianceNeedsReason(1, 1)).toBe(true)
+    expect(() => varianceNeedsReason(0, 0)).toThrow(RangeError) // ruling R4: an alert below 1 satang is refused
   })
 })
 
@@ -303,7 +303,7 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
 
   it('property: the result always satisfies buildZReport as `prev`, and as a real, non-null chainWarning built from its own lists — never BAD_INPUT, whatever the earlier rows claim (review NF-2, NF-7, R2-1, R2-2)', () => {
     const zeroSales: SalesSummary = { orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 }
-    const zeroCash: CashInputs = { openingFloatSatang: 0, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const zeroCash: CashInputs = { openingFloatSatang: 0, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 }
     const wide = fc.integer({ min: -10, max: Number.MAX_SAFE_INTEGER })
     // review R2-1/R2-2: the zNo arbitrary now also reaches zNo <= 0 and huge (near-MAX_SAFE_INTEGER) values, on top
     // of the small range that already produced duplicates and gaps — exactly the inputs the earlier property test
@@ -336,7 +336,7 @@ describe('recomputeZChainLenient (Q3b-16 · D54): never throws, unlike recompute
         }
         const currentShift: ZInput = {
           shiftId: 's-current', businessDate: '2026-09-17', deviceId: 'dev-A', zNo: chain.zNo + 1, openedAt: '2026-09-17T01:00:00.000Z', openedBy: 'u1', openedQuick: false,
-          closedAt: '2026-09-17T13:05:00.000Z', closedBy: 'u1', countedBy: 'u1',
+          closedAt: '2026-09-17T13:05:00.000Z', closedBy: 'u1', countedBy: 'u1', countedAt: '2026-09-17T13:05:00.000Z', botWindow: null, botBills: [],
           sales: zeroSales, cash: zeroCash, countLines: [], countedCashSatang: 0, varianceAlertSatang: 2_000, varianceReason: null, voids: [], bankQrTotalSatang: null, chainWarning,
         }
         buildZReport(currentShift, { zNo: chain.zNo, grandTotalSatang: chain.grandTotalSatang }) // must never throw
@@ -350,11 +350,11 @@ describe('buildZReport', () => {
     orderCount: 3, voidCount: 1, grossSalesSatang: 24_000, discountSatang: 500, voidedSatang: 9_000, netSalesSatang: 14_500,
     cashSalesSatang: 19_000, qrSalesSatang: 4_500, qrRefundedSatang: 0, qrNetSatang: 4_500,
   }
-  const zCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 19_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0 }
+  const zCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 19_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 }
   // expected = 50_000 + 19_000 − 9_000 − 2_000 = 58_000
   const input: ZInput = {
     shiftId: 's1', businessDate: '2026-09-17', deviceId: 'dev-A', zNo: 1, openedAt: '2026-09-17T01:00:00.000Z', openedBy: 'u1', openedQuick: false,
-    closedAt: '2026-09-17T13:05:00.000Z', closedBy: 'u1', countedBy: 'u2',
+    closedAt: '2026-09-17T13:05:00.000Z', closedBy: 'u1', countedBy: 'u2', countedAt: '2026-09-17T13:05:00.000Z', botWindow: null, botBills: [],
     sales, cash: zCash,
     countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 5_000, count: 1 }, { denominationSatang: 1_000, count: 3 }],
     countedCashSatang: 58_000,
@@ -381,31 +381,36 @@ describe('buildZReport', () => {
   })
 
   it('pins the base input to a known golden hash (M-7): any change to canonicalization or snapshot shape must be deliberate', () => {
-    expect(buildZReport(input, null).hash).toBe('bf90b64e36954495d2e4e385fd006d4ebcfe17febc914ba6607fef06a5cee4a4')
+    // Block 3 (spec §4.10 · D101): the snapshot gained countedAt/botWindow/botBills and cash.drawerExpensesSatang/botCashSatang.
+    const z = buildZReport(input, null)
+    expect(z.hash).toBe('bccf5156072f1597657c9c4736e27240b992b91ae454b807374498a7c0e17ee5')
+    // Canonicalization itself did not change: drop the block-3 fields and the block-2 golden hash comes back.
+    const { countedAt: _a, botWindow: _w, botBills: _b, cash, ...rest } = z.snapshot
+    const { drawerExpensesSatang: _d, botCashSatang: _c, ...block2Cash } = cash
+    expect(zReportHash({ ...rest, cash: block2Cash })).toBe('bf90b64e36954495d2e4e385fd006d4ebcfe17febc914ba6607fef06a5cee4a4')
   })
 
-  it('a variance exactly at the alert threshold does not need a reason, with a non-default threshold too (M-7, spec §4.8 equality)', () => {
+  it('a variance exactly at the alert threshold needs a reason, with a non-default threshold too (D102, amends D98)', () => {
     // expected cash is 58_000 either way; countLines are rebuilt to sum to the new countedCashSatang exactly.
-    const z1 = buildZReport(
-      { ...input, countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 10_000, count: 1 }], countedCashSatang: 60_000 },
-      null,
-    )
-    expect(z1.snapshot).toMatchObject({ cashVarianceSatang: DEFAULT_VARIANCE_ALERT_SATANG, varianceReason: null })
-    const z2 = buildZReport(
-      {
-        ...input,
-        varianceAlertSatang: 500,
-        countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 5_000, count: 1 }, { denominationSatang: 2_000, count: 1 }, { denominationSatang: 500, count: 1 }],
-        countedCashSatang: 57_500,
-      },
-      null,
-    )
-    expect(z2.snapshot).toMatchObject({ cashVarianceSatang: -500, varianceReason: null })
+    const over = { ...input, countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 10_000, count: 1 }], countedCashSatang: 60_000 }
+    expect(() => buildZReport(over, null)).toThrow(/reason/)
+    expect(buildZReport({ ...over, varianceReason: 'เกิน' }, null).snapshot).toMatchObject({ cashVarianceSatang: DEFAULT_VARIANCE_ALERT_SATANG, varianceReason: 'เกิน' })
+    const short = {
+      ...input,
+      varianceAlertSatang: 500,
+      countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 5_000, count: 1 }, { denominationSatang: 2_000, count: 1 }, { denominationSatang: 500, count: 1 }],
+      countedCashSatang: 57_500,
+    }
+    expect(() => buildZReport(short, null)).toThrow(/reason/)
+    expect(buildZReport({ ...short, varianceReason: 'ทอนผิด' }, null).snapshot).toMatchObject({ cashVarianceSatang: -500, varianceReason: 'ทอนผิด' })
+    // a variance under the threshold still needs none
+    const under = { ...short, countLines: [...short.countLines, { denominationSatang: 100, count: 4 }], countedCashSatang: 57_900 }
+    expect(buildZReport(under, null).snapshot).toMatchObject({ cashVarianceSatang: -100, varianceReason: null })
   })
 
   it('a zero-sales Z is accepted; the grand total carries forward unchanged (M-7)', () => {
     const zeroSales: SalesSummary = { orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 }
-    const zeroCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const zeroCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 }
     const z = buildZReport(
       { ...input, sales: zeroSales, cash: zeroCash, countLines: [{ denominationSatang: 50_000, count: 1 }], countedCashSatang: 50_000, voids: [] },
       { zNo: 0, grandTotalSatang: 1_000_000 },
@@ -418,7 +423,7 @@ describe('buildZReport', () => {
       orderCount: 1, voidCount: 1, grossSalesSatang: 5_000, discountSatang: 500, voidedSatang: 4_500, netSalesSatang: 0,
       cashSalesSatang: 4_500, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0,
     }
-    const onlyVoidCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 4_500, voidRefundsSatang: 4_500, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const onlyVoidCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 4_500, voidRefundsSatang: 4_500, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 }
     const z = buildZReport(
       {
         ...input, sales: onlyVoidSales, cash: onlyVoidCash, countedCashSatang: 50_000, countLines: [{ denominationSatang: 50_000, count: 1 }],
@@ -434,7 +439,7 @@ describe('buildZReport', () => {
       orderCount: 2, voidCount: 1, grossSalesSatang: 9_500, discountSatang: 0, voidedSatang: 5_000, netSalesSatang: 4_500,
       cashSalesSatang: 0, qrSalesSatang: 9_500, qrRefundedSatang: 5_000, qrNetSatang: 4_500,
     }
-    const qrVoidCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 }
+    const qrVoidCash: CashInputs = { openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 }
     const z = buildZReport(
       {
         ...input, sales: qrVoidSales, cash: qrVoidCash, countedCashSatang: 50_000, countLines: [{ denominationSatang: 50_000, count: 1 }],

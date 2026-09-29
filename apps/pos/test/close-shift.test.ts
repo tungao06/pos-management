@@ -97,8 +97,11 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
       closedAt: '2026-09-17T13:05:00.000Z',
       closedBy: t.owner.id,
       countedBy: t.other.id,
+      countedAt: '2026-09-17T13:05:00.000Z', // block 2 counts and closes in one step (R17)
+      botWindow: null,
+      botBills: [],
       sales: { orderCount: 3, voidCount: 2, grossSalesSatang: 18_500, discountSatang: 500, voidedSatang: 14_000, netSalesSatang: 4_000, cashSalesSatang: 13_000, qrSalesSatang: 5_000, qrRefundedSatang: 5_000, qrNetSatang: 0 },
-      cash: { openingFloatSatang: 50_000, cashSalesSatang: 13_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0 },
+      cash: { openingFloatSatang: 50_000, cashSalesSatang: 13_000, voidRefundsSatang: 9_000, paidInSatang: 0, paidOutSatang: 2_000, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 },
       countedCashSatang: 52_000,
       expectedCashSatang: 52_000,
       cashVarianceSatang: 0,
@@ -137,12 +140,14 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     ).rejects.toThrow(/^NO_OPEN_SHIFT: /)
   })
 
-  it('a variance above ฿20 needs a reason — without one nothing is written; with one it is kept (spec §4.8)', async () => {
+  it('a variance of ฿20 or more needs a reason — without one nothing is written; with one it is kept (D102)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
-    // ฿500 counted, ฿520 expected → −฿20, which is not above the ฿20 threshold: no reason needed
-    const z0 = await t.api.closeShift(await closeInput(t, { countLines: [{ denominationSatang: 50_000, count: 1 }] }))
-    expect(z0.snapshot).toMatchObject({ cashVarianceSatang: -2_000, varianceReason: null })
+    // ฿500 counted, ฿520 expected → −฿20, at the ฿20 threshold: needs a reason (D102, amends D98)
+    const at20 = [{ denominationSatang: 50_000, count: 1 }]
+    await expect(t.api.closeShift(await closeInput(t, { countLines: at20 }))).rejects.toThrow(/^VARIANCE_REASON_REQUIRED: /)
+    const z0 = await t.api.closeShift(await closeInput(t, { countLines: at20, varianceReason: 'ทอนผิด' }))
+    expect(z0.snapshot).toMatchObject({ cashVarianceSatang: -2_000, varianceReason: 'ทอนผิด' })
 
     const u = await openReadyApi()
     await sellVoidScenario(u)
@@ -179,7 +184,7 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     await expect(closeShift(t.db, t.deps, await closeInput(t, { approverPin: '9999' }), hooks)).rejects.toThrow(/^PIN_WRONG: /)
     await expect(closeShift(t.db, t.deps, await closeInput(t, { countLines: [{ denominationSatang: 100, count: -1 }] }), hooks)).rejects.toThrow(/^BAD_INPUT: /)
     expect(woken).toEqual([])
-    await closeShift(t.db, t.deps, await closeInput(t), hooks)
+    await closeShift(t.db, t.deps, await closeInput(t, { countLines: [{ denominationSatang: 50_000, count: 1 }] }), hooks) // ฿500 float, no sales: counted = expected (D102: +฿20 would need a reason)
     expect(woken).toEqual(['before_close'])
   })
 
@@ -851,12 +856,21 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
     expect(z.snapshot).toMatchObject({ zNo: 1 })
   })
 
-  it('the positive variance boundary needs no reason at +฿20 and does above it (m-3)', async () => {
+  it('the positive variance boundary needs no reason at +฿19 and does at +฿20 (m-3 · D102)', async () => {
     const t = await openReadyApi()
     await sellVoidScenario(t)
-    // ฿520 expected, ฿540 counted → +฿20, not above the ฿20 threshold: no reason needed
-    const zAt = await t.api.closeShift(await closeInput(t, { countLines: [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 2_000, count: 2 }] }))
-    expect(zAt.snapshot).toMatchObject({ cashVarianceSatang: 2_000, varianceReason: null })
+    // ฿520 expected, ฿539 counted → +฿19, under the ฿20 threshold: no reason needed
+    const under = [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 2_000, count: 1 }, { denominationSatang: 1_000, count: 1 }, { denominationSatang: 500, count: 1 }, { denominationSatang: 200, count: 2 }]
+    const zUnder = await t.api.closeShift(await closeInput(t, { countLines: under }))
+    expect(zUnder.snapshot).toMatchObject({ cashVarianceSatang: 1_900, varianceReason: null })
+
+    const v = await openReadyApi()
+    await sellVoidScenario(v)
+    // ฿540 counted → +฿20, at the threshold: needs a reason (D102, amends D98)
+    const at = [{ denominationSatang: 50_000, count: 1 }, { denominationSatang: 2_000, count: 2 }]
+    await expect(v.api.closeShift(await closeInput(v, { countLines: at }))).rejects.toThrow(/^VARIANCE_REASON_REQUIRED: /)
+    const zAt = await v.api.closeShift(await closeInput(v, { countLines: at, varianceReason: 'เกินมา' }))
+    expect(zAt.snapshot).toMatchObject({ cashVarianceSatang: 2_000, varianceReason: 'เกินมา' })
 
     const u = await openReadyApi()
     await sellVoidScenario(u)
