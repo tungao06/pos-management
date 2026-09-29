@@ -1,6 +1,7 @@
 // packages/dayo-mock/src/state.ts — no node:* imports (the tablet's jsdom tests load this package)
 import { PosCatalogResponse, type CentralOrder, type DayoEdit, type OrderRowData, type PosCatalogData, type ReceivedRowResult } from '@dayo/contracts'
 import rich from '@dayo/contracts/fixtures/pos-test/e1-catalog-rich.json' with { type: 'json' }
+import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 
 export type PosCatalogChangedData = Extract<PosCatalogData, { changed: true }>
 export type CatalogPromotion = PosCatalogChangedData['catalog']['promotions'][number]
@@ -117,5 +118,8 @@ export function mergeVariants(c: PosCatalogChangedData, variants: readonly Catal
 export function freshCatalog(): PosCatalogChangedData {
   const d = PosCatalogResponse.parse(rich).data
   if (!d.changed) throw new Error('e1-catalog-rich.json must be changed:true')
-  return structuredClone(d)
+  // E1 `pricing` = the vendored pin: the mock plays a dayo running the exact pricing code the tablet vendored, so a
+  // `vendor:update` never needs this fixture's hashes edited by hand (a test wanting a mismatch sets `opts.pricing`
+  // or mutates `catalog.pricing`).
+  return { ...structuredClone(d), pricing: { commit: vendor.commit, files_sha256: { ...vendor.files } } }
 }

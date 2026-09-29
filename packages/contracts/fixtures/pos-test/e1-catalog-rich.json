@@ -4,11 +4,11 @@
     "pricing": { "commit": "135679ceefc0016ade2d94508fe3de615be0da3e", "files_sha256": {
         "packages/shared/src/cost.ts": "83df8f024306ad4e4575d84e3b2b32b0ff1579d765138d76c4eacfb7160202a8",
         "packages/shared/src/fmt.ts": "df31505296c9c99d2e1cc984d02a7fc86706b7ce668b7680554008fbc74334ac",
-        "packages/shared/src/money.ts": "96abf33a850979298e3d3f3996acc03cdbbd6a17b33630b22a3cfcdb1407699e",
+        "packages/shared/src/money.ts": "9fc84edb98244b60454d0da8cad1abe8f17ff7dfefc503c7d4cde192b7e0e5c7",
         "packages/shared/src/promotions.ts": "4850b98d5084e703bb1deb84ea4629253f510f37d6e0ab80161e2e5dab15ea11",
         "packages/shared/src/shopSettings.ts": "7b1fdd25231fece6527bd82b938217ec94f0cb403e14071d4a4edb6edd5ec34d",
         "packages/shared/src/time.ts": "c634692b8b9c5dd30876cca15e94b3b642da7c685966db5017a34682c3cc1de1",
-        "packages/shared/src/types.ts": "0c6e790ea3e16a8dcdbf93b36c32c224f422c3fefe6ee34e791a2dc8e42edaa0" }  },
+        "packages/shared/src/types.ts": "10d4eb777fb4ca2f8174dd9bd07e5e40e3a10b2244a78bc025673c2b44b33db9" }  },
     "supported_kinds": ["order", "order_void"],
     "supported_fields": {
       "order": ["pos_order_id", "receipt_no", "queue_no", "sale_date", "sold_at", "channel", "payment", "staff_id", "catalog_version", "shift_id", "lines", "lines.code", "lines.size", "lines.sweetness", "lines.milk", "lines.grade", "lines.qty", "lines.free", "lines.discount_baht", "lines.discount_percent", "lines.discount_reason", "bill_discount", "promo_code", "skip_promotion_ids", "no_promotions", "totals", "note"],

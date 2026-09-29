@@ -1,250 +1,495 @@
 {
-  "dayo_commit": "a0f76e226b018878566126e1209bf90b59676a54",
-  "generated_at": "2026-09-25T17:01:41.245Z",
+  "dayo_commit": "4f359320b68e8b4cc7713e4c6b3123615f5cfa7d",
+  "generated_at": "2026-09-28T20:09:37.224Z",
   "pricing_files_sha256": {
-    "packages/shared/src/money.ts": "2c588356b2e2d69f65d8e01f14c8c5b7b479d1d721828f8e944da9a118d105f3",
+    "packages/shared/src/money.ts": "cc619ca5d603b591a2e156b810bdef8bc552e525ad5b78bc5ada70a58394daf3",
     "packages/shared/src/promotions.ts": "007526169494c36a3f8367e6aeb855b7d1cfa107be99dc0f807224135b5ff38e",
     "packages/shared/src/cost.ts": "3c3b3db56ce656005b2b909b063ece360fc07ee350e3030ce1f6e5b5dba7ddea",
     "packages/shared/src/fmt.ts": "8cc04f4aa797974438a51beafebe2b718b3ba03a0f0a0a2d7142be3ba539afa3",
     "packages/shared/src/shopSettings.ts": "7f936e722816849bc673b38c6d7816dcc6c8e2e0d0add626eefd3acb15495289",
-    "packages/shared/src/types.ts": "64b3ce0d72d71b4a8dc9a46a513d6c28fde5a69bb94dbf23d757745aeb9a9b30",
+    "packages/shared/src/types.ts": "21f74a78803cfe0e49696cc6b637f448072d4ff5890587085ddfc41ef4cb824a",
     "packages/shared/src/time.ts": "e924caa06e0cfa195d9a8086509d33133b2d597964ea34f1237c19e52db6a7c7"
   },
+  "catalog_version": 23,
   "catalog": {
-    "settings": {
-      "shopName": "DA-YO (ตัวอย่าง parity)",
-      "defaultSize": "16 oz",
-      "defaultSweetness": "100%",
-      "defaultChannelCode": "store",
-      "defaultMilk": "fresh",
-      "maxQtyPerLine": 99,
-      "backdateDays": 7,
-      "recentOrdersCount": 5
-    },
+    "bases": {},
     "sizes": [
       {
         "code": "16 oz",
         "label": "16 oz",
-        "sortOrder": 0,
-        "isActive": true
+        "isActive": true,
+        "sortOrder": 0
       },
       {
         "code": "20 oz",
         "label": "20 oz",
-        "sortOrder": 1,
-        "isActive": true
-      }
-    ],
-    "variants": [
-      {
-        "menuCode": "Thai Tea",
-        "menuNameTh": "ชาไทย",
-        "family": "ชาไทย",
-        "categoryLabel": "ชาไทย",
-        "menuSortOrder": 0,
-        "size": "16 oz",
-        "sweetness": "50%",
-        "price": 35,
-        "allowOatMilk": false,
-        "isMatcha": false,
-        "recipeLines": [
-          {
-            "ingredientId": "ing-thai-base",
-            "qty": 150,
-            "unit": "ml"
-          }
-        ]
-      },
-      {
-        "menuCode": "Green Tea",
-        "menuNameTh": "ชาเขียว",
-        "family": "ชาเขียว",
-        "categoryLabel": "ชาเขียว",
-        "menuSortOrder": 1,
-        "size": "16 oz",
-        "sweetness": "50%",
-        "price": 45,
-        "allowOatMilk": false,
-        "isMatcha": false,
-        "recipeLines": [
-          {
-            "ingredientId": "ing-green-base",
-            "qty": 150,
-            "unit": "ml"
-          }
-        ]
-      },
-      {
-        "menuCode": "Green Tea",
-        "menuNameTh": "ชาเขียว",
-        "family": "ชาเขียว",
-        "categoryLabel": "ชาเขียว",
-        "menuSortOrder": 1,
-        "size": "20 oz",
-        "sweetness": "50%",
-        "price": 65,
-        "allowOatMilk": false,
-        "isMatcha": false,
-        "recipeLines": [
-          {
-            "ingredientId": "ing-green-base",
-            "qty": 200,
-            "unit": "ml"
-          }
-        ]
-      },
-      {
-        "menuCode": "Matcha Latte",
-        "menuNameTh": "มัตจะลาเต้",
-        "family": "มัตจะ",
-        "categoryLabel": "มัตจะ",
-        "menuSortOrder": 2,
-        "size": "16 oz",
-        "sweetness": "50%",
-        "price": 85,
-        "allowOatMilk": true,
-        "isMatcha": true,
-        "recipeLines": [
-          {
-            "ingredientId": "ing-powder-excellent",
-            "qty": 3.5,
-            "unit": "g"
-          },
-          {
-            "ingredientId": "ing-fresh-milk",
-            "qty": 150,
-            "unit": "ml"
-          }
-        ]
-      }
-    ],
-    "ingredients": {
-      "ing-thai-base": {
-        "id": "ing-thai-base",
-        "code": "BASE-THAI",
-        "name": "ชาไทยเบส",
-        "useUnit": "ml",
-        "costPerUseUnit": 0.1
-      },
-      "ing-green-base": {
-        "id": "ing-green-base",
-        "code": "BASE-GREEN",
-        "name": "ชาเขียวเบส",
-        "useUnit": "ml",
-        "costPerUseUnit": 0.12
-      },
-      "ing-fresh-milk": {
-        "id": "ing-fresh-milk",
-        "code": "RM-020",
-        "name": "นมสด",
-        "useUnit": "ml",
-        "costPerUseUnit": 0.05
-      },
-      "ing-oat-milk": {
-        "id": "ing-oat-milk",
-        "code": "RM-021",
-        "name": "นมโอ๊ต",
-        "useUnit": "ml",
-        "costPerUseUnit": 0.09
-      },
-      "ing-powder-excellent": {
-        "id": "ing-powder-excellent",
-        "code": "RM-010",
-        "name": "ผงมัตจะ Excellent",
-        "useUnit": "g",
-        "costPerUseUnit": 8
-      },
-      "ing-powder-isuzu": {
-        "id": "ing-powder-isuzu",
-        "code": "RM-012",
-        "name": "ผงมัตจะ Isuzu",
-        "useUnit": "g",
-        "costPerUseUnit": 12
-      }
-    },
-    "bases": {},
-    "milkOptions": [
-      {
-        "code": "fresh",
-        "ingredientId": "ing-fresh-milk",
-        "priceAdd": 0,
-        "aliases": []
-      },
-      {
-        "code": "oat",
-        "ingredientId": "ing-oat-milk",
-        "priceAdd": 5,
-        "aliases": [
-          "นมโอ๊ต"
-        ]
-      }
-    ],
-    "gradeOptions": [
-      {
-        "code": "Excellent",
-        "ingredientId": "ing-powder-excellent",
-        "multiplier": 1,
-        "priceAdd": 0,
-        "isDefault": true,
-        "aliases": [
-          "excellent"
-        ]
-      },
-      {
-        "code": "Isuzu",
-        "ingredientId": "ing-powder-isuzu",
-        "multiplier": 0.8,
-        "priceAdd": 90,
-        "isDefault": false,
-        "aliases": [
-          "isuzu"
-        ]
+        "isActive": true,
+        "sortOrder": 1
       }
     ],
     "channels": [
       {
         "code": "store",
         "name": "หน้าร้าน",
+        "feePct": 0,
         "aliases": [
           "หน้าร้าน"
         ],
-        "priceMarkupPct": 0,
-        "priceAddBaht": 0,
         "rounding": "ceil_baht",
-        "feePct": 0,
+        "priceAddBaht": 0,
+        "priceMarkupPct": 0,
         "defaultPaymentMethodCode": "cash"
       },
       {
         "code": "grab",
         "name": "Grab",
+        "feePct": 0.3,
         "aliases": [
           "grab"
         ],
-        "priceMarkupPct": 0.3,
-        "priceAddBaht": 0,
         "rounding": "ceil_baht",
-        "feePct": 0.3,
+        "priceAddBaht": 0,
+        "priceMarkupPct": 0.3,
         "defaultPaymentMethodCode": "platform"
       },
       {
         "code": "round7",
         "name": "ทดสอบปัดเศษ 7%",
-        "aliases": [],
-        "priceMarkupPct": 0.07,
-        "priceAddBaht": 0,
-        "rounding": "ceil_baht",
         "feePct": 0,
+        "aliases": [],
+        "rounding": "ceil_baht",
+        "priceAddBaht": 0,
+        "priceMarkupPct": 0.07,
         "defaultPaymentMethodCode": "cash"
       },
       {
         "code": "delivery",
         "name": "เดลิเวอรี",
-        "aliases": [],
-        "priceMarkupPct": 0.1,
-        "priceAddBaht": 2,
-        "rounding": "ceil_baht",
         "feePct": 0.15,
+        "aliases": [],
+        "rounding": "ceil_baht",
+        "priceAddBaht": 2,
+        "priceMarkupPct": 0.1,
         "defaultPaymentMethodCode": "platform"
+      }
+    ],
+    "settings": {
+      "shopName": "test-pos-parity",
+      "defaultMilk": "fresh",
+      "defaultSize": "16 oz",
+      "backdateDays": 7,
+      "maxQtyPerLine": 99,
+      "defaultSweetness": "100%",
+      "recentOrdersCount": 5,
+      "defaultChannelCode": "store"
+    },
+    "variants": [
+      {
+        "size": "16 oz",
+        "price": 35,
+        "family": "ชาไทย",
+        "isMatcha": false,
+        "menuCode": "Thai Tea",
+        "sweetness": "50%",
+        "menuNameTh": "ชาไทย",
+        "recipeLines": [
+          {
+            "qty": 150,
+            "unit": "ml",
+            "baseId": null,
+            "ingredientId": "94d62a54-d9ba-4b5a-9df7-da9ab7804a5b"
+          }
+        ],
+        "allowOatMilk": false,
+        "categoryLabel": "ชาไทย",
+        "menuSortOrder": 0
+      },
+      {
+        "size": "16 oz",
+        "price": 45,
+        "family": "ชาเขียว",
+        "isMatcha": false,
+        "menuCode": "Green Tea",
+        "sweetness": "50%",
+        "menuNameTh": "ชาเขียว",
+        "recipeLines": [
+          {
+            "qty": 150,
+            "unit": "ml",
+            "baseId": null,
+            "ingredientId": "0734d668-77ab-4baf-b5a9-2d4eb62e3dea"
+          }
+        ],
+        "allowOatMilk": false,
+        "categoryLabel": "ชาเขียว",
+        "menuSortOrder": 1
+      },
+      {
+        "size": "20 oz",
+        "price": 65,
+        "family": "ชาเขียว",
+        "isMatcha": false,
+        "menuCode": "Green Tea",
+        "sweetness": "50%",
+        "menuNameTh": "ชาเขียว",
+        "recipeLines": [
+          {
+            "qty": 200,
+            "unit": "ml",
+            "baseId": null,
+            "ingredientId": "0734d668-77ab-4baf-b5a9-2d4eb62e3dea"
+          }
+        ],
+        "allowOatMilk": false,
+        "categoryLabel": "ชาเขียว",
+        "menuSortOrder": 1
+      },
+      {
+        "size": "16 oz",
+        "price": 85,
+        "family": "มัตจะ",
+        "isMatcha": true,
+        "menuCode": "Matcha Latte",
+        "sweetness": "50%",
+        "menuNameTh": "มัตจะลาเต้",
+        "recipeLines": [
+          {
+            "qty": 3.5,
+            "unit": "g",
+            "baseId": null,
+            "ingredientId": "bd1ac8df-fb1c-4cb1-b6cc-270dae484e76"
+          },
+          {
+            "qty": 150,
+            "unit": "ml",
+            "baseId": null,
+            "ingredientId": "00b5fea9-3111-40cb-adad-5508d43d93da"
+          }
+        ],
+        "allowOatMilk": true,
+        "categoryLabel": "มัตจะ",
+        "menuSortOrder": 2
+      }
+    ],
+    "promotions": [
+      {
+        "id": "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+        "code": "FRIEND",
+        "kind": "item_discount",
+        "name": "โค้ด FRIEND ลด 10",
+        "endsOn": null,
+        "params": {
+          "menu_codes": [
+            "Thai Tea"
+          ],
+          "amount_baht": 10
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 1,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": false,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": true
+      },
+      {
+        "id": "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+        "code": null,
+        "kind": "item_discount",
+        "name": "ลด 15% ชาเขียว",
+        "endsOn": null,
+        "params": {
+          "percent": 15,
+          "menu_codes": [
+            "Green Tea"
+          ]
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 1,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+        "code": null,
+        "kind": "item_discount",
+        "name": "ลด 33% ชาเขียว",
+        "endsOn": null,
+        "params": {
+          "percent": 33,
+          "menu_codes": [
+            "Green Tea"
+          ]
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 1,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "47ec6da6-ced9-4a48-a302-6420bbff855d",
+        "code": null,
+        "kind": "item_discount",
+        "name": "ลด 7% มัตจะลาเต้",
+        "endsOn": null,
+        "params": {
+          "percent": 7,
+          "menu_codes": [
+            "Matcha Latte"
+          ]
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 1,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+        "code": null,
+        "kind": "item_discount",
+        "name": "ลด 15% ชาไทย",
+        "endsOn": null,
+        "params": {
+          "percent": 15,
+          "menu_codes": [
+            "Thai Tea"
+          ]
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 1,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+        "code": null,
+        "kind": "item_discount",
+        "name": "ชาไทยช่วงเย็นลด 5",
+        "endsOn": null,
+        "params": {
+          "menu_codes": [
+            "Thai Tea"
+          ],
+          "amount_baht": 5
+        },
+        "timeTo": "20:00",
+        "isActive": true,
+        "priority": 1,
+        "startsOn": null,
+        "timeFrom": "17:00",
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+        "code": null,
+        "kind": "item_discount",
+        "name": "ชาไทยทาง Grab ลด 3",
+        "endsOn": null,
+        "params": {
+          "menu_codes": [
+            "Thai Tea"
+          ],
+          "amount_baht": 3
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 1,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [
+          "grab"
+        ],
+        "requiresCode": false
+      },
+      {
+        "id": "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+        "code": null,
+        "kind": "buy_n_get_m",
+        "name": "ชาไทยซื้อ 2 แถม 1",
+        "endsOn": null,
+        "params": {
+          "buy_qty": 2,
+          "get_qty": 1,
+          "menu_codes": [
+            "Thai Tea"
+          ]
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 2,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "681537ad-5aba-471e-967a-b327a7865f8d",
+        "code": null,
+        "kind": "bundle",
+        "name": "เซ็ตชาไทย+มัตจะลาเต้ ฿100",
+        "endsOn": null,
+        "params": {
+          "items": [
+            {
+              "qty": 1,
+              "menu_codes": [
+                "Thai Tea"
+              ]
+            },
+            {
+              "qty": 1,
+              "menu_codes": [
+                "Matcha Latte"
+              ]
+            }
+          ],
+          "bundle_price": 100
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 3,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      },
+      {
+        "id": "63dbd158-4b3e-42c2-a16b-499299f63495",
+        "code": null,
+        "kind": "bill_discount",
+        "name": "ลดบิล 10% (สูงสุด ฿50)",
+        "endsOn": null,
+        "params": {
+          "percent": 10,
+          "max_amount": 50,
+          "min_subtotal": 0
+        },
+        "timeTo": null,
+        "isActive": true,
+        "priority": 5,
+        "startsOn": null,
+        "timeFrom": null,
+        "autoApply": true,
+        "stackable": true,
+        "daysOfWeek": null,
+        "channelCodes": [],
+        "requiresCode": false
+      }
+    ],
+    "ingredients": {
+      "00b5fea9-3111-40cb-adad-5508d43d93da": {
+        "id": "00b5fea9-3111-40cb-adad-5508d43d93da",
+        "code": "RM-020",
+        "name": "นมสด",
+        "useUnit": "ml"
+      },
+      "0734d668-77ab-4baf-b5a9-2d4eb62e3dea": {
+        "id": "0734d668-77ab-4baf-b5a9-2d4eb62e3dea",
+        "code": "BASE-GREEN",
+        "name": "ชาเขียวเบส",
+        "useUnit": "ml"
+      },
+      "94d62a54-d9ba-4b5a-9df7-da9ab7804a5b": {
+        "id": "94d62a54-d9ba-4b5a-9df7-da9ab7804a5b",
+        "code": "BASE-THAI",
+        "name": "ชาไทยเบส",
+        "useUnit": "ml"
+      },
+      "aaba3835-05bd-41e3-b9a9-cfcbc52e737b": {
+        "id": "aaba3835-05bd-41e3-b9a9-cfcbc52e737b",
+        "code": "RM-021",
+        "name": "นมโอ๊ต",
+        "useUnit": "ml"
+      },
+      "b3958a8a-fd79-45ab-8549-cc53ad7bff06": {
+        "id": "b3958a8a-fd79-45ab-8549-cc53ad7bff06",
+        "code": "RM-012",
+        "name": "ผงมัตจะ Isuzu",
+        "useUnit": "g"
+      },
+      "bd1ac8df-fb1c-4cb1-b6cc-270dae484e76": {
+        "id": "bd1ac8df-fb1c-4cb1-b6cc-270dae484e76",
+        "code": "RM-010",
+        "name": "ผงมัตจะ Excellent",
+        "useUnit": "g"
+      }
+    },
+    "milkOptions": [
+      {
+        "code": "fresh",
+        "aliases": [],
+        "priceAdd": 0,
+        "ingredientId": "00b5fea9-3111-40cb-adad-5508d43d93da"
+      },
+      {
+        "code": "oat",
+        "aliases": [
+          "นมโอ๊ต"
+        ],
+        "priceAdd": 5,
+        "ingredientId": "aaba3835-05bd-41e3-b9a9-cfcbc52e737b"
+      }
+    ],
+    "gradeOptions": [
+      {
+        "code": "Excellent",
+        "aliases": [
+          "excellent"
+        ],
+        "priceAdd": 0,
+        "isDefault": true,
+        "multiplier": 1,
+        "ingredientId": "bd1ac8df-fb1c-4cb1-b6cc-270dae484e76"
+      },
+      {
+        "code": "Isuzu",
+        "aliases": [
+          "isuzu"
+        ],
+        "priceAdd": 90,
+        "isDefault": false,
+        "multiplier": 0.8,
+        "ingredientId": "b3958a8a-fd79-45ab-8549-cc53ad7bff06"
       }
     ],
     "paymentMethods": [
@@ -259,194 +504,6 @@
         "code": "platform",
         "name": "แพลตฟอร์ม",
         "aliases": []
-      }
-    ],
-    "promotions": [
-      {
-        "id": "promo-pct15-thai",
-        "code": null,
-        "name": "ลด 15% ชาไทย",
-        "kind": "item_discount",
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 1,
-        "stackable": true,
-        "isActive": true,
-        "params": {
-          "menu_codes": [
-            "Thai Tea"
-          ],
-          "percent": 15
-        }
-      },
-      {
-        "id": "promo-pct15-green",
-        "code": null,
-        "name": "ลด 15% ชาเขียว",
-        "kind": "item_discount",
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 1,
-        "stackable": true,
-        "isActive": true,
-        "params": {
-          "menu_codes": [
-            "Green Tea"
-          ],
-          "percent": 15
-        }
-      },
-      {
-        "id": "promo-pct33-green",
-        "code": null,
-        "name": "ลด 33% ชาเขียว",
-        "kind": "item_discount",
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 1,
-        "stackable": true,
-        "isActive": true,
-        "params": {
-          "menu_codes": [
-            "Green Tea"
-          ],
-          "percent": 33
-        }
-      },
-      {
-        "id": "promo-pct7-matcha",
-        "code": null,
-        "name": "ลด 7% มัตจะลาเต้",
-        "kind": "item_discount",
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 1,
-        "stackable": true,
-        "isActive": true,
-        "params": {
-          "menu_codes": [
-            "Matcha Latte"
-          ],
-          "percent": 7
-        }
-      },
-      {
-        "id": "promo-buy2get1-thai",
-        "code": null,
-        "name": "ชาไทยซื้อ 2 แถม 1",
-        "kind": "buy_n_get_m",
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 2,
-        "stackable": true,
-        "isActive": true,
-        "params": {
-          "buy_qty": 2,
-          "get_qty": 1,
-          "menu_codes": [
-            "Thai Tea"
-          ]
-        }
-      },
-      {
-        "id": "promo-bundle-thai-matcha",
-        "code": null,
-        "name": "เซ็ตชาไทย+มัตจะลาเต้ ฿100",
-        "kind": "bundle",
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 3,
-        "stackable": true,
-        "isActive": true,
-        "params": {
-          "items": [
-            {
-              "menu_codes": [
-                "Thai Tea"
-              ],
-              "qty": 1
-            },
-            {
-              "menu_codes": [
-                "Matcha Latte"
-              ],
-              "qty": 1
-            }
-          ],
-          "bundle_price": 100
-        }
-      },
-      {
-        "id": "promo-billpct10-cap50",
-        "code": null,
-        "name": "ลดบิล 10% (สูงสุด ฿50)",
-        "kind": "bill_discount",
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 5,
-        "stackable": true,
-        "isActive": true,
-        "params": {
-          "min_subtotal": 0,
-          "percent": 10,
-          "max_amount": 50
-        }
-      },
-      {
-        "id": "promo-time-evening-thai",
-        "code": null,
-        "name": "ชาไทยช่วงเย็นลด 5",
-        "kind": "item_discount",
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 1,
-        "stackable": true,
-        "isActive": true,
-        "timeFrom": "17:00",
-        "timeTo": "20:00",
-        "params": {
-          "menu_codes": [
-            "Thai Tea"
-          ],
-          "amount_baht": 5
-        }
-      },
-      {
-        "id": "promo-grabonly-thai",
-        "code": null,
-        "name": "ชาไทยทาง Grab ลด 3",
-        "kind": "item_discount",
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 1,
-        "stackable": true,
-        "isActive": true,
-        "channelCodes": [
-          "grab"
-        ],
-        "params": {
-          "menu_codes": [
-            "Thai Tea"
-          ],
-          "amount_baht": 3
-        }
-      },
-      {
-        "id": "promo-code-friend",
-        "code": "FRIEND",
-        "name": "โค้ด FRIEND ลด 10",
-        "kind": "item_discount",
-        "requiresCode": true,
-        "autoApply": false,
-        "priority": 1,
-        "stackable": true,
-        "isActive": true,
-        "params": {
-          "menu_codes": [
-            "Thai Tea"
-          ],
-          "amount_baht": 10
-        }
       }
     ]
   },
@@ -466,15 +523,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -490,16 +547,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 5.25,
             "discountReason": null,
-            "promotionId": "promo-pct15-thai",
+            "promotionId": "cecdd664-43d7-449e-af8e-1707c89c5d7c",
             "lineTotal": 29.75
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-pct15-thai",
+            "promotionId": "cecdd664-43d7-449e-af8e-1707c89c5d7c",
             "code": null,
             "name": "ลด 15% ชาไทย",
             "kind": "item_discount",
@@ -511,9 +568,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 29.75,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 14.75,
-        "gpPercent": 0.4958,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -532,15 +589,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -556,16 +613,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 45,
-            "unitCost": 18,
+            "unitCost": 0,
             "discountPerCup": 6.75,
             "discountReason": null,
-            "promotionId": "promo-pct15-green",
+            "promotionId": "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
             "lineTotal": 38.25
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-pct15-green",
+            "promotionId": "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
             "code": null,
             "name": "ลด 15% ชาเขียว",
             "kind": "item_discount",
@@ -577,9 +634,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 38.25,
         "channelFeeAmount": 0,
-        "costTotal": 18,
-        "grossProfit": 20.25,
-        "gpPercent": 0.5294,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -598,15 +655,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -622,16 +679,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 85,
-            "unitCost": 35.5,
+            "unitCost": 0,
             "discountPerCup": 5.95,
             "discountReason": null,
-            "promotionId": "promo-pct7-matcha",
+            "promotionId": "47ec6da6-ced9-4a48-a302-6420bbff855d",
             "lineTotal": 79.05
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-pct7-matcha",
+            "promotionId": "47ec6da6-ced9-4a48-a302-6420bbff855d",
             "code": null,
             "name": "ลด 7% มัตจะลาเต้",
             "kind": "item_discount",
@@ -643,9 +700,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 79.05,
         "channelFeeAmount": 0,
-        "costTotal": 35.5,
-        "grossProfit": 43.55,
-        "gpPercent": 0.5509,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -664,15 +721,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -688,16 +745,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 65,
-            "unitCost": 24,
+            "unitCost": 0,
             "discountPerCup": 21.45,
             "discountReason": null,
-            "promotionId": "promo-pct33-green",
+            "promotionId": "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
             "lineTotal": 43.55
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-pct33-green",
+            "promotionId": "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
             "code": null,
             "name": "ลด 33% ชาเขียว",
             "kind": "item_discount",
@@ -709,9 +766,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 43.55,
         "channelFeeAmount": 0,
-        "costTotal": 24,
-        "grossProfit": 19.55,
-        "gpPercent": 0.4489,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -730,16 +787,16 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -755,7 +812,7 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 38,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -768,9 +825,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 38,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 23,
-        "gpPercent": 0.6053,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -789,16 +846,16 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -814,7 +871,7 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 41,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -827,9 +884,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 41,
         "channelFeeAmount": 6.15,
-        "costTotal": 15,
-        "grossProfit": 19.85,
-        "gpPercent": 0.4841,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -848,15 +905,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d"
         ]
       },
       "expected": {
@@ -872,7 +929,7 @@
             "grade": null,
             "qty": 7,
             "unitPrice": 85,
-            "unitCost": 35.5,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -881,7 +938,7 @@
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-billpct10-cap50",
+            "promotionId": "63dbd158-4b3e-42c2-a16b-499299f63495",
             "code": null,
             "name": "ลดบิล 10% (สูงสุด ฿50)",
             "kind": "bill_discount",
@@ -893,9 +950,9 @@
         "billDiscountAmount": 50,
         "totalAmount": 545,
         "channelFeeAmount": 0,
-        "costTotal": 248.5,
-        "grossProfit": 296.5,
-        "gpPercent": 0.544,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -914,15 +971,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -938,10 +995,10 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 35,
             "discountReason": null,
-            "promotionId": "promo-buy2get1-thai",
+            "promotionId": "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
             "lineTotal": 0
           },
           {
@@ -954,7 +1011,7 @@
             "grade": null,
             "qty": 3,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -963,7 +1020,7 @@
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-buy2get1-thai",
+            "promotionId": "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
             "code": null,
             "name": "ชาไทยซื้อ 2 แถม 1",
             "kind": "buy_n_get_m",
@@ -979,9 +1036,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 105,
         "channelFeeAmount": 0,
-        "costTotal": 60,
-        "grossProfit": 45,
-        "gpPercent": 0.4286,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1006,15 +1063,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1030,10 +1087,10 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 5.83,
             "discountReason": null,
-            "promotionId": "promo-bundle-thai-matcha",
+            "promotionId": "681537ad-5aba-471e-967a-b327a7865f8d",
             "lineTotal": 29.17
           },
           {
@@ -1046,16 +1103,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 85,
-            "unitCost": 35.5,
+            "unitCost": 0,
             "discountPerCup": 14.17,
             "discountReason": null,
-            "promotionId": "promo-bundle-thai-matcha",
+            "promotionId": "681537ad-5aba-471e-967a-b327a7865f8d",
             "lineTotal": 70.83
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-bundle-thai-matcha",
+            "promotionId": "681537ad-5aba-471e-967a-b327a7865f8d",
             "code": null,
             "name": "เซ็ตชาไทย+มัตจะลาเต้ ฿100",
             "kind": "bundle",
@@ -1070,9 +1127,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 100,
         "channelFeeAmount": 0,
-        "costTotal": 50.5,
-        "grossProfit": 49.5,
-        "gpPercent": 0.495,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1093,16 +1150,16 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1118,7 +1175,7 @@
             "grade": "Isuzu",
             "qty": 1,
             "unitPrice": 180,
-            "unitCost": 47.1,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -1131,9 +1188,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 180,
         "channelFeeAmount": 0,
-        "costTotal": 47.1,
-        "grossProfit": 132.9,
-        "gpPercent": 0.7383,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1153,16 +1210,16 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1175,7 +1232,7 @@
         "totalAmount": 0,
         "channelFeeAmount": 0,
         "costTotal": 0,
-        "grossProfit": 0,
+        "grossProfit": null,
         "gpPercent": null,
         "warnings": [
           "⚠ ชาไทย ไม่มีตัวเลือกนมโอ๊ต"
@@ -1198,15 +1255,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1222,7 +1279,7 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -1235,9 +1292,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 35,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 20,
-        "gpPercent": 0.5714,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1257,15 +1314,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1281,16 +1338,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 5,
             "discountReason": null,
-            "promotionId": "promo-time-evening-thai",
+            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
             "lineTotal": 30
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-time-evening-thai",
+            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
             "code": null,
             "name": "ชาไทยช่วงเย็นลด 5",
             "kind": "item_discount",
@@ -1302,9 +1359,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 30,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 15,
-        "gpPercent": 0.5,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1324,15 +1381,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1348,16 +1405,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 5,
             "discountReason": null,
-            "promotionId": "promo-time-evening-thai",
+            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
             "lineTotal": 30
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-time-evening-thai",
+            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
             "code": null,
             "name": "ชาไทยช่วงเย็นลด 5",
             "kind": "item_discount",
@@ -1369,9 +1426,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 30,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 15,
-        "gpPercent": 0.5,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1391,15 +1448,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1415,16 +1472,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 5,
             "discountReason": null,
-            "promotionId": "promo-time-evening-thai",
+            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
             "lineTotal": 30
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-time-evening-thai",
+            "promotionId": "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
             "code": null,
             "name": "ชาไทยช่วงเย็นลด 5",
             "kind": "item_discount",
@@ -1436,9 +1493,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 30,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 15,
-        "gpPercent": 0.5,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1458,15 +1515,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1482,7 +1539,7 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -1495,9 +1552,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 35,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 20,
-        "gpPercent": 0.5714,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1516,16 +1573,16 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1541,7 +1598,7 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -1554,9 +1611,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 35,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 20,
-        "gpPercent": 0.5714,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1575,16 +1632,16 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1600,7 +1657,7 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -1613,9 +1670,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 35,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 20,
-        "gpPercent": 0.5714,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1625,7 +1682,6 @@
       "draft": {
         "saleDate": "2026-09-24",
         "channelCode": "store",
-        "promoCode": "FRIEND",
         "lines": [
           {
             "code": "Thai Tea",
@@ -1634,16 +1690,17 @@
             "qty": 1
           }
         ],
+        "promoCode": "FRIEND",
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai"
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1659,16 +1716,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 10,
             "discountReason": null,
-            "promotionId": "promo-code-friend",
+            "promotionId": "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
             "lineTotal": 25
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-code-friend",
+            "promotionId": "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
             "code": "FRIEND",
             "name": "โค้ด FRIEND ลด 10",
             "kind": "item_discount",
@@ -1680,9 +1737,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 25,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 10,
-        "gpPercent": 0.4,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1701,15 +1758,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai"
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1725,7 +1782,7 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -1738,9 +1795,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 35,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 20,
-        "gpPercent": 0.5714,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -1759,16 +1816,16 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -1784,7 +1841,7 @@
             "grade": null,
             "qty": 99,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -1797,9 +1854,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 3465,
         "channelFeeAmount": 0,
-        "costTotal": 1485,
-        "grossProfit": 1980,
-        "gpPercent": 0.5714,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": [
           "จำนวน 150 ปรับเป็น 99 แก้ว"
         ]
@@ -2120,49 +2177,32 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
-        "ok": true,
-        "lines": [
-          {
-            "lineNo": 1,
-            "menuCode": "Thai Tea",
-            "menuNameTh": "ชาไทย",
-            "size": "16 oz",
-            "sweetness": "50%",
-            "milk": "fresh",
-            "grade": null,
-            "qty": 51,
-            "unitPrice": 35,
-            "unitCost": 15,
-            "discountPerCup": 0,
-            "discountReason": null,
-            "promotionId": null,
-            "lineTotal": 1785
-          }
-        ],
+        "ok": false,
+        "lines": [],
         "promotionsApplied": [],
-        "itemsSubtotal": 1785,
+        "itemsSubtotal": 0,
         "itemsDiscount": 0,
         "billDiscountAmount": 0,
-        "totalAmount": 1785,
+        "totalAmount": 0,
         "channelFeeAmount": 0,
-        "costTotal": 765,
-        "grossProfit": 1020,
-        "gpPercent": 0.5714,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": [
-          "บิลมีรายการเกิน 50 รายการ (51) — บันทึกจริงจะถูกปฏิเสธ (DY422)"
+          "quote_order ปฏิเสธคำขอทั้งก้อน (ไม่มียอดให้เทียบ): [DY422] too_large: บิลละไม่เกิน 50 รายการ"
         ]
       }
     },
@@ -2182,16 +2222,16 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-grabonly-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "05f2c419-6edc-40d1-a1a2-b5214dec5727",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -2204,7 +2244,7 @@
         "totalAmount": 0,
         "channelFeeAmount": 0,
         "costTotal": 0,
-        "grossProfit": 0,
+        "grossProfit": null,
         "gpPercent": null,
         "warnings": [
           "\"Thai Tea\" ลดเต็มราคาต้องมีหมายเหตุ (ADR-0023)"
@@ -2226,15 +2266,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -2250,7 +2290,7 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 35,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 0,
             "discountReason": null,
             "promotionId": null,
@@ -2263,9 +2303,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 35,
         "channelFeeAmount": 0,
-        "costTotal": 15,
-        "grossProfit": 20,
-        "gpPercent": 0.5714,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     },
@@ -2284,15 +2324,15 @@
           }
         ],
         "skipPromotionIds": [
-          "promo-pct15-thai",
-          "promo-pct15-green",
-          "promo-pct33-green",
-          "promo-pct7-matcha",
-          "promo-buy2get1-thai",
-          "promo-bundle-thai-matcha",
-          "promo-billpct10-cap50",
-          "promo-time-evening-thai",
-          "promo-code-friend"
+          "9ac21d7f-0050-4e9a-ab24-5d1c87235e6b",
+          "bf1673e7-2a6f-4ac1-83bc-fc4ce8276452",
+          "f7d3b303-8a5d-4d4e-83eb-a3f1a4657dfe",
+          "47ec6da6-ced9-4a48-a302-6420bbff855d",
+          "cecdd664-43d7-449e-af8e-1707c89c5d7c",
+          "b01a1dd4-7881-41e4-8f18-47ce5c526bca",
+          "48d84f3f-f3a0-436f-a293-d0ac104f4d6f",
+          "681537ad-5aba-471e-967a-b327a7865f8d",
+          "63dbd158-4b3e-42c2-a16b-499299f63495"
         ]
       },
       "expected": {
@@ -2308,16 +2348,16 @@
             "grade": null,
             "qty": 1,
             "unitPrice": 46,
-            "unitCost": 15,
+            "unitCost": 0,
             "discountPerCup": 3,
             "discountReason": null,
-            "promotionId": "promo-grabonly-thai",
+            "promotionId": "05f2c419-6edc-40d1-a1a2-b5214dec5727",
             "lineTotal": 43
           }
         ],
         "promotionsApplied": [
           {
-            "promotionId": "promo-grabonly-thai",
+            "promotionId": "05f2c419-6edc-40d1-a1a2-b5214dec5727",
             "code": null,
             "name": "ชาไทยทาง Grab ลด 3",
             "kind": "item_discount",
@@ -2329,9 +2369,9 @@
         "billDiscountAmount": 0,
         "totalAmount": 43,
         "channelFeeAmount": 12.9,
-        "costTotal": 15,
-        "grossProfit": 15.1,
-        "gpPercent": 0.3512,
+        "costTotal": 0,
+        "grossProfit": null,
+        "gpPercent": null,
         "warnings": []
       }
     }
