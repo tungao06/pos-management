@@ -36,10 +36,24 @@ export const DAYO_KEYS = {
   // full pages, kept between refreshes (fix round 1 item 1)
   dayoEditsSince: 'dayo.dayo_edits_since',
   dayoEditsWalk: 'dayo.dayo_edits_walk',
+  // Task 13 · ruling R9: dayo's E1 client.last_z_* — written ONLY by connectShop / replaceApiKey / recoverOwner (never the
+  // periodic E1); all three or none (api/central-z.ts)
+  lastZNo: 'dayo.last_z_no',
+  lastZHash: 'dayo.last_z_hash',
+  lastZUntil: 'dayo.last_z_until',
+  lastZContinued: 'dayo.last_z_continued', // fix round 1: last_z_no a Z of this device has already continued (used once)
+  // fix round 2: the highest zNo this device ever issued — written by writeZ in the Z's own transaction, NEVER cleared (not
+  // by storeCentralZ, replaceApiKey or recoverOwner): no hand-edit or unreadable Z row can lower this device's last Z below it
+  deviceZHigh: 'dayo.device_z_high',
+  // fix round 2: the zNo of the Z that continued dayo's numbering (R9) — never cleared; floors the lenient numbering of close.ts
+  // (D54's reuse of a deleted Z's number stays for the device's own chain, never below a number continued from dayo)
+  centralZFloor: 'dayo.central_z_floor',
 } as const
 export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled' | 'bad_base_url'
 
 export const CLOCK_WARN_MS = 5 * 60_000            // D80
+/** dayo's own tolerance for a device time ahead of its clock (0066: `v_at > now() + interval '5 minutes'`). */
+export const DAYO_AHEAD_TOLERANCE_MS = 5 * 60_000
 export const BACKOFF_MS = [5_000, 15_000, 60_000, 300_000, 900_000] as const // spec §6.3
 export const STUCK_AFTER_ATTEMPTS = 50
 export const API_DISABLED_RETRY_MS = 15 * 60_000
@@ -80,6 +94,23 @@ export function backoffMs(attempt: number, random: () => number): number {
 export function skewMs(serverTimeIso: string, sentAtMs: number, receivedAtMs: number): number {
   return Date.parse(serverTimeIso) - Math.round((sentAtMs + receivedAtMs) / 2)
 }
+/**
+ * D106: dayo's time as this tablet can estimate it at `deviceNowIso` (epoch ms), or null when no skew counts now. A measured
+ * skew counts only while fresh — measured at most SKEW_FRESH_MS before the device's now. A NEGATIVE age means the clock was
+ * set back after the measurement (final review I1): the device's now is then not trusted at all — the estimate is frozen at
+ * the server time of the measurement (measured_at + skew), which real time can only have passed. Shared by the same-day
+ * void rule (voidInstant), the far-ahead count rule (rows.ts) and E4's "window closed" check (bot-cash.ts).
+ */
+export async function estimatedServerMs(db: RemoteDb, deviceNowIso: string): Promise<number | null> {
+  const skewRaw = await readKey(db, DAYO_KEYS.clockSkewMs)
+  const skew = skewRaw === null ? Number.NaN : Number(skewRaw)
+  const measuredAt = Date.parse((await readKey(db, DAYO_KEYS.clockMeasuredAt)) ?? '')
+  const deviceNow = Date.parse(deviceNowIso)
+  const age = deviceNow - measuredAt
+  if (!Number.isFinite(skew) || !Number.isFinite(age) || age > SKEW_FRESH_MS) return null
+  return age < 0 ? measuredAt + skew : deviceNow + skew
+}
+
 export async function recordServerTime(db: RemoteDb, serverTimeIso: string, sentAtMs: number, receivedAtMs: number, nowIso: string): Promise<void> {
   await writeKey(db, DAYO_KEYS.clockSkewMs, String(skewMs(serverTimeIso, sentAtMs, receivedAtMs)))
   await writeKey(db, DAYO_KEYS.clockMeasuredAt, nowIso)

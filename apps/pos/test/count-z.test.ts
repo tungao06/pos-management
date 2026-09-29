@@ -5,6 +5,9 @@ import { CashCountRowData, ShiftCloseRowData, type CentralOrder } from '@dayo/co
 import { posErrorCode } from '../src/api/errors'
 import { pushOnce } from '../src/sync/push'
 import { LOCAL_DEVICE_KEY } from '../src/api/bootstrap'
+import { botPreviewKey } from '../src/api/bot-cash'
+import { pullCatalog } from '../src/sync/catalog'
+import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
 import { openConnectedApi, STAFF } from './helpers/dayo'
 import { sellCode } from './helpers/db'
 import { countAndClose } from './helpers/shift'
@@ -145,6 +148,7 @@ describe('count and Z (D101 · spec 04 §6.8 · §4.10)', () => {
     await t.api.confirmCount({ shiftId: a.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(545), shownFingerprint: sum.fingerprint, z: null })
     await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
     t.clock.advanceMs(3_600_000)
+    t.mock.setNow(t.clock.now()) // dayo's clock too (fix round 1: E4 without a fresh skew asks E1 for dayo's time first)
     const b = await t.api.finishCount({ actorUserId: STAFF.TungAo })
     sum = await t.api.countSummary(b.shiftId)
     expect(sum.zBlockedBy).toBe(a.shiftId) // R7: the screen knows a Z of b would be refused now
@@ -378,6 +382,70 @@ describe('count and Z — states, PINs, resend (D101 · R2 · R7)', () => {
     expect(await t.db.select().from(s.shift).all()).toEqual(shifts)
     expect(await t.db.select().from(s.auditLog).all()).toEqual(audit)
     expect((await t.api.bootstrap()).openShift?.id).toBe(b.id)
+  })
+  it('after the device clock passes a far-ahead count, its Z issues first (R7) and the next shift counts in a window starting at its until (task 12 carried)', async () => {
+    const t = await openConnectedApi({ block3: true }) // server and tablet both 2026-09-25T03:00Z · central shift A
+    t.clock.set('2027-09-25T03:00:00.000Z')              // the tablet clock jumps a year ahead and A is counted then
+    const a = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    await t.api.confirmCount({ shiftId: a.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, z: null })
+    t.clock.set('2026-09-25T03:30:00.000Z')              // set right: B opens at the device clock (A far ahead)
+    const b = await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    expect(b.openedAt).toBe('2026-09-25T03:30:00.000Z')
+    // a year later real time (and the tablet clock) has passed A's count: counting B is no longer refused
+    t.clock.set('2027-09-25T04:00:00.000Z')
+    t.mock.setNow(t.clock.now())
+    const bc = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    expect(bc.countedAt).toBe('2027-09-25T04:00:00.000Z')
+    expect(await t.api.fetchBotCash(b.id)).toMatchObject({ after: a.countedAt, until: bc.countedAt })
+    // B's Z waits for A's (R7) — a refused Z rolls B's count back, B stays counting
+    const sb = await t.api.countSummary(b.id)
+    await expectCode(t.api.confirmCount({ shiftId: b.id, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: sb.fingerprint, z: settle }), 'Z_NOT_READY')
+    await t.api.fetchBotCash(a.shiftId)
+    const za = await t.api.issueZ({ shiftId: a.shiftId, ...owner2, shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, ...settle })
+    expect(za.snapshot).toMatchObject({ zNo: 1, countedAt: a.countedAt })
+    const zb = await t.api.confirmCount({ shiftId: b.id, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(b.id)).fingerprint, z: settle })
+    expect(zb.z?.snapshot).toMatchObject({ zNo: 2, botWindow: { after: za.snapshot!.botWindow!.until, until: bc.countedAt } })
+    const close = ShiftCloseRowData.parse((await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, `shift_close:${b.id}`)).get())!.rowJson)
+    expect(close.z_report).toMatchObject({ z_no: 2, prev_hash: za.hash, bot_window: { after: a.countedAt } })
+  })
+  it('a stale clock skew does not decide "far ahead" (D106: only a skew measured in the last 15 min counts) — task 12 carried', async () => {
+    const t = await openConnectedApi({ block3: false }) // 2026-09-25T03:00Z
+    t.clock.set('2026-09-26T05:00:00.000Z')              // 26 h ahead: A is counted then
+    const a = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    await t.api.confirmCount({ shiftId: a.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(500), shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, z: null })
+    t.clock.set('2026-09-25T04:00:00.000Z')
+    t.mock.setMode('offline') // no wake of the scheduler re-measures the skew below
+    // a skew that would say "dayo is 30 h ahead of this tablet" — measured 1 h ago: stale, ignored → A is 25 h ahead = far
+    await writeKey(t.db, DAYO_KEYS.clockSkewMs, String(30 * 3_600_000))
+    await writeKey(t.db, DAYO_KEYS.clockMeasuredAt, '2026-09-25T03:00:00.000Z')
+    const b = await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 0 })
+    expect(b.openedAt).toBe('2026-09-25T04:00:00.000Z') // far ahead: opened at the device clock
+    try { await t.api.finishCount({ actorUserId: STAFF.TungAo }); expect.unreachable() } catch (e) { expect((e as Error).message).toMatch(/^BAD_INPUT: CLOCK_AHEAD: /) }
+    // the same skew measured a minute ago is fresh: dayo's time is 2026-09-26T09:59 → A is behind it → the count floors 1 ms after A
+    await writeKey(t.db, DAYO_KEYS.clockMeasuredAt, '2026-09-25T03:59:00.000Z')
+    expect(Number(await readKey(t.db, DAYO_KEYS.clockSkewMs))).toBe(30 * 3_600_000)
+    expect((await t.api.finishCount({ actorUserId: STAFF.TungAo })).countedAt).toBe('2026-09-26T05:00:00.001Z')
+  })
+  it('E4 is refused while the count is later than dayo\'s time + 5 min (its window is not closed yet) — nothing stored (task 12 carried)', async () => {
+    const t = await openConnectedApi({ block3: true }) // dayo's clock stays at 2026-09-25T03:00Z
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    t.clock.set('2026-09-25T04:00:00.000Z')            // the tablet runs 1 h ahead of dayo…
+    await pullCatalog(ctx)                              // …and E1 just measured it (fresh skew −1 h)
+    expect(Number(await readKey(t.db, DAYO_KEYS.clockSkewMs))).toBe(-3_600_000)
+    const { shiftId, countedAt } = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    expect(countedAt).toBe('2026-09-25T04:00:00.000Z')
+    try { await t.api.fetchBotCash(shiftId); expect.unreachable() } catch (e) {
+      expect(posErrorCode(e)).toBe('BAD_INPUT')
+      expect((e as Error).message).toMatch(/^BAD_INPUT: CLOCK_AHEAD: .*ยังไม่ถึง/)
+    }
+    expect(await readKey(t.db, botPreviewKey(shiftId))).toBeNull()
+    expect((await t.api.countSummary(shiftId)).includesBotCash).toBe(false)
+    // within the 5-minute tolerance it is taken: dayo's clock at 03:56 → counted_at 04:00 is 4 min ahead
+    t.mock.setNow('2026-09-25T03:56:00.000Z')
+    t.clock.set('2026-09-25T04:00:00.000Z')
+    await pullCatalog(ctx)
+    expect(await t.api.fetchBotCash(shiftId)).toMatchObject({ until: countedAt })
+    expect(await readKey(t.db, botPreviewKey(shiftId))).not.toBeNull()
   })
   it('a clock set back less than 24 h still floors the opening at the last count and the next count 1 ms after it (rounds 1–3)', async () => {
     const t = await openConnectedApi({ block3: false })

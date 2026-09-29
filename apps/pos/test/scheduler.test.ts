@@ -331,9 +331,10 @@ describe('sync scheduler — backoffs a wake cannot skip (fix round 1)', () => {
     const t = await openConnectedApi()
     const n = t.mock.requests().length
     const input = { baseUrl: 'http://localhost:8787/api/v1', apiKey: MOCK_API_KEY }
-    for (let i = 0; i < SETUP_CALLS_PER_MIN - 1; i++) await t.api.probeDayo(input) // connectShop (in openConnectedApi) was the first
+    // probeDayo + connectShop (in openConnectedApi, as the setup screen does — Task 13) were the first two
+    for (let i = 0; i < SETUP_CALLS_PER_MIN - 2; i++) await t.api.probeDayo(input)
     await expect(t.api.probeDayo(input)).rejects.toThrow(/^DAYO_UNREACHABLE: SETUP_RATE_LIMITED/)
-    expect(t.mock.requests().length).toBe(n + SETUP_CALLS_PER_MIN - 1)
+    expect(t.mock.requests().length).toBe(n + SETUP_CALLS_PER_MIN - 2)
   })
 })
 

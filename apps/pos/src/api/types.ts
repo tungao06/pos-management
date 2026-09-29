@@ -40,6 +40,10 @@ export type BootstrapState = {
   countingShift: { shiftId: string; countedAt: string } | null
   /** D68 · spec §6.8: counted shifts of this device with no Z yet (the red "ใบปิดกะ <วันที่> รอออนไลน์" bar), oldest count first. */
   zWaiting: WaitingZDto[]
+  /** Task 13 (ruling R9): dayo's last Z number of this key as stored at setup / key swap / recovery (sync_state
+   * dayo.last_z_no), or null — the close screen names it on Z_CHAIN_BROKEN 'central'. Optional in the type only until the
+   * screen fixtures carry it (Task 16); bootstrap always sets it. */
+  centralLastZNo?: number | null
 }
 /** Task 14 (spec 04 §4.3, §4.4 rule 9, §6.7, §10.5 · D80). Never carries the API key — only its masked form. */
 export type SyncStatusDto = {
@@ -69,8 +73,16 @@ export type SyncStatusDto = {
 }
 export type StaffOptionDto = { id: string; displayName: string; role: UserRole }
 export type DayoProbeInput = { baseUrl: string; apiKey: string }
-export type DayoProbe = { clientName: string; lastReceiptNo: string | null; requiredPrefix: string | null; catalogVersion: number; owners: { id: string; displayName: string }[]; pricingMatches: boolean }
-export type ConnectShopInput = { baseUrl: string; apiKey: string; receiptPrefix: string; ownerStaffId: string; ownerPin: string; promptPayId: string; legacyApproval: { userId: string; pin: string } | null }
+/** lastZNo (Task 13 · spec §4.4 ข้อ 6): the last Z number of this key as dayo holds it (E1 client.last_z_no), null = none yet —
+ * shown on "ทดสอบกุญแจ"; the owner confirms it (ConnectShopInput.confirmedLastZNo). probeDayo always sets it; optional in
+ * the type only until the screen fixtures carry it (Task 16). */
+export type DayoProbe = { clientName: string; lastReceiptNo: string | null; requiredPrefix: string | null; catalogVersion: number; owners: { id: string; displayName: string }[]; pricingMatches: boolean; lastZNo?: number | null }
+/**
+ * confirmedLastZNo (Task 13 · R4-1): DayoProbe.lastZNo as the owner saw and ticked it — must equal what E1 says now, else
+ * BAD_INPUT. Optional only until the setup screen sends it (Task 16): absent = null, so a key whose dayo holds a Z is
+ * refused until the owner has confirmed that number.
+ */
+export type ConnectShopInput = { baseUrl: string; apiKey: string; receiptPrefix: string; ownerStaffId: string; ownerPin: string; promptPayId: string; legacyApproval: { userId: string; pin: string } | null; confirmedLastZNo?: number | null }
 export type SetStaffPinInput = { staffId: string; pin: string; approverUserId: string; approverPin: string }
 export type ReplaceApiKeyInput = { baseUrl: string; apiKey: string; approverUserId: string; approverPin: string }
 /** ruling N2 — no approver: the new key (issued on the dayo web after a LINE login) is the proof. */

@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import { CLOCK_AHEAD_FAR_MS } from '../sync/push'
-import { DAYO_KEYS, readKey } from '../sync/state'
+import { estimatedServerMs } from '../sync/state'
+import { centralContinuation } from './central-z'
 import { PosError } from './errors'
 
 /**
@@ -34,7 +35,7 @@ export const CLOCK_AHEAD_COUNT = 'CLOCK_AHEAD'
  * and a new count are floored at this device's last counted_at — a clock stepped back must not reopen a window already
  * in a Z. But ONE count taken while the tablet clock was far ahead (say a year) must not drag everything after it:
  * the last count is "far ahead" when it is more than CLOCK_AHEAD_FAR_MS (24 h — the sender's own line) ahead of the
- * estimated server time = the device clock + the last skew dayo reported (the device clock alone when none was measured).
+ * estimated server time = the device clock + the last skew dayo reported, while fresh (D106 — the device clock alone otherwise).
  * - opening a shift (`openFloor`): never refused — selling is never blocked. Floored only when the last count is not far
  *   ahead; far ahead = opened at the device clock.
  * - counting (`countFloor`) and issuing a Z (`assertNoFarAheadCount`): refused while the last count is far ahead (its E4
@@ -42,15 +43,21 @@ export const CLOCK_AHEAD_COUNT = 'CLOCK_AHEAD'
  *   it (PIN + reason + audit) is Task 14's.
  */
 async function lastCountOf(db: RemoteDb, deviceId: string): Promise<string | null> {
-  return (await db.values<[string | null]>(sql`select max(counted_at) from shift where device_id = ${deviceId} and counted_at is not null`))[0]?.[0] ?? null
+  const local = (await db.values<[string | null]>(sql`select max(counted_at) from shift where device_id = ${deviceId} and counted_at is not null`))[0]?.[0] ?? null
+  // Task 13 (ruling R9 · spec §13.8 R5-1): on the R9 path dayo's last Z (until = its count) is this key's last count too —
+  // the first central Z's window starts there (bot-cash.ts centralWindowStart), so no count may land at or before it
+  const central = await centralContinuation(db, deviceId)
+  if (central === null) return local
+  return local !== null && Date.parse(local) >= Date.parse(central.lastZUntil) ? local : central.lastZUntil
 }
 
 /** Only a last count AFTER the device clock (the clock went back since) can floor anything or overlap an E4 window: one
- * at or before it is never "far ahead" here — so a stale or odd skew can never refuse an ordinary count or Z whose clock simply moved on. */
+ * at or before it is never "far ahead" here — so a stale or odd skew can never refuse an ordinary count or Z whose clock simply moved on.
+ * Task 12 carried (L): the skew counts only while fresh (D106 `estimatedServerMs`, as the same-day void rule) — a stale one
+ * falls back to the device clock. */
 async function farAhead(db: RemoteDb, iso: string, deviceNow: string): Promise<boolean> {
   if (Date.parse(iso) <= Date.parse(deviceNow)) return false
-  const skew = Number((await readKey(db, DAYO_KEYS.clockSkewMs)) ?? Number.NaN)
-  const server = Date.parse(deviceNow) + (Number.isFinite(skew) ? skew : 0)
+  const server = (await estimatedServerMs(db, deviceNow)) ?? Date.parse(deviceNow)
   return Date.parse(iso) - server > CLOCK_AHEAD_FAR_MS
 }
 
