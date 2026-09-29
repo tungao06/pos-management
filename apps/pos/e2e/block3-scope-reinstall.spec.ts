@@ -27,15 +27,20 @@ test('block3 scope wait: a key without shift:write still pushes bills; the shift
   await expect(page.getByTestId('banner-scope')).toContainText(TH.scopeBanner('shift:write'))
   await expect(page.getByTestId('banner-problems')).toHaveCount(0) // never "dead" — nothing here for the owner to remedy directly
 
-  // an owner adds the scope back on the dayo website
+  // an owner adds the scope back on the dayo website, then presses "ส่งตอนนี้" — fix round 1 item 3 (ruling): a
+  // manual wake now also clears a scope-wait row's own retry wait at once (apps/pos/src/sync/push.ts
+  // clearScopeWait/hasScopeWait, apps/pos/src/sync/scheduler.ts clearBackoffFor), never waiting the full
+  // SCOPE_RETRY_MS (15 real minutes) an automatic cycle still would.
   await mock(request, 'scopes', { scopes: ['catalog:read', 'staff:read', 'orders:read', 'orders:write', 'shift:write'] })
-  // FINDING (not a weakened assertion — see task-17-report.md): `markScopeWait` (apps/pos/src/sync/push.ts)
-  // schedules the row's own `nextAttemptAt` a hard SCOPE_RETRY_MS (15 real minutes) ahead, with no bypass for a
-  // 'manual' wake ("ส่งตอนนี้") — `pendingRows`'s `isShiftLane` only lets the picker SEE the row early enough to
-  // keep holding the lane, never send it again sooner. Waiting for the real clear here would need either 15 real
-  // minutes or changing that business rule, neither appropriate for this spec — so this spec stops at the state
-  // that the mock (and this test) can actually reach and check within a normal e2e run.
-  await expect(page.getByTestId('banner-scope')).toBeVisible()
+  await page.getByTestId('nav-shift').click()
+  await page.getByTestId('nav-status').click()
+  await expect(page).toHaveURL(/\/status$/)
+  await page.getByTestId('status-sync-now').click()
+  await expect(page.getByTestId('banner-scope')).toHaveCount(0, { timeout: 15_000 })
+
+  await expect.poll(async () => (await mockState(request)).shifts.at(-1)?.status).not.toBe(undefined)
+  const state = await mockState(request)
+  expect(state.shifts.some((s) => s.dataConflict)).toBe(false)
 })
 
 test('block3 reinstall: setup shows dayo\'s last Z and requires the tick; the first Z after it acknowledges the broken chain and continues the number', async ({ page, request }) => {

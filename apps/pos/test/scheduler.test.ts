@@ -80,6 +80,31 @@ describe('sync scheduler (spec 04 §6.2)', () => {
     await sch.runNow()
     expect(pushes(t)).toBe(3)                // 30 s after the last clear it may clear again
   })
+  // Task 17 fix round 1 item 3 (ruling): a manual wake shares the failure-backoff clear's own 30 s throttle, but
+  // ALSO makes every scope-wait row (markScopeWait, FORBIDDEN "scope:") due again right away — never just letting
+  // its own SCOPE_RETRY_MS (15 real minutes) run out. An automatic wake (the minute tick) still waits the full time.
+  it('manual "ส่งตอนนี้" clears a scope-wait row\'s own 15-minute retry at once; an automatic wake still waits (Task 17 fix round 1 item 3)', async () => {
+    const t = await openConnectedApi({ block3: true, openShift: false })
+    t.mock.setScopes(['catalog:read', 'staff:read', 'orders:read', 'orders:write']) // no shift:write
+    const shift = await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    const key = `shift_open:${shift.id}`
+    const outboxRow = async () => (await t.db.select().from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get())!
+    const pushCalls = () => t.mock.requests().filter((r) => r.path === '/api/v1/pos/push').length
+    const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })
+
+    await sch.runNow() // first attempt: FORBIDDEN scope: — parked as a scope-wait row, 15 min out
+    expect(pushCalls()).toBe(1)
+    expect((await outboxRow()).status).toBe('pending') // still waiting — never accepted yet
+
+    await sch.kick('timer') // an automatic wake must not resend it a moment early
+    await new Promise((r) => setTimeout(r, 0))
+    expect(pushCalls()).toBe(1) // still not due — no new push request at all
+
+    t.mock.setScopes(['catalog:read', 'staff:read', 'orders:read', 'orders:write', 'shift:write']) // owner adds it back
+    await sch.runNow() // manual — sent in this very cycle, never waiting out SCOPE_RETRY_MS
+    expect(pushCalls()).toBe(2)
+    expect((await outboxRow()).status).toBe('sent')
+  })
   it('online wakes it at once; a second wake during a cycle runs one more cycle, never two in parallel', async () => {
     const t = await openConnectedApi()
     const sch = scheduler({ db: t.db, deps: t.deps, serial: (fn) => fn() })

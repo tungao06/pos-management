@@ -2,7 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import * as s from '@dayo/db-schema/sqlite'
 import { PUSH_KINDS } from '@dayo/contracts'
 import { pullCatalog, type CatalogPullResult, type SyncContext } from './catalog'
-import { clearFailureBackoff, hasClearableBackoff, MAX_ROUNDS_PER_CALL, pushOnce, type PushOutcome } from './push'
+import { clearFailureBackoff, clearScopeWait, hasClearableBackoff, hasScopeWait, MAX_ROUNDS_PER_CALL, pushOnce, type PushOutcome } from './push'
 import { DAYO_KEYS, readKey, writeKey } from './state'
 
 export type WakeReason = 'open' | 'write' | 'online' | 'timer' | 'manual' | 'before_shift' | 'before_close'
@@ -154,11 +154,20 @@ export function createSyncScheduler(ctx: SyncContext & { timers?: Timers; locks?
       return true
     })
   }
-  /** 'online' forgets only an offline tablet's backoff (item 4); manual / open / before_close any failure backoff, under N4. */
+  /**
+   * 'online' forgets only an offline tablet's backoff (item 4); manual / open / before_close any failure backoff,
+   * under N4. Task 17 fix round 1 item 3: a manual wake ("ส่งตอนนี้") ALSO makes every scope-wait row due again —
+   * sharing the very same 30 s token (never a separate budget of its own), so the two never fire independently of
+   * each other's throttle.
+   */
   async function clearBackoffFor(reasons: ReadonlySet<WakeReason>): Promise<void> {
-    // final review M3: the 30 s window is used only when there is a failure backoff to clear
-    if ([...reasons].some((r) => CLEARS_WITH_N4.has(r)) && (await ctx.serial(() => hasClearableBackoff(ctx.db))) && (await takeClearToken())) {
-      await ctx.serial(() => clearFailureBackoff(ctx.db))
+    const wantsScopeClear = reasons.has('manual')
+    // final review M3: the 30 s window is used only when there is something it would actually clear
+    const backoffClearable = [...reasons].some((r) => CLEARS_WITH_N4.has(r)) && (await ctx.serial(() => hasClearableBackoff(ctx.db)))
+    const scopeClearable = wantsScopeClear && (await ctx.serial(() => hasScopeWait(ctx.db)))
+    if ((backoffClearable || scopeClearable) && (await takeClearToken())) {
+      if (backoffClearable) await ctx.serial(() => clearFailureBackoff(ctx.db))
+      if (scopeClearable) await ctx.serial(() => clearScopeWait(ctx.db, ctx.deps.now()))
       return
     }
     if (reasons.has('online')) await ctx.serial(() => clearFailureBackoff(ctx.db, { onlyNetwork: true }))

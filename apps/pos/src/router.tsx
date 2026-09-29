@@ -192,25 +192,32 @@ const zReportRoute = createRoute({
 })
 
 /** D101 step 3 (spec §6.8): `/shift/z/$shiftId` issues the Z of a shift already counted and waiting (D68's
- * `zWaiting` bar) — `countedSatang` is that shift's own saved count, read off `bootstrap().zWaiting`, never re-typed. */
-function IssueZRoute(): JSX.Element {
-  const { shiftId } = useParams({ from: '/shift/z/$shiftId' })
+ * `zWaiting` bar) — `countedSatang` is that shift's own saved count, read off `bootstrap().zWaiting`, never re-typed.
+ * Exported for its own unit test (Task 17 fix round 1 item 1): `IssueZRoute` below is only the thin `useParams` glue. */
+export function IssueZGate({ shiftId }: { shiftId: string }): JSX.Element {
   const boot = useBootstrap()
   const waiting = boot.data?.zWaiting.find((w) => w.shiftId === shiftId) ?? null
   // Task 17 fix: `issueZ`'s own success invalidates `bootstrapKey` (IssueZScreen.tsx) so the banner clears — but
   // that same refetch drops this shift out of `zWaiting` a moment later, which used to unmount `IssueZScreen`
-  // (and its "เสร็จ" screen) mid-render, replacing it with `errZNotFound`. Once this route has found the shift
-  // waiting once, it keeps using that same `countedSatang` for as long as this route stays mounted — a genuinely
-  // unknown shiftId (never found even once) still shows `errZNotFound`, unchanged.
-  const [locked, setLocked] = useState<{ countedSatang: number } | null>(null)
+  // (and its "เสร็จ" screen) mid-render, replacing it with `errZNotFound`. Once this route has found a shift
+  // waiting once, it keeps using that same `countedSatang` for as long as THIS SAME `shiftId` stays current — a
+  // genuinely unknown shiftId (never found even once) still shows `errZNotFound`, unchanged.
+  // fix round 1 item 1 (High): `locked` is keyed on `shiftId` itself, not just "have I locked once" — a route that
+  // re-renders with a DIFFERENT `$shiftId` (no remount in between) must never keep showing the FIRST shift's
+  // count under the new one; it drops the stale lock and waits for the new shiftId's own `waiting` instead.
+  const [locked, setLocked] = useState<{ shiftId: string; countedSatang: number } | null>(null)
   useEffect(() => {
-    if (waiting !== null && locked === null) setLocked({ countedSatang: waiting.countedSatang })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- locked is the guard: only ever set once per mount
-  }, [waiting])
-  if (boot.data === undefined && locked === null) return <main className="page">{TH.loading}</main>
-  const found = waiting ?? locked
+    if (waiting !== null && (locked === null || locked.shiftId !== shiftId)) setLocked({ shiftId, countedSatang: waiting.countedSatang })
+  }, [waiting, shiftId, locked])
+  const lockedForThis = locked !== null && locked.shiftId === shiftId ? locked : null
+  if (boot.data === undefined && lockedForThis === null) return <main className="page">{TH.loading}</main>
+  const found = waiting ?? lockedForThis
   if (found === null) return <main className="page">{TH.errZNotFound}</main>
   return <IssueZScreen shiftId={shiftId} countedSatang={found.countedSatang} />
+}
+function IssueZRoute(): JSX.Element {
+  const { shiftId } = useParams({ from: '/shift/z/$shiftId' })
+  return <IssueZGate shiftId={shiftId} />
 }
 const issueZRoute = createRoute({
   getParentRoute: () => rootRoute,
