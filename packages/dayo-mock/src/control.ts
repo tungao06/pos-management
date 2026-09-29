@@ -1,6 +1,7 @@
 // packages/dayo-mock/src/control.ts — the /__mock/* test-control routes of server.ts (e2e). No node:* imports, never shipped.
 import type { CentralOrder, CupSize } from '@dayo/contracts'
-import { mergeVariants, type CatalogVariant, type MockDayo, type MockMode, type MockOverride, type PosOrderEdit } from './state.js'
+import type { PromoRulesOption } from './promo-rules.js'
+import { mergeVariants, type CatalogPromotion, type CatalogVariant, type MockDayo, type MockMode, type MockOverride, type PosOrderEdit, type PromotionGroup } from './state.js'
 
 type EditBody = { pos_order_id?: string; kind: PosOrderEdit['kind']; reason: string; edited_at?: string; edited_by_name?: string | null; totals?: PosOrderEdit['totals'] }
 
@@ -29,6 +30,20 @@ export async function mockControl(mock: MockDayo, path: string, body: unknown): 
     case '/__mock/close-promotion': {
       const b = body as { id: string; at: string }
       return { status: 200, body: { catalog_version: mock.closePromotion(b.id, b.at) } }
+    }
+    case '/__mock/promotions': { // plan 10: {promotions, groups?} as the owner saves them on dayo's web (rules; dayo derives the old shape)
+      const b = body as { promotions: CatalogPromotion[]; groups?: PromotionGroup[] }
+      return { status: 200, body: { catalog_version: mock.setPromotions(b.promotions, b.groups) } }
+    }
+    case '/__mock/exhaust': { // plan 10: a promotion over its usage limit — {id, scope:'total'} | {id, scope:'day', sale_date}
+      const b = body as { id: string; scope: 'total' } | { id: string; scope: 'day'; sale_date: string }
+      if (b.scope === 'day' && typeof b.sale_date !== 'string') return { status: 422, body: { ok: false, error: 'scope day needs sale_date' } }
+      if (b.scope === 'day') mock.exhaust(b.id, 'day', b.sale_date)
+      else mock.exhaust(b.id, 'total')
+      return ok
+    }
+    case '/__mock/promo-rules': { // plan 10: {versions, manualFields} — the promotion-rule release of dayo
+      return { status: 200, body: { catalog_version: mock.setPromoRules(body as PromoRulesOption) } }
     }
     case '/__mock/edit-pos-order': { // no pos_order_id = the latest POS bill the mock accepted
       const b = body as EditBody
