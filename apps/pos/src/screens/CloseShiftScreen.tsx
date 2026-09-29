@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { isCentralZBlockedError, isClockAheadCountError, posErrorCode } from '../api/errors'
@@ -107,7 +107,7 @@ export function CloseShiftScreen(): JSX.Element {
     }
   }, [summaryQuery.data, shiftId, api, queryClient])
 
-  const confirm = useMutation({
+  const confirm: UseMutationResult<Awaited<ReturnType<typeof api.confirmCount>>, unknown, ConfirmCountInput> = useMutation({
     mutationFn: (input: ConfirmCountInput) => api.confirmCount(input),
     onSuccess: async (r) => {
       setConfirmError(null)
@@ -136,9 +136,10 @@ export function CloseShiftScreen(): JSX.Element {
       setChainBroken(false)
       setConfirmError(errorMessage(e))
       setClockAheadBlocked(isClockAheadCountError(e))
-      // fix round 1 item 1a: only while a Z was actually being attempted (`online`) — confirming the count alone
-      // (`z: null`) never runs `writeZ`, so this never fires there.
-      setZBlockedPermanently(online && isCentralZBlockedError(e))
+      // fix round 1 item 1a · fix round 2 item D: only while a Z was actually being attempted against dayo
+      // (`online` AND the shift is still `central` — confirming the count alone, `z: null`, never runs `writeZ`,
+      // and a shift already `local_only` has nothing left for keepShiftLocal to do).
+      setZBlockedPermanently(online && summary?.syncMode === 'central' && isCentralZBlockedError(e))
       if (code === 'NO_OPEN_SHIFT' || code === 'SHIFT_NOT_COUNTING') {
         void queryClient.invalidateQueries({ queryKey: bootstrapKey })
       }
@@ -151,6 +152,9 @@ export function CloseShiftScreen(): JSX.Element {
         void queryClient.invalidateQueries({ queryKey: countSummaryKey(shiftId) })
       }
     },
+    // fix round 2 item A (security): `approverPin` sits in this mutation's `variables` while `CloseShiftScreen`
+    // stays mounted (the count review, its own retry) — reset once settled, same as every other PIN mutation.
+    onSettled: (): void => confirm.reset(),
   })
 
   const clearBlocked = (): void => {

@@ -381,14 +381,25 @@ export function SyncProblemsScreen(): JSX.Element {
   const [newStaffId, setNewStaffId] = useState<string | null>(null)
   const [excludeConfirmId, setExcludeConfirmId] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  // fix round 2 item A (security, High): `mutation.reset()` (below) detaches the mutation observer in the same
+  // tick as the error dispatch it follows — `mutation.isError`/`mutation.error` never actually show a wrong PIN,
+  // NOT_OWNER, REMEDY_NOT_ALLOWED, … to the owner. A plain `useState` written by `onError` (a real React update,
+  // never reset away) is what the dialogs actually render; cleared whenever a dialog opens or closes.
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
   const owners = boot.data?.users.filter((u) => u.role === 'owner') ?? []
   const staffOptions = [...(boot.data?.users ?? []), ...(boot.data?.staffNeedingPin ?? [])].filter((u, i, arr) => arr.findIndex((x) => x.id === u.id) === i)
+
+  const openRemedy = (row: SyncProblemDto, remedy: Remedy): void => {
+    setMutationError(null)
+    setDialog({ row, remedy })
+  }
 
   const closeDialog = (): void => {
     setDialog(null)
     setTarget(null)
     setNewStaffId(null)
+    setMutationError(null)
   }
 
   const mutation: UseMutationResult<void, unknown, OwnerApproval> = useMutation<void, unknown, OwnerApproval>({
@@ -416,6 +427,7 @@ export function SyncProblemsScreen(): JSX.Element {
       }
     },
     onSuccess: async () => {
+      setMutationError(null)
       // fix round 1 item 5: every remedy can change what the status banners warn about (a scope wait closed, a
       // central mismatch acknowledged, …) — `syncStatusKey` must refresh alongside `bootstrapKey`, not 30 s later.
       await Promise.all([
@@ -425,6 +437,7 @@ export function SyncProblemsScreen(): JSX.Element {
       ])
       closeDialog()
     },
+    onError: (e) => setMutationError(errorMessage(e)),
     // fix round 1 item 4 (security): the PIN just typed must not sit in this mutation's `variables` a moment
     // longer than the call itself needs it.
     onSettled: (): void => mutation.reset(),
@@ -465,7 +478,7 @@ export function SyncProblemsScreen(): JSX.Element {
             depth={0}
             excludeConfirmId={excludeConfirmId}
             canCloseOffCatalog={canCloseOffCatalog}
-            onRemedy={(r, remedy) => setDialog({ row: r, remedy })}
+            onRemedy={openRemedy}
             onExcludeAsk={setExcludeConfirmId}
             onExport={(r) => void doExport(r)}
           />
@@ -481,7 +494,7 @@ export function SyncProblemsScreen(): JSX.Element {
           owners={owners}
           defaultApproverId={user?.role === 'owner' ? user.id : null}
           busy={mutation.isPending}
-          error={mutation.isError ? errorMessage(mutation.error) : null}
+          error={mutationError}
           onSubmit={(approval) => mutation.mutate(approval)}
           onClose={closeDialog}
         />
@@ -492,7 +505,7 @@ export function SyncProblemsScreen(): JSX.Element {
           owners={owners}
           defaultApproverId={user?.role === 'owner' ? user.id : null}
           busy={mutation.isPending}
-          error={mutation.isError ? errorMessage(mutation.error) : null}
+          error={mutationError}
           submitDisabled={(dialog.remedy === 'REMAP_CODE' && target === null) || (dialog.remedy === 'REMAP_STAFF' && newStaffId === null)}
           extra={
             dialog.remedy === 'REMAP_CODE' ? (

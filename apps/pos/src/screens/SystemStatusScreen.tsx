@@ -5,7 +5,7 @@ import type { ApiState } from '../sync/state'
 import type { DayoProbe } from '../api/types'
 import { PIN_RE } from '../api/types'
 import { useApi } from '../app/api-context'
-import { bootstrapKey, useBootstrap } from '../app/queries'
+import { bootstrapKey, syncStatusKey, useBootstrap } from '../app/queries'
 import { useSession } from '../app/session'
 import { APP_VERSION } from '../lib/app-version'
 import { errorMessage } from '../ui/errors'
@@ -60,7 +60,9 @@ export function SystemStatusScreen(): JSX.Element {
       return api.replaceApiKey({ baseUrl, apiKey, approverUserId: approverId ?? '', approverPin: pin })
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: bootstrapKey })
+      // fix round 2 item E: a new key changes apiState/scope immediately — syncStatusKey must refresh alongside
+      // bootstrapKey, not wait up to 30 s for its own poll.
+      await Promise.all([queryClient.invalidateQueries({ queryKey: bootstrapKey }), queryClient.invalidateQueries({ queryKey: syncStatusKey })])
       setReplaceDone(true)
       setApiKey('')
       setProbed(null)

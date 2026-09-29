@@ -293,7 +293,9 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
       prev,
     )
   } catch (e) {
-    if (e instanceof RangeError) throw new PosError('BAD_INPUT', e.message)
+    // fix round 2 item C: a structured detail prefix — `buildZReport` refusing forever (not a transient input
+    // slip) is the same "central Z can never issue" dead end `isCentralZBlockedError` (api/errors.ts) allowlists.
+    if (e instanceof RangeError) throw new PosError('BAD_INPUT', `Z_BUILD: ${e.message}`)
     throw e
   }
 

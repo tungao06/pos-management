@@ -145,9 +145,13 @@ export function StatusBanners(): JSX.Element | null {
   const syncStatus = useSyncStatus()
   const { user } = useSession()
   const navigate = useNavigate()
-  // Task 16: the dedicated `syncStatus()` poll wins once it has answered — `bootstrap().sync` (Task 14) is the
-  // fallback while it has not (offline first render, or a fake api in a screen test that only stubs `bootstrap`).
-  const sync = syncStatus.data ?? boot.data?.sync
+  // Task 16 · fix round 2 item E: the dedicated `syncStatus()` poll wins once it has answered — `bootstrap().sync`
+  // (Task 14) is the fallback while it has not (offline first render, or a fake api in a screen test that only
+  // stubs `bootstrap`). `isError` is checked FIRST and unconditionally: a query that succeeded once keeps its last
+  // good `data` sitting around even while a later background poll is failing, which would otherwise hide a
+  // brand-new problem (or a stale one syncStatus just cleared) behind figures that are no longer fresh — falling
+  // straight back to `bootstrap().sync` (its own independent poll) is always the safer of the two once it errors.
+  const sync = syncStatus.isError ? boot.data?.sync : (syncStatus.data ?? boot.data?.sync)
   if (user === null || boot.data === undefined || sync === undefined) return null
   return (
     <StatusBannersView

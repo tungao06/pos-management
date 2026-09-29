@@ -243,4 +243,62 @@ describe('CloseShiftScreen (D52 Q3b-3 · D101 · D102)', () => {
     await user.click(screen.getByTestId('count-finish'))
     expect(await screen.findByTestId('count-not-in-dayo')).toHaveTextContent(TH.countNotInDayo(2, '฿30.00'))
   })
+
+  // fix round 2 · 1d gap: confirm.onError with an allowlisted code (online, central) shows keepShiftLocal prominently.
+  it('confirmCount refused Z_TOO_LARGE (online, central) shows keepShiftLocal prominently', async () => {
+    const api = fakeApi({ confirmCount: vi.fn(async () => { throw new Error('Z_TOO_LARGE: too many rows') }) })
+    render(<CloseShiftScreen />, { api, session })
+    await countBaht(615)
+    await user.click(screen.getByTestId('count-finish'))
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('DCm', '2222')
+    await user.click(screen.getByTestId('count-confirm'))
+    expect(await screen.findByTestId('keep-shift-local-open')).toBeVisible()
+  })
+
+  // fix round 2 item C: an ALLOWLIST, never "any BAD_INPUT" — an ordinary input mistake never shows keepShiftLocal.
+  it('confirmCount refused an ordinary BAD_INPUT (not allowlisted) does NOT show keepShiftLocal', async () => {
+    const api = fakeApi({ confirmCount: vi.fn(async () => { throw new Error('BAD_INPUT: unknown or inactive user nobody') }) })
+    render(<CloseShiftScreen />, { api, session })
+    await countBaht(615)
+    await user.click(screen.getByTestId('count-finish'))
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('DCm', '2222')
+    await user.click(screen.getByTestId('count-confirm'))
+    await screen.findByText(TH.errBadInput, { exact: false })
+    expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+  })
+
+  // fix round 2 item D: an already local_only shift has nothing left for keepShiftLocal to do.
+  it('confirmCount refused an allowlisted code on a local_only shift shows no escape', async () => {
+    const api = fakeApi({
+      confirmCount: vi.fn(async () => { throw new Error('Z_TOO_LARGE: too many rows') }),
+      countSummary: vi.fn(async () => summary({ syncMode: 'local_only', includesBotCash: false, bot: null, cash: { ...summary().cash, botCashSatang: 0 } })),
+    })
+    render(<CloseShiftScreen />, { api, session })
+    await countBaht(545)
+    await user.click(screen.getByTestId('count-finish'))
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('DCm', '2222')
+    await user.type(screen.getByTestId('count-reason'), 'x')
+    await user.click(screen.getByTestId('count-confirm'))
+    await screen.findByRole('alert')
+    expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+  })
+
+  // fix round 2 item A (High): a wrong PIN in skipCountFloor must show, not disappear because reset() ran.
+  it('a wrong PIN in skipCountFloor shows an error (reset() never hides it)', async () => {
+    const api = fakeApi({
+      skipCountFloor: vi.fn(async () => { throw new Error('PIN_WRONG: nope') }),
+      finishCount: vi.fn(async () => { throw new PosError('BAD_INPUT', 'CLOCK_AHEAD: นาฬิกาเครื่องล้ำเวลาจริง') }),
+    })
+    render(<CloseShiftScreen />, { api, session })
+    await user.click(screen.getByTestId('count-finish'))
+    await user.click(await screen.findByTestId('skip-count-floor-open'))
+    await user.click(screen.getByTestId('approval-owner-DCm'))
+    await user.type(screen.getByTestId('approval-pin'), '9999')
+    await user.type(screen.getByTestId('approval-reason'), 'x')
+    await user.click(screen.getByTestId('approval-ok'))
+    expect(await screen.findByText(TH.errPinWrong)).toBeVisible()
+  })
 })

@@ -62,12 +62,15 @@ describe('IssueZScreen (D101 step 3)', () => {
     expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
   })
 
-  // fix round 1 item 1a: every other reason issueZ itself refused for good also offers keepShiftLocal, prominently.
+  // fix round 1 item 1a · fix round 2 item C: every allowlisted reason issueZ itself refused for good also offers
+  // keepShiftLocal, prominently.
   it.each([
     ['DAYO_BAD_RESPONSE', 'unreadable'],
     ['Z_TOO_LARGE', 'too many rows'],
     ['BAD_INPUT', 'COUNT_BEFORE_CENTRAL_Z: การนับนี้เกิดก่อน Z ล่าสุด'],
-    ['BAD_INPUT', 'closedAt must be after countedAt'],
+    ['BAD_INPUT', 'E2 shift_close row: closedAt must be after countedAt'],
+    ['BAD_INPUT', 'E2 cash_count row: countedAt must be after openedAt'],
+    ['BAD_INPUT', 'Z_BUILD: closedAt must be after countedAt'],
   ] as const)('issueZ refused %s shows keepShiftLocal prominently', async (code, detail) => {
     const issueZ = vi.fn(async () => { throw new Error(`${code}: ${detail}`) })
     const api = fakeApi({ issueZ })
@@ -77,6 +80,74 @@ describe('IssueZScreen (D101 step 3)', () => {
     await user.type(screen.getByTestId('count-reason'), 'x')
     await user.click(screen.getByTestId('count-confirm'))
     expect(await screen.findByTestId('keep-shift-local-open')).toBeVisible()
+  })
+
+  // fix round 2 item C: an ALLOWLIST, never "any BAD_INPUT" — an ordinary input mistake never shows keepShiftLocal.
+  it.each([
+    ['BAD_INPUT', 'unknown or inactive user nobody'],
+    ['BAD_INPUT', 'a reason must be plain text (no control characters)'],
+    ['BAD_INPUT', 'countLines has an invalid denomination'],
+  ] as const)('issueZ refused %s does NOT show keepShiftLocal (not an allowlisted prefix)', async (code, detail) => {
+    const issueZ = vi.fn(async () => { throw new Error(`${code}: ${detail}`) })
+    const api = fakeApi({ issueZ })
+    render(<IssueZScreen shiftId="s1" countedSatang={59_500} />, { api, session })
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('TungAo', '1111')
+    await user.type(screen.getByTestId('count-reason'), 'x')
+    await user.click(screen.getByTestId('count-confirm'))
+    await screen.findByRole('alert') // the error itself still shows
+    expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+  })
+
+  // fix round 2 item D: a shift already local_only has nothing left for keepShiftLocal to do — never shown even
+  // for an otherwise-allowlisted code.
+  it('issueZ refused with an allowlisted code on an already local_only shift shows neither escape', async () => {
+    const issueZ = vi.fn(async () => { throw new Error('Z_TOO_LARGE: too many rows') })
+    const api = fakeApi({ issueZ, countSummary: vi.fn(async () => summary({ syncMode: 'local_only', includesBotCash: false, bot: null })) })
+    render(<IssueZScreen shiftId="s1" countedSatang={59_500} />, { api, session })
+    await screen.findByTestId('count-expected')
+    await pickOwnerAndPin('TungAo', '1111')
+    await user.type(screen.getByTestId('count-reason'), 'x')
+    await user.click(screen.getByTestId('count-confirm'))
+    await screen.findByRole('alert')
+    expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+    expect(screen.queryByTestId('keep-shift-local-link')).toBeNull()
+  })
+
+  // fix round 2 item B: every recoverable E4 answer (try again later / fix the key) stays the secondary link.
+  it.each(['DAYO_UNREACHABLE', 'DAYO_BAD_KEY', 'DAYO_KEY_NO_SCOPE', 'DAYO_API_DISABLED'] as const)(
+    'E4 refused %s (recoverable) shows only the secondary keepShiftLocal link',
+    async (code) => {
+      const api = fakeApi({ fetchBotCash: vi.fn(async () => { throw new Error(`${code}: x`) }), countSummary: vi.fn(async () => summary({ includesBotCash: false, bot: null })) })
+      render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+      expect(await screen.findByTestId('keep-shift-local-link')).toBeVisible()
+      expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+    },
+  )
+  it('E4 refused with the CLOCK_AHEAD of assertWindowClosed (recoverable) shows only the secondary link', async () => {
+    const api = fakeApi({
+      fetchBotCash: vi.fn(async () => { throw new Error('BAD_INPUT: CLOCK_AHEAD: เวลานับเงินยังไม่ถึงในระบบกลาง') }),
+      countSummary: vi.fn(async () => summary({ includesBotCash: false, bot: null })),
+    })
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    expect(await screen.findByTestId('keep-shift-local-link')).toBeVisible()
+    expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+  })
+
+  // fix round 2 item A (High): a wrong PIN in keepShiftLocal must show, not disappear because reset() ran.
+  it('a wrong PIN in keepShiftLocal shows an error (reset() never hides it)', async () => {
+    const api = fakeApi({
+      keepShiftLocal: vi.fn(async () => { throw new Error('PIN_WRONG: nope') }),
+      fetchBotCash: vi.fn(async () => { throw new Error('DAYO_BAD_RESPONSE: unreadable') }),
+      countSummary: vi.fn(async () => summary({ includesBotCash: false, bot: null })),
+    })
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    await user.click(await screen.findByTestId('keep-shift-local-open'))
+    await user.click(screen.getByTestId('approval-owner-TungAo'))
+    await user.type(screen.getByTestId('approval-pin'), '9999')
+    await user.type(screen.getByTestId('approval-reason'), 'x')
+    await user.click(screen.getByTestId('approval-ok'))
+    expect(await screen.findByText(TH.errPinWrong)).toBeVisible()
   })
 
   // fix round 1 item 3: issueZ refused with CLOCK_AHEAD offers skipCountFloor, same as CloseShiftScreen.

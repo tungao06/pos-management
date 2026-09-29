@@ -329,6 +329,22 @@ describe('SyncProblemsScreen — block 3 (spec 04 §6.4)', () => {
     // fix round 1 item 4 (security): the PIN just typed must not sit in the mutation's own state afterwards.
     await waitFor(() => expect(queryClient.getMutationCache().getAll().every((m) => m.state.status === 'idle')).toBe(true))
   })
+
+  // fix round 2 item A (High): reset() must never hide the error — a wrong PIN has to actually show, and the
+  // mutation cache still ends up holding no PIN once it does.
+  it('a wrong PIN shows an error in the remedy dialog (reset() never hides it), and the cache holds no PIN after', async () => {
+    const api = apiWith([problem()])
+    api.closeOffCatalog = vi.fn(async () => { throw new Error('PIN_WRONG: nope') })
+    const { queryClient } = renderProblemsAs(api, OWNER_U1)
+    await user.click(await screen.findByTestId('remedy-close-off-catalog'))
+    const dialog = await screen.findByTestId('off-catalog-dialog')
+    await user.type(within(dialog).getByTestId('off-catalog-reason'), 'เมนูถูกลบในระบบกลาง')
+    await user.click(within(dialog).getByTestId('count-approver-TungAo'))
+    for (const d of '9999') await user.click(within(dialog).getByTestId(`pin-${d}`))
+    await user.click(within(dialog).getByTestId('off-catalog-confirm'))
+    expect(await within(dialog).findByText(TH.errPinWrong)).toBeVisible()
+    await waitFor(() => expect(queryClient.getMutationCache().getAll().every((m) => m.state.status === 'idle')).toBe(true))
+  })
   // deviation from task-16-brief.md: spec 04 §12 Q44 makes the WHOLE "ส่งไม่ผ่าน" page owner-only (already covered
   // by "a manager is sent away from /sync-problems too" above) — a manager never reaches a row to check the button
   // against, so this checks the same role gate `canCloseOffCatalog` uses instead (defense in depth, D97): even a

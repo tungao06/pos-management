@@ -78,16 +78,36 @@ export function isClockAheadCountError(e: unknown): boolean {
   return posErrorCode(e) === 'BAD_INPUT' && e instanceof Error && e.message.startsWith('BAD_INPUT: CLOCK_AHEAD:')
 }
 
+/** Every `BAD_INPUT` detail prefix `isCentralZBlockedError` allowlists (fix round 2 item C) — never "any BAD_INPUT". */
+const CENTRAL_Z_BLOCKED_BAD_INPUT_PREFIXES = ['COUNT_BEFORE_CENTRAL_Z:', 'E2 shift_close row:', 'E2 cash_count row:', 'Z_BUILD:'] as const
+
 /**
- * Task 14 · carried item 9a fix round 1 (item 1a): every reason a CENTRAL shift's Z can refuse for good — dayo
- * answered something this tablet cannot use (`DAYO_BAD_RESPONSE`), the Z is too large for E2 (`Z_TOO_LARGE`), the
- * count is before dayo's own last Z (`BAD_INPUT COUNT_BEFORE_CENTRAL_Z:`), or the snapshot itself could not be
- * built (`BAD_INPUT` from a `RangeError` in `buildZReport` — close.ts, no structured prefix of its own). `CLOCK_AHEAD`
- * is excluded on purpose: it already has its own remedy (`skipCountFloor`), never this one.
+ * Task 14 · carried item 9a fix round 1 (item 1a) · fix round 2 item C: every reason a CENTRAL shift's Z can
+ * refuse for good — dayo answered something this tablet cannot use (`DAYO_BAD_RESPONSE`), the Z is too large for
+ * E2 (`Z_TOO_LARGE`), the count is before dayo's own last Z (`BAD_INPUT COUNT_BEFORE_CENTRAL_Z:`), the shift_close
+ * or cash_count row itself could not be built (`BAD_INPUT E2 shift_close row:` / `E2 cash_count row:` — rows.ts
+ * `builtRow`), or the Z snapshot itself could not be built (`BAD_INPUT Z_BUILD:` — a `RangeError` in `buildZReport`,
+ * close.ts). An ALLOWLIST of structured detail prefixes, never "any BAD_INPUT" (fix round 2 review: that swept up
+ * ordinary input mistakes — an inactive user, a reason with control characters, bad count lines — that are not
+ * this dead end at all and have nothing to do with keepShiftLocal).
  */
 export function isCentralZBlockedError(e: unknown): boolean {
   const code = posErrorCode(e)
   if (code === 'DAYO_BAD_RESPONSE' || code === 'Z_TOO_LARGE') return true
-  if (code !== 'BAD_INPUT') return false
-  return !isClockAheadCountError(e)
+  if (code !== 'BAD_INPUT' || !(e instanceof Error)) return false
+  return CENTRAL_Z_BLOCKED_BAD_INPUT_PREFIXES.some((prefix) => e.message.startsWith(`BAD_INPUT: ${prefix}`))
+}
+
+/**
+ * Fix round 2 item B: E4 (`fetchBotCash`) failures this tablet's own retry (or time passing) can still fix —
+ * `keepShiftLocal` must stay the small secondary link for these, prominent only for a real, lasting refusal.
+ * `DAYO_UNREACHABLE` (network/5xx/429/timeout), a scope/key problem dayo's own web fixes (`DAYO_BAD_KEY`,
+ * `DAYO_KEY_NO_SCOPE`, `DAYO_API_DISABLED`), and `CLOCK_AHEAD` (bot-cash.ts `assertWindowClosed` — waits for the
+ * count moment to actually pass, then answers) are all "try again later/after fixing the key", never "this
+ * shift's Z can never issue".
+ */
+export function isRecoverableE4Error(e: unknown): boolean {
+  const code = posErrorCode(e)
+  if (code === 'DAYO_UNREACHABLE' || code === 'DAYO_BAD_KEY' || code === 'DAYO_KEY_NO_SCOPE' || code === 'DAYO_API_DISABLED') return true
+  return isClockAheadCountError(e)
 }

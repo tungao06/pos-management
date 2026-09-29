@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useState, type FormEvent, type JSX } from 'react'
 import { PIN_RE, type DayoProbe } from '../api/types'
 import { useApi } from '../app/api-context'
-import { bootstrapKey, useBootstrap } from '../app/queries'
+import { bootstrapKey, syncStatusKey, useBootstrap } from '../app/queries'
 import { errorMessage } from '../ui/errors'
 import { TH } from '../ui/th'
 import { ConnectFields } from './ConnectFields'
@@ -42,7 +42,8 @@ export function OwnerRecoveryScreen(): JSX.Element {
       return api.recoverOwner({ baseUrl, apiKey, ownerStaffId: ownerId ?? '', ownerPin: pin })
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: bootstrapKey })
+      // fix round 2 item E: a brand-new key changes apiState/scope immediately — syncStatusKey too, not just bootstrapKey.
+      await Promise.all([queryClient.invalidateQueries({ queryKey: bootstrapKey }), queryClient.invalidateQueries({ queryKey: syncStatusKey })])
       void navigate({ to: '/login' })
     },
     onError: (e) => setError(errorMessage(e)),

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useEffect, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BootstrapState, PosApi, SyncStatusDto, UserDto } from '../api/types'
 import { ApiProvider } from '../app/api-context'
 import { CartProvider } from '../app/cart-context'
+import { syncStatusKey } from '../app/queries'
 import { SessionProvider, useSession } from '../app/session'
 import { render as renderBlock3 } from '../test-utils'
 import { HEALTHY_SYNC } from '../test-utils/sync-status'
@@ -191,5 +192,20 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
       session: { userId: 'u1', role: 'owner' },
     })
     expect(await screen.findByTestId('banner-problems')).toHaveTextContent('3')
+  })
+
+  // fix round 2 item E: a query that once succeeded keeps its stale `data` sitting around while a LATER background
+  // poll fails — the fallback must still trigger on `isError` alone, never only on `data === undefined`, or a
+  // brand-new problem `bootstrap().sync` already knows about would stay hidden behind the stale figure.
+  it('an error after a successful poll still falls back to bootstrap().sync, not the stale figure (item E)', async () => {
+    const syncStatusMock = vi.fn(async () => status({ problemSyncRows: 0 }))
+    const { queryClient } = renderBlock3(<StatusBanners />, {
+      api: { syncStatus: syncStatusMock, bootstrap: vi.fn(async () => ({ users: OWNERS, zWaiting: [], sync: status({ problemSyncRows: 5 }) })) },
+      session: { userId: 'u1', role: 'owner' },
+    })
+    await waitFor(() => expect(syncStatusMock).toHaveBeenCalledTimes(1))
+    syncStatusMock.mockRejectedValueOnce(new Error('OFFLINE: network'))
+    await queryClient.refetchQueries({ queryKey: syncStatusKey })
+    expect(await screen.findByTestId('banner-problems')).toHaveTextContent('5')
   })
 })

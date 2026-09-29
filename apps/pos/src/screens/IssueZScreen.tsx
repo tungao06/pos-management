@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
-import { isCentralZBlockedError, isClockAheadCountError, posErrorCode } from '../api/errors'
+import { isCentralZBlockedError, isClockAheadCountError, isRecoverableE4Error, posErrorCode } from '../api/errors'
 import type { CountSummaryDto, IssueZInput, SkipCountFloorResult } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, issueZKey, useBootstrap, zKey, zListKey } from '../app/queries'
@@ -28,6 +28,9 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
   const [chainBroken, setChainBroken] = useState(false)
   const [chainCentralZNo, setChainCentralZNo] = useState<number | null>(null)
   const [botCashError, setBotCashError] = useState<string | null>(null)
+  // fix round 2 item B: prominent only for a real, lasting E4 refusal — an allowlisted "try again later/fix the
+  // key" answer (isRecoverableE4Error) stays the small secondary link, whatever the raw error text looks like.
+  const [botCashRecoverable, setBotCashRecoverable] = useState(true)
   // fix round 1 items 1a/3: issueZ refused for a reason this device's own retry can never fix — the owner keeps
   // the shift on the tablet for good (9a) or, for CLOCK_AHEAD specifically, skips the far-ahead count (9b).
   const [zBlockedPermanently, setZBlockedPermanently] = useState(false)
@@ -40,16 +43,22 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
       try {
         await api.fetchBotCash(shiftId)
         setBotCashError(null)
+        setBotCashRecoverable(true)
       } catch (e) {
-        // fix round 2 item 2 (same as CloseShiftScreen): a plain OFFLINE means "no answer yet" — expected, silent —
+        // fix round 1 item 2 (same as CloseShiftScreen): a plain OFFLINE means "no answer yet" — expected, silent —
         // but anything else (DAYO_BAD_RESPONSE, CLOCK_AHEAD, …) is worth telling the owner about, not swallowed.
-        setBotCashError(posErrorCode(e) === 'OFFLINE' ? null : errorMessage(e))
+        if (posErrorCode(e) === 'OFFLINE') {
+          setBotCashError(null)
+        } else {
+          setBotCashError(errorMessage(e))
+          setBotCashRecoverable(isRecoverableE4Error(e))
+        }
       }
       return api.countSummary(shiftId)
     },
   })
 
-  const issueZ = useMutation({
+  const issueZ: UseMutationResult<Awaited<ReturnType<typeof api.issueZ>>, unknown, IssueZInput> = useMutation({
     mutationFn: (input: IssueZInput) => api.issueZ(input),
     onSuccess: async () => {
       setIssued(true)
@@ -74,12 +83,17 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
       }
       setChainBroken(false)
       setError(errorMessage(e))
-      // fix round 1 item 1a: DAYO_BAD_RESPONSE, Z_TOO_LARGE, COUNT_BEFORE_CENTRAL_Z, a builder refusal — none of
-      // this device's own retries can fix them; item 3: CLOCK_AHEAD gets skipCountFloor instead, same as CloseShiftScreen.
-      setZBlockedPermanently(isCentralZBlockedError(e))
+      // fix round 1 item 1a · fix round 2 item D: DAYO_BAD_RESPONSE, Z_TOO_LARGE, COUNT_BEFORE_CENTRAL_Z, a builder
+      // refusal — none of this device's own retries can fix them, and only while the shift is still `central`
+      // (already local_only has nothing left for keepShiftLocal to do); item 3: CLOCK_AHEAD gets skipCountFloor
+      // instead, same as CloseShiftScreen.
+      setZBlockedPermanently(summary.syncMode === 'central' && isCentralZBlockedError(e))
       setZClockAheadBlocked(isClockAheadCountError(e))
       if (code === 'SHIFT_CHANGED') void queryClient.invalidateQueries({ queryKey: issueZKey(shiftId) })
     },
+    // fix round 2 item A (security): `approverPin` sits in this mutation's `variables` while this screen stays
+    // mounted (a Z_CHAIN_BROKEN retry, the review) — reset once settled, same as every other PIN mutation.
+    onSettled: (): void => issueZ.reset(),
   })
 
   const clearBlocked = (): void => {
@@ -149,9 +163,10 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
         <button type="button" data-testid="z-retry" onClick={() => void load.refetch()}>
           {TH.retry}
         </button>
-        {/* fix round 1 item 1a/1b: prominent once E4 has actually answered with a real refusal (`botCashError`) —
-            a plain OFFLINE (still no answer, network may come back) gets the small secondary link only. */}
-        <KeepShiftLocalControl shiftId={shiftId} owners={owners} prominent={botCashError !== null} onDone={() => void load.refetch()} />
+        {/* fix round 1 item 1a/1b · fix round 2 item B: prominent only for a real, lasting E4 refusal — an
+            allowlisted "try again later/fix the key" answer (`isRecoverableE4Error`), or a plain OFFLINE (still
+            no answer, network may come back), gets the small secondary link only. */}
+        <KeepShiftLocalControl shiftId={shiftId} owners={owners} prominent={botCashError !== null && !botCashRecoverable} onDone={() => void load.refetch()} />
       </main>
     )
   }
