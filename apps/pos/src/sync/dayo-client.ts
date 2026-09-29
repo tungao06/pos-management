@@ -1,4 +1,4 @@
-import { API_KEY_RE, ApiErrorBody, OrdersListResponse, PosCatalogLooseResponse, PushResponse, type CentralOrder, type PosCatalogLooseData, type PushRequest, type PushResponseData } from '@dayo/contracts'
+import { API_KEY_RE, ApiErrorBody, OrdersListResponse, PosCatalogLooseResponse, PushResponse, ShiftCashResponse, type CentralOrder, type PosCatalogLooseData, type PushRequest, type PushResponseData, type ShiftCashData } from '@dayo/contracts'
 import { normalizeBaseUrl } from './base-url'
 
 export type DayoFailure =
@@ -30,6 +30,11 @@ export type DayoClient = {
   push(body: PushRequest): Promise<Timed<PushResponseData>>
   /** E3 · `updatedSince` = dayo's `updated_since` (coalesce(updated_at, created_at) > it — 0052_pos_push.sql:840). */
   listOrders(q: { from: string; to: string; updatedSince?: string }): Promise<Timed<CentralOrder[]>>
+  /**
+   * E4 (block 3 · dayo 0067): the bot/web CASH bills in (after, until] (scope orders:read). A block-2 dayo has no such
+   * path = 404 = api_disabled. The answer is only parsed here — its bill numbers are checked by the Z builder (Task 12).
+   */
+  shiftCash(q: { after: string; until: string }): Promise<Timed<ShiftCashData>>
 }
 
 /** plan 5 transport (fix M-4): setTimeout + AbortController, not AbortSignal.timeout, so tests can use fake timers. */
@@ -98,6 +103,7 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
   return {
     getCatalog: (known) => call(`/pos/catalog?known_version=${Math.max(0, Math.trunc(known))}`, { method: 'GET' }, (b) => PosCatalogLooseResponse.parse(b).data), // `catalog` checked by the caller (R12)
     push: (body) => call('/pos/push', { method: 'POST', body: JSON.stringify(body) }, (b) => PushResponse.parse(b).data),
+    shiftCash: (q) => call(`/pos/shift-cash?after=${encodeURIComponent(q.after)}&until=${encodeURIComponent(q.until)}`, { method: 'GET' }, (b) => ShiftCashResponse.parse(b).data),
     listOrders: (q) => call(`/orders?from=${encodeURIComponent(q.from)}&to=${encodeURIComponent(q.to)}${q.updatedSince === undefined ? '' : `&updated_since=${encodeURIComponent(q.updatedSince)}`}`, { method: 'GET' }, (b) => OrdersListResponse.parse(b).data),
   }
 }
