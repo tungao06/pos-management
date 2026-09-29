@@ -28,7 +28,8 @@ describe('listOrders / getOrder', () => {
   it('orders of a closed shift are not listed and not voidable (D47 ข้อ 2 · Q3-13)', async () => {
     const t = await openReadyApi()
     const a = await legacySale(t, 'Original-16oz', 1, { method: 'CASH', tenderedSatang: 4500 })
-    t.raw.prepare("update shift set status = 'closed', closed_at = ?, closed_by = ? where id = ?").run(t.clock.now(), t.owner.id, t.shift.id)
+    // final fix S3: a shift is closed with its count moment (trigger shift_status_forward_only needs counted_at)
+    t.raw.prepare("update shift set status = 'closed', counted_at = ?, closed_at = ?, closed_by = ? where id = ?").run(t.clock.now(), t.clock.now(), t.owner.id, t.shift.id)
     expect(await t.api.listOrders()).toEqual([])
     t.clock.set('2026-09-18T03:00:00.000Z')
     await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
