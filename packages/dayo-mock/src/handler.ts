@@ -146,12 +146,15 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
    */
   function catalogAnswer(url: URL, h: Record<string, string>): Response {
     const c = s.catalog
+    // lib/api/pos.ts:19-24 (dayo's route, before promo_rule_version): '' or absent = none · else an integer ≥ 0 by Number()
+    const knownRaw = url.searchParams.get('known_version')
+    const known = knownRaw === null || knownRaw === '' ? null : Number(knownRaw)
+    if (known !== null && (!Number.isInteger(known) || known < 0)) return err(422, 'DY422', 'invalid: known_version ต้องเป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป', h)
     const versions = s.promoRules.versions
     const asked = versions === null ? 0 : readPromoRuleVersion(url.searchParams.get('promo_rule_version'))
     if (asked === null) return err(422, 'DY422', PROMO_RULE_VERSION_INVALID, h)
     const supported_fields = versions === null ? c.supported_fields : { ...c.supported_fields, promotion_rule_versions: [...versions] }
     const common = { pricing: s.pricing ?? c.pricing, catalog_version: c.catalog_version, server_time: serverTime(), supported_kinds: c.supported_kinds, supported_fields }
-    const known = Number(url.searchParams.get('known_version') ?? '0')
     if (known === c.catalog_version) return json(200, { ok: true, data: { ...common, changed: false } }, { ...h, 'Cache-Control': 'no-store' })
     const { promotionGroups, ...rest } = c.catalog
     const catalog = { ...rest, promotions: promotionsFor(c.catalog.promotions, asked), ...(versions === null ? {} : { promotionGroups: promotionGroups ?? [MAIN_GROUP] }) }
@@ -245,8 +248,10 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       if (groups !== undefined) s.catalog.catalog.promotionGroups = structuredClone([...groups])
       return bump()
     },
-    exhaust: (promoId, scope) => {
-      if (!s.exhausted.some((e) => e.id === promoId && e.scope === scope)) s.exhausted.push({ id: promoId, scope })
+    exhaust: (promoId: string, scope: 'total' | 'day', saleDate?: string) => {
+      if (scope === 'day' && (saleDate === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(saleDate))) throw new Error('exhaust: scope day needs the sale_date (YYYY-MM-DD) it is used up on')
+      const day = scope === 'day' ? saleDate! : null
+      if (!s.exhausted.some((e) => e.id === promoId && e.scope === scope && e.saleDate === day)) s.exhausted.push({ id: promoId, scope, saleDate: day })
     },
     setPromoRules: (p) => {
       s.promoRules = structuredClone(p)

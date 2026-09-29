@@ -67,11 +67,15 @@ export type MockDayo = {
    */
   setPromotions(promotions: readonly CatalogPromotion[], groups?: readonly PromotionGroup[]): number
   /**
-   * ADR-0072 rule 2 (0074 · handoff §10): dayo's count says this promotion is used up — for every bill judged from now on
-   * (scope 'day' on whatever sale_date: the mock does not count per day). dayo still accepts such a bill: it prices it
-   * without the promotion (→ amount_mismatch) and warns for a code/manual one. Bills already in are never re-priced.
+   * ADR-0072 rule 2 (0074 · handoff §10): dayo's count says this promotion is used up for every bill judged from now on —
+   * 'total' on any sale_date, 'day' on bills of `saleDate` only (dayo_promo_usage_exhausted counts per orders.sale_date,
+   * 0074:87-146). dayo still accepts such a bill: it prices it without the promotion (→ amount_mismatch) and warns for a
+   * code/manual one. Bills already in are never re-priced.
+   * A test hook standing in for dayo's count: it does NOT check that the promotion has usageLimitTotal/usageLimitPerDay
+   * (real dayo only counts promotions with a limit — 0074:1137-1140), nor that the id is a promotion at all.
    */
-  exhaust(promoId: string, scope: 'total' | 'day'): void
+  exhaust(promoId: string, scope: 'total'): void
+  exhaust(promoId: string, scope: 'day', saleDate: string): void
   /** dayo moves to another promotion-rule release. Bumps catalog_version (0071 seeds `main`, whose trigger bumps it — 0071:1103-1108,1186), returns it. */
   setPromoRules(p: PromoRulesOption): number
   editPosOrder(posOrderId: string, edit: PosOrderEdit): void
@@ -175,7 +179,7 @@ export type MockState = {
   offCatalogCap: number                       // shop_settings.off_catalog_max_total, baht (D103 · default 3000)
   rejections: Map<string, Set<string>>        // pos_push_rejections: pos_order_id → reasons (0066:993-1002)
   promoRules: PromoRulesOption                // plan 10 Task 5: the promotion-rule release played
-  exhausted: { id: string; scope: 'total' | 'day' }[] // dayo_promo_usage_exhausted as the mock is told it (mock.exhaust) — p_ctx.exhausted_promotions
+  exhausted: { id: string; scope: 'total' | 'day'; saleDate: string | null }[] // dayo_promo_usage_exhausted as the mock is told it (mock.exhaust) — p_ctx.exhausted_promotions
 }
 
 export const variantKey = (code: string, size: string, sweetness: string): string => JSON.stringify([code, size, sweetness])

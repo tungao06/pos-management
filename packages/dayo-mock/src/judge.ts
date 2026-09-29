@@ -8,10 +8,10 @@
 // api_pos_push records every rejected `order` row in pos_push_rejections (0066:993-1002). Phase 2 (not shipped — preflight P3):
 // order_off_catalog (judge-off-catalog.ts), off_catalog_exists: on order rows, and the recompute of every Z (recompute.ts).
 import { clipCodePoints, fieldsUsed, KIND_ID_FIELD, MAX_MANUAL_PROMOTIONS, trimWs, type PushKind, type ReceivedRowResult } from '@dayo/contracts'
-import { computedTotalAt, manualReasonRequiredAt } from './reprice.js'
+import { dayoQuoteAt } from './reprice.js'
 import { judgeOffCatalog } from './judge-off-catalog.js'
 import { conflictShiftOf, flagConflict, judgeCashCount, judgeCashMovement, judgeShiftClose, judgeShiftOpen, SHIFT_KINDS } from './judge-shift.js'
-import { DAY, defer, existsData, FIVE_MIN, has, hashOf, isInt, isMoney, isObj, isPct, isText, isUuid, issueOrderNo, minusDays, reject, staffOk, thaiDate, ts, utcZ, Verdict, ymd, type J } from './judge-util.js'
+import { cents, DAY, defer, existsData, FIVE_MIN, has, hashOf, isInt, isMoney, isObj, isPct, isText, isUuid, issueOrderNo, minusDays, reject, staffOk, thaiDate, ts, utcZ, Verdict, ymd, type J } from './judge-util.js'
 import { recomputeAll } from './recompute.js'
 import { variantKey, type MockOrderData, type MockOrderLine, type MockOverride, type MockState, type StoredOrder } from './state.js'
 
@@ -213,17 +213,20 @@ function judgeOrder(s: MockState, key: string, d: J, now: number): ReceivedRowRe
 
   // ── save (dayo create_order: re-quote at sold_at · freeze · amount_mismatch · pos_computed_total) ──
   if (s.mode === 'force_row_error') throw new Error('force_row_error') // the business step fails after every check above
-  // dayo_create_order → dayo_quote (0069): the draft's manual list (dayo_draft_manual_promotions: DY422 too_large) · then the
-  // reason guard on dayo's OWN quote at sold_at (0069:1096-1098) — both DY422 → rejected INVALID (dayo_pos_map_error)
+  // dayo_impl_create_order (0074:1534-1561) → dayo_quote: the draft's manual list (dayo_draft_manual_promotions: DY422
+  // too_large) · the reason guard on dayo's OWN quote at sold_at (0069:1096-1098) · invalid_order: when that quote is not ok
+  // (0074:1544-1547) — each DY422 → rejected INVALID with dayo's message (dayo_pos_map_error)
   if (o.manual_promotion_ids.length > MAX_MANUAL_PROMOTIONS) reject('INVALID', 'too_large: เลือกโปรเองได้ไม่เกิน 20 ตัวต่อบิล')
-  if (o.manual_promotion_ids.length > 0 && o.manual_promotion_reason === null && manualReasonRequiredAt(s, o, soldAt)) {
-    reject('INVALID', 'reason_required: โปรที่เลือกเองทำให้บิลเหลือ ฿0 ต้องใส่เหตุผลค่ะ')
-  }
-  const { computed, warnings } = computedTotalAt(s, o, soldAt)
+  const q = dayoQuoteAt(s, o, soldAt) // null = the mock's catalog cannot reproduce dayo's price (see dayoQuoteAt): trust the tablet
+  if (q !== null && q.manualPromotionReasonRequired && o.manual_promotion_reason === null) reject('INVALID', 'reason_required: โปรที่เลือกเองทำให้บิลเหลือ ฿0 ต้องใส่เหตุผลค่ะ')
+  if (q !== null && !q.ok) reject('INVALID', `invalid_order: ${q.warnings.length > 0 ? q.warnings.join(' · ') : 'บิลไม่ถูกต้อง'}`)
+  // pos_computed_total = dayo's quote total · amount_mismatch = |reported − computed| > ฿1 (dayo_order_amounts 0008:998)
+  const computed = q === null ? o.totals.total : q.totalAmount
+  const warnings = q === null ? [] : [...q.warnings]
   const stored: StoredOrder = {
     orderNo: issueOrderNo(s, o.sale_date), posOrderId: o.pos_order_id, receiptNo: o.receipt_no,
     saleDate: o.sale_date, soldAt: o.sold_at, total: o.totals.total, status: 'ok', version: 1, staffId: o.staff_id, data: o, offCatalog: false,
-    computedTotal: computed, amountMismatch: Math.abs(o.totals.total - computed) > 1, createdAt: now, updatedAt: null, dayoEdit: null,
+    computedTotal: computed, amountMismatch: Math.abs(cents(o.totals.total) - cents(computed)) > 100, createdAt: now, updatedAt: null, dayoEdit: null,
   }
   s.orders.set(stored.posOrderId, stored)
   s.receipts.set(stored.receiptNo, stored.posOrderId)
