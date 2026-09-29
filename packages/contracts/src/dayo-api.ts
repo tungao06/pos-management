@@ -83,11 +83,11 @@ const LONE_SURROGATE_RE = /[\ud800-\udfff]/u
  * dayo_pos_is_text (0052): 1..max code points · no C0/DEL · not blank after trimming spaces (Postgres btrim) · plus
  * well-formed UTF-16, so one bad text can never turn a whole push into a DY422.
  */
-const posText = (max: number) =>
-  z.string().refine((s) => {
-    const n = [...s].length
-    return n >= 1 && n <= max && !CONTROL_RE.test(s) && !LONE_SURROGATE_RE.test(s) && s.replace(/^ +| +$/g, '') !== ''
-  }, `1–${max} code points, no control characters, well-formed, not blank`)
+export function isPosText(s: string, max: number): boolean {
+  const n = [...s].length
+  return n >= 1 && n <= max && !CONTROL_RE.test(s) && !LONE_SURROGATE_RE.test(s) && s.replace(/^ +| +$/g, '') !== ''
+}
+const posText = (max: number) => z.string().refine((s) => isPosText(s, max), `1–${max} code points, no control characters, well-formed, not blank`)
 export const Text200 = posText(TEXT_MAX_CODE_POINTS)
 /** A cup size code — any "<n> oz" since ADR-0054 (dayo cup_sizes CHECK, 0048_cup_sizes.sql:33 = shared SIZE_CODE_PATTERN). The shop's real sizes come in E1 `catalog.sizes`. */
 export const SIZE_CODE_RE = /^[1-9][0-9]{0,2} oz$/
@@ -285,7 +285,8 @@ export type ZReportData = z.infer<typeof ZReportData>
 export const ShiftCloseRowData = z.strictObject({ shift_id: Uuid, count_id: Uuid, closed_by: Uuid, closed_at: IsoSent, variance_reason: Text200.nullable(), z_report: ZReportData })
 export type ShiftCloseRowData = z.infer<typeof ShiftCloseRowData>
 const OffCatalogLine = z.strictObject({
-  code: z.string().min(1).max(40).nullable(), name: z.string().min(1).max(100), size: z.string().min(1).max(20).nullable(), sweetness: z.string().min(1).max(10).nullable(),
+  // dayo text rules in CODE POINTS (Task 3 fix round 1): z.string().max counts UTF-16 units and lets control characters through
+  code: posText(40).nullable(), name: posText(100), size: posText(20).nullable(), sweetness: posText(10).nullable(),
   qty: z.number().int().min(1).max(999), unit_price: Baht, discount_per_cup: Baht, line_total: Baht,
 }).refine((l) => l.discount_per_cup <= l.unit_price && satangOf(l.line_total) === (satangOf(l.unit_price) - satangOf(l.discount_per_cup)) * l.qty, 'line_total = (unit_price − discount_per_cup) × qty')
 /**

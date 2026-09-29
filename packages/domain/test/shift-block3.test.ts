@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as domain from '../src/index'
+import { BOT_ORDER_NO_RE } from '@dayo/contracts'
 import {
   BOT_ORDER_NO_PATTERN, buildZReport, cashInputsFromMovements, cashVarianceSatang, effectiveVarianceAlertSatang, expectedCashSatang, MAX_BOT_BILLS,
   MIN_VARIANCE_ALERT_SATANG, summarizeShiftSales, varianceNeedsReason, withBotCash, zReportHash, type CashInputs, type ZBotBill, type ZChainWarning, type ZInput,
@@ -151,6 +152,7 @@ describe('fix round 1 — bot bills exactly as dayo accepts them (0066 bot_bills
   const bills = (n: number, total: number): ZBotBill[] => Array.from({ length: n }, (_, i) => ({ ...b, orderNo: `L260925-${String(i).padStart(3, '0')}`, totalSatang: total }))
   it('the order-number pattern is the one contracts and dayo use', () => {
     expect(BOT_ORDER_NO_PATTERN.source).toBe('^L\\d{6}-\\d{3,}$')
+    expect(BOT_ORDER_NO_PATTERN).toBe(BOT_ORDER_NO_RE) // fix round 1 item 4: one pattern, owned by contracts — the line above pins it to dayo's
     expect(MAX_BOT_BILLS).toBe(500)
   })
   it('at most 500 bills', () => {

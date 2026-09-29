@@ -134,7 +134,7 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
     const queueNo = (await lastQueueNo(tx, device.id, shift.businessDate)) + 1
     if (queueNo > 9999) throw new PosError('QUEUE_FULL', 'queue number 9999 reached today') // ruling R13
     // Checked before anything is written: a row dayo would refuse as INVALID fails the sale here, never the queue.
-    const parsed = OrderRowData.safeParse(buildOrderRowData({ posOrderId: input.orderId, receiptNo, queueNo, staffId: actor.id, catalogVersion: stored.catalogVersion, cart, priced, note: null }))
+    const parsed = OrderRowData.safeParse(buildOrderRowData({ posOrderId: input.orderId, receiptNo, queueNo, staffId: actor.id, catalogVersion: stored.catalogVersion, shiftId: null, cart, priced, note: null })) // Task 11 sends the central shift id
     if (!parsed.success) throw new PosError('BAD_INPUT', `E2 order row: ${parsed.error.issues.slice(0, 3).map((i) => `${i.path.join('.')} ${i.message}`).join(' · ')}`)
     const discountSatang = priced.discountSatang // items + bill, computed and cross-checked in the domain (review item 18)
     const { draft, ...pricedRest } = priced

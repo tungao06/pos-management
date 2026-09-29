@@ -1,3 +1,4 @@
+import { BOT_ORDER_NO_RE } from '@dayo/contracts'
 import { canonicalJson, sha256Hex } from './hash.js'
 import { assertSafeInt } from './money.js'
 
@@ -316,22 +317,27 @@ export type ZChainWarning = {
 
 /** dayo 0066 `bot_bills`: at most 500 per Z (the same cap dayo applies — a longer list is rejected INVALID). */
 export const MAX_BOT_BILLS = 500
-/** dayo 0066 `bot_bills[].order_no` `^L[0-9]{6}-[0-9]{3,}$` — same pattern as contracts `BOT_ORDER_NO_RE` (copied: domain
- * only imports types from contracts). */
-export const BOT_ORDER_NO_PATTERN = /^L\d{6}-\d{3,}$/
+/** dayo 0066 `bot_bills[].order_no` `^L[0-9]{6}-[0-9]{3,}$` — contracts `BOT_ORDER_NO_RE` itself, one pattern (fix round 1). */
+export const BOT_ORDER_NO_PATTERN: RegExp = BOT_ORDER_NO_RE
 /** dayo 0066 `bot_bills[].version` is an int4 1..2147483647. */
 const BOT_BILL_VERSION_MAX = 2_147_483_647
 /** Instants frozen into a Z: ISO-8601 UTC, `Z` or `+00:00` (dayo returns `…+00:00`, ruling P7), at most millisecond
  * precision so comparing them with Date.parse is exact. */
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|\+00:00)$/
 
-/** Security fix round 1 (L-1): the form above, and a real calendar instant (Date.parse alone rolls 30 Feb or 24:00 over). */
-function isoUtcMs(iso: unknown, name: string): number {
+/** Security fix round 1 (L-1): the form above, and a real calendar instant (Date.parse alone rolls 30 Feb or 24:00 over).
+ * Exported for the E2 row builders (shift-rows.ts) — one check of instants for the Z and the rows built from it. */
+export function isoUtcMs(iso: unknown, name: string): number {
   const t = typeof iso === 'string' && ISO_UTC.test(iso) ? Date.parse(iso) : Number.NaN
   if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 19) !== (iso as string).slice(0, 19)) {
     throw new RangeError(`${name} is not an ISO UTC instant (YYYY-MM-DDTHH:MM:SS[.mmm]Z or +00:00)`)
   }
   return t
+}
+
+/** An instant as the tablet SENDS it (contracts IsoSent `YYYY-MM-DDTHH:MM:SS.mmmZ`): the same instant, checked by `isoUtcMs`. */
+export function toSentIso(iso: string, name: string): string {
+  return new Date(isoUtcMs(iso, name)).toISOString()
 }
 
 /** Security fix round 1 (M-1): every bill checked exactly as dayo 0066 checks it (so a Z that dayo would reject
