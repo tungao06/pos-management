@@ -138,6 +138,27 @@ describe('CloseShiftScreen (D52 Q3b-3 · D101 · D102)', () => {
     expect(screen.queryByTestId('count-expected')).toBeNull() // still blind — the review never opened
   })
 
+  // Task 14 · carried item 9b (Task 16): CLOCK_AHEAD offers "ข้ามการตรวจเวลาที่ล้ำ" — the risk shown before the
+  // PIN, the skipped counts listed after.
+  it('CLOCK_AHEAD offers skipCountFloor: shows the risk before confirming, lists the skipped counts after', async () => {
+    const api = fakeApi({
+      finishCount: vi.fn(async () => {
+        throw new PosError('BAD_INPUT', 'CLOCK_AHEAD: นาฬิกาเครื่องล้ำเวลาจริง')
+      }),
+    })
+    render(<CloseShiftScreen />, { api, session })
+    await user.click(screen.getByTestId('count-finish'))
+    await user.click(await screen.findByTestId('skip-count-floor-open'))
+    expect(screen.getByText(TH.skipCountFloorWarning)).toBeVisible()
+    await user.click(screen.getByTestId('approval-owner-DCm'))
+    await user.type(screen.getByTestId('approval-pin'), '2222')
+    await user.type(screen.getByTestId('approval-reason'), 'นาฬิกาผิด')
+    await user.click(screen.getByTestId('approval-ok'))
+    expect(await screen.findByTestId('skip-count-floor-done')).toHaveTextContent(TH.skipCountFloorDone(1))
+    expect(api.skipCountFloor).toHaveBeenCalledWith({ approverUserId: 'u2', approverPin: '2222', reason: 'นาฬิกาผิด' })
+    expect(screen.queryByTestId('skip-count-floor-open')).toBeNull() // the refusal is cleared
+  })
+
   it('fix round 1 item 5 (security): SHIFT_CHANGED then confirming with no retype saves what is shown (0), never the stale count', async () => {
     let calls = 0
     const confirmCount = vi.fn(async () => {

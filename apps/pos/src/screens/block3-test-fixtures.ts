@@ -10,7 +10,7 @@ export function status(over: Partial<SyncStatusDto> = {}): SyncStatusDto {
   return {
     linked: true, apiState: 'ok', maskedKey: 'dayo_…abcd', baseUrl: 'http://localhost:8787/api/v1', clockSkewMs: 0, clockWarning: false,
     pricingMismatch: false, pricingCommit: null, catalogVersion: 42, catalogCheckedAt: '2026-09-25T03:00:00.000Z', catalogError: null,
-    lastPushAt: '2026-09-25T03:00:00.000Z', pendingBills: 0, problemBills: 0, oldestPendingAt: null, pendingOver24h: false, priceDiffBills: 0,
+    lastPushAt: '2026-09-25T03:00:00.000Z', pendingSyncRows: 0, problemSyncRows: 0, oldestPendingAt: null, pendingOver24h: false, priceDiffBills: 0,
     clockFarAheadBills: 0, scopeWait: null, shiftDataConflict: false, centralMismatchBills: 0, shiftLaneHeld: null, ...over,
   }
 }
@@ -85,6 +85,9 @@ export function fakeApi(over: Record<string, unknown> = {}): Record<string, unkn
     countSummary: vi.fn(async () => summary()),
     confirmCount: vi.fn(async () => ({ countId: 'c1', z: null })),
     issueZ: vi.fn(async () => ({ id: 'z1', shiftId: 's1', createdAt: '2026-09-25T05:10:00.000Z', hash: 'ab'.repeat(32), hashOk: true, snapshot: null })),
+    // Task 14 · carried items 9a/9b (Task 16)
+    keepShiftLocal: vi.fn(async () => ({ shiftId: 's1', closedKeys: [], sentKeys: [], botWindow: null })),
+    skipCountFloor: vi.fn(async () => ({ skipped: [{ countedAt: '2026-09-22T05:00:00.000Z', shiftId: 's0' }], botBillsRisk: 'double_or_missed' as const })),
     ...over,
   }
 }

@@ -2,12 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
 import { posErrorCode } from '../api/errors'
-import type { CountSummaryDto, IssueZInput } from '../api/types'
+import type { CountSummaryDto, IssueZInput, OwnerApproval } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, issueZKey, useBootstrap, zKey, zListKey } from '../app/queries'
 import { errorMessage } from '../ui/errors'
 import { TH } from '../ui/th'
 import { CountReview } from './CountReview'
+import { OwnerApprovalDialog } from './OwnerApprovalDialog'
 
 /**
  * D101 step 3 (spec §6.8): once online again, a counted shift's Z is issued from its already-saved count —
@@ -27,6 +28,9 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
   const [chainBroken, setChainBroken] = useState(false)
   const [chainCentralZNo, setChainCentralZNo] = useState<number | null>(null)
   const [botCashError, setBotCashError] = useState<string | null>(null)
+  // Task 14 · carried item 9a (Task 16): a central shift whose Z can never be issued with dayo (E4 keeps failing
+  // here, BOT_CASH_REQUIRED) — the owner keeps it on the tablet for good so R7 stops holding every later Z.
+  const [keepDialogOpen, setKeepDialogOpen] = useState(false)
 
   const load = useQuery({
     queryKey: issueZKey(shiftId),
@@ -43,6 +47,14 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
     },
   })
 
+  const keepShiftLocal = useMutation({
+    mutationFn: (approval: OwnerApproval) => api.keepShiftLocal({ ...approval, shiftId }),
+    onSuccess: async () => {
+      setKeepDialogOpen(false)
+      await Promise.all([queryClient.invalidateQueries({ queryKey: bootstrapKey }), queryClient.invalidateQueries({ queryKey: issueZKey(shiftId) })])
+    },
+  })
+
   const issueZ = useMutation({
     mutationFn: (input: IssueZInput) => api.issueZ(input),
     onSuccess: async () => {
@@ -56,9 +68,7 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
       const code = posErrorCode(e)
       if (code === 'Z_CHAIN_BROKEN') {
         const detail = e instanceof Error ? e.message.slice(code.length + 2) : ''
-        // Task 13 (parallel worktree, not merged yet) adds `centralLastZNo?: number | null` to `BootstrapState` —
-        // read defensively so this screen compiles today and picks up the real field once that merges.
-        const centralLastZNo: number | null | undefined = (boot.data as unknown as { centralLastZNo?: number | null | undefined } | undefined)?.centralLastZNo
+        const centralLastZNo = boot.data?.centralLastZNo ?? null
         setChainBroken(true)
         setChainCentralZNo(detail === 'central' && centralLastZNo != null ? centralLastZNo : null)
         setError(null)
@@ -130,6 +140,26 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
         <button type="button" data-testid="z-retry" onClick={() => void load.refetch()}>
           {TH.retry}
         </button>
+        {/* Task 14 · carried item 9a (Task 16): shown prominently right where BOT_CASH_REQUIRED is stuck. */}
+        <button type="button" className="banner error" data-testid="keep-shift-local-open" onClick={() => setKeepDialogOpen(true)}>
+          {TH.keepShiftLocalButton}
+        </button>
+        {keepDialogOpen && (
+          <OwnerApprovalDialog
+            title={TH.keepShiftLocalButton}
+            owners={owners}
+            defaultApproverId={null}
+            busy={keepShiftLocal.isPending}
+            error={keepShiftLocal.isError ? errorMessage(keepShiftLocal.error) : null}
+            extra={
+              <p role="alert" className="error">
+                {TH.keepShiftLocalWarning}
+              </p>
+            }
+            onSubmit={(approval) => keepShiftLocal.mutate(approval)}
+            onClose={() => setKeepDialogOpen(false)}
+          />
+        )}
       </main>
     )
   }

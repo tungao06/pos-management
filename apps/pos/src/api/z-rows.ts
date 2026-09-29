@@ -1,6 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
+import type { ShiftSyncMode } from '@dayo/contracts'
 import { MAX_ZNO_LIST_LENGTH, recomputeZChainLenient, zReportHash, type LenientZEntry, type SalesSummary } from '@dayo/domain'
 import { DAYO_KEYS, readKey, writeKey } from '../sync/state'
 import type { StoredZSnapshot, ZReportDto } from './types'
@@ -78,10 +79,10 @@ export function toZReportDto(row: ZRawRow): ZReportDto {
  * restore/re-seed of a device's database from the server (Postgres has no `rowid`) must insert its Z rows back in
  * `zNo` (or `created_at`) order. Getting this wrong would misidentify the "previous Z" — but the `zNo === row
  * count` check below still catches it as a *false* `Z_CHAIN_BROKEN`, never as silent data loss. */
-export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRawRow[]> {
+export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<(ZRawRow & { syncMode: ShiftSyncMode })[]> {
   const rowid = sql`"z_report"."rowid"`
   return db
-    .select({ id: s.zReport.id, shiftId: s.zReport.shiftId, hash: s.zReport.hash, createdAt: s.zReport.createdAt, snapshotText: sql<string>`${s.zReport.snapshotJson}` })
+    .select({ id: s.zReport.id, shiftId: s.zReport.shiftId, hash: s.zReport.hash, createdAt: s.zReport.createdAt, snapshotText: sql<string>`${s.zReport.snapshotJson}`, syncMode: s.shift.syncMode })
     .from(s.zReport)
     .innerJoin(s.shift, eq(s.shift.id, s.zReport.shiftId))
     .where(eq(s.shift.deviceId, deviceId))

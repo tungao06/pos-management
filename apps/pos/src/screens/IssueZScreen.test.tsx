@@ -30,6 +30,26 @@ describe('IssueZScreen (D101 step 3)', () => {
     expect(screen.getByText(TH.errBotCashRequired)).toBeVisible()
   })
 
+  // Task 14 · carried item 9a (Task 16): E4 stuck (BOT_CASH_REQUIRED) offers "เก็บกะนี้ไว้ในเครื่อง" prominently.
+  it('BOT_CASH_REQUIRED offers keepShiftLocal with the exact warning, then reloads as local-only', async () => {
+    const api = fakeApi({
+      fetchBotCash: vi.fn(async () => { throw new Error('OFFLINE: network') }),
+      countSummary: vi
+        .fn(async () => summary({ includesBotCash: false, bot: null }))
+        .mockResolvedValueOnce(summary({ includesBotCash: false, bot: null }))
+        .mockResolvedValueOnce(summary({ syncMode: 'local_only', includesBotCash: false, bot: null })),
+    })
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    await user.click(await screen.findByTestId('keep-shift-local-open'))
+    expect(screen.getByText(TH.keepShiftLocalWarning)).toBeVisible()
+    await user.click(screen.getByTestId('approval-owner-TungAo'))
+    await user.type(screen.getByTestId('approval-pin'), '1111')
+    await user.type(screen.getByTestId('approval-reason'), 'E4 ล่มถาวร')
+    await user.click(screen.getByTestId('approval-ok'))
+    await waitFor(() => expect(api.keepShiftLocal).toHaveBeenCalledWith({ approverUserId: 'u1', approverPin: '1111', reason: 'E4 ล่มถาวร', shiftId: 's1' }))
+    expect(await screen.findByTestId('count-expected')).toBeVisible() // local_only now — the count review opens
+  })
+
   it('fix round 1 item 1: sends the bank-app total typed here too', async () => {
     const api = fakeApi()
     render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })

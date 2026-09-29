@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState, type JSX } from 'react'
-import { posErrorCode } from '../api/errors'
-import type { ConfirmCountInput } from '../api/types'
+import { isClockAheadCountError, posErrorCode } from '../api/errors'
+import type { ConfirmCountInput, OwnerApproval, SkipCountFloorResult } from '../api/types'
 import { useApi } from '../app/api-context'
 import { useCart } from '../app/cart-context'
 import { bootstrapKey, countSummaryKey, ordersKey, useBootstrap, zListKey } from '../app/queries'
@@ -10,6 +10,7 @@ import { useSession } from '../app/session'
 import { errorMessage } from '../ui/errors'
 import { TH } from '../ui/th'
 import { CountReview } from './CountReview'
+import { OwnerApprovalDialog } from './OwnerApprovalDialog'
 
 /**
  * D101 (spec 04 §6.8 · §4.10): "นับเสร็จ" (finishCount) freezes the open shift → `countSummary` shows the review,
@@ -38,6 +39,11 @@ export function CloseShiftScreen(): JSX.Element {
   const [confirmError, setConfirmError] = useState<string | null>(null)
   const [botCashError, setBotCashError] = useState<string | null>(null)
   const [savedOffline, setSavedOffline] = useState<string | null>(null) // the shiftId of a count confirmed offline (z: null)
+  // Task 14 · carried item 9b (Task 16): a far-ahead count of this device floors every later one — the owner's
+  // way past it (`skipCountFloor`, PIN + reason, the risk shown before confirming).
+  const [clockAheadBlocked, setClockAheadBlocked] = useState(false)
+  const [skipDialogOpen, setSkipDialogOpen] = useState(false)
+  const [skipResult, setSkipResult] = useState<SkipCountFloorResult | null>(null)
   // SHIFT_CHANGED (D54): bumped to remount `CountReview` fresh (`key`) — the typed count, chosen approver and
   // reason are all discarded, same as the old screen's "count again, blind" (review kept this behaviour deliberately).
   const [resetNonce, setResetNonce] = useState(0)
@@ -56,11 +62,27 @@ export function CloseShiftScreen(): JSX.Element {
     mutationFn: () => api.finishCount({ actorUserId: user?.id ?? '' }),
     onSuccess: (r) => {
       setConfirmError(null)
+      setClockAheadBlocked(false)
       setShiftId(r.shiftId)
       setCounted(true)
       setBlind(false)
     },
-    onError: (e) => setConfirmError(errorMessage(e)),
+    onError: (e) => {
+      setConfirmError(errorMessage(e))
+      setClockAheadBlocked(isClockAheadCountError(e))
+    },
+  })
+
+  const skipCountFloor = useMutation({
+    mutationFn: (approval: OwnerApproval) => api.skipCountFloor(approval),
+    onSuccess: async (r) => {
+      setSkipResult(r)
+      setSkipDialogOpen(false)
+      setClockAheadBlocked(false)
+      setConfirmError(null)
+      await queryClient.invalidateQueries({ queryKey: bootstrapKey })
+      if (shiftId !== null) await queryClient.invalidateQueries({ queryKey: countSummaryKey(shiftId) })
+    },
   })
 
   const summaryQuery = useQuery({
@@ -113,18 +135,17 @@ export function CloseShiftScreen(): JSX.Element {
       const code = posErrorCode(e)
       if (code === 'Z_CHAIN_BROKEN') {
         const detail = e instanceof Error ? e.message.slice(code.length + 2) : ''
-        // Task 13 (parallel worktree, not merged yet) adds `centralLastZNo?: number | null` to `BootstrapState`
-        // (apps/pos/src/api/types.ts) — read defensively so this screen compiles today and picks up the real
-        // field once that merges; remove this cast then. Only surfaced in this Z_CHAIN_BROKEN "central" branch,
-        // never as a general status figure.
-        const centralLastZNo: number | null | undefined = (boot.data as unknown as { centralLastZNo?: number | null | undefined } | undefined)?.centralLastZNo
+        // Task 13 (ruling R9): shown only in this Z_CHAIN_BROKEN "central" branch, never as a general status figure.
+        const centralLastZNo = boot.data?.centralLastZNo ?? null
         setChainBroken(true)
         setChainCentralZNo(detail === 'central' && centralLastZNo != null ? centralLastZNo : null)
         setConfirmError(null)
+        setClockAheadBlocked(false)
         return
       }
       setChainBroken(false)
       setConfirmError(errorMessage(e))
+      setClockAheadBlocked(isClockAheadCountError(e))
       if (code === 'NO_OPEN_SHIFT' || code === 'SHIFT_NOT_COUNTING') {
         void queryClient.invalidateQueries({ queryKey: bootstrapKey })
       }
@@ -183,6 +204,34 @@ export function CloseShiftScreen(): JSX.Element {
             {TH.zBlockedGo}
           </button>
         </p>
+      )}
+      {/* Task 14 · carried item 9b (Task 16): a far-ahead count of this device blocks counting/Z until the owner
+          skips it — prominent right where CLOCK_AHEAD refused "นับเสร็จ"/"ยืนยัน". */}
+      {clockAheadBlocked && (
+        <button type="button" className="banner error" data-testid="skip-count-floor-open" onClick={() => setSkipDialogOpen(true)}>
+          {TH.skipCountFloorButton}
+        </button>
+      )}
+      {skipResult !== null && (
+        <p className="badge" data-testid="skip-count-floor-done">
+          {TH.skipCountFloorDone(skipResult.skipped.length)} ({skipResult.skipped.map((s) => s.countedAt).join(', ')})
+        </p>
+      )}
+      {skipDialogOpen && (
+        <OwnerApprovalDialog
+          title={TH.skipCountFloorButton}
+          owners={(boot.data?.users ?? []).filter((u) => u.role === 'owner')}
+          defaultApproverId={user?.role === 'owner' ? user.id : null}
+          busy={skipCountFloor.isPending}
+          error={skipCountFloor.isError ? errorMessage(skipCountFloor.error) : null}
+          extra={
+            <p role="alert" className="error">
+              {TH.skipCountFloorWarning}
+            </p>
+          }
+          onSubmit={(approval) => skipCountFloor.mutate(approval)}
+          onClose={() => setSkipDialogOpen(false)}
+        />
       )}
       {botCashError !== null && (
         <p role="alert" className="error" data-testid="count-bot-cash-error">

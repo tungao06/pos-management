@@ -67,3 +67,13 @@ export function posErrorCode(e: unknown): PosErrorCode | null {
   const m = /^([A-Z_]+): /.exec(message)
   return m ? (m[1] as PosErrorCode) : null
 }
+
+/**
+ * Task 14 · carried item 9b (Task 16): `BAD_INPUT` whose detail starts with `CLOCK_AHEAD:` (rows.ts
+ * `clockAheadError`) — the tablet's own last count is more than 24 h ahead of the real time, floor-blocking every
+ * later count and Z until the owner skips it (`skipCountFloor`). Matched on the structured detail prefix, never by
+ * parsing the rest of the Thai text as free text (same rule as every other prefixed detail in this app).
+ */
+export function isClockAheadCountError(e: unknown): boolean {
+  return posErrorCode(e) === 'BAD_INPUT' && e instanceof Error && e.message.startsWith('BAD_INPUT: CLOCK_AHEAD:')
+}

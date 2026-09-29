@@ -6,7 +6,7 @@ import { openTestApi, sellCode } from './helpers/db'
 describe('bootstrap().sync (spec 04 §4.3, §6.7, §10.5 · D80)', () => {
   it('is healthy right after setup', async () => {
     const t = await openConnectedApi()
-    expect((await t.api.bootstrap()).sync).toMatchObject({ linked: true, apiState: 'ok', maskedKey: 'dayo_…cdef', clockWarning: false, pricingMismatch: false, catalogVersion: 42, pendingBills: 0, problemBills: 0, pendingOver24h: false, priceDiffBills: 0 })
+    expect((await t.api.bootstrap()).sync).toMatchObject({ linked: true, apiState: 'ok', maskedKey: 'dayo_…cdef', clockWarning: false, pricingMismatch: false, catalogVersion: 42, pendingSyncRows: 0, problemSyncRows: 0, pendingOver24h: false, priceDiffBills: 0 })
   })
   it('warns when the server clock is 6 minutes ahead', async () => {
     const t = await openConnectedApi()
@@ -18,7 +18,7 @@ describe('bootstrap().sync (spec 04 §4.3, §6.7, §10.5 · D80)', () => {
     const t = await openConnectedApi()
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     t.clock.advanceMs(25 * 3_600_000)
-    expect((await t.api.bootstrap()).sync).toMatchObject({ pendingBills: 1, pendingOver24h: true })
+    expect((await t.api.bootstrap()).sync).toMatchObject({ pendingSyncRows: 1, pendingOver24h: true })
   })
   it('counts a 1-satang difference from dayo (spec §4.3: every size is visible)', async () => {
     const t = await openConnectedApi()
@@ -32,7 +32,7 @@ describe('bootstrap().sync (spec 04 §4.3, §6.7, §10.5 · D80)', () => {
     await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })
     t.mock.setNow('2026-09-25T03:00:00.000Z')
     await t.api.syncNow()
-    expect((await t.api.bootstrap()).sync).toMatchObject({ clockFarAheadBills: 1, pendingBills: 1, problemBills: 0 })
+    expect((await t.api.bootstrap()).sync).toMatchObject({ clockFarAheadBills: 1, pendingSyncRows: 1, problemSyncRows: 0 })
   })
   it('shows a revoked key', async () => {
     const t = await openConnectedApi()
@@ -51,7 +51,7 @@ describe('bootstrap().sync (spec 04 §4.3, §6.7, §10.5 · D80)', () => {
   })
   it('a tablet not set up yet reports an empty, unlinked status', async () => {
     const t = await openTestApi()
-    expect((await t.api.bootstrap()).sync).toMatchObject({ linked: false, apiState: null, maskedKey: null, pendingBills: 0, clockWarning: false })
+    expect((await t.api.bootstrap()).sync).toMatchObject({ linked: false, apiState: null, maskedKey: null, pendingSyncRows: 0, clockWarning: false })
   })
   it('never shows a stored base URL the tablet would refuse (a restored backup) — not linked either (M3, fix round 1 item 6)', async () => {
     const t = await openConnectedApi()

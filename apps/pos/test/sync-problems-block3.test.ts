@@ -218,7 +218,7 @@ describe('owner remedies of block 3 (spec 04 §6.4)', () => {
     await t.api.recordCashMovement({ actorUserId: STAFF.TungAo, kind: 'PAID_OUT', amountSatang: 2_000, reason: 'น้ำแข็ง' })
     t.mock.override({ match: { key: `shift_open:${t.shift!.id}` }, verdict: { status: 'rejected', reason: 'CONFLICT', detail: 'key_changed: x' }, times: 1 })
     await pushOnce(ctx)
-    expect((await t.api.syncStatus())).toMatchObject({ shiftDataConflict: true, problemBills: 1 }) // one root cause, its child rolls up (carried item 2)
+    expect((await t.api.syncStatus())).toMatchObject({ shiftDataConflict: true, problemSyncRows: 1 }) // one root cause, its child rolls up (carried item 2)
     const [p] = await t.api.listSyncProblems(STAFF.TungAo)
     expect(p).toMatchObject({ kind: 'shift_open', orderId: null, shiftId: t.shift!.id, hint: 'shift_conflict', remedies: ['EXCLUDE'], children: [expect.objectContaining({ kind: 'cash_movement', reason: 'PARENT_REJECTED', remedies: [] })] })
     await t.api.excludeFromSync({ ...owner, outboxId: p!.outboxId })
@@ -357,7 +357,7 @@ describe('owner remedies of block 3 (spec 04 §6.4)', () => {
     for (const reason of ['PARENT_REJECTED', 'STUCK', 'CLOCK_AHEAD', '']) {
       const { t, p } = await rejected(reason, 'x')
       expect(p).toMatchObject({ reason: 'REJECTED', remedies: ['RETRY', 'CLOSE_OFF_CATALOG', 'EXCLUDE'] })
-      expect((await t.api.syncStatus()).problemBills).toBe(1)
+      expect((await t.api.syncStatus()).problemSyncRows).toBe(1)
     }
   })
   it('fix round 1 item 5: an exists: order_no that is not a dayo order number is not taken — no acknowledge, "ปิดไว้ในเครื่อง" only', async () => {

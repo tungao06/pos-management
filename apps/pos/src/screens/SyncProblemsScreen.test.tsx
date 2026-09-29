@@ -43,7 +43,7 @@ function fakeProblemsApi(rows: SyncProblemDto[], overrides: Partial<PosApi> = {}
       centralLastZNo: null,
       sync: {
         linked: true, apiState: 'ok', maskedKey: 'dayo_…cdef', baseUrl: 'https://dayo.example/api/v1', clockSkewMs: 0, clockWarning: false, pricingMismatch: false, pricingCommit: null,
-        catalogVersion: 42, catalogCheckedAt: null, catalogError: null, lastPushAt: null, pendingBills: 0, problemBills: rows.length, oldestPendingAt: null, pendingOver24h: false,
+        catalogVersion: 42, catalogCheckedAt: null, catalogError: null, lastPushAt: null, pendingSyncRows: 0, problemSyncRows: rows.length, oldestPendingAt: null, pendingOver24h: false,
         priceDiffBills: 0, clockFarAheadBills: 0, scopeWait: null, shiftDataConflict: false, centralMismatchBills: 0, shiftLaneHeld: null,
       },
     })),

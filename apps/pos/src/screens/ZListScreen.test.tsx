@@ -32,7 +32,7 @@ describe('ZListScreen', () => {
   // read — the list must show "—" for those, not crash or print "null".
   it('shows — for every missing figure of a row whose snapshot could not be read', async () => {
     const rows: ZReportSummaryDto[] = [
-      { shiftId: 'shift-1', businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false },
+      { shiftId: 'shift-1', businessDate: null, zNo: null, closedAt: null, netSalesSatang: null, cashVarianceSatang: null, openedQuick: null, hashOk: false, chainWarning: false, syncMode: 'central' },
     ]
     renderZList({ listZReports: async () => rows })
 
@@ -44,5 +44,16 @@ describe('ZListScreen', () => {
     expect(spans[1]?.textContent?.trim()).toBe(`${TH.variance} —`) // cashVarianceSatang
     expect(spans[2]?.textContent).toBe(TH.zHashBad) // hashOk: false
     expect(row.querySelector('[data-testid="z-warn-0"]')).toBeNull() // chainWarning: false — unreadable, not a real chain break
+  })
+
+  // Task 16 · carried item 6: a Z whose shift never left the tablet shows the same badge the Z detail screen does.
+  it('shows the local-only badge for a Z whose shift never left the tablet', async () => {
+    const rows: ZReportSummaryDto[] = [
+      { shiftId: 'shift-1', businessDate: '2026-09-25', zNo: 1, closedAt: '2026-09-25T05:05:00.000Z', netSalesSatang: 4_500, cashVarianceSatang: 0, openedQuick: false, hashOk: true, chainWarning: false, syncMode: 'local_only' },
+      { shiftId: 'shift-2', businessDate: '2026-09-24', zNo: 2, closedAt: '2026-09-24T05:05:00.000Z', netSalesSatang: 4_500, cashVarianceSatang: 0, openedQuick: false, hashOk: true, chainWarning: false, syncMode: 'central' },
+    ]
+    renderZList({ listZReports: async () => rows })
+    expect(await screen.findByTestId('z-local-only-0')).toHaveTextContent(TH.zLocalOnly)
+    expect(screen.queryByTestId('z-local-only-1')).toBeNull()
   })
 })

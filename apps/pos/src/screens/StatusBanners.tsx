@@ -89,9 +89,9 @@ export function StatusBannersView({
           {TH.bannerClockFarAhead(sync.clockFarAheadBills)}
         </button>
       )}
-      {isOwner && sync.problemBills > 0 && (
+      {isOwner && sync.problemSyncRows > 0 && (
         <button type="button" className="banner error" data-testid="banner-problems" onClick={onGoProblems}>
-          {TH.bannerProblems(sync.problemBills)}
+          {TH.bannerProblems(sync.problemSyncRows)}
         </button>
       )}
       {/* ก้อน 3 (Task 14 spec §6.2 m1 · R14, owner only): yellow at once, red after 24 h — closable ("ปิดไว้ในเครื่อง")
@@ -120,9 +120,9 @@ export function StatusBannersView({
           {TH.shiftLaneHeldBanner(sync.shiftLaneHeld.rows)}
         </button>
       )}
-      {sync.pendingBills > 0 && (
+      {sync.pendingSyncRows > 0 && (
         <span className="badge" data-testid="badge-pending">
-          {TH.pendingSync(sync.pendingBills)}
+          {TH.pendingSync(sync.pendingSyncRows)}
         </span>
       )}
       {zWaiting.length > 0 && (

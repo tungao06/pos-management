@@ -61,8 +61,12 @@ export type SyncStatusDto = {
   catalogCheckedAt: string | null
   catalogError: string | null
   lastPushAt: string | null
-  pendingBills: number
-  problemBills: number
+  /** Task 16 · carried item 5: renamed from `pendingBills` — a pending item is a bill OR a shift-lane row
+   * (`shift_open`/`cash_movement`/`cash_count`/`shift_close`), one per shift_id/pos_order_id (D50 Q3-26). */
+  pendingSyncRows: number
+  /** Task 16 · carried item 5: renamed from `problemBills` — same "bill or shift-lane row" counting rule, dead
+   * rows only, one per ROOT cause (a `PARENT_REJECTED` child never counted on its own). */
+  problemSyncRows: number
   oldestPendingAt: string | null
   pendingOver24h: boolean
   /** Bills whose dayo computed_total differs from ours by any amount (spec §4.3). */
@@ -428,6 +432,10 @@ export type ZReportSummaryDto = {
   hashOk: boolean
   /** This Z was closed after acknowledging a previous Z that failed its hash (Q3b-11 · D53); false when unreadable. */
   chainWarning: boolean
+  /** Task 14/16 (carried item 6): its shift's own `syncMode` — 'local_only' shows "ใบปิดกะนี้เก็บในเครื่องเท่านั้น"
+   * on the list, same badge the Z detail screen already shows (`TH.zLocalOnly`) — read from the shift row itself
+   * (never from the snapshot, which never carried it). */
+  syncMode: ShiftSyncMode
 }
 
 /** The raw SQLite file of this device (spec §11 · spike I3 `exportFile`) and the latest Z it contains. */

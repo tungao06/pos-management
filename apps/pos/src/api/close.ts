@@ -355,6 +355,7 @@ export async function listZReports(db: RemoteDb): Promise<ZReportSummaryDto[]> {
       openedQuick: safeBoolOrNull(snap?.openedQuick),
       hashOk: z.hashOk,
       chainWarning: snap?.chainWarning != null,
+      syncMode: row.syncMode,
     }
   })
 }

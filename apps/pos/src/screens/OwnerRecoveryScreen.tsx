@@ -68,6 +68,17 @@ export function OwnerRecoveryScreen(): JSX.Element {
         <li>{TH.ownerRecoveryStep2}</li>
         <li>{TH.ownerRecoveryStep3}</li>
       </ol>
+      {/* Task 14 · carried items 8/9 (Task 16): "เก็บกะนี้ไว้ในเครื่อง"/"ข้ามการตรวจเวลาที่ล้ำ" both still need an
+          owner PIN that already works — this screen exists only because none does. Reachable from here as a
+          pointer to where an owner whose PIN still works actually uses them (the status page's own banners point
+          at the "ส่งไม่ผ่าน"/close-shift/issue-Z screens that carry the real PIN dialog), not a PIN flow
+          duplicated on this screen itself. */}
+      <p>
+        {TH.ownerRecoveryOtherToolsHint}{' '}
+        <button type="button" data-testid="owner-recovery-status-link" onClick={() => void navigate({ to: '/status' })}>
+          {TH.statusTitle}
+        </button>
+      </p>
       {dayoBaseUrl === null ? (
         <p role="alert">{TH.ownerRecoveryNoAddress}</p>
       ) : (

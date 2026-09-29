@@ -101,7 +101,7 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
     [{ apiState: 'forbidden' as const }, 'banner-key-forbidden'],
     [{ catalogError: 'อ่านไม่ได้' }, 'banner-catalog'],
     [{ pendingOver24h: true }, 'banner-stale-queue'],
-    [{ pendingBills: 3 }, 'badge-pending'],
+    [{ pendingSyncRows: 3 }, 'badge-pending'],
   ])('%o shows %s', async (sync, id) => {
     renderBanners({ ...BASE_SYNC, ...sync }, 'staff')
     expect(await screen.findByTestId(id)).toBeInTheDocument()
@@ -116,19 +116,19 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
   })
 
   it('pricingCommit: null shows no banner-pricing (only a files_sha256 mismatch does — spec §4.4 ข้อ 9)', async () => {
-    renderBanners({ ...BASE_SYNC, pricingCommit: null, pricingMismatch: false, pendingBills: 1 }, 'owner')
+    renderBanners({ ...BASE_SYNC, pricingCommit: null, pricingMismatch: false, pendingSyncRows: 1 }, 'owner')
     expect(await screen.findByTestId('badge-pending')).toBeInTheDocument() // proves the sync data has loaded
     expect(screen.queryByTestId('banner-pricing')).toBeNull()
   })
 
   it('shows banner-clock-far-ahead and banner-problems to the owner, with the right counts', async () => {
-    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 2, problemBills: 5 }, 'owner')
+    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 2, problemSyncRows: 5 }, 'owner')
     expect(await screen.findByTestId('banner-clock-far-ahead')).toHaveTextContent('2')
     expect(screen.getByTestId('banner-problems')).toHaveTextContent('5')
   })
 
   it('ruling N5: staff sees neither banner-clock-far-ahead nor banner-problems, nor the counts', async () => {
-    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 2, problemBills: 5, pendingBills: 1 }, 'staff')
+    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 2, problemSyncRows: 5, pendingSyncRows: 1 }, 'staff')
     expect(await screen.findByTestId('badge-pending')).toBeInTheDocument() // proves the sync data has loaded
     expect(screen.queryByTestId('banner-clock-far-ahead')).toBeNull()
     expect(screen.queryByTestId('banner-problems')).toBeNull()
@@ -137,14 +137,14 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
   })
 
   it('a manager sees neither owner-only banner either', async () => {
-    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 1, problemBills: 1, pendingBills: 1 }, 'manager')
+    renderBanners({ ...BASE_SYNC, clockFarAheadBills: 1, problemSyncRows: 1, pendingSyncRows: 1 }, 'manager')
     expect(await screen.findByTestId('badge-pending')).toBeInTheDocument()
     expect(screen.queryByTestId('banner-clock-far-ahead')).toBeNull()
     expect(screen.queryByTestId('banner-problems')).toBeNull()
   })
 
   it('clicking banner-problems navigates toward /sync-problems (owner)', async () => {
-    renderBanners({ ...BASE_SYNC, problemBills: 1 }, 'owner')
+    renderBanners({ ...BASE_SYNC, problemSyncRows: 1 }, 'owner')
     const btn = await screen.findByTestId('banner-problems')
     fireEvent.click(btn) // just proves it is clickable — navigation itself is mocked in this suite
   })

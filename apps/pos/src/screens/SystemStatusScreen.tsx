@@ -127,13 +127,13 @@ export function SystemStatusScreen(): JSX.Element {
               : TH.statusPricingCommitLabel(sync.pricingCommit)}
         </p>
         <p data-testid="status-last-push">{sync.lastPushAt === null ? TH.statusLastPushNever : TH.statusLastPush(fmt(sync.lastPushAt) ?? '—')}</p>
-        <p data-testid="status-pending">{TH.statusPendingLine(sync.pendingBills)}</p>
+        <p data-testid="status-pending">{TH.statusPendingLine(sync.pendingSyncRows)}</p>
         {isOwner ? (
           <button type="button" data-testid="status-problems-link" onClick={() => void navigate({ to: '/sync-problems' })}>
-            {TH.statusProblemsLine(sync.problemBills)}
+            {TH.statusProblemsLine(sync.problemSyncRows)}
           </button>
         ) : (
-          <p data-testid="status-problems">{TH.statusProblemsLine(sync.problemBills)}</p>
+          <p data-testid="status-problems">{TH.statusProblemsLine(sync.problemSyncRows)}</p>
         )}
         {isOwner ? (
           <button type="button" data-testid="status-price-diff-link" onClick={() => void navigate({ to: '/price-diffs' })}>
