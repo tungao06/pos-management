@@ -26,11 +26,30 @@ const SETUP: Partial<Record<string, (m: MockDayo, fx: Fx) => void>> = {
     m.closePromotion('9f8e0000-0000-4000-8000-000000000001', '2026-09-25T03:00:00.000Z') // dayo's promotion_status_history row
     m.setNextOrderNo('2026-09-25', 62)
   },
+  // plan 10 Task 5: the bill numbers dayo gave the two manual-promotion bills (the fixture's order_no)
+  'e2-order-manual-promo-accepted': (m) => m.setNextOrderNo('2026-09-25', 15),
+  'e1-catalog-changed-old-dayo': (m) => m.preloadZ({ zNo: 41, hash: 'ab'.repeat(32), countedAt: '2026-09-24T12:00:00.000Z' }), // as e1-catalog-changed-block3
   'e2-row-server-error': (m) => {
     m.override({ match: { key: 'order:8c9d0e1f-2a3b-4c4d-8e5f-6a7b8c9d0e1f' }, verdict: { status: 'deferred', reason: 'SERVER_ERROR', detail: 'SQLSTATE XX000' }, times: 1 })
     m.setNextOrderNo('2026-09-25', 51)
     m.seedCentralOrders([{ order_no: 'L260925-049', sale_date: '2026-09-25', status: 'ok', source: 'line', external_ref: null, version: 1, channel: 'store', payment: 'qr', totals: { items_subtotal: 35, items_discount: 0, bill_discount: 0, total: 35, fee: 0 }, amount_mismatch: false, updated_at: null, sold_at: '2026-09-25T07:55:00+00:00', created_by_name: 'TungAo' } satisfies CentralOrder])
   },
+}
+
+/**
+ * Plan 10 Task 5: the fixtures recorded on dayo f4cda56 (ADR-0069 phase 1 shipped · rule versions [1, 2] · manual promotion
+ * fields) replay on a mock playing that release; e1-catalog-changed-old-dayo on one playing dayo 12885fe (block 3, no rules).
+ */
+const F4CDA56 = new Set(['e1-catalog-changed-promo-rules', 'e1-catalog-unchanged-promo-rules', 'e2-order-manual-promo-accepted', 'e2-order-manual-reason-required'])
+const LEGACY_KEYS = ['kind', 'params', 'daysOfWeek', 'timeFrom', 'timeTo', 'stackable']
+/**
+ * dayo's tables behind e1-catalog-changed-promo-rules: the promotions as the owner saves them (rules only) — the old-shape
+ * columns the fixture shows must come from the mock's own derivation (dayo's promoToLegacy), not from the fixture.
+ */
+function f4cda56Catalog(): unknown {
+  const d = structuredClone((loadContractFixture('e1-catalog-changed-promo-rules').response.body as { data: { catalog: { promotions: Record<string, unknown>[] } } }).data)
+  d.catalog.promotions = d.catalog.promotions.map((p) => Object.fromEntries(Object.entries(p).filter(([k]) => !LEGACY_KEYS.includes(k))))
+  return d
 }
 
 function mockFor(fx: Fx): MockDayo {
@@ -49,6 +68,8 @@ function mockFor(fx: Fx): MockDayo {
     apiKey: 'dayo_fixture_key_0001', origins: String(fx.env['POS_ORIGINS'] ?? '').split(','), now, mode,
     retryAfterSec: auth?.retry_after ?? 30, scopes,
     ...(fx.name === 'e1-catalog-changed' ? { catalog: data as never } : {}),
+    ...(F4CDA56.has(fx.name) ? { block3: true, promoRules: { versions: [1, 2], manualFields: true }, catalog: f4cda56Catalog() as never } : {}),
+    ...(fx.name === 'e1-catalog-changed-old-dayo' ? { block3: true, catalog: (loadContractFixture('e1-catalog-changed').response.body as { data: never }).data } : {}),
     ...(manifest === undefined ? {} : { pricing: manifest }),
     ...(fx.name === 'e3-orders-today' ? { seedOrders: (data as unknown as CentralOrder[]) } : {}),
   })
@@ -57,8 +78,18 @@ function mockFor(fx: Fx): MockDayo {
 }
 
 const BLOCK3 = new Set<string>(BLOCK3_FIXTURE_NAMES) // replayed on the block 3 mock in fixtures-replay.test.ts
-const PROMO_RULES = new Set<string>(PROMO_RULES_FIXTURE_NAMES) // plan 10: the mock plays dayo f4cda56 from Task 5 on, which replays them
-for (const file of listContractFixtures().filter((f) => !BLOCK3.has(basename(f, '.json')) && !PROMO_RULES.has(basename(f, '.json')))) {
+const PROMO_RULES = new Set<string>(PROMO_RULES_FIXTURE_NAMES)
+/** dayo does not sort supported_fields (0066:603-606) — sets, as fixtures-replay.test.ts compares them; used for the plan 10 files (block 3 lists). */
+function sortedFields(body: unknown): unknown {
+  const b = structuredClone(body) as { data?: { supported_fields?: Record<string, unknown[]> } }
+  const f = b.data?.supported_fields
+  if (f !== undefined) for (const k of Object.keys(f)) f[k] = [...f[k]!].sort()
+  return b
+}
+it('every plan 10 promo-rule fixture is replayed here', () => {
+  expect([...PROMO_RULES_FIXTURE_NAMES].sort()).toEqual([...F4CDA56, 'e1-catalog-changed-old-dayo'].sort())
+})
+for (const file of listContractFixtures().filter((f) => !BLOCK3.has(basename(f, '.json')))) {
   const fx = loadContractFixture(basename(file, '.json'))
   describe(`replay ${fx.name}`, () => {
     it('the mock answers exactly as the contract fixture says', async () => {
@@ -71,7 +102,9 @@ for (const file of listContractFixtures().filter((f) => !BLOCK3.has(basename(f, 
       for (const [h, v] of Object.entries(fx.response.headers ?? {})) expect(res.headers.get(h), h).toBe(v)
       for (const h of fx.response.headers_absent ?? []) expect(res.headers.get(h), h).toBeNull()
       const text = await res.text()
-      expect(text === '' ? undefined : JSON.parse(text)).toEqual(fx.response.body)
+      const got: unknown = text === '' ? undefined : JSON.parse(text)
+      if (PROMO_RULES.has(fx.name)) expect(sortedFields(got)).toEqual(sortedFields(fx.response.body))
+      else expect(got).toEqual(fx.response.body)
       void header
     })
   })
