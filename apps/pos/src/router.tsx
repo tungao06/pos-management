@@ -1,5 +1,5 @@
 import { createRootRoute, createRoute, createRouter, Outlet, useParams } from '@tanstack/react-router'
-import type { JSX } from 'react'
+import { useEffect, useState, type JSX } from 'react'
 import { RequireSession } from './app/guards'
 import { useBootstrap } from './app/queries'
 import { useSyncCycleSignal } from './app/useSyncCycleSignal'
@@ -197,9 +197,20 @@ function IssueZRoute(): JSX.Element {
   const { shiftId } = useParams({ from: '/shift/z/$shiftId' })
   const boot = useBootstrap()
   const waiting = boot.data?.zWaiting.find((w) => w.shiftId === shiftId) ?? null
-  if (boot.data === undefined) return <main className="page">{TH.loading}</main>
-  if (waiting === null) return <main className="page">{TH.errZNotFound}</main>
-  return <IssueZScreen shiftId={shiftId} countedSatang={waiting.countedSatang} />
+  // Task 17 fix: `issueZ`'s own success invalidates `bootstrapKey` (IssueZScreen.tsx) so the banner clears — but
+  // that same refetch drops this shift out of `zWaiting` a moment later, which used to unmount `IssueZScreen`
+  // (and its "เสร็จ" screen) mid-render, replacing it with `errZNotFound`. Once this route has found the shift
+  // waiting once, it keeps using that same `countedSatang` for as long as this route stays mounted — a genuinely
+  // unknown shiftId (never found even once) still shows `errZNotFound`, unchanged.
+  const [locked, setLocked] = useState<{ countedSatang: number } | null>(null)
+  useEffect(() => {
+    if (waiting !== null && locked === null) setLocked({ countedSatang: waiting.countedSatang })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- locked is the guard: only ever set once per mount
+  }, [waiting])
+  if (boot.data === undefined && locked === null) return <main className="page">{TH.loading}</main>
+  const found = waiting ?? locked
+  if (found === null) return <main className="page">{TH.errZNotFound}</main>
+  return <IssueZScreen shiftId={shiftId} countedSatang={found.countedSatang} />
 }
 const issueZRoute = createRoute({
   getParentRoute: () => rootRoute,

@@ -15,13 +15,15 @@ test('block2: a receipt conflict on A-000001 is fixed with a new receipt number,
   await expect(page.getByTestId('banner-problems')).toContainText('ส่งไม่ผ่าน 1 บิล', { timeout: 35_000 })
   await page.getByTestId('banner-problems').click()
   await expect(page).toHaveURL(/\/sync-problems$/)
-  await expect(page.getByTestId('problem-A-000001')).toBeVisible()
+  // Task 16: the row's testid is now `problem-<outboxId>` (always present, always unique) — no longer `problem-<receiptNo>`.
+  const row = page.locator('[data-testid^="problem-"]', { hasText: 'A-000001' })
+  await expect(row).toBeVisible()
   await page.getByTestId('remedy-renumber').click()
   await page.getByTestId(`approval-owner-${OWNER.name}`).click()
   await page.getByTestId('approval-reason').fill('เลขใบเสร็จชนกับบิลอื่น')
   await page.getByTestId('approval-pin').fill(OWNER.pin)
   await page.getByTestId('approval-ok').click()
-  await expect(page.getByTestId('problem-A-000001')).toHaveCount(0)
+  await expect(row).toHaveCount(0)
 
   await expect.poll(async () => (await mockState(request)).orders.map((o) => o.receiptNo)).toContain('A-000002')
 
