@@ -37,16 +37,25 @@ export type CashInputs = {
 }
 
 export function expectedCashSatang(x: CashInputs): number {
-  return (
-    x.openingFloatSatang +
-    x.cashSalesSatang -
-    x.voidRefundsSatang +
-    x.paidInSatang -
-    x.paidOutSatang -
-    x.dropsSatang -
-    x.drawerExpensesSatang +
-    x.botCashSatang
-  )
+  // Security fix round 1 (L-3): term by term, each term and each partial sum a safe integer — a sum that leaves
+  // the safe range part-way (or fractions that cancel out) must throw, not come back looking exact.
+  const terms: readonly [number, 1 | -1, string][] = [
+    [x.openingFloatSatang, 1, 'openingFloatSatang'],
+    [x.cashSalesSatang, 1, 'cashSalesSatang'],
+    [x.voidRefundsSatang, -1, 'voidRefundsSatang'],
+    [x.paidInSatang, 1, 'paidInSatang'],
+    [x.paidOutSatang, -1, 'paidOutSatang'],
+    [x.dropsSatang, -1, 'dropsSatang'],
+    [x.drawerExpensesSatang, -1, 'drawerExpensesSatang'],
+    [x.botCashSatang, 1, 'botCashSatang'],
+  ]
+  let expected = 0
+  for (const [term, sign, name] of terms) {
+    assertSafeInt(term, `cash.${name}`)
+    expected += sign * term
+    assertSafeInt(expected, 'expectedCashSatang')
+  }
+  return expected
 }
 
 function assertNonNegInt(n: number, name: string): void {
@@ -305,6 +314,61 @@ export type ZChainWarning = {
   centralLastZ?: { zNo: number; hash: string }
 }
 
+/** dayo 0066 `bot_bills`: at most 500 per Z (the same cap dayo applies — a longer list is rejected INVALID). */
+export const MAX_BOT_BILLS = 500
+/** dayo 0066 `bot_bills[].order_no` `^L[0-9]{6}-[0-9]{3,}$` — same pattern as contracts `BOT_ORDER_NO_RE` (copied: domain
+ * only imports types from contracts). */
+export const BOT_ORDER_NO_PATTERN = /^L\d{6}-\d{3,}$/
+/** dayo 0066 `bot_bills[].version` is an int4 1..2147483647. */
+const BOT_BILL_VERSION_MAX = 2_147_483_647
+/** Instants frozen into a Z: ISO-8601 UTC, `Z` or `+00:00` (dayo returns `…+00:00`, ruling P7), at most millisecond
+ * precision so comparing them with Date.parse is exact. */
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|\+00:00)$/
+
+/** Security fix round 1 (L-1): the form above, and a real calendar instant (Date.parse alone rolls 30 Feb or 24:00 over). */
+function isoUtcMs(iso: unknown, name: string): number {
+  const t = typeof iso === 'string' && ISO_UTC.test(iso) ? Date.parse(iso) : Number.NaN
+  if (Number.isNaN(t) || new Date(t).toISOString().slice(0, 19) !== (iso as string).slice(0, 19)) {
+    throw new RangeError(`${name} is not an ISO UTC instant (YYYY-MM-DDTHH:MM:SS[.mmm]Z or +00:00)`)
+  }
+  return t
+}
+
+/** Security fix round 1 (M-1): every bill checked exactly as dayo 0066 checks it (so a Z that dayo would reject
+ * INVALID forever is never frozen), duplicates looked for only after that, and each frozen bill rebuilt from an
+ * explicit field list — a stray caller property never reaches the snapshot or its hash. */
+function frozenBotBills(bills: unknown): ZBotBill[] {
+  if (!Array.isArray(bills)) throw new RangeError('botBills must be an array')
+  if (bills.length > MAX_BOT_BILLS) throw new RangeError(`at most ${MAX_BOT_BILLS} bot bills per Z (dayo 0066), got ${bills.length}`)
+  const out: ZBotBill[] = []
+  for (const raw of bills as unknown[]) {
+    if (typeof raw !== 'object' || raw === null) throw new RangeError('each bot bill must be an object')
+    const b = raw as Record<string, unknown>
+    const orderNo = b['orderNo']
+    if (typeof orderNo !== 'string' || !BOT_ORDER_NO_PATTERN.test(orderNo)) throw new RangeError(`bot bill orderNo must match ${BOT_ORDER_NO_PATTERN.source}, got ${JSON.stringify(orderNo)}`)
+    const version = b['version']
+    if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1 || version > BOT_BILL_VERSION_MAX) {
+      throw new RangeError(`bot bill ${orderNo} version must be a whole number 1..${BOT_BILL_VERSION_MAX}`)
+    }
+    const totalSatang = b['totalSatang']
+    if (typeof totalSatang !== 'number') throw new RangeError(`bot bill ${orderNo} totalSatang must be a number`)
+    assertNonNegInt(totalSatang, `bot bill ${orderNo} totalSatang`)
+    const source = b['source']
+    if (typeof source !== 'string') throw new RangeError(`bot bill ${orderNo} source must be a string`)
+    const soldAt = b['soldAt']
+    if (soldAt !== null && typeof soldAt !== 'string') throw new RangeError(`bot bill ${orderNo} soldAt must be a string or null`)
+    const createdByName = b['createdByName']
+    if (createdByName !== null && typeof createdByName !== 'string') throw new RangeError(`bot bill ${orderNo} createdByName must be a string or null`)
+    out.push({ orderNo, version, source, soldAt, totalSatang, createdByName })
+  }
+  const seen = new Set<string>()
+  for (const b of out) {
+    if (seen.has(b.orderNo)) throw new RangeError(`bot bill ${b.orderNo} counted twice`)
+    seen.add(b.orderNo)
+  }
+  return out
+}
+
 /** One bot/web cash bill as E4 returned it (spec §4.10 bot_bills) — frozen into the Z. */
 export type ZBotBill = { orderNo: string; version: number; source: string; soldAt: string | null; totalSatang: number; createdByName: string | null }
 /** spec §4.10 bot_window: the E4 window (after, until], until = the Z's countedAt. */
@@ -561,36 +625,40 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     }
     if (w.zNoGap !== undefined) assertNonNegInt(w.zNoGap, 'chainWarning.zNoGap') // 2026-09-21 · D55 (review R4-1, R4-2)
   }
-  const ms = (iso: string, name: string): number => {
-    const t = Date.parse(iso)
-    if (Number.isNaN(t)) throw new RangeError(`${name} is not an instant`)
-    return t
-  }
-  if (ms(input.countedAt, 'countedAt') < ms(input.openedAt, 'openedAt')) throw new RangeError('countedAt must not be before openedAt (D101)')
-  if (ms(input.closedAt, 'closedAt') < ms(input.countedAt, 'countedAt')) throw new RangeError('closedAt must not be before countedAt (spec §4.10 shift_close)')
-  const seenBot = new Set<string>()
-  let botSum = 0
-  for (const b of input.botBills) {
-    if (b.orderNo.trim() === '') throw new RangeError('bot bill needs an orderNo')
-    if (seenBot.has(b.orderNo)) throw new RangeError(`bot bill ${b.orderNo} counted twice`)
-    seenBot.add(b.orderNo)
-    assertNonNegInt(b.totalSatang, `bot bill ${b.orderNo} totalSatang`)
-    assertSafeInt(b.version, `bot bill ${b.orderNo} version`)
-    botSum += b.totalSatang
-  }
+  // Security fix round 1 (L-1): ISO UTC only, compared as instants.
+  const openedMs = isoUtcMs(input.openedAt, 'openedAt')
+  const countedMs = isoUtcMs(input.countedAt, 'countedAt')
+  const closedMs = isoUtcMs(input.closedAt, 'closedAt')
+  if (countedMs < openedMs) throw new RangeError('countedAt must not be before openedAt (D101)')
+  if (closedMs < countedMs) throw new RangeError('closedAt must not be before countedAt (spec §4.10 shift_close)')
+  const botBills = frozenBotBills(input.botBills)
+  let botWindow: ZBotWindow | null = null
   if (input.botWindow === null) {
-    if (input.botBills.length > 0 || input.cash.botCashSatang !== 0) throw new RangeError('bot bills need a bot window (ruling R6: a local-only Z has none)')
+    if (botBills.length > 0 || input.cash.botCashSatang !== 0) throw new RangeError('bot bills need a bot window (ruling R6: a local-only Z has none)')
   } else {
-    if (input.botWindow.until !== input.countedAt) throw new RangeError('botWindow.until must equal countedAt (spec §4.10 bot_window)')
-    if (ms(input.botWindow.after, 'botWindow.after') >= ms(input.botWindow.until, 'botWindow.until')) throw new RangeError('botWindow.after must be before until')
+    if (typeof input.botWindow !== 'object') throw new RangeError('botWindow must be {after, until} or null')
+    const afterMs = isoUtcMs(input.botWindow.after, 'botWindow.after')
+    const untilMs = isoUtcMs(input.botWindow.until, 'botWindow.until')
+    if (untilMs !== countedMs) throw new RangeError('botWindow.until must equal countedAt (spec §4.10 bot_window)')
+    if (afterMs >= untilMs) throw new RangeError('botWindow.after must be before until')
+    botWindow = { after: input.botWindow.after, until: input.botWindow.until } // explicit fields: nothing stray is frozen
   }
-  assertSafeInt(botSum, 'Σ botBills.totalSatang') // M-1
+  let botSum = 0
+  for (const b of botBills) {
+    botSum += b.totalSatang
+    assertSafeInt(botSum, 'Σ botBills.totalSatang') // M-1
+  }
   if (botSum !== input.cash.botCashSatang) throw new RangeError('Σ botBills.totalSatang must equal cash.botCashSatang (spec §4.10 bot_bills)')
   if (input.varianceAlertSatang < MIN_VARIANCE_ALERT_SATANG) throw new RangeError('varianceAlertSatang must be >= 1 satang (ruling R4)')
-  const cz = input.chainWarning?.centralLastZ
+  const cz: unknown = input.chainWarning?.centralLastZ
   if (cz !== undefined) {
-    assertSafeInt(cz.zNo, 'chainWarning.centralLastZ.zNo')
-    if (cz.zNo < 1 || !/^[0-9a-f]{64}$/.test(cz.hash)) throw new RangeError('chainWarning.centralLastZ needs zNo >= 1 and a 64-hex hash')
+    // Security fix round 1 (L-2): present = a real object naming exactly the Z this one continues (prev).
+    if (typeof cz !== 'object' || cz === null) throw new RangeError('chainWarning.centralLastZ must be {zNo, hash} when present')
+    const { zNo, hash } = cz as { zNo: unknown; hash: unknown }
+    if (typeof zNo !== 'number' || !Number.isSafeInteger(zNo) || zNo < 1 || typeof hash !== 'string' || !/^[0-9a-f]{64}$/.test(hash)) {
+      throw new RangeError('chainWarning.centralLastZ needs zNo >= 1 and a 64-hex hash')
+    }
+    if (zNo !== prevZNo) throw new RangeError(`chainWarning.centralLastZ.zNo must be the previous Z number ${prevZNo}, got ${zNo}`)
   }
   const expected = expectedCashSatang(input.cash)
   assertSafeInt(expected, 'expectedCashSatang') // M-1
@@ -616,8 +684,8 @@ export function buildZReport(input: ZInput, prev: { zNo: number; grandTotalSatan
     closedBy: input.closedBy,
     countedBy: input.countedBy,
     countedAt: input.countedAt,
-    botWindow: input.botWindow,
-    botBills: input.botBills,
+    botWindow,
+    botBills,
     sales: input.sales,
     cash: input.cash,
     countLines: tally.lines,
