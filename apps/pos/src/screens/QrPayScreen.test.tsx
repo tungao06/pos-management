@@ -96,7 +96,7 @@ describe('QrPayScreen — review round 2 item 1 (Medium): a clock-crossed promot
       vi.setSystemTime(new Date(BEFORE))
 
       const matchaLine: CartLineDraft = { code: 'Matcha Latte', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: 'Excellent', qty: 1, free: false, discountSatang: null, discountPercent: null, discountReason: null }
-      const matchaDraft: CartDraft = { channelCode: 'store', paymentCode: 'cash', lines: [matchaLine], billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false }
+      const matchaDraft: CartDraft = { channelCode: 'store', paymentCode: 'cash', lines: [matchaLine], billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: null }
       const matchaCart: CartState = { orderId: 'o1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, lines: [{ key: 'Matcha Latte|16 oz|50%|fresh|Excellent', code: 'Matcha Latte', nameTh: 'มัตฉะลาเต้', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: 'Excellent', qty: 1 }] }
 
       const dto = testSellCatalog()

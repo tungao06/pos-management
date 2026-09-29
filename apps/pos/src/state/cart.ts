@@ -96,5 +96,8 @@ export function toCartDraft(state: CartState): Omit<CartDraft, 'paymentCode'> {
     promoCode: state.promoCode,
     skipPromotionIds: [...state.skipPromotionIds],
     noPromotions: state.noPromotions,
+    // plan 10 T3: the cart state has no manual promotions yet (T9 adds the picker) — none picked
+    manualPromotionIds: [],
+    manualPromotionReason: null,
   }
 }

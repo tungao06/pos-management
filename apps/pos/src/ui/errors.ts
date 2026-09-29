@@ -80,6 +80,7 @@ const CART_ERROR_MESSAGES: Record<CartErrorCode, string> = {
   UNKNOWN_VARIANT: TH.errSizeClosed,
   GRADE_RULE: TH.errGradeRule,
   BAD_DISCOUNT: TH.errBadInput,
+  BAD_MANUAL_PROMOTION: TH.errBadManualPromotion,
 }
 
 /**
