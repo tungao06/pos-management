@@ -26,14 +26,18 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
   const [error, setError] = useState<string | null>(null)
   const [chainBroken, setChainBroken] = useState(false)
   const [chainCentralZNo, setChainCentralZNo] = useState<number | null>(null)
+  const [botCashError, setBotCashError] = useState<string | null>(null)
 
   const load = useQuery({
     queryKey: issueZKey(shiftId),
     queryFn: async (): Promise<CountSummaryDto> => {
       try {
         await api.fetchBotCash(shiftId)
-      } catch {
-        // ignored here — `countSummary.includesBotCash` is what decides the path (review item 1 of Task 12)
+        setBotCashError(null)
+      } catch (e) {
+        // fix round 2 item 2 (same as CloseShiftScreen): a plain OFFLINE means "no answer yet" — expected, silent —
+        // but anything else (DAYO_BAD_RESPONSE, CLOCK_AHEAD, …) is worth telling the owner about, not swallowed.
+        setBotCashError(posErrorCode(e) === 'OFFLINE' ? null : errorMessage(e))
       }
       return api.countSummary(shiftId)
     },
@@ -118,6 +122,11 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
         <p role="alert" className="error">
           {TH.errBotCashRequired}
         </p>
+        {botCashError !== null && (
+          <p role="alert" className="error" data-testid="count-bot-cash-error">
+            {botCashError}
+          </p>
+        )}
         <button type="button" data-testid="z-retry" onClick={() => void load.refetch()}>
           {TH.retry}
         </button>
@@ -128,6 +137,11 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
   return (
     <main className="page">
       <h1>{TH.zIssue}</h1>
+      {botCashError !== null && (
+        <p role="alert" className="error" data-testid="count-bot-cash-error">
+          {botCashError}
+        </p>
+      )}
       <CountReview
         summary={summary}
         online={online}

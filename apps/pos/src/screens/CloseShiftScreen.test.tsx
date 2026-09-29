@@ -168,7 +168,7 @@ describe('CloseShiftScreen (D52 Q3b-3 · D101 · D102)', () => {
     expect(confirmCount).toHaveBeenLastCalledWith(expect.objectContaining({ countLines: expect.arrayContaining([expect.objectContaining({ denominationSatang: 100, count: 0 })]) }))
   })
 
-  it('fix round 1 item 7: a countSummary refusal shows an error and a retry that asks again', async () => {
+  it('fix round 2 item 1: a countSummary refusal keeps the typed count (never unmounts CountReview) and stays blind through a retry', async () => {
     let calls = 0
     const countSummary = vi.fn(async () => {
       calls += 1
@@ -177,10 +177,19 @@ describe('CloseShiftScreen (D52 Q3b-3 · D101 · D102)', () => {
     })
     const api = fakeApi({ countSummary })
     render(<CloseShiftScreen />, { api, session })
+    await countBaht(615)
     await user.click(screen.getByTestId('count-finish'))
     expect(await screen.findByTestId('count-summary-retry')).toBeVisible()
+    expect(screen.getByTestId('count-input-1')).toHaveValue('615') // the count is not lost — CountReview stays mounted
+    expect(screen.queryByTestId('count-expected')).toBeNull()
+
     await user.click(screen.getByTestId('count-summary-retry'))
     await waitFor(() => expect(countSummary).toHaveBeenCalledTimes(2))
+    // the query itself recovered, but the review must not pop open on its own — D52 (old `setShown(null)`): the
+    // owner presses "นับเสร็จ" again to confirm they are looking at a real, current count.
+    expect(screen.queryByTestId('count-expected')).toBeNull()
+
+    await user.click(screen.getByTestId('count-finish'))
     expect(await screen.findByTestId('count-expected')).toBeVisible()
   })
 

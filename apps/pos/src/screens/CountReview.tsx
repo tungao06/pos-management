@@ -70,8 +70,11 @@ export function CountReview({
     if (summary === null || totalSatang === null) return setLocalError(TH.errCountFirst)
     if (askReason && reason.trim() === '') return setLocalError(TH.errVarianceReasonRequired)
     if (approverId === null) return setLocalError(TH.errNotOwner)
-    const bankQrTotalSatang = bankQrText.trim() === '' ? null : parseBahtInput(bankQrText)
-    if (bankQrText.trim() !== '' && bankQrTotalSatang === null) return setLocalError(TH.errBadInput)
+    // fix round 2 item 5: offline (z: null) the bank-app figure has nowhere to go — `ZSettle` only exists when a Z
+    // is actually being written, so it is always null here; the owner enters it on `/shift/z/$shiftId` instead,
+    // once online (the field itself is hidden below in that case, review item 5).
+    const bankQrTotalSatang = !online || bankQrText.trim() === '' ? null : parseBahtInput(bankQrText)
+    if (online && bankQrText.trim() !== '' && bankQrTotalSatang === null) return setLocalError(TH.errBadInput)
     setLocalError(null)
     onSubmit({ pin, approverUserId: approverId, reason: reason.trim() === '' ? null : reason, bankQrTotalSatang, lines })
   }
@@ -142,17 +145,21 @@ export function CountReview({
               void refunds · paid in/out · drops — the expected/variance pair above stays the one this screen owns,
               already checked against the domain formula), PromptPay (item 1 · D53 Q3b-12), negative bases, voids and
               the pending-sync count — every figure straight off `summary`, nothing recomputed here. */}
-          <DrawerTable cash={summary.cash} expectedSatang={summary.expectedCashSatang} p="count" hideExpected />
+          <DrawerTable cash={summary.cash} expectedSatang={summary.expectedCashSatang} p="count" hideExpected hideExpectedNote />
           <QrTable sales={summary.sales} p="count" />
           <NegativeBaseList items={summary.negativeBases} />
           <VoidList voids={summary.voids} p="count" />
           <p className="badge" data-testid="count-pending">
             {TH.pendingAtClose(summary.pendingSyncItems)}
           </p>
-          <label>
-            {TH.bankQrTotal}
-            <input data-testid="count-bank-qr" inputMode="decimal" value={bankQrText} onChange={(e) => setBankQrText(e.target.value)} />
-          </label>
+          {/* fix round 2 item 5: offline (z: null), nothing here is ever sent anywhere — the owner types the
+              bank-app figure on `/shift/z/$shiftId` instead, once online and a Z is actually being written. */}
+          {online && (
+            <label>
+              {TH.bankQrTotal}
+              <input data-testid="count-bank-qr" inputMode="decimal" value={bankQrText} onChange={(e) => setBankQrText(e.target.value)} />
+            </label>
+          )}
           {askReason && (
             <label>
               {TH.varianceReason} ({TH.varianceReasonHint(formatBaht(summary.varianceAlertSatang))})

@@ -69,6 +69,15 @@ export function CloseShiftScreen(): JSX.Element {
     enabled: shiftId !== null,
   })
 
+  // fix round 2 item 1: a countSummary refusal (SHIFT_NOT_COUNTING after some other tab closed it, a transient
+  // read failure, …) must not unmount `CountReview` — that threw away whatever the owner had already typed. Going
+  // blind (same D52 "count again" gate SHIFT_CHANGED uses) instead keeps the denomination inputs exactly as they
+  // were, shows the error + a retry inline, and — even once the retry succeeds — never pops the review back open
+  // by itself; "นับเสร็จ" still does that, same as every other blind → reviewed transition on this screen.
+  useEffect(() => {
+    if (summaryQuery.isError) setBlind(true)
+  }, [summaryQuery.isError])
+
   // ladder item 1 · fix round 1 item 8: a central shift whose stored E4 answer does not cover this count yet tries
   // fetchBotCash once — its own outcome never chooses the path (review item 1 of Task 12): only the countSummary
   // read right after does. But a failure worth telling the owner about (DAYO_BAD_RESPONSE, CLOCK_AHEAD, a far-ahead
@@ -146,22 +155,6 @@ export function CloseShiftScreen(): JSX.Element {
     )
   }
 
-  // fix round 1 item 7: a countSummary refusal (SHIFT_NOT_COUNTING after some other tab closed it, a transient
-  // read failure, …) gets its own message and a retry, instead of the review silently staying blank forever.
-  if (summaryQuery.isError) {
-    return (
-      <main className="page">
-        <h1>{TH.closeTitle}</h1>
-        <p role="alert" className="error">
-          {errorMessage(summaryQuery.error)}
-        </p>
-        <button type="button" data-testid="count-summary-retry" onClick={() => void summaryQuery.refetch()}>
-          {TH.retry}
-        </button>
-      </main>
-    )
-  }
-
   const summary = blind ? null : (summaryQuery.data ?? null)
   const online = summary !== null && summary.zBlockedBy === null && (summary.includesBotCash || summary.syncMode === 'local_only')
 
@@ -196,6 +189,16 @@ export function CloseShiftScreen(): JSX.Element {
           {botCashError}
         </p>
       )}
+      {summaryQuery.isError && (
+        <>
+          <p role="alert" className="error">
+            {errorMessage(summaryQuery.error)}
+          </p>
+          <button type="button" data-testid="count-summary-retry" onClick={() => void summaryQuery.refetch()}>
+            {TH.retry}
+          </button>
+        </>
+      )}
       <CountReview
         key={resetNonce}
         summary={summary}
@@ -220,7 +223,7 @@ export function CloseShiftScreen(): JSX.Element {
                 type="button"
                 className="primary"
                 data-testid="count-finish"
-                disabled={(!counted && finish.isPending) || (blind && summaryQuery.isFetching) || cart.state.lines.length > 0}
+                disabled={(!counted && finish.isPending) || (blind && (summaryQuery.isFetching || summaryQuery.isError)) || cart.state.lines.length > 0}
                 onClick={() => {
                   if (!counted) {
                     finish.mutate()
@@ -228,6 +231,7 @@ export function CloseShiftScreen(): JSX.Element {
                   }
                   // review already re-fetched (the SHIFT_CHANGED handler above invalidated it) — this only lifts
                   // the blind curtain back up, never re-runs finishCount on an already-counting shift.
+                  setConfirmError(null) // fix round 2 item 3: a lingering errShiftChanged must not follow the owner into the recount
                   setBlind(false)
                 }}
               >
