@@ -284,8 +284,34 @@ export const MAX_MANUAL_PROMOTIONS = 20
  */
 const MANUAL_REASON_BANNED: readonly (readonly [number, number])[] = [[0x7f, 0x9f], [0x200b, 0x200f], [0x202a, 0x202e], [0x2028, 0x2029], [0x2066, 0x2069]]
 const hasBannedReasonChar = (s: string): boolean => [...s].some((ch) => { const c = ch.codePointAt(0) ?? 0; return MANUAL_REASON_BANNED.some(([lo, hi]) => c >= lo && c <= hi) })
-/** 1–200 code points, one line, no invisible or direction-changing characters (dayo 0069 · docs/API.md:308). */
-export const ManualPromotionReason = Text200.refine((s) => !hasBannedReasonChar(s), 'no C1, zero-width, bidi or line/paragraph separator characters')
+/**
+ * dayo_trim_ws (0069:28-38): the characters dayo strips from both ends — \t\n\v\f\r, space, U+00A0, U+1680, U+2000–U+200A,
+ * U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF (= JS String.prototype.trim, written out so no engine can differ).
+ * All are BMP, so a UTF-16 unit never matches half a surrogate pair.
+ */
+const DAYO_TRIM_WS: readonly (readonly [number, number])[] = [
+  [0x09, 0x0d], [0x20, 0x20], [0xa0, 0xa0], [0x1680, 0x1680], [0x2000, 0x200a], [0x2028, 0x2029], [0x202f, 0x202f], [0x205f, 0x205f], [0x3000, 0x3000], [0xfeff, 0xfeff],
+]
+const isDayoWs = (unit: number): boolean => DAYO_TRIM_WS.some(([lo, hi]) => unit >= lo && unit <= hi)
+/**
+ * The text dayo keeps after trimming (dayo_trim_ws) — the ONE trim for manual_promotion_reason: the tablet freezes
+ * `trimWs(typed)`, so its reason equals what dayo stores byte for byte (dayo_draft_manual_reason, 0069:322-345).
+ */
+export function trimWs(s: string): string {
+  let start = 0
+  let end = s.length
+  while (start < end && isDayoWs(s.charCodeAt(start))) start++
+  while (end > start && isDayoWs(s.charCodeAt(end - 1))) end--
+  return s.slice(start, end)
+}
+/**
+ * 1–200 code points, one line, no invisible or direction-changing characters (dayo 0069 · docs/API.md:308) — and already
+ * trimmed with trimWs (fix round 1): a reason dayo trims down to nothing (NBSP, U+3000, U+FEFF …) would freeze a paid ฿0
+ * bill that dayo then rejects `reason_required:`; one with edge whitespace would freeze text dayo stores differently.
+ */
+export const ManualPromotionReason = Text200
+  .refine((s) => !hasBannedReasonChar(s), 'no C1, zero-width, bidi or line/paragraph separator characters')
+  .refine((s) => trimWs(s) !== '' && trimWs(s) === s, 'must be trimWs(reason): not blank, no whitespace at either end (dayo_trim_ws)')
 export const OrderRowData = z.strictObject({
   pos_order_id: Uuid, receipt_no: z.string().regex(RECEIPT_NO_RE), queue_no: z.number().int().min(1).max(9999),
   sale_date: Ymd, sold_at: IsoSent, channel: posText(100), payment: posText(100),

@@ -5,7 +5,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   DETAIL_PREFIXES, detailPrefix, fieldsUsed, isRowSupported, OrderRowData, ParityDraft, ParityFile, ParityMoney, PosCatalogLooseResponse,
-  PosCatalogResponse, PosOrderCatalog, PromoRuleSchema, PromotionGroupSchema, PushRequest, PushResponse, supportedOf, TimeWindowSchema,
+  ManualPromotionReason, PosCatalogResponse, PosOrderCatalog, PromoRuleSchema, PromotionGroupSchema, PushRequest, PushResponse, supportedOf, TimeWindowSchema,
+  trimWs,
 } from '../src/dayo-api.js'
 import { PROMO_RULES_FIXTURE_NAMES } from '../src/dayo-fixture.js'
 import { loadContractFixture } from '../src/dayo-fixture-files.js'
@@ -277,6 +278,56 @@ describe('E2 order row — manual_promotion_ids / manual_promotion_reason', () =
   it('detail prefix reason_required: (dayo 0069:1098 → dayo_pos_map_error 0074:2555-2560 = rejected INVALID)', () => {
     expect(DETAIL_PREFIXES).toContain('reason_required:')
     expect(detailPrefix('reason_required: โปรที่เลือกเองทำให้บิลเหลือ ฿0 ต้องใส่เหตุผลค่ะ')).toBe('reason_required:')
+  })
+})
+
+// ── fix round 1: the reason must be exactly what dayo stores (dayo_draft_manual_reason 0069:322-345 → dayo_trim_ws 0069:28-38) ──
+/** dayo_trim_ws's set, written out from 0069:34-35: \t\n\v\f\r, space, U+00A0, U+1680, U+2000–U+200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF. */
+const DAYO_WS = [0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20, 0xa0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff]
+
+describe('trimWs = dayo_trim_ws', () => {
+  it.each(DAYO_WS.map((n) => [n.toString(16), n]))('U+%s is trimmed at both ends, never in the middle', (_, n) => {
+    expect(trimWs(`${cp(n)}${cp(n)}ชง${cp(n)}ผิด${cp(n)}`)).toBe(`ชง${cp(n)}ผิด`)
+    expect(trimWs(cp(n).repeat(3))).toBe('')
+  })
+  it.each([['zero-width space', 0x200b], ['NEL', 0x85], ['Mongolian vowel separator', 0x180e], ['word joiner', 0x2060], ['ideographic period', 0x3002]])('%s is not whitespace to dayo — kept', (_, n) => {
+    expect(trimWs(`${cp(n)}x${cp(n)}`)).toBe(`${cp(n)}x${cp(n)}`)
+  })
+  it('is the same set as JS String.prototype.trim over the BMP (the SQL comment says so)', () => {
+    for (let n = 0; n <= 0xffff; n++) {
+      if (n >= 0xd800 && n <= 0xdfff) continue
+      expect(trimWs(cp(n)) === '', n.toString(16)).toBe(cp(n).trim() === '')
+    }
+  })
+  it('leaves text without edge whitespace alone · empty stays empty · a lone surrogate is not whitespace', () => {
+    expect(trimWs('ชงผิดสูตร')).toBe('ชงผิดสูตร')
+    expect(trimWs('')).toBe('')
+    expect(trimWs(` ${String.fromCharCode(0xd800)} `)).toBe(String.fromCharCode(0xd800))
+  })
+})
+
+describe('manual_promotion_reason must be what dayo stores (fix round 1)', () => {
+  const reasonOk = (r: string): boolean => orderOk({ manual_promotion_ids: [P1], manual_promotion_reason: r })
+  it.each([
+    ['NBSP only', cp(0xa0)], ['U+3000 only', cp(0x3000)], ['U+FEFF only', cp(0xfeff)], ['U+2028 only', cp(0x2028)], ['em spaces only', cp(0x2003).repeat(3)],
+    ['tabs only', '\t\t'],
+  ])('%s → dayo trims it to empty (→ reason_required on a ฿0 bill) → refused', (_, r) => {
+    expect(ManualPromotionReason.safeParse(r).success).toBe(false)
+    expect(reasonOk(r)).toBe(false)
+  })
+  it.each([
+    ['a leading space', ' ชงผิด'], ['a trailing space', 'ชงผิด '], ['a leading tab', '\tชงผิด'], ['a trailing tab', 'ชงผิด\t'],
+    ['a trailing U+3000', `ชงผิด${cp(0x3000)}`], ['a leading NBSP', `${cp(0xa0)}ชงผิด`], ['a leading U+FEFF', `${cp(0xfeff)}ชงผิด`], ['a trailing U+202F', `ชงผิด${cp(0x202f)}`],
+  ])('with %s → refused: callers send trimWs(reason), so the frozen text = dayo\'s byte for byte', (_, r) => {
+    expect(ManualPromotionReason.safeParse(r).success).toBe(false)
+    expect(reasonOk(r)).toBe(false)
+    expect(reasonOk(trimWs(r))).toBe(true)
+  })
+  it('a trimmed reason parses, inner spaces kept (a plain space, NBSP and U+3000 inside are fine)', () => {
+    for (const r of ['ชงผิดสูตร ทำแก้วใหม่ให้ลูกค้า', `ชงผิด${cp(0xa0)}สูตร`, `ชงผิด${cp(0x3000)}สูตร`, 'x']) {
+      expect(ManualPromotionReason.safeParse(r).success, r).toBe(true)
+      expect(reasonOk(r), r).toBe(true)
+    }
   })
 })
 
