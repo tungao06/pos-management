@@ -5,8 +5,9 @@ import { BOT_ORDER_NO_RE } from '@dayo/contracts'
 import { edgeBahtToSatang, MAX_Z_BOT_BILLS, sumSatang, type ZBotBill } from '@dayo/domain'
 import { apiBlocked, rateLimitLeft, readDayoConfig, recordDayoFailure, type SyncContext } from '../sync/catalog'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from '../sync/dayo-client'
-import { DAYO_KEYS, estimatedServerMs, extendRateLimit, MAX_BACKOFF_WAIT_MS, readKey, writeKey } from '../sync/state'
+import { DAYO_AHEAD_TOLERANCE_MS, DAYO_KEYS, estimatedServerMs, extendRateLimit, MAX_BACKOFF_WAIT_MS, readKey, writeKey } from '../sync/state'
 import { requireDevice } from './bootstrap'
+import { centralWindowStart } from './central-z'
 import { PosError } from './errors'
 import { CLOCK_AHEAD_COUNT } from './rows'
 import type { BotCashDto } from './types'
@@ -22,8 +23,12 @@ const VERSION_MAX = 2_147_483_647
 /**
  * spec §4.10 E4: after = counted_at of this device's previous count (local-only shifts included), else 00:00 Bangkok of
  * the business date; until = this shift's counted_at. Every counted_at is set once (trigger), so the window never moves.
+ * Task 13 (spec §13.8 R5-1 · ruling R9): on the R9 path the first Z of the line starts at dayo's last_z_until instead
+ * (centralWindowStart) — rows.ts floors this device's counts after it, so the window neither overlaps that Z nor leaves a gap.
  */
 export async function botWindowFor(db: RemoteDb, shift: { id: string; deviceId: string; businessDate: string; countedAt: string }): Promise<{ after: string; until: string }> {
+  const central = await centralWindowStart(db, shift)
+  if (central !== null) return { after: central, until: shift.countedAt }
   const prev = await db.select({ c: s.shift.countedAt }).from(s.shift)
     .where(and(eq(s.shift.deviceId, shift.deviceId), isNotNull(s.shift.countedAt), lt(s.shift.countedAt, shift.countedAt)))
     .orderBy(desc(s.shift.countedAt)).limit(1).get()
@@ -55,9 +60,6 @@ async function blockedError(db: RemoteDb): Promise<PosError> {
 
 const bad = (why: string): PosError => new PosError('DAYO_BAD_RESPONSE', `E4 ${why}`)
 
-/** dayo's own tolerance for a device time ahead of its clock (0066: `v_at > now() + interval '5 minutes'`). */
-export const E4_WINDOW_TOLERANCE_MS = 5 * 60_000
-
 /**
  * Task 12 carried (security M): E4 answers for bills created up to dayo's time of the answer. A window whose end (this
  * count's counted_at) is later than that + 5 min is not closed yet — a bot bill created between the answer and
@@ -68,7 +70,7 @@ export const E4_WINDOW_TOLERANCE_MS = 5 * 60_000
  */
 async function assertWindowClosed(db: RemoteDb, until: string, answeredAt: string): Promise<void> {
   const server = (await estimatedServerMs(db, answeredAt)) ?? Date.parse(answeredAt)
-  if (Date.parse(until) > server + E4_WINDOW_TOLERANCE_MS) {
+  if (Date.parse(until) > server + DAYO_AHEAD_TOLERANCE_MS) {
     throw new PosError('BAD_INPUT', `${CLOCK_AHEAD_COUNT}: เวลานับเงิน (${until}) ยังไม่ถึงในระบบกลาง (ตอนนี้ประมาณ ${new Date(server).toISOString()}) — นาฬิกาแท็บเล็ตเดินเร็ว บิลบอทที่จะเข้ามาก่อนถึงเวลานั้นจะไม่อยู่ในใบปิดกะใด ตั้งนาฬิกาให้ตรง แล้วรอให้ถึงเวลานับก่อนดึงยอดบิลบอทอีกครั้ง`)
   }
 }

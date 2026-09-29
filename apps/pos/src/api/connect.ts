@@ -11,6 +11,7 @@ import { createDayoClient, DayoError, type Timed } from '../sync/dayo-client'
 import { DAYO_KEYS, readKey, writeKey } from '../sync/state'
 import { requireOwnerPin } from './auth'
 import { LOCAL_DEVICE_KEY, localDeviceId } from './bootstrap'
+import { centralZOfAnswer, storeCentralZ } from './central-z'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { PROMPTPAY_SETTING_KEY } from './setup'
@@ -18,6 +19,8 @@ import type { ConnectShopInput, DayoProbe, DayoProbeInput, RecoverOwnerInput, Re
 
 /** The one base-URL rule of the tablet (Task 9) — re-exported so the setup screens need only this module. */
 export { normalizeBaseUrl, storedBaseUrl }
+/** Task 13 (spec §4.4 ข้อ 6 · ruling R9) — dayo's last Z of the key, read at setup / key swap / recovery (api/central-z.ts). */
+export { centralZOf, type CentralZ } from './central-z'
 
 type ChangedAnswer = Extract<PosCatalogLooseData, { changed: true }>
 
@@ -87,6 +90,7 @@ export async function probeDayo(deps: ApiDeps, input: DayoProbeInput): Promise<D
   return {
     clientName: v.client.name, lastReceiptNo: last, requiredPrefix: requiredPrefix(last),
     catalogVersion: v.catalog_version, owners: activeOwners(v), pricingMatches: pricingMatches(v.pricing.files_sha256),
+    lastZNo: centralZOfAnswer(v)?.lastZNo ?? null, // Task 13: shown, and confirmed by the owner before connectShop
   }
 }
 
@@ -131,6 +135,10 @@ export async function connectShop(db: RemoteDb, deps: ApiDeps, input: ConnectSho
   if (owner === undefined) throw new PosError('BAD_INPUT', 'เลือกเจ้าของจากรายชื่อระบบกลาง (owner ที่ใช้งานอยู่)')
   const last = v.client.last_receipt_no
   checkKeyBelongsTo({ receiptPrefix: prefix }, last)
+  // Task 13 (spec §4.4 ข้อ 6 · §6.6 · R4-1): the Z numbers of this key continue from dayo's — the owner saw that number on
+  // "ทดสอบกุญแจ" and confirmed it; another number now (a Z arrived meanwhile) is refused: test the key again
+  const cz = centralZOfAnswer(v)
+  if ((cz?.lastZNo ?? null) !== (input.confirmedLastZNo ?? null)) throw new PosError('BAD_INPUT', 'Z ล่าสุดในระบบกลางเปลี่ยนไปหลังทดสอบกุญแจ — ทดสอบกุญแจใหม่')
   const pinHash = await hashPin(input.ownerPin, deps.pinCost) // slow: outside the transaction
 
   await deps.secrets.setApiKey(target.apiKey)
@@ -152,6 +160,7 @@ export async function connectShop(db: RemoteDb, deps: ApiDeps, input: ConnectSho
       await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: deviceId, action: 'dayo_linked', beforeJson: null, afterJson: { baseUrl: target.baseUrl, catalogVersion: v.catalog_version }, actorUserId: owner.id, at }) // never the key
       await writeKey(tx, DAYO_KEYS.baseUrl, target.baseUrl)
       if (last !== null) await writeKey(tx, DAYO_KEYS.lastReceiptNo, last)
+      await storeCentralZ(tx, cz) // ruling R9: here, key swap and recovery only — never the periodic E1
       await writeCatalogAnswer(tx, deps, v, answer) // catalog + staff (disables plan-3 owners — ruling R7) + api_state ok
     })
   } catch (e) {
@@ -214,8 +223,10 @@ export async function replaceApiKey(db: RemoteDb, deps: ApiDeps, input: ReplaceA
   if (!activeOwners(v).some((o) => o.id === input.approverUserId)) throw new PosError('NOT_OWNER', 'dayo no longer lists this owner — use "เชื่อมใหม่ด้วยคีย์ใหม่"')
   const last = v.client.last_receipt_no
   checkKeyBelongsTo(device, last)
+  const cz = centralZOfAnswer(v) // ruling R9: no confirmation — the device and its Zs stay; a new key clears it (§6.6)
   await withNewKey(deps, target.apiKey, () => db.transaction(async (tx) => {
     if (last !== null) await writeKey(tx, DAYO_KEYS.lastReceiptNo, last)
+    await storeCentralZ(tx, cz)
     await writeCatalogAnswer(tx, deps, v, answer) // api_state = ok, api_retry_at cleared
     await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: device.id, action: 'api_key_replaced', beforeJson: null, afterJson: { baseUrl: stored, by: 'replaceApiKey' }, actorUserId: input.approverUserId, at: deps.now() }) // never the key
   }))
@@ -262,10 +273,12 @@ export async function recoverOwner(db: RemoteDb, deps: ApiDeps, input: RecoverOw
   if (owner === undefined) throw new PosError('BAD_INPUT', 'เลือกเจ้าของจากรายชื่อระบบกลาง (owner ที่ใช้งานอยู่)')
   const last = v.client.last_receipt_no
   checkKeyBelongsTo(device, last)
+  const cz = centralZOfAnswer(v) // ruling R9, as replaceApiKey
   const pinHash = await hashPin(input.ownerPin, deps.pinCost) // slow: outside the transaction
   await withNewKey(deps, target.apiKey, () => db.transaction(async (tx) => {
     const at = deps.now()
     if (last !== null) await writeKey(tx, DAYO_KEYS.lastReceiptNo, last)
+    await storeCentralZ(tx, cz)
     await writeCatalogAnswer(tx, deps, v, answer) // staff from dayo + api_state = ok
     await giveOwnerPin(tx, owner, pinHash, at)
     await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'user', entityId: owner.id, action: 'owner_recovered', beforeJson: null, afterJson: { staffId: owner.id, role: 'owner', by: 'recoverOwner' }, actorUserId: owner.id, at })

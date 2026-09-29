@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import { CLOCK_AHEAD_FAR_MS } from '../sync/push'
 import { estimatedServerMs } from '../sync/state'
+import { centralContinuation } from './central-z'
 import { PosError } from './errors'
 
 /**
@@ -42,7 +43,12 @@ export const CLOCK_AHEAD_COUNT = 'CLOCK_AHEAD'
  *   it (PIN + reason + audit) is Task 14's.
  */
 async function lastCountOf(db: RemoteDb, deviceId: string): Promise<string | null> {
-  return (await db.values<[string | null]>(sql`select max(counted_at) from shift where device_id = ${deviceId} and counted_at is not null`))[0]?.[0] ?? null
+  const local = (await db.values<[string | null]>(sql`select max(counted_at) from shift where device_id = ${deviceId} and counted_at is not null`))[0]?.[0] ?? null
+  // Task 13 (ruling R9 · spec §13.8 R5-1): on the R9 path dayo's last Z (until = its count) is this key's last count too —
+  // the first central Z's window starts there (bot-cash.ts centralWindowStart), so no count may land at or before it
+  const central = await centralContinuation(db, deviceId)
+  if (central === null) return local
+  return local !== null && Date.parse(local) >= Date.parse(central.lastZUntil) ? local : central.lastZUntil
 }
 
 /** Only a last count AFTER the device clock (the clock went back since) can floor anything or overlap an E4 window: one

@@ -36,10 +36,17 @@ export const DAYO_KEYS = {
   // full pages, kept between refreshes (fix round 1 item 1)
   dayoEditsSince: 'dayo.dayo_edits_since',
   dayoEditsWalk: 'dayo.dayo_edits_walk',
+  // Task 13 · ruling R9: dayo's E1 client.last_z_* — written ONLY by connectShop / replaceApiKey / recoverOwner (never the
+  // periodic E1); all three or none (api/central-z.ts)
+  lastZNo: 'dayo.last_z_no',
+  lastZHash: 'dayo.last_z_hash',
+  lastZUntil: 'dayo.last_z_until',
 } as const
 export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled' | 'bad_base_url'
 
 export const CLOCK_WARN_MS = 5 * 60_000            // D80
+/** dayo's own tolerance for a device time ahead of its clock (0066: `v_at > now() + interval '5 minutes'`). */
+export const DAYO_AHEAD_TOLERANCE_MS = 5 * 60_000
 export const BACKOFF_MS = [5_000, 15_000, 60_000, 300_000, 900_000] as const // spec §6.3
 export const STUCK_AFTER_ATTEMPTS = 50
 export const API_DISABLED_RETRY_MS = 15 * 60_000

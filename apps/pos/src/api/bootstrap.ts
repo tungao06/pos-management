@@ -6,6 +6,7 @@ import { readCatalog } from '../sync/catalog'
 import { maskApiKey } from '../sync/secret-store'
 import { CLOCK_WARN_MS, DAYO_KEYS, readKey, type ApiState } from '../sync/state'
 import { isBackupDue, lastBackupAt, lastBackupZId } from './backup'
+import { readCentralZ } from './central-z'
 import { isDayoLinked, ownerRecoveryAllowed, storedBaseUrl } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
@@ -156,7 +157,7 @@ export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapS
   // null in exactly the cases `replaceApiKey`/`recoverOwner` themselves would refuse (e.g. a corrupt stored value).
   const dayoBaseUrl = await storedBaseUrl(db)
   if ((await localDeviceId(db)) === null) {
-    return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl, staffNeedingPin: [], ownerRecovery: false, sync: await syncStatus(db, deps), countingShift: null, zWaiting: [] }
+    return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl, staffNeedingPin: [], ownerRecovery: false, sync: await syncStatus(db, deps), countingShift: null, zWaiting: [], centralLastZNo: null }
   }
   const device = await requireDevice(db)
   const lastAt = await lastBackupAt(db)
@@ -177,5 +178,6 @@ export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapS
     sync: await syncStatus(db, deps),
     countingShift: await countingShiftOf(db, device.id),
     zWaiting: await waitingZs(db, device.id),
+    centralLastZNo: (await readCentralZ(db))?.lastZNo ?? null,
   }
 }

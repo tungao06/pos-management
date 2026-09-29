@@ -9,6 +9,7 @@ import {
 import { countParentKey, enqueueLocalOnly, enqueuePush } from '../db/outbox'
 import { deleteKey } from '../sync/state'
 import { botPreviewKey } from './bot-cash'
+import { centralContinuation } from './central-z'
 import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
@@ -17,6 +18,11 @@ import { PAYMENT_CODE, type CountSummaryDto, type StoredZSnapshot, type UserDto,
 
 /** audit_log action written when an owner acknowledges a previous Z that fails its hash (Q3b-11 · D53). */
 export const Z_CHAIN_ACK_ACTION = 'z_chain_broken_ack'
+/** Z_CHAIN_BROKEN detail and chainWarning.brokenShiftId on the R9 path (Task 13): dayo holds a later Z of this key. The
+ * screen names it with BootstrapState.centralLastZNo. */
+export const CENTRAL_CHAIN_BREAK = 'central'
+
+export { centralContinuation, type CentralZ } from './central-z'
 
 /** `snapshot_json` read as raw text, never through the column's own JSON decode (review I-1) — a hand-edited row
  * can hold text that is not valid JSON at all, and letting the driver's `JSON.parse` run on it would throw before
@@ -301,7 +307,35 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
   let prev: { zNo: number; grandTotalSatang: number } | null = null
   let chainWarning: ZChainWarning | null = null
   let maxStoredZNo = 0 // review NF-4: named in the audit row alongside rowCount; 0 when the chain is healthy
-  if (last !== undefined || deletedIds.length > 0) {
+  // R-m2: prev_hash = the hash column of this device's previous Z row — or, on the R9 path, dayo's last_z_hash
+  let prevHash = last?.hash ?? null
+  // Task 13 · ruling R9 · D55: dayo holds a later Z of this key than this device (a reinstall, a restored file) — the same
+  // test botWindowFor used for this Z's window. Asked once (Z_CHAIN_BROKEN 'central', the owner's PIN again); the new Z
+  // then continues dayo's numbering and hash; the grand total is this device's own (dayo's is not continued — R9).
+  const central = await centralContinuation(tx, deviceId)
+  if (central !== null) {
+    if (!settle.acknowledgeZChainBroken) throw new PosError('Z_CHAIN_BROKEN', CENTRAL_CHAIN_BREAK)
+    const lenient = recomputeZChainLenient(orderForLenientRecompute(rows).map(toLenientEntry))
+    maxStoredZNo = lenient.maxStoredZNo
+    const grand = lastHealthy && lastGrand !== null ? lastGrand : lenient.grandTotalSatang
+    prev = { zNo: central.lastZNo, grandTotalSatang: grand }
+    chainWarning = {
+      brokenShiftId: CENTRAL_CHAIN_BREAK,
+      storedGrandTotalSatang: lastHealthy ? lastGrand : null,
+      recomputedGrandTotalSatang: grand,
+      acknowledgedBy: approver.id,
+      unreadableZs: lenient.unreadable,
+      duplicateZNos: lenient.duplicateZNos,
+      duplicateZNosTruncated: lenient.duplicateZNosTruncated,
+      missingZNos: lenient.missingZNos,
+      missingZNosTruncated: lenient.missingZNosTruncated,
+      deletedShiftIds: [],
+      deletedShiftIdsTruncated: false,
+      zNoGap: central.lastZNo + 1 - (rows.length + 1), // D55: the new Z's zNo minus the row count including it (expectedZNoGap)
+      centralLastZ: { zNo: central.lastZNo, hash: central.lastZHash },
+    }
+    prevHash = central.lastZHash
+  } else if (last !== undefined || deletedIds.length > 0) {
     if (lastHealthy && deletedIds.length === 0 && !unacknowledgedZNoGap && lastSnapshot !== null) {
       prev = { zNo: lastSnapshot.zNo, grandTotalSatang: lastSnapshot.grandTotalSatang }
     } else if (!settle.acknowledgeZChainBroken) {
@@ -371,8 +405,6 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
   const zRow = { id: deps.newId(), shiftId: shift.id, snapshotJson: z.snapshot, hash: z.hash, createdAt: at } satisfies typeof s.zReport.$inferInsert
   await tx.insert(s.zReport).values(zRow)
   if (shift.syncMode === 'central') {
-    // R-m2: prev_hash = the hash column of this device's previous Z row (Task 13 adds the continuation from dayo's E1)
-    const prevHash = last?.hash ?? null
     const posBills = await zPosBills(tx, shift.id)
     const movementIds = (await tx.select({ id: s.cashMovement.id }).from(s.cashMovement).where(eq(s.cashMovement.shiftId, shift.id)).orderBy(asc(s.cashMovement.createdAt), asc(s.cashMovement.id)).all()).map((m) => m.id)
     const data = builtClose(() => buildShiftCloseRowData({ snapshot: z.snapshot, hash: z.hash, prevHash, countId: count.id, posBills, movementIds }))
@@ -389,7 +421,7 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
       entityId: zRow.id,
       action: Z_CHAIN_ACK_ACTION,
       beforeJson: { brokenShiftId: chainWarning.brokenShiftId, storedGrandTotalSatang: chainWarning.storedGrandTotalSatang },
-      afterJson: { zNo: z.snapshot.zNo, recomputedGrandTotalSatang: chainWarning.recomputedGrandTotalSatang, rowCount: rows.length, maxStoredZNo },
+      afterJson: { zNo: z.snapshot.zNo, recomputedGrandTotalSatang: chainWarning.recomputedGrandTotalSatang, rowCount: rows.length, maxStoredZNo, ...(central !== null ? { centralLastZNo: central.lastZNo } : {}) },
       actorUserId: approver.id,
       at,
     })
