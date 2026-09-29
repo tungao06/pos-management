@@ -27,7 +27,7 @@ function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
     needsSetup: false,
     device: { id: 'd1', name: 'แท็บเล็ตหน้าร้าน', receiptPrefix: 'A' },
     users: [],
-    openShift: { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 50_000 },
+    openShift: { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 50_000, syncMode: 'local_only' },
     pendingSyncItems: 0,
     lastBackupAt: null,
     backupDue: false,

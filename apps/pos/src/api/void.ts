@@ -5,10 +5,12 @@ import { bangkokDateOf, rowKey, Text200, type UserRole } from '@dayo/contracts'
 import { sumSatang, voidReturnMovements, type MovementDraft } from '@dayo/domain'
 import { can } from '../app/permissions'
 import { appendOrderEvents, type NewEvent } from '../db/events'
-import { enqueueLocalOnly, enqueuePush } from '../db/outbox'
+import { enqueuePush } from '../db/outbox'
 import { insertMovements } from '../db/stock'
 import { requireOwnerPin } from './auth'
 import { currentOpenShift, requireDevice } from './bootstrap'
+import { enqueueCashMovement } from './cash'
+import { notBefore } from './rows'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { getOrder, voidInstant } from './orders'
@@ -19,7 +21,7 @@ type LegacyVoid = { order: typeof s.order.$inferSelect; shift: ShiftDto; deviceI
 /**
  * The stock way of voiding a paid order (spec §4.3 + D18/D36/D39), inside the caller's transaction after its checks:
  * not made yet → VOID_RETURN of the exact SALE movements (same cost) · made → no movement, waste marker only · cash →
- * VOID_REFUND (local_only) · PromptPay → the refund transfer reference is recorded. `cancelSale` is the only caller —
+ * VOID_REFUND (in the shift lane of a central shift, else local_only) · PromptPay → the refund transfer reference is recorded. `cancelSale` is the only caller —
  * for a plan-3 bill (no sold_at) it goes this way too, so an old bill's ingredients come back either way.
  */
 async function voidWithStock(tx: RemoteDb, deps: ApiDeps, v: LegacyVoid): Promise<void> {
@@ -31,7 +33,7 @@ async function voidWithStock(tx: RemoteDb, deps: ApiDeps, v: LegacyVoid): Promis
   const refundReference = v.refundReference?.trim() ?? ''
   if (qrRefundSatang > 0 && refundReference === '') throw new PosError('BAD_INPUT', 'a PromptPay void needs the refund transfer reference') // (D48 Q3-15)
 
-  const at = deps.now()
+  const at = notBefore(deps.now(), shift.openedAt) // never before the shift opened (dayo 0066:216 — its refund row)
   await tx.update(s.order).set({ status: 'voided', voidedAt: at }).where(eq(s.order.id, order.id))
 
   let returnedMovementIds: string[] = []
@@ -65,7 +67,7 @@ async function voidWithStock(tx: RemoteDb, deps: ApiDeps, v: LegacyVoid): Promis
       createdAt: at,
     } satisfies typeof s.cashMovement.$inferInsert
     await tx.insert(s.cashMovement).values(row)
-    await enqueueLocalOnly(tx, 'cash_movement', row, at, deps.newId) // block 2: local_only (spec 04 §6.1)
+    await enqueueCashMovement(tx, deps, row) // central shift → E2 VOID_REFUND in the shift lane · else local_only (R1)
     cashMovementId = row.id
   }
 
@@ -96,7 +98,7 @@ function assertMayVoid(role: UserRole, order: typeof s.order.$inferSelect, actor
 
 /**
  * spec 04 §4.5 order_void + §4.7: same Thai day as the sale only; owner PIN (D50); staff and managers cancel their own
- * bills only (Q44, ruling R11 — `void_any` is the owner's). Cash back = local VOID_REFUND (D36 — local_only in block 2).
+ * bills only (Q44, ruling R11 — `void_any` is the owner's). Cash back = a VOID_REFUND of the open shift (D36), sent in the shift lane when the shift is central (R1).
  * "made" is recorded for the Z void list only (ruling R6); no stock rows. A plan-3 bill (no sold_at) goes through
  * voidWithStock after the same checks (its stock comes back unless made); it and an excluded bill queue no order_void.
  * Never calls dayo.
@@ -131,13 +133,14 @@ export async function cancelSale(db: RemoteDb, deps: ApiDeps, input: CancelSaleI
     if (qrRefundSatang > 0 && refundReference === '') throw new PosError('BAD_INPUT', 'a PromptPay void needs the refund transfer reference') // D48 Q3-15
     // ONE void time for the bill, its refund, its events, its queue row and E2 (review item 5: dayo refuses
     // voided_at < sold_at as INVALID; voidInstant already keeps it at or after the latest sale — the max is a guard)
-    const at = Date.parse(now) < Date.parse(order.soldAt) ? order.soldAt : now
+    // … and never before the shift opened: a clock stepped back must not stamp the VOID_REFUND before its shift_open (dayo 0066:216)
+    const at = notBefore(notBefore(now, order.soldAt), shift.openedAt)
     await tx.update(s.order).set({ status: 'voided', voidedAt: at }).where(eq(s.order.id, order.id))
     let cashMovementId: string | null = null
     if (cashRefundSatang > 0) {
       const row = { id: deps.newId(), shiftId: shift.id, kind: 'VOID_REFUND', amountSatang: cashRefundSatang, orderId: order.id, reason: `${order.receiptNo ?? order.id}: ${reason}`, createdBy: actor.id, createdAt: at } satisfies typeof s.cashMovement.$inferInsert
       await tx.insert(s.cashMovement).values(row)
-      await enqueueLocalOnly(tx, 'cash_movement', row, at, deps.newId)
+      await enqueueCashMovement(tx, deps, row) // central shift → E2 VOID_REFUND (pos_order_id, reason null — D36) · else local_only (R1)
       cashMovementId = row.id
     }
     await appendOrderEvents(tx, { orderId: order.id, deviceId: device.id, actorType: 'user', actorId: actor.id, at, newId: deps.newId }, [

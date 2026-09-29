@@ -71,14 +71,14 @@ const STOCK: StockOverviewDto = {
 
 const DONE: PurchaseDto = { id: 'p1', businessDate: '2026-09-17', supplier: null, totalSatang: 12, lines: [], cashMovementId: null, createdAt: '2026-09-17T10:00:00Z' }
 
-const OPEN_SHIFT = { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 5 }
+const OPEN_SHIFT = { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 5, syncMode: 'local_only' as const }
 // n-1 (Task 9 re-review 1): a second, later shift — distinct id — for the "a new shift opens" step of the m-2 test.
-const OPEN_SHIFT_2 = { id: 's2', businessDate: '2026-09-17', openedAt: '2026-09-17T02:00:00Z', openedBy: 'u1', openingFloatSatang: 5 }
+const OPEN_SHIFT_2 = { id: 's2', businessDate: '2026-09-17', openedAt: '2026-09-17T02:00:00Z', openedBy: 'u1', openingFloatSatang: 5, syncMode: 'local_only' as const }
 
 // Q3b-14: an expected drawer cash of just 5 satang — small enough that even a single ฿0.10/g line (10 satang) is
 // "over the drawer", so the over-drawer flow is trivial to reach without needing large quantities.
 const REPORT: ShiftReportDto = {
-  shift: { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 5, openedByName: 'TungAo', openedQuick: false },
+  shift: { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 5, syncMode: 'local_only', openedByName: 'TungAo', openedQuick: false },
   generatedAt: '2026-09-17T10:00:00Z',
   sales: { orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 },
   cash: { openingFloatSatang: 5, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 },

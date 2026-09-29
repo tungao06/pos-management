@@ -1,4 +1,4 @@
-import type { AdjustReason, CashMovementKind, MovementKind, UseUnit, UserRole } from '@dayo/contracts'
+import type { AdjustReason, CashMovementKind, MovementKind, ShiftSyncMode, UseUnit, UserRole } from '@dayo/contracts'
 import type { Size, Sweetness } from '@dayo/dayo-pricing'
 import type { SyncCycleResult } from '../sync/scheduler'
 import type { ApiState } from '../sync/state'
@@ -11,7 +11,8 @@ export const REASON_MAX_LENGTH = 200
 
 export type UserDto = { id: string; displayName: string; role: UserRole }
 export type DeviceDto = { id: string; name: string; receiptPrefix: string }
-export type ShiftDto = { id: string; businessDate: string; openedAt: string; openedBy: string; openingFloatSatang: number }
+/** syncMode (ruling R1): 'central' = the shift and its cash rows go to dayo (E2 shift lane) · 'local_only' = they never leave the tablet. */
+export type ShiftDto = { id: string; businessDate: string; openedAt: string; openedBy: string; openingFloatSatang: number; syncMode: ShiftSyncMode }
 export type BootstrapState = {
   needsSetup: boolean
   device: DeviceDto | null

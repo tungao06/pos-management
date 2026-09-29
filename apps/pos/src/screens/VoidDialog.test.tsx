@@ -48,7 +48,7 @@ const BOOT: BootstrapState = {
   needsSetup: false,
   device: { id: 'd1', name: 'เครื่อง 1', receiptPrefix: 'A' },
   users: [OWNER],
-  openShift: { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 50_000 },
+  openShift: { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 50_000, syncMode: 'local_only' },
   pendingSyncItems: 0,
   lastBackupAt: null,
   backupDue: false,

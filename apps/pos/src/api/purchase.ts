@@ -1,5 +1,6 @@
 import { loadCatalogSqlite, type RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
+import { Text200 } from '@dayo/contracts'
 import { isPriceJump, purchaseMovements, purchaseUnitCostUsat, unitsToUseMilli, type PurchaseLineDraft } from '@dayo/domain'
 import { insertMovements } from '../db/stock'
 import { currentOpenShift, requireDevice } from './bootstrap'
@@ -28,6 +29,9 @@ export async function receivePurchase(db: RemoteDb, deps: ApiDeps, input: Receiv
   if (input.lines.length === 0) throw new PosError('BAD_INPUT', 'a purchase needs at least one line')
   if (input.lines.length > MAX_STOCK_LINES) throw new PosError('BAD_INPUT', `at most ${MAX_STOCK_LINES} lines`)
   const supplier = cleanText(input.supplier, 'supplier', false)
+  // the supplier becomes the reason of the drawer's PAID_OUT, which a central shift sends to dayo: dayo's text rule
+  // (Text200 — no control character, well-formed) applies whatever the shift, so central and local_only agree
+  if (supplier !== '' && !Text200.safeParse(supplier).success) throw new PosError('BAD_INPUT', `supplier must be 1–${REASON_MAX_LENGTH} characters of plain text`)
   const note = cleanText(input.note, 'note', false)
   for (const l of input.lines) {
     assertUnitsMilli(l.qtyUnitsMilli, 'qtyUnitsMilli')
@@ -37,7 +41,7 @@ export async function receivePurchase(db: RemoteDb, deps: ApiDeps, input: Receiv
   }
   const device = await requireDevice(db)
 
-  return db.transaction(async (tx) => {
+  const received = await db.transaction(async (tx) => {
     const at = deps.now()
     const businessDate = await stockBusinessDate(tx, device.id, at)
     const catalog = await loadCatalogSqlite(tx)
@@ -105,6 +109,8 @@ export async function receivePurchase(db: RemoteDb, deps: ApiDeps, input: Receiv
     await insertMovements(tx, deps, purchaseMovements(drafts, purchaseId), { businessDate, deviceId: device.id, createdBy: actor.id, at }, catalog)
     return { id: purchaseId, businessDate, supplier: purchaseRow.supplier, totalSatang, lines: out, cashMovementId, createdAt: at }
   })
+  deps.afterWrite?.() // a PAID_OUT of a central shift waits in the queue: wake the sender
+  return received
 }
 
 /**
