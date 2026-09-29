@@ -49,3 +49,16 @@ describe('DAYO_RECEIPT_NO_INVALID sanitizes its value (M2, fix round 1)', () => 
     expect(message).not.toContain(long)
   })
 })
+
+// block 3 Task 1: error codes for shifts/cash/Z (spec 04 §6.4, §6.8, §7 ข้อ 5–6 · D97)
+describe('block 3 shift/cash/Z error codes have Thai text', () => {
+  it.each(['COUNT_PENDING', 'SHIFT_NOT_COUNTING', 'Z_NOT_READY', 'BOT_CASH_REQUIRED', 'DAYO_Z_STATE_INVALID', 'Z_TOO_LARGE', 'OFF_CATALOG_NOT_POSSIBLE'] as const)('%s has Thai text', (code) => {
+    const text = errorMessage(new Error(`${code}: x`))
+    expect(text).not.toBe(TH.errUnexpected)
+    expect(text).toMatch(/[฀-๿]/)
+  })
+
+  it("DAYO_Z_STATE_INVALID strips control characters from dayo's raw value", () => {
+    expect(errorMessage(new Error('DAYO_Z_STATE_INVALID: 4‮1'))).toBe(TH.dayoZStateInvalid('41'))
+  })
+})

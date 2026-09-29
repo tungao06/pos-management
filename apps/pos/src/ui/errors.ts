@@ -53,6 +53,16 @@ export const MESSAGES: Record<PosErrorCode, string> = {
   // Task 15: owner remedies on "ส่งไม่ผ่าน" and the online-only E3 lists
   REMEDY_NOT_ALLOWED: 'ใช้ทางแก้นี้กับรายการนี้ไม่ได้ — โหลดหน้า "ส่งไม่ผ่าน" ใหม่แล้วเลือกปุ่มที่มีให้',
   OFFLINE: 'ต่อระบบกลางไม่ได้ตอนนี้ — ต้องออนไลน์จึงดูรายการนี้ได้ ลองใหม่อีกครั้ง',
+  // block 3 shifts/cash/Z (Task 1 · spec 04 §6.4, §6.8, §7 ข้อ 5–6 · D97)
+  COUNT_PENDING: TH.errCountPending,
+  SHIFT_NOT_COUNTING: TH.errShiftNotCounting,
+  Z_NOT_READY: TH.errZNotReady,
+  BOT_CASH_REQUIRED: TH.errBotCashRequired,
+  // fallback only — the raw last_z_no is unparsable here, so the special case below (which has the detail) is
+  // what actually renders; this entry exists only to keep the Record complete.
+  DAYO_Z_STATE_INVALID: TH.dayoZStateInvalidGeneric,
+  Z_TOO_LARGE: TH.errZTooLarge,
+  OFF_CATALOG_NOT_POSSIBLE: TH.errOffCatalogNotPossible,
 }
 
 /** dayo's `CartError` code → Thai. `UNKNOWN_VARIANT` is refined by `CartError.reason` below (never by parsing the
@@ -113,6 +123,11 @@ export function errorMessage(e: unknown): string {
     if (raw.startsWith(`${code}: SAME_DAY_ONLY:`)) return TH.errVoidSameDayOnly
     if (raw.startsWith(`${code}: OWN_BILLS_ONLY:`)) return TH.errVoidOwnBillsOnly
     return MESSAGES[code]
+  }
+  // block 3 Task 1: dayo's raw last_z_no, sanitized the same way as DAYO_RECEIPT_NO_INVALID above (M2).
+  if (code === 'DAYO_Z_STATE_INVALID') {
+    const value = raw.slice(code.length + 2).replace(/\p{C}/gu, '').slice(0, 32)
+    return value === '' ? MESSAGES[code] : TH.dayoZStateInvalid(value)
   }
   return MESSAGES[code]
 }

@@ -43,6 +43,14 @@ export type PosErrorCode =
   // block 2 Task 15 — owner remedies and E3 (spec 04 §4.6, §6.4)
   | 'REMEDY_NOT_ALLOWED' // the row is not on the "ส่งไม่ผ่าน" page, or this fix does not fit its reason
   | 'OFFLINE' // E3 (bot/web bills, dayo edits) needs dayo now: offline, refused key, API off, rate limit — detail = why
+  // block 3 shifts/cash/Z (spec 04 §6.4, §6.8, §7 ข้อ 5–6 · D97)
+  | 'COUNT_PENDING' // R2: a shift of this device is 'counting' (นับเสร็จ แต่ยังไม่ยืนยัน) — confirm it before opening a new one
+  | 'SHIFT_NOT_COUNTING' // confirmCount/countSummary on a shift that is not counting/counted — detail = shiftId
+  | 'Z_NOT_READY' // R7: issueZ while an earlier counted shift has no Z yet, or the count is not confirmed — detail = that shiftId
+  | 'BOT_CASH_REQUIRED' // D68/§6.8: the Z of a central shift needs E4 bot cash (fetchBotCash first, online)
+  | 'DAYO_Z_STATE_INVALID' // §4.4 ข้อ 6: client.last_z_no/last_z_hash/last_z_until unreadable — detail = the raw last_z_no
+  | 'Z_TOO_LARGE' // R20: > 2000 POS bills / > 500 bot bills / > 500 cash movements in one Z
+  | 'OFF_CATALOG_NOT_POSSIBLE' // R10/R11: this bill cannot be closed as off-catalog (use "ปิดไว้ในเครื่อง")
 
 /** Comlink forwards only name/message/stack, so the code travels as a "CODE: " message prefix. */
 export class PosError extends Error {
