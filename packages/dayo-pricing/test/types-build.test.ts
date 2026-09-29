@@ -59,6 +59,14 @@ describe('turbo runs build:types before anything that type-checks a dependent pa
     const pos = readJson<{ scripts: Record<string, string> }>(join(REPO, 'apps', 'pos', 'package.json'))
     expect(pos.scripts['e2e']).toMatch(/^turbo run build:types --filter=@dayo\/pos\.\.\. && /)
   })
+  it('a change of tsconfig.base.json re-runs build:types / typecheck (it is a global dependency of every task hash)', () => {
+    expect(readJson<{ globalDependencies?: string[] }>(join(REPO, 'turbo.json')).globalDependencies).toContain('tsconfig.base.json')
+  })
+  it('vendor:update rebuilds dist/types right after re-vendoring (stale .d.ts would type-check against the old engine)', () => {
+    const script = readFileSync(join(ROOT, 'scripts', 'vendor.ts'), 'utf8')
+    const branch = script.slice(script.indexOf("cmd === 'update'"), script.indexOf("cmd === 'drift'"))
+    expect(branch).toMatch(/updateVendor\([\s\S]*pnpm run build:types/)
+  })
   it('dist/ is git-ignored', () => {
     expect(readFileSync(join(REPO, '.gitignore'), 'utf8').split(/\r?\n/)).toContain('dist/')
   })

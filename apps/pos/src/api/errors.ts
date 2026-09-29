@@ -55,6 +55,7 @@ export type PosErrorCode =
   | 'MANUAL_REASON_REQUIRED' // reason_required: prefix on E2's rejected INVALID — a manual promotion was chosen with no reason
   | 'MANUAL_PROMO_UNSUPPORTED' // dayo's catalog does not carry manual_promotion_ids yet (old dayo) — never send one
   | 'ZERO_TOTAL_NOT_ALLOWED' // owner Q1=(ข): a ฿0 total from a manual discount — distinct from a promotion's own ฿0 (cash only)
+  | 'ZERO_TOTAL_CASH_ONLY' // D124: a ฿0 promotion bill is paid in cash only (domain zeroTotalVerdict)
 
 /** Comlink forwards only name/message/stack, so the code travels as a "CODE: " message prefix. */
 export class PosError extends Error {

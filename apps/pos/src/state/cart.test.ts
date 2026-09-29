@@ -20,7 +20,7 @@ describe('cart reducer (block 2)', () => {
   it('builds the draft the API prices', () => {
     const s = cartReducer(cartReducer(empty, { type: 'add', line: tt, maxQty: 99 }), { type: 'setDiscount', satang: 500, reason: 'ลูกค้าประจำ' })
     expect(toCartDraft(cartReducer(s, { type: 'skipPromotion', id: 'p1' }))).toEqual({
-      channelCode: 'store', promoCode: null, skipPromotionIds: ['p1'], noPromotions: false,
+      channelCode: 'store', promoCode: null, skipPromotionIds: ['p1'], noPromotions: false, manualPromotionIds: [], manualPromotionReason: null,
       billDiscount: { kind: 'satang', satang: 500, reason: 'ลูกค้าประจำ' },
       lines: [{ code: 'Thai Tea', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1, free: false, discountSatang: null, discountPercent: null, discountReason: null }],
     })

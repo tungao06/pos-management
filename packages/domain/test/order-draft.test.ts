@@ -21,3 +21,22 @@ describe('cartFromOrderDraft (dayo OrderDraft → the tablet cart)', () => {
     expect(() => cartFromOrderDraft({ saleDate: '2026-09-25', channelCode: 'store', lines: [{ code: 'Thai Tea', qty: 1 }] }, POS_CATALOG)).toThrow(/NO_SALE_TIME/)
   })
 })
+
+describe('cartFromOrderDraft: manual promotions of a dayo case (ADR-0070 · plan 10 T3)', () => {
+  const base = { saleDate: '2026-09-25', saleTime: '10:00', channelCode: 'store', lines: [{ code: 'Thai Tea', qty: 1 }] }
+  it('maps manualPromotionIds and the reason, trimmed as dayo stores it (trimWs)', () => {
+    const { cart } = cartFromOrderDraft({ ...base, manualPromotionIds: ['a', 'b'], manualPromotionReason: '  ชงผิด 　' }, POS_CATALOG)
+    expect([cart.manualPromotionIds, cart.manualPromotionReason]).toEqual([['a', 'b'], 'ชงผิด'])
+  })
+  it('none, [], null or a reason dayo trims to nothing = [] and null', () => {
+    for (const extra of [{}, { manualPromotionIds: [], manualPromotionReason: null }, { manualPromotionIds: ['a'], manualPromotionReason: '  ' }]) {
+      const { cart } = cartFromOrderDraft({ ...base, ...extra }, POS_CATALOG)
+      expect(cart.manualPromotionReason).toBeNull()
+      expect(cart.manualPromotionIds).toEqual('manualPromotionIds' in extra ? extra.manualPromotionIds : [])
+    }
+  })
+  it('never carries exhaustedPromotions into the cart (the tablet does not count uses)', () => {
+    const { cart } = cartFromOrderDraft({ ...base, exhaustedPromotions: [{ id: 'a', scope: 'total' }] }, POS_CATALOG)
+    expect('exhaustedPromotions' in cart).toBe(false)
+  })
+})

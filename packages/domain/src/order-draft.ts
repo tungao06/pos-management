@@ -1,5 +1,5 @@
 import { saleSettingsOf } from '@dayo/dayo-pricing'
-import type { ParityDraft } from '@dayo/contracts'
+import { trimWs, type ParityDraft } from '@dayo/contracts'
 import { edgeBahtToSatang } from './money-edge.js'
 import { CartError, defaultMilkForLine, type CartDraft, type PosOrderCatalog } from './price-cart.js'
 
@@ -11,6 +11,8 @@ export function cartFromOrderDraft(draft: ParityDraft, catalog: PosOrderCatalog)
   const channelCode = draft.channelCode || set.defaultChannelCode
   const channel = catalog.channels.find((c) => c.code === channelCode)
   const defaultGrade = (catalog.gradeOptions.find((g) => g.isDefault) ?? catalog.gradeOptions[0])?.code ?? null
+  // the cart holds the reason as dayo stores it (dayo_trim_ws): the engine trims too, so the price is the same (carried item 6)
+  const reason = draft.manualPromotionReason == null ? '' : trimWs(draft.manualPromotionReason)
   return {
     soldAt: new Date(`${draft.saleDate}T${draft.saleTime}:00.000+07:00`).toISOString(),
     cart: {
@@ -36,6 +38,9 @@ export function cartFromOrderDraft(draft: ParityDraft, catalog: PosOrderCatalog)
       promoCode: draft.promoCode ?? null,
       skipPromotionIds: [...(draft.skipPromotionIds ?? [])],
       noPromotions: false, // dayo cases express "no promotions" as skipPromotionIds = every id — the same result (spec §4.5)
+      manualPromotionIds: [...(draft.manualPromotionIds ?? [])],
+      manualPromotionReason: reason === '' ? null : reason,
+      // the exhausted list stays out: the tablet never counts uses (ADR-0072 rule 2) — parity-support passes it on request
     },
   }
 }

@@ -81,6 +81,29 @@ describe('golden: legacy promotions (legacy-*.json) = dayo\'s engine after 0070'
           expect(toExpected(computeOrder(toOrderDraft(cs.draft), viaRule))).toEqual(cs.expected)
         })
       }
+      // copied from dayo's promoRulesGolden.test.ts at f4cda56 (T1 review · carried item 3)
+      it('promoToLegacy(promoFromLegacy(x)) = x · the rule passes validatePromoRule', () => {
+        for (const row of file.promotions) {
+          const { template, rule } = promoFromLegacy(row.kind, row.params, row.stackable)
+          const windows = windowsFromLegacy(row.daysOfWeek, row.timeFrom, row.timeTo)
+          expect(validatePromoRule(rule)).toEqual([])
+          expect(validateTimeWindows(windows)).toEqual([])
+          const back = promoToLegacy(template, rule, windows, 'main')
+          // item_discount with both percent and amount_baht: the old engine used baht (percent had no effect) → the normal form drops percent
+          const params =
+            row.kind === 'item_discount' && 'amount_baht' in row.params && row.params.amount_baht != null && 'percent' in row.params
+              ? (({ percent: _x, ...p }) => p)(row.params as { percent?: number })
+              : row.params
+          expect(back).toEqual({
+            kind: row.kind,
+            params,
+            stackable: row.stackable,
+            daysOfWeek: row.daysOfWeek && row.daysOfWeek.length > 0 ? row.daysOfWeek : null,
+            timeFrom: row.timeFrom,
+            timeTo: row.timeTo,
+          })
+        }
+      })
     })
   }
 })

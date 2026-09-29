@@ -67,6 +67,7 @@ export const MESSAGES: Record<PosErrorCode, string> = {
   MANUAL_REASON_REQUIRED: TH.errManualReasonRequired,
   MANUAL_PROMO_UNSUPPORTED: TH.errManualPromoUnsupported,
   ZERO_TOTAL_NOT_ALLOWED: TH.errZeroTotalNotAllowed,
+  ZERO_TOTAL_CASH_ONLY: TH.zeroBillCashOnly, // D124 — the same copy the pay screen shows
 }
 
 /** dayo's `CartError` code → Thai. `UNKNOWN_VARIANT` is refined by `CartError.reason` below (never by parsing the
@@ -80,6 +81,7 @@ const CART_ERROR_MESSAGES: Record<CartErrorCode, string> = {
   UNKNOWN_VARIANT: TH.errSizeClosed,
   GRADE_RULE: TH.errGradeRule,
   BAD_DISCOUNT: TH.errBadInput,
+  BAD_MANUAL_PROMOTION: TH.errBadManualPromotion,
 }
 
 /**
