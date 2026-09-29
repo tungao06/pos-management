@@ -10,10 +10,43 @@ export const API_KEY_RE = /^dayo_[0-9a-f]{64}$/
 export const RECEIPT_NO_RE = /^[A-Z]{1,3}-\d{6}$/
 /** Row key dayo accepts (0052 dayo_pos_push_row): `<kind>:<lowercase uuid>`, kind `^[a-z][a-z_]{0,39}$`. */
 export const ROW_KEY_RE = /^[a-z][a-z_]{0,39}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-export const PUSH_KINDS = ['order', 'order_void'] as const
+/**
+ * Push kinds (spec 04 §4.10 · C11). dayo main 12885fe ships ADR-0069 PHASE 1 only: order, order_void + the four shift kinds
+ * (dayo_pos_supported, dayo 0066_pos_push_shift_kinds.sql:594-608). order_off_catalog is PHASE 2 (0066:15 · ADR-0069:18,24):
+ * its schema is kept, but the tablet only sends a kind E1 `supported_kinds` advertises (preflight ruling P1) — dayo answers any
+ * other kind `deferred UNSUPPORTED` (0066:654-656).
+ */
+export const PUSH_KINDS = ['order', 'order_void', 'shift_open', 'cash_movement', 'cash_count', 'shift_close', 'order_off_catalog'] as const
 export type PushKind = (typeof PUSH_KINDS)[number]
-export const KNOWN_REJECT_REASONS = ['INVALID', 'BAD_KEY', 'UNKNOWN_CODE', 'UNKNOWN_STAFF', 'CONFLICT', 'ALREADY_PRESENT', 'FORBIDDEN'] as const
+/** spec §6.2: ONE shift lane per device, strictly in createdAt order = dayo_pos_is_shift_kind (0066:48-53). */
+export const SHIFT_LANE_KINDS = ['shift_open', 'cash_movement', 'cash_count', 'shift_close'] as const
+export type ShiftLaneKind = (typeof SHIFT_LANE_KINDS)[number]
+export type Lane = 'bill' | 'shift'
+/** spec §6.2: one shift lane per device; everything else (and any unknown kind) is the bill lane. */
+export const laneOf = (kind: string): Lane => ((SHIFT_LANE_KINDS as readonly string[]).includes(kind) ? 'shift' : 'bill')
+/** The data field whose uuid the row key carries = dayo_pos_id_field (0066:38-46, checked 0066:677-683). */
+export const KIND_ID_FIELD: Record<PushKind, string> = { order: 'pos_order_id', order_void: 'pos_order_id', shift_open: 'shift_id', cash_movement: 'movement_id', cash_count: 'count_id', shift_close: 'shift_id', order_off_catalog: 'pos_order_id' }
+/** The scope a row needs besides orders:write: shift:write per shift row (dayo 0066:669-675 → `FORBIDDEN scope:`). */
+export const KIND_SCOPE: Record<PushKind, 'orders:write' | 'shift:write'> = { order: 'orders:write', order_void: 'orders:write', order_off_catalog: 'orders:write', shift_open: 'shift:write', cash_movement: 'shift:write', cash_count: 'shift:write', shift_close: 'shift:write' }
+/** Block 3 kinds dayo phase 1 advertises (0066:595) — the shift kinds. */
+export const BLOCK3_PHASE1_KINDS = SHIFT_LANE_KINDS
+/** Block 3 kinds that wait for dayo ADR-0069 phase 2 (preflight ruling P1). */
+export const BLOCK3_PHASE2_KINDS = ['order_off_catalog'] as const
+/** C13: ALREADY_PRESENT of the old draft is cancelled — dayo never sends it (spec §4.5 table · CONFLICT replaces it). */
+export const KNOWN_REJECT_REASONS = ['INVALID', 'BAD_KEY', 'UNKNOWN_CODE', 'UNKNOWN_STAFF', 'CONFLICT', 'FORBIDDEN'] as const
 export const KNOWN_DEFER_REASONS = ['PARENT_PENDING', 'BUSY', 'CLOCK_AHEAD', 'UNSUPPORTED', 'SERVER_ERROR'] as const
+/**
+ * spec §4.10 · §13.8 R5-2: the fixed machine prefixes of `detail` (`data_conflict:` = the INVALID verdicts of the S5 class:
+ * Z counted ≠ the count in dayo · z_no above max + 50 — dayo 0066:495-498, 0066:519-523). dayo phase 1 writes them on the
+ * shift kinds only; on order/order_void rows they are phase 2 (0066:5 · preflight D3) — no prefix = the block-2 rule of that reason.
+ */
+export const DETAIL_PREFIXES = ['scope:', 'role:', 'rule:', 'exists:', 'off_catalog_exists:', 'receipt_taken:', 'key_changed:', 'counted:', 'z_no_taken:', 'data_conflict:'] as const
+export type DetailPrefix = (typeof DETAIL_PREFIXES)[number]
+/** spec §4.10: the tablet decides from this fixed prefix only — never from the Thai text after it. */
+export function detailPrefix(detail: string | null | undefined): DetailPrefix | null {
+  if (typeof detail !== 'string') return null
+  return DETAIL_PREFIXES.find((p) => detail.startsWith(p)) ?? null
+}
 
 /** Shortens to `max` CODE POINTS — never strands half a surrogate pair (plan 5 `clip`, fix N4-2). */
 export function clipCodePoints(text: string, max: number): string {
@@ -124,7 +157,16 @@ export const PricingInfo = z.looseObject({ commit: z.string().nullable(), files_
  * last_receipt_no = the latest `external_ref` of this key as stored (0049_pos_catalog.sql:321-325), so any text: one odd
  * value must not throw the whole E1 away. The receipt counter checks RECEIPT_NO_RE where it uses it.
  */
-export const ClientInfo = z.looseObject({ name: z.string(), last_receipt_no: z.string().nullable() })
+export const ClientInfo = z.looseObject({
+  name: z.string(), last_receipt_no: z.string().nullable(),
+  /**
+   * Block 3 (spec §4.4 rule 6 · §13.8 R5-1/R5-3 · dayo 0067:134-155): last_z_no = the highest z_no of the key INCLUDING
+   * quarantined Zs; last_z_hash / last_z_until = of the highest NON-quarantined Z (until = counted_at of its count); all three
+   * null when the key has no Z. Raw like last_receipt_no — one odd value must not throw E1 away; Task 13 checks them where used.
+   * dayo writes last_z_until as `YYYY-MM-DDTHH:MM:SS.mmm+00:00` (0067:155 · preflight P7), not `…Z`. Optional: older dayo has none.
+   */
+  last_z_no: z.number().int().nullable().optional(), last_z_hash: z.string().nullable().optional(), last_z_until: z.string().nullable().optional(),
+})
 const e1Common = {
   catalog_version: z.number().int().min(1), server_time: IsoReceived, pricing: PricingInfo,
   supported_kinds: z.array(z.string()), supported_fields: z.record(z.string(), z.array(z.string())),
@@ -170,11 +212,120 @@ export const OrderRowData = z.strictObject({
 export type OrderRowData = z.infer<typeof OrderRowData>
 export const OrderVoidRowData = z.strictObject({ pos_order_id: Uuid, voided_at: IsoSent, staff_id: Uuid, approved_by: Uuid.nullable(), reason: Text200 })
 export type OrderVoidRowData = z.infer<typeof OrderVoidRowData>
+
+// ── E2 block 3 rows (spec §4.10 · C11 · field rules = what dayo 0066 rejects INVALID) ─────────────────────────────────────
+// Object-level refinements also run when a field already failed, so each one checks the shape it reads (safeParse never throws).
+export const CASH_DENOMINATIONS_BAHT = [1000, 500, 100, 50, 20, 10, 5, 2, 1] as const
+/** Lowercase hex, 64 characters (z_report.hash / prev_hash — dayo 0066:382-387). */
+export const Hex64 = z.string().regex(/^[0-9a-f]{64}$/)
+/** A bot/web bill number in `z_report.bot_bills` (dayo 0066:421 · 0008_orders_rpc.sql:1127 `L<yymmdd>-<seq ≥ 3 digits>` · preflight P7/D5). */
+export const BOT_ORDER_NO_RE = /^L\d{6}-\d{3,}$/
+const INT32_MAX = 2_147_483_647
+/** Baht → satang for a CHECK only: every Baht here has ≤ 2 decimals, so this is exact (money stays in @dayo/domain). */
+const satangOf = (baht: unknown): number => (typeof baht === 'number' ? Math.round(baht * 100) : Number.NaN)
+const PositiveBaht = Baht.refine((v) => v > 0, 'must be > 0')
+const isArr = (v: unknown): v is unknown[] => Array.isArray(v)
+const isRec = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v)
+const sameThaiDate = (instant: unknown, ymd: unknown): boolean => typeof instant !== 'string' || !isInstant(instant) || bangkokDateOf(instant) === ymd
+const hasDuplicate = (values: unknown[]): boolean => new Set(values).size !== values.length
+
+/** shift_open (dayo 0066:58-132): business_date = the Thai date of opened_at (0066:96-99). */
+export const ShiftOpenRowData = z.strictObject({ shift_id: Uuid, business_date: Ymd, opened_at: IsoSent, opened_by: Uuid, opening_float: Baht, quick_open: z.boolean() })
+  .superRefine((d, ctx) => {
+    if (!sameThaiDate(d.opened_at, d.business_date)) ctx.addIssue({ code: 'custom', path: ['business_date'], message: 'business_date must be the Thai date of opened_at' })
+  })
+export type ShiftOpenRowData = z.infer<typeof ShiftOpenRowData>
+/** cash_movement (dayo 0066:137-226): amount > 0 · pos_order_id for (and only for) VOID_REFUND · a reason for the other kinds. */
+export const CashMovementRowData = z.strictObject({
+  movement_id: Uuid, shift_id: Uuid, kind: z.enum(['PAID_IN', 'PAID_OUT', 'DROP', 'VOID_REFUND']), amount: PositiveBaht,
+  pos_order_id: Uuid.nullable(), reason: Text200.nullable(), created_by: Uuid, created_at: IsoSent,
+}).superRefine((d, ctx) => {
+  if ((d.kind === 'VOID_REFUND') !== (d.pos_order_id !== null)) ctx.addIssue({ code: 'custom', path: ['pos_order_id'], message: 'pos_order_id only (and always) for VOID_REFUND' })
+  if (d.kind !== 'VOID_REFUND' && d.reason === null) ctx.addIssue({ code: 'custom', path: ['reason'], message: 'reason required for PAID_IN/PAID_OUT/DROP' })
+})
+export type CashMovementRowData = z.infer<typeof CashMovementRowData>
+const CashCountLineData = z.strictObject({
+  denomination: z.number().int().refine((v) => (CASH_DENOMINATIONS_BAHT as readonly number[]).includes(v), 'unknown denomination'),
+  count: z.number().int().min(0).max(99_999),
+})
+/** cash_count (dayo 0066:231-320): nine lines, each denomination once, counted = Σ denomination × count (0066:253-272). */
+export const CashCountRowData = z.strictObject({ count_id: Uuid, shift_id: Uuid, lines: z.array(CashCountLineData).length(9), counted: Baht, counted_by: Uuid, counted_at: IsoSent })
+  .superRefine((d, ctx) => {
+    if (!isArr(d.lines)) return
+    const lines = d.lines.filter(isRec)
+    if (hasDuplicate(lines.map((l) => l['denomination']))) ctx.addIssue({ code: 'custom', path: ['lines'], message: 'each denomination once' })
+    const sum = lines.reduce((a, l) => a + (typeof l['denomination'] === 'number' && typeof l['count'] === 'number' ? l['denomination'] * 100 * l['count'] : 0), 0)
+    if (satangOf(d.counted) !== sum) ctx.addIssue({ code: 'custom', path: ['counted'], message: 'counted must equal Σ denomination × count' })
+  })
+export type CashCountRowData = z.infer<typeof CashCountRowData>
+/** z_report.cash — the eight non-negative parts of the expected-cash formula (spec §4.10 · C5 · dayo 0066:392-397). */
+export const ZCashData = z.strictObject({ opening_float: Baht, pos_cash_sales: Baht, void_refunds: Baht, paid_in: Baht, paid_out: Baht, drops: Baht, drawer_expenses: Baht, bot_cash: Baht })
+export type ZCashData = z.infer<typeof ZCashData>
+const ZBotBill = z.strictObject({ order_no: z.string().regex(BOT_ORDER_NO_RE), version: z.number().int().min(1).max(INT32_MAX), total: Baht })
+const ZPosBill = z.strictObject({ pos_order_id: Uuid, receipt_no: z.string().regex(RECEIPT_NO_RE), payment: posText(100), total: Baht, sold_at: IsoSent, voided_at: IsoSent.nullable() })
+/** shift_close.z_report: exactly these eleven keys, no unknown sub-key (spec §4.10 S28 · dayo 0066:375-449). */
+export const ZReportData = z.strictObject({
+  z_no: z.number().int().min(1).max(INT32_MAX), hash: Hex64, prev_hash: Hex64.nullable(), variance_alert: Baht, chain_warning: z.boolean(),
+  cash: ZCashData, counted: Baht, bot_window: z.strictObject({ after: IsoSent, until: IsoSent }),
+  movement_ids: z.array(Uuid).max(500), bot_bills: z.array(ZBotBill).max(500), pos_bills: z.array(ZPosBill).max(2000),
+}).superRefine((r, ctx) => {
+  const issue = (path: string, message: string): void => { ctx.addIssue({ code: 'custom', path: [path], message }) }
+  if (isRec(r.cash) && r.cash.drawer_expenses !== 0) issue('cash', 'drawer_expenses must be 0 in block 3 (dayo 0066:398-400 · ADR-0057)')
+  if (isRec(r.bot_window) && Date.parse(r.bot_window.after) >= Date.parse(r.bot_window.until)) issue('bot_window', 'after must be before until')
+  if (isArr(r.movement_ids) && hasDuplicate(r.movement_ids)) issue('movement_ids', 'movement ids must be unique (dayo 0066:410-414)')
+  if (isArr(r.bot_bills)) {
+    const bills = r.bot_bills.filter(isRec)
+    if (hasDuplicate(bills.map((b) => b['order_no']))) issue('bot_bills', 'order_no must be unique (dayo 0066:427-429)')
+    if (isRec(r.cash) && bills.reduce((a, b) => a + satangOf(b['total']), 0) !== satangOf(r.cash.bot_cash)) issue('bot_bills', 'Σ bot_bills.total must equal cash.bot_cash')
+  }
+  if (isArr(r.pos_bills) && hasDuplicate(r.pos_bills.filter(isRec).map((b) => b['pos_order_id']))) issue('pos_bills', 'pos_order_id must be unique (dayo 0066:448)')
+})
+export type ZReportData = z.infer<typeof ZReportData>
+/** shift_close (dayo 0066:325-561). Who closes (owner active at closed_at) and the z_no order are dayo's own checks. */
+export const ShiftCloseRowData = z.strictObject({ shift_id: Uuid, count_id: Uuid, closed_by: Uuid, closed_at: IsoSent, variance_reason: Text200.nullable(), z_report: ZReportData })
+export type ShiftCloseRowData = z.infer<typeof ShiftCloseRowData>
+const OffCatalogLine = z.strictObject({
+  code: z.string().min(1).max(40).nullable(), name: z.string().min(1).max(100), size: z.string().min(1).max(20).nullable(), sweetness: z.string().min(1).max(10).nullable(),
+  qty: z.number().int().min(1).max(999), unit_price: Baht, discount_per_cup: Baht, line_total: Baht,
+}).refine((l) => l.discount_per_cup <= l.unit_price && satangOf(l.line_total) === (satangOf(l.unit_price) - satangOf(l.discount_per_cup)) * l.qty, 'line_total = (unit_price − discount_per_cup) × qty')
+/**
+ * order_off_catalog — PHASE 2 of dayo (not shipped at 12885fe · ruling P1): kept so the tablet can build and hold the row.
+ * Totals follow spec §4.10 (= @dayo/shared money.ts:284-291 · orders_discount_le_subtotal) — a check of what the frozen bill
+ * already says, never a recomputation. channel/payment follow the order row (spec §4.10 "ตามแถว order").
+ */
+export const OrderOffCatalogRowData = z.strictObject({
+  pos_order_id: Uuid, receipt_no: z.string().regex(RECEIPT_NO_RE), queue_no: z.number().int().min(1).max(9999), sale_date: Ymd, sold_at: IsoSent,
+  channel: posText(100), payment: posText(100), staff_id: Uuid, catalog_version: z.number().int().min(1), shift_id: Uuid.nullable(), note: Text200.nullable(),
+  lines: z.array(OffCatalogLine).min(1).max(50), totals: z.strictObject({ items_subtotal: Baht, items_discount: Baht, bill_discount: Baht, total: Baht }),
+  closed_by: Uuid, closed_at: IsoSent, reason: Text200, original_reason: z.string().regex(/^[A-Z_]{1,40}$/),
+}).superRefine((d, ctx) => {
+  const issue = (path: string, message: string): void => { ctx.addIssue({ code: 'custom', path: [path], message }) }
+  if (!sameThaiDate(d.sold_at, d.sale_date)) issue('sale_date', 'sale_date must be the Thai date of sold_at')
+  if (Date.parse(d.closed_at) < Date.parse(d.sold_at)) issue('closed_at', 'closed_at must not be before sold_at')
+  if (!isArr(d.lines) || !isRec(d.totals)) return
+  const lines = d.lines.filter(isRec)
+  const qty = (l: Record<string, unknown>): number => (typeof l['qty'] === 'number' ? l['qty'] : Number.NaN)
+  const sub = lines.reduce((a, l) => a + satangOf(l['unit_price']) * qty(l), 0)
+  const idisc = lines.reduce((a, l) => a + satangOf(l['discount_per_cup']) * qty(l), 0)
+  const t = d.totals
+  if (satangOf(t.items_subtotal) !== sub) issue('totals', 'items_subtotal = Σ unit_price × qty')
+  if (satangOf(t.items_discount) !== idisc) issue('totals', 'items_discount = Σ discount_per_cup × qty')
+  if (satangOf(t.items_discount) + satangOf(t.bill_discount) > satangOf(t.items_subtotal)) issue('totals', 'discounts must not exceed items_subtotal (orders_discount_le_subtotal)')
+  if (satangOf(t.total) !== Math.max(0, satangOf(t.items_subtotal) - satangOf(t.items_discount) - satangOf(t.bill_discount))) issue('totals', 'total = max(0, subtotal − discounts)')
+})
+export type OrderOffCatalogRowData = z.infer<typeof OrderOffCatalogRowData>
+
 const rowKeyField = z.string().max(MAX_ROW_KEY_LENGTH).regex(ROW_KEY_RE)
+const rowOf = <K extends PushKind, T extends z.ZodType>(kind: K, data: T) => z.strictObject({ key: rowKeyField, kind: z.literal(kind), data })
+/** One E2 row of any kind; key = `<kind>:<the kind's id field>` (dayo 0066:677-683 → BAD_KEY). */
 export const PushRow = z.discriminatedUnion('kind', [
-  z.strictObject({ key: rowKeyField, kind: z.literal('order'), data: OrderRowData }),
-  z.strictObject({ key: rowKeyField, kind: z.literal('order_void'), data: OrderVoidRowData }),
-]).refine((r) => r.key === rowKey(r.kind, r.data.pos_order_id), { message: 'key must be <kind>:<pos_order_id>', path: ['key'] })
+  rowOf('order', OrderRowData), rowOf('order_void', OrderVoidRowData), rowOf('shift_open', ShiftOpenRowData), rowOf('cash_movement', CashMovementRowData),
+  rowOf('cash_count', CashCountRowData), rowOf('shift_close', ShiftCloseRowData), rowOf('order_off_catalog', OrderOffCatalogRowData),
+]).refine((r) => {
+  const data: unknown = r.data
+  const id = isRec(data) ? data[KIND_ID_FIELD[r.kind]] : undefined
+  return typeof id === 'string' && r.key === rowKey(r.kind, id)
+}, { message: 'key must be <kind>:<id field of the kind>', path: ['key'] })
 export type PushRow = z.infer<typeof PushRow>
 export const PushRequest = z.strictObject({ device_time: IsoSent, rows: z.array(PushRow).min(1).max(MAX_PUSH_ROWS) })
 export type PushRequest = z.infer<typeof PushRequest>
@@ -190,6 +341,16 @@ export const ReceivedRowResult = z.looseObject({ key: z.string().nullable(), sta
 export type ReceivedRowResult = z.infer<typeof ReceivedRowResult>
 export const OrderAcceptedData = z.looseObject({ order_no: z.string(), version: z.number().int(), computed_total: z.number().finite().nonnegative(), amount_mismatch: z.boolean(), duplicate_of: z.array(z.string()), warnings: z.array(z.string()) })
 export const OrderVoidAcceptedData = z.looseObject({ order_no: z.string(), version: z.number().int() })
+// block 3 accepted/duplicate `data` = `{<id field>}` only (spec §4.10 · dayo 0066:114,130,204,225,294,316,470,515,558 — no
+// negative money, no cost) · order_off_catalog and the `exists:` conflict data are phase 2 (ADR-0056:40,42 · preflight C38)
+export const ShiftOpenAcceptedData = z.looseObject({ shift_id: Uuid })
+export const CashMovementAcceptedData = z.looseObject({ movement_id: Uuid })
+export const CashCountAcceptedData = z.looseObject({ count_id: Uuid })
+export const ShiftCloseAcceptedData = z.looseObject({ shift_id: Uuid })
+export const OffCatalogAcceptedData = z.looseObject({ order_no: z.string(), version: z.number().int() })
+/** `data` of a CONFLICT `exists:` / `off_catalog_exists:` (spec §4.10 m2): the tablet reads these values here, never from detail. */
+export const ExistsConflictData = z.looseObject({ order_no: z.string(), version: z.number().int(), reported_total: z.number().finite().nonnegative(), payment_is_cash: z.boolean(), off_catalog: z.boolean() })
+export type ExistsConflictData = z.infer<typeof ExistsConflictData>
 export const PushResponseData = z.looseObject({ server_time: IsoReceived, results: z.array(ReceivedRowResult) })
 export type PushResponseData = z.infer<typeof PushResponseData>
 export const PushResponse = z.looseObject({ ok: z.literal(true), data: PushResponseData })
@@ -218,6 +379,19 @@ export const CentralOrder = z.looseObject({
 export type CentralOrder = z.infer<typeof CentralOrder>
 export const OrdersListResponse = z.looseObject({ ok: z.literal(true), data: z.array(CentralOrder) })
 
+// ── E4 GET /v1/pos/shift-cash?after=&until= (spec §4.10 · dayo 0067:18-73) — tolerant on receive ─────────────────────────
+/**
+ * One cash bill of the bot/web (status ok · payment cash · source line/web · created_at ∈ (after, until] — 0067:18-29).
+ * sold_at comes as `…+00:00` (0067:66); created_by_name is null for a key without staff:read (0067:69). The tablet checks
+ * order_no against BOT_ORDER_NO_RE where it builds the Z (Task 12), so one odd bill never throws the whole answer away here.
+ */
+export const ShiftCashBill = z.looseObject({ order_no: z.string().min(1), version: z.number().int(), source: z.string(), sold_at: IsoReceived.nullable(), total: z.number().finite().nonnegative(), created_by_name: z.string().nullable() })
+export type ShiftCashBill = z.infer<typeof ShiftCashBill>
+export const ShiftCashData = z.looseObject({ bills: z.array(ShiftCashBill), cash_total: z.number().finite().nonnegative() })
+export type ShiftCashData = z.infer<typeof ShiftCashData>
+export const ShiftCashResponse = z.looseObject({ ok: z.literal(true), data: ShiftCashData })
+export type ShiftCashResponse = z.infer<typeof ShiftCashResponse>
+
 // ── supported kinds/fields (spec §4.4 rule 10) ─────────────────────────────────────────────────────────────────────
 /** Every key present in `data` (value irrelevant); keys inside an ARRAY of objects are named `array.key` (lines.milk). */
 export function fieldsUsed(data: Record<string, unknown>): string[] {
@@ -234,6 +408,22 @@ export function isRowSupported(kind: string, data: Record<string, unknown>, s: S
   const allowed = new Set(s.fields[kind] ?? [])
   return fieldsUsed(data).every((f) => allowed.has(f))
 }
+/**
+ * spec §4.4 rule 10 · §4.10: the fields dayo's E1 advertises per block 3 kind (sorted, dotted for lines.*). Phase 1 = exactly
+ * dayo_pos_supported() of 0066:603-606 (dayo does not sort — compare as sets); phase 2 = order_off_catalog, not in dayo yet.
+ * A mock or fixture of today's dayo advertises PHASE 1 only (preflight ruling P3).
+ */
+export const BLOCK3_PHASE1_SUPPORTED_FIELDS = {
+  shift_open: ['business_date', 'opened_at', 'opened_by', 'opening_float', 'quick_open', 'shift_id'],
+  cash_movement: ['amount', 'created_at', 'created_by', 'kind', 'movement_id', 'pos_order_id', 'reason', 'shift_id'],
+  cash_count: ['count_id', 'counted', 'counted_at', 'counted_by', 'lines', 'lines.count', 'lines.denomination', 'shift_id'],
+  shift_close: ['closed_at', 'closed_by', 'count_id', 'shift_id', 'variance_reason', 'z_report'],
+} as const satisfies Record<ShiftLaneKind, readonly string[]>
+export const BLOCK3_PHASE2_SUPPORTED_FIELDS = {
+  order_off_catalog: ['catalog_version', 'channel', 'closed_at', 'closed_by', 'lines', 'lines.code', 'lines.discount_per_cup', 'lines.line_total', 'lines.name', 'lines.qty', 'lines.size', 'lines.sweetness', 'lines.unit_price', 'note', 'original_reason', 'payment', 'pos_order_id', 'queue_no', 'reason', 'receipt_no', 'sale_date', 'shift_id', 'sold_at', 'staff_id', 'totals'],
+} as const satisfies Record<(typeof BLOCK3_PHASE2_KINDS)[number], readonly string[]>
+/** Both phases — what spec §4.10 locks for all five block 3 kinds. */
+export const BLOCK3_SUPPORTED_FIELDS = { ...BLOCK3_PHASE1_SUPPORTED_FIELDS, ...BLOCK3_PHASE2_SUPPORTED_FIELDS } as const
 
 // ── parity file = pos-parity.json of dayo scripts/export-pos-parity.ts:230-238 (spec §5.2 layer B → C) ─────────────────
 // {dayo_commit, generated_at, pricing_files_sha256, catalog, cases:[{spec, note, draft, expected}]} — no catalog_version, cases named by `spec`.
@@ -264,3 +454,12 @@ export const ParityFile = z.looseObject({
   catalog: PosOrderCatalog,
   cases: z.array(ParityCase).min(1),
 })
+
+// ── fixtures/parity/pos-shift-cash-parity.json (spec §4.10 "dayo คิดเอง" · D84 — POS owns it; hand-computed, never edited to
+// make a test pass). Name and shape fixed with dayo's plan 08: { cases: [{ name, cash, counted, expected, variance }] }, money in
+// baht; expected/variance may be negative; cash may carry drawer_expenses ≠ 0 (a block 4 case — the formula already has it).
+const SignedBaht = z.number().finite().refine((v) => /^-?\d+(\.\d{1,2})?$/.test(String(v)), 'at most 2 decimals')
+export const ShiftCashParityCase = z.strictObject({ name: z.string().min(1), cash: ZCashData, counted: Baht, expected: SignedBaht, variance: SignedBaht })
+export type ShiftCashParityCase = z.infer<typeof ShiftCashParityCase>
+export const ShiftCashParityFile = z.strictObject({ cases: z.array(ShiftCashParityCase).min(1) })
+export type ShiftCashParityFile = z.infer<typeof ShiftCashParityFile>
