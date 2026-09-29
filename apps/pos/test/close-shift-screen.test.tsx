@@ -109,7 +109,7 @@ describe('CloseShiftScreen against the real API (D101)', () => {
       expectedCashSatang: 52_000,
       cashVarianceSatang: 0,
       varianceReason: null,
-      bankQrTotalSatang: null, // the new review has no bank-app total field at all (see report's Follow-up)
+      bankQrTotalSatang: null, // left empty — no bank figure is invented (Q3b-12 · D53, restored fix round 1 item 1)
       qrDifferenceSatang: null,
       chainWarning: null,
     })
@@ -146,14 +146,18 @@ describe('CloseShiftScreen against the real API (D101)', () => {
 
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe(TH.errShiftChanged))
     expect((await t.api.listZReports()).length).toBe(0) // nothing was written
-    // the count is cleared (CountReview remounts) — recount blind against the reloaded figures: ฿520 + ฿45 = ฿565
-    await waitFor(() => expect((screen.getByTestId('count-input-500') as HTMLInputElement).value).toBe(''))
-    await waitFor(() => expect(screen.getByTestId('count-expected').textContent).toBe('฿565.00'))
+    // D52 (old `setShown(null)` behaviour, fix round 1 item 6): fully blind again — the count is cleared and the
+    // expected cash/variance are hidden until "นับเสร็จ" is pressed once more, not shown mid-reload.
+    expect((screen.getByTestId('count-input-500') as HTMLInputElement).value).toBe('')
+    expect(screen.queryByTestId('count-expected')).toBeNull()
 
+    // recount, blind, against the reloaded figures: ฿520 + ฿45 = ฿565
     count(500, '1')
     count(20, '3')
     count(5, '1')
     expect(screen.getByTestId('count-total').textContent).toBe('฿565')
+    await finishAndReview()
+    expect(screen.getByTestId('count-expected').textContent).toBe('฿565.00')
     chooseApprover('TungAo')
     enterPin(PINS.TungAo)
     await waitForZCount(t, 1)
