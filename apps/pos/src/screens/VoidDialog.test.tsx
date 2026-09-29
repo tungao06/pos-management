@@ -41,6 +41,7 @@ const ORDER: OrderDetailDto = {
   channelCode: null,
   catalogVersion: null,
   promotions: [],
+  manualPromotionReason: null,
   lines: [],
   events: [],
   voidable: true,

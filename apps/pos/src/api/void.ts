@@ -137,6 +137,7 @@ export async function cancelSale(db: RemoteDb, deps: ApiDeps, input: CancelSaleI
     const at = notBefore(notBefore(now, order.soldAt), shift.openedAt)
     await tx.update(s.order).set({ status: 'voided', voidedAt: at }).where(eq(s.order.id, order.id))
     let cashMovementId: string | null = null
+    // a ฿0 promotion bill (plan 10 · Q1 = ข) was paid a cash 0: nothing to give back, so no VOID_REFUND (amount CHECK > 0)
     if (cashRefundSatang > 0) {
       const row = { id: deps.newId(), shiftId: shift.id, kind: 'VOID_REFUND', amountSatang: cashRefundSatang, orderId: order.id, reason: `${order.receiptNo ?? order.id}: ${reason}`, createdBy: actor.id, createdAt: at } satisfies typeof s.cashMovement.$inferInsert
       await tx.insert(s.cashMovement).values(row)

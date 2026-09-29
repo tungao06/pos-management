@@ -94,7 +94,7 @@ describe('recordSale (spec 04 §4.5, §5.1, §6.1)', () => {
     expect((await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'PROMPTPAY' })).receiptNo).toBe('A-000312')
   })
   it.each([
-    ['a total of 0 (D50 Q3-20)', { billDiscountSatang: 4_500, reason: 'ฟรี' }, 'DISCOUNT_TOO_BIG'],
+    ['a total of 0 from a typed bill discount (D124 · Q1 = ข: ฿0 only from promotions)', { billDiscountSatang: 4_500, reason: 'ฟรี' }, 'ZERO_TOTAL_NOT_ALLOWED'],
     ['a code dayo does not know', { channelCode: 'foodpanda' }, 'PRICE_NOT_OK'],
   ] as const)('refuses %s', async (_, extra, code) => {
     const t = await openConnectedApi()
