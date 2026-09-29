@@ -258,6 +258,30 @@ describe('fix round 3 — the bill is cancelled AFTER the owner closed it locall
     expect(t.mock.orders()).toEqual([expect.objectContaining({ posOrderId: r.orderId, status: 'cancelled' })])
     expect((await t.api.getOrder(r.orderId)).central).toMatchObject({ state: 'sent', voidState: 'sent' })
   })
+  // final fix S1: a void that cannot be built (here: the bill's voided_at is not an ISO time) never throws inside
+  // applyVerdicts — that rolled the whole batch back. The bill is still sent, the audit row says no void was queued and why.
+  it('a void that cannot be built is not queued, the verdicts of the batch stand, and the audit row names the error', async () => {
+    const t = await openConnectedApi({ now: '2026-09-27T03:00:00.000Z' })
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    const r = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
+    t.mock.setNow('2026-09-25T03:00:00.000Z')
+    await pushOnce(ctx) // CLOCK_AHEAD, far ahead: a clock card
+    const [p] = await t.api.listSyncProblems(STAFF.TungAo)
+    t.clock.advanceMs(120_000)
+    const { api, sync, wire, release } = onTheWire(t)
+    await wire
+    t.mock.setNow(t.clock.now())
+    await api.excludeFromSync({ ...owner, outboxId: p!.outboxId })
+    await cancel(api, r.orderId)
+    t.raw.prepare(`update "order" set voided_at = 'not-a-time' where id = ?`).run(r.orderId) // the void row now fails PushRow
+    release()
+    await expect(sync).resolves.toBeDefined()
+    expect(await rowOf(t, `order:${r.orderId}`)).toMatchObject({ status: 'sent' })
+    expect(await rowOf(t, `order_void:${r.orderId}`)).toBeUndefined()
+    const [audit] = await t.db.select().from(s.auditLog).where(eq(s.auditLog.action, SENT_AFTER_LOCAL_ACTION)).all()
+    expect(audit!.afterJson).toMatchObject({ status: 'sent', queuedVoid: null, queuedVoidError: expect.stringMatching(/voided_at/) })
+    expect((await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())!.excludedAt).toBeNull()
+  })
   it('order_off_catalog row: the same — the void waits for the off-catalog row and dayo ends cancelled', async () => {
     const t = await openConnectedApi({ now: '2026-09-27T03:00:00.000Z', block3: true, block3Phase2: true })
     t.mock.setBlock3LiveFrom('2026-09-01')

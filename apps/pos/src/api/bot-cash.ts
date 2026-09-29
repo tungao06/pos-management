@@ -1,7 +1,7 @@
 import { and, desc, eq, isNotNull, lt } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { BOT_ORDER_NO_RE } from '@dayo/contracts'
+import { BOT_ORDER_NO_RE, clipCodePoints } from '@dayo/contracts'
 import { edgeBahtToSatang, MAX_Z_BOT_BILLS, sumSatang, type ZBotBill } from '@dayo/domain'
 import { apiBlocked, rateLimitLeft, readDayoConfig, recordDayoFailure, type SyncContext } from '../sync/catalog'
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from '../sync/dayo-client'
@@ -18,6 +18,12 @@ export const thaiMidnightUtc = (ymd: string): string => new Date(Date.parse(`${y
 
 /** dayo 0066 bot_bills[].version is an int4 1..2147483647. */
 const VERSION_MAX = 2_147_483_647
+/**
+ * final fix S2: code points kept of E4's free text — frozen into the Z snapshot, so never trusted to be small (M6). A name
+ * like every other dayo name the tablet keeps (central-orders.ts NAME_MAX); `source` is a short code ('line' / 'web').
+ */
+export const BOT_NAME_MAX = 100
+export const BOT_SOURCE_MAX = 40
 
 /**
  * spec §4.10 E4: after = counted_at of this device's previous count (local-only shifts included), else 00:00 Bangkok of
@@ -87,7 +93,8 @@ async function assertWindowClosed(db: RemoteDb, until: string, answeredAt: strin
  * cash_total — the tablet's own sum is what counts. dayo filters on created_at ∈ (after, until] in µs; its bot/web bills
  * get sold_at = now() in the same transaction (0051:1058) or null for a back-dated entry, so a null sold_at cannot be
  * checked and is taken · E4 prints sold_at truncated to ms (0067:65): a bill created 0.5 ms after `after` reads as
- * exactly `after`, so the lower bound is inclusive here (fix round 1 item 3).
+ * exactly `after`, so the lower bound is inclusive here (fix round 1 item 3) · source and created_by_name clipped to
+ * BOT_SOURCE_MAX / BOT_NAME_MAX code points (final fix S2 — clipped, not refused: one long name never blocks the Z).
  * Any failure = DAYO_BAD_RESPONSE: nothing is stored and the screen stays on the count-without-bot-cash path.
  */
 export function checkedBotBills(data: { bills: readonly { order_no: string; version: number; source: string; sold_at: string | null; total: number; created_by_name: string | null }[]; cash_total: number }, window: { after: string; until: string }): { bills: ZBotBill[]; cashTotalSatang: number } {
@@ -107,7 +114,10 @@ export function checkedBotBills(data: { bills: readonly { order_no: string; vers
     }
     let totalSatang: number
     try { totalSatang = edgeBahtToSatang(b.total) } catch { throw bad(`${b.order_no} total ${b.total}`) }
-    bills.push({ orderNo: b.order_no, version: b.version, source: b.source, soldAt: b.sold_at, totalSatang, createdByName: b.created_by_name })
+    bills.push({
+      orderNo: b.order_no, version: b.version, source: clipCodePoints(b.source, BOT_SOURCE_MAX), soldAt: b.sold_at, totalSatang,
+      createdByName: b.created_by_name === null ? null : clipCodePoints(b.created_by_name, BOT_NAME_MAX),
+    })
   }
   let cashTotalSatang: number
   try { cashTotalSatang = edgeBahtToSatang(data.cash_total) } catch { throw bad(`cash_total ${data.cash_total}`) }

@@ -552,10 +552,11 @@ describe('pushOnce — hardening', () => {
       }))
       expect(await pushOnce(ctx)).toMatchObject({ sent: 1 })
       const o = (await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())!
-      expect([...o.centralOrderNo!]).toHaveLength(100)
+      expect(o.centralOrderNo).toBeNull() // final fix S5: not a dayo order number — never on the bill
       expect(o.centralDuplicateOfJson).toHaveLength(20)
       const stored = (await outbox(t))[0]!.resultJson as Record<string, unknown>
       expect(Object.keys(stored).sort()).toEqual(['amount_mismatch', 'computed_total', 'duplicate_of', 'order_no', 'version', 'warnings'])
+      expect([...(stored['order_no'] as string)]).toHaveLength(100)
       expect(stored['warnings']).toHaveLength(20)
       expect([...(stored['warnings'] as string[])[0]!]).toHaveLength(200)
     })
