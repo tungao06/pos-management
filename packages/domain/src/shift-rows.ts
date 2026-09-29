@@ -1,13 +1,14 @@
-import { bangkokDateOf, TEXT_MAX_CODE_POINTS, type CashCountRowData, type CashMovementRowData, type ShiftCloseRowData, type ShiftOpenRowData } from '@dayo/contracts'
+import { bangkokDateOf, CashCountRowData, CashMovementRowData, isPosText, ShiftCloseRowData, ShiftOpenRowData, TEXT_MAX_CODE_POINTS } from '@dayo/contracts'
 import { edgeSatangToBaht as b } from './money-edge.js'
 import { assertSafeInt } from './money.js'
-import { isoUtcMs, MAX_BOT_BILLS, tallyCashCount, zReportHash, type CashCountLine, type CashKind, type ZSnapshot } from './shift.js'
+import { isoUtcMs, MAX_BOT_BILLS, tallyCashCount, toSentIso as sentIso, zReportHash, type CashCountLine, type CashKind, type ZSnapshot } from './shift.js'
 
 /**
  * `data` of the four E2 shift kinds (spec 04 §4.10 · dayo 0066). Money leaves as baht through `edgeSatangToBaht` only —
  * which also refuses anything above numeric(10,2) (99,999,999.99) — and every object is rebuilt from an explicit field
  * list, so nothing a caller or a stored snapshot carries besides the contract's fields ever reaches dayo.
- * Each builder refuses what dayo would reject INVALID forever and the tablet can already see.
+ * Each builder refuses what dayo would reject INVALID forever and the tablet can already see, and ends by parsing its
+ * own row with the contract schema (fix round 1 item 3): a bad row throws at build time, never at enqueue.
  */
 
 export const MAX_Z_POS_BILLS = 2000
@@ -19,6 +20,9 @@ export const CASH_PAYMENT_CODE = 'cash'
 
 const HEX64 = /^[0-9a-f]{64}$/
 
+/** A reason dayo takes (dayo_pos_is_text, 200) — and not blank after any trim (stricter than btrim of spaces: safe). */
+const isReasonText = (s: string): boolean => isPosText(s, TEXT_MAX_CODE_POINTS) && s.trim() !== ''
+
 /** Ruling R20 · spec §4.10 m4: dayo refuses a Z over these caps (INVALID) — the tablet refuses first. */
 export class ZTooLargeError extends RangeError {
   constructor(what: string, n: number, max: number) {
@@ -27,16 +31,13 @@ export class ZTooLargeError extends RangeError {
   }
 }
 
-/** The one form the contract takes for a sent instant (`…mmmZ`): the same instant, checked by `isoUtcMs`. */
-const sentIso = (iso: string, name: string): string => new Date(isoUtcMs(iso, name)).toISOString()
-
 export type ShiftOpenRowInput = { shiftId: string; businessDate: string; openedAt: string; openedBy: string; openingFloatSatang: number; quickOpen: boolean }
 
 /** shift_open (dayo 0066:58-132): business_date is the Thai date of opened_at (0066:96-99). */
 export function buildShiftOpenRowData(i: ShiftOpenRowInput): ShiftOpenRowData {
   const openedAt = sentIso(i.openedAt, 'openedAt')
   if (bangkokDateOf(openedAt) !== i.businessDate) throw new RangeError(`businessDate ${i.businessDate} is not the Thai date of openedAt ${openedAt} (dayo 0066:96-99)`)
-  return { shift_id: i.shiftId, business_date: i.businessDate, opened_at: openedAt, opened_by: i.openedBy, opening_float: b(i.openingFloatSatang), quick_open: i.quickOpen }
+  return ShiftOpenRowData.parse({ shift_id: i.shiftId, business_date: i.businessDate, opened_at: openedAt, opened_by: i.openedBy, opening_float: b(i.openingFloatSatang), quick_open: i.quickOpen })
 }
 
 export type CashMovementRowInput = { movementId: string; shiftId: string; kind: CashKind; amountSatang: number; posOrderId: string | null; reason: string | null; createdBy: string; createdAt: string }
@@ -46,15 +47,15 @@ export function buildCashMovementRowData(i: CashMovementRowInput): CashMovementR
   if (!Number.isSafeInteger(i.amountSatang) || i.amountSatang <= 0) throw new RangeError(`cash movement amount must be whole satang > 0, got ${i.amountSatang}`)
   if (i.kind !== 'PAID_IN' && i.kind !== 'PAID_OUT' && i.kind !== 'DROP' && i.kind !== 'VOID_REFUND') throw new RangeError(`unknown cash movement kind ${String(i.kind)}`)
   if ((i.kind === 'VOID_REFUND') !== (i.posOrderId !== null)) throw new RangeError('only VOID_REFUND carries pos_order_id, and it always does (spec §4.10)')
-  // dayo_pos_is_text: a reason, when there is one, is never blank — for VOID_REFUND too (0066:171-173)
-  if (i.reason !== null && (i.reason.trim() === '' || [...i.reason].length > TEXT_MAX_CODE_POINTS)) {
-    throw new RangeError(`a reason is 1–${TEXT_MAX_CODE_POINTS} code points, never blank (dayo_pos_is_text)`)
+  // dayo_pos_is_text: a reason, when there is one, is dayo text — for VOID_REFUND too (0066:171-173)
+  if (i.reason !== null && !isReasonText(i.reason)) {
+    throw new RangeError(`a reason is 1–${TEXT_MAX_CODE_POINTS} code points, no control characters, well-formed, never blank (dayo_pos_is_text)`)
   }
   if (i.kind !== 'VOID_REFUND' && i.reason === null) throw new RangeError(`${i.kind} needs a reason (D52 Q3b-9)`)
-  return {
+  return CashMovementRowData.parse({
     movement_id: i.movementId, shift_id: i.shiftId, kind: i.kind, amount: b(i.amountSatang), pos_order_id: i.posOrderId, reason: i.reason,
     created_by: i.createdBy, created_at: sentIso(i.createdAt, 'createdAt'),
-  }
+  })
 }
 
 export type CashCountRowInput = { countId: string; shiftId: string; lines: readonly CashCountLine[]; countedBy: string; countedAt: string }
@@ -62,11 +63,11 @@ export type CashCountRowInput = { countId: string; shiftId: string; lines: reado
 /** cash_count (dayo 0066:231-320): nine lines, largest first, counted = Σ (0066:253-272). */
 export function buildCashCountRowData(i: CashCountRowInput): CashCountRowData {
   const t = tallyCashCount(i.lines)
-  return {
+  return CashCountRowData.parse({
     count_id: i.countId, shift_id: i.shiftId,
     lines: t.lines.map((l) => ({ denomination: b(l.denominationSatang), count: l.count })), // satang → baht only at the edge (review item 8) · whole-baht notes/coins (D52 Q3b-1)
     counted: b(t.totalSatang), counted_by: i.countedBy, counted_at: sentIso(i.countedAt, 'countedAt'),
-  }
+  })
 }
 
 export type ZPosBill = { posOrderId: string; receiptNo: string; paymentCode: string; totalSatang: number; soldAt: string; voidedAt: string | null }
@@ -96,8 +97,8 @@ export function buildShiftCloseRowData(i: ShiftCloseRowInput): ShiftCloseRowData
   if (zReportHash(z) !== i.hash) throw new RangeError('hash is not the hash of this snapshot')
   const c = z.cash
   if (c.drawerExpensesSatang !== 0) throw new RangeError('drawer expenses must be 0 in block 3 (dayo 0066:398-400 · ADR-0057)')
-  if (z.varianceReason !== null && [...z.varianceReason].length > TEXT_MAX_CODE_POINTS) {
-    throw new RangeError(`varianceReason must be at most ${TEXT_MAX_CODE_POINTS} code points (dayo 0066:370-373)`)
+  if (z.varianceReason !== null && !isReasonText(z.varianceReason)) {
+    throw new RangeError(`varianceReason must be 1–${TEXT_MAX_CODE_POINTS} code points, no control characters, well-formed, not blank (dayo 0066:370-373)`)
   }
   assertUnique(i.movementIds, 'movement id')
   assertUnique(i.posBills.map((p) => p.posOrderId), 'pos bill')
@@ -115,7 +116,7 @@ export function buildShiftCloseRowData(i: ShiftCloseRowInput): ShiftCloseRowData
     return { pos_order_id: p.posOrderId, receipt_no: p.receiptNo, payment: p.paymentCode, total, sold_at: soldAt, voided_at: voidedAt }
   })
   if (posCash !== c.cashSalesSatang) throw new RangeError(`pos_bills cash ${posCash} ≠ cash.cashSalesSatang ${c.cashSalesSatang}`)
-  return {
+  return ShiftCloseRowData.parse({
     shift_id: z.shiftId, count_id: i.countId, closed_by: z.closedBy, closed_at: sentIso(z.closedAt, 'closedAt'), variance_reason: z.varianceReason,
     z_report: {
       z_no: z.zNo, hash: i.hash, prev_hash: i.prevHash, variance_alert: b(z.varianceAlertSatang), chain_warning: z.chainWarning !== null,
@@ -129,5 +130,5 @@ export function buildShiftCloseRowData(i: ShiftCloseRowInput): ShiftCloseRowData
       bot_bills: z.botBills.map((x) => ({ order_no: x.orderNo, version: x.version, total: b(x.totalSatang) })),
       pos_bills: posBills,
     },
-  }
+  })
 }

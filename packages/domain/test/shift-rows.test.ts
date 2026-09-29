@@ -194,3 +194,26 @@ describe('shift_close — guards at the wire boundary (Task 2 security lows a/b)
     expect(d.z_report.pos_bills).toHaveLength(2)
   })
 })
+
+describe('shift rows — Task 3 fix round 1 item 3: every builder parses its own row', () => {
+  const at = '2026-09-25T03:00:00.000Z'
+  it('shift_open: a non-uuid id fails at build time', () => {
+    expect(() => buildShiftOpenRowData({ shiftId: 'x', businessDate: '2026-09-25', openedAt: '2026-09-25T02:00:00.000Z', openedBy: U, openingFloatSatang: 0, quickOpen: false })).toThrow(/shift_id/)
+  })
+  it('cash_movement: a reason with a control character or a lone surrogate is refused (dayo_pos_is_text)', () => {
+    const mv = { movementId: M1, shiftId: S, kind: 'PAID_IN' as const, amountSatang: 100, posOrderId: null, createdBy: U, createdAt: at }
+    expect(() => buildCashMovementRowData({ ...mv, reason: 'a\u0000b' })).toThrow(/reason/)
+    expect(() => buildCashMovementRowData({ ...mv, reason: 'a\ud83c' })).toThrow(/reason/)
+    expect(() => buildCashMovementRowData({ ...mv, reason: 'ok', createdBy: 'nobody' })).toThrow(/created_by/)
+  })
+  it('cash_count: a non-uuid counter fails at build time', () => {
+    expect(() => buildCashCountRowData({ countId: C1, shiftId: S, lines: [], countedBy: 'nobody', countedAt: '2026-09-25T12:00:00.000Z' })).toThrow(/counted_by/)
+  })
+  it('shift_close: a variance reason with a control character, or a non-uuid count id, fails at build time', () => {
+    const { snapshot } = z(10_000)
+    const bad = { ...snapshot, varianceReason: 'short\u0007' }
+    expect(() => buildShiftCloseRowData({ snapshot: bad, hash: zReportHash(bad), prevHash: null, countId: C1, posBills: [bill], movementIds: [] })).toThrow(/varianceReason/)
+    const { snapshot: s2, hash } = z(10_000)
+    expect(() => buildShiftCloseRowData({ snapshot: s2, hash, prevHash: null, countId: 'nope', posBills: [bill], movementIds: [] })).toThrow(/count_id/)
+  })
+})

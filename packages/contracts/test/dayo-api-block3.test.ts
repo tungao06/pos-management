@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   BLOCK3_PHASE1_KINDS, BLOCK3_PHASE1_SUPPORTED_FIELDS, BLOCK3_PHASE2_KINDS, BLOCK3_PHASE2_SUPPORTED_FIELDS, BLOCK3_SUPPORTED_FIELDS, BOT_ORDER_NO_RE,
-  CASH_DENOMINATIONS_BAHT, CashCountRowData, CashMovementRowData, ClientInfo, detailPrefix, DETAIL_PREFIXES, ExistsConflictData, fieldsUsed, Hex64,
+  CASH_DENOMINATIONS_BAHT, CashCountRowData, isPosText, CashMovementRowData, ClientInfo, detailPrefix, DETAIL_PREFIXES, ExistsConflictData, fieldsUsed, Hex64,
   KIND_ID_FIELD, KIND_SCOPE, KNOWN_REJECT_REASONS, laneOf, OrderOffCatalogRowData, PUSH_KINDS, PushRequest, PushRow, rowKey, SHIFT_LANE_KINDS,
   ShiftCashParityFile, ShiftCashResponse, ShiftCloseRowData, ShiftOpenRowData, ZReportData,
 } from '../src/dayo-api.js'
@@ -73,6 +73,31 @@ describe('block 3 push rows (spec 04 §4.10)', () => {
     expect(OrderOffCatalogRowData.safeParse({ ...SAMPLE.order_off_catalog, totals: { ...t, total: 71 } }).success).toBe(false)
     expect(OrderOffCatalogRowData.safeParse({ ...SAMPLE.order_off_catalog, totals: { ...t, bill_discount: 106, total: 0 } }).success).toBe(false)
     expect(OrderOffCatalogRowData.safeParse({ ...SAMPLE.order_off_catalog, lines: [{ ...SAMPLE.order_off_catalog.lines[0], line_total: 104 }] }).success).toBe(false)
+  })
+  it('order_off_catalog: line texts are dayo text (code points, no control, well-formed, not blank) — Task 3 fix round 1', () => {
+    const l = SAMPLE.order_off_catalog.lines[0]
+    const withLine = (o: Record<string, unknown>) => OrderOffCatalogRowData.safeParse({ ...SAMPLE.order_off_catalog, lines: [{ ...l, ...o }] }).success
+    const tea = '\u{1F375}' // one code point, two UTF-16 units
+    expect(withLine({ name: tea.repeat(100) })).toBe(true)
+    expect(withLine({ name: tea.repeat(101) })).toBe(false)
+    expect(withLine({ name: 'Thai\u0000Tea' })).toBe(false)
+    expect(withLine({ name: '\ud83c' })).toBe(false)
+    expect(withLine({ name: '   ' })).toBe(false)
+    expect(withLine({ code: tea.repeat(40) })).toBe(true)
+    expect(withLine({ code: tea.repeat(41) })).toBe(false)
+    expect(withLine({ code: 'Thai\tTea' })).toBe(false)
+    expect(withLine({ size: tea.repeat(20), sweetness: tea.repeat(10) })).toBe(true)
+    expect(withLine({ size: tea.repeat(21) })).toBe(false)
+    expect(withLine({ sweetness: '\u007f' })).toBe(false)
+    expect(withLine({ code: null, size: null, sweetness: null })).toBe(true)
+  })
+  it('isPosText is the one text rule (dayo_pos_is_text)', () => {
+    expect(isPosText('abcde', 5)).toBe(true)
+    expect(isPosText('abcdef', 5)).toBe(false)
+    expect(isPosText('', 5)).toBe(false)
+    expect(isPosText(' a ', 5)).toBe(true)
+    expect(isPosText('a\nb', 5)).toBe(false)
+    expect(isPosText('\udc00', 5)).toBe(false)
   })
 })
 
