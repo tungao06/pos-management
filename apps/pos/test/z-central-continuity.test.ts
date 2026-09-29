@@ -25,6 +25,8 @@ async function countedCentral(t: Api) {
   return (ack: boolean) => t.api.confirmCount({ shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: [{ denominationSatang: 100, count: 500 }], shownFingerprint: sum.fingerprint, z: { varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: ack } })
 }
 const closeCentral = async (t: Api, ack: boolean) => (await countedCentral(t))(ack)
+/** Real time passes: the tablet clock and dayo's move together (fix round 1: E4 checks the count against dayo's time). */
+const tick = (t: Api, ms = 3_600_000): void => { t.clock.advanceMs(ms); t.mock.setNow(t.clock.now()) }
 async function expectCode(p: Promise<unknown>, code: string): Promise<Error> {
   try { await p } catch (e) { expect(posErrorCode(e)).toBe(code); return e as Error }
   return expect.unreachable() as never
@@ -49,8 +51,7 @@ describe('Z numbering continues from dayo after a reinstall (spec 04 §6.6 · R4
   it('the first Z after it asks the owner once (D55 path), is Z 42, chains to dayo\'s hash and window; the phase-2 mock matches it (R5-1)', async () => {
     const t = await openConnectedApi({ block3: true, block3Phase2: true, beforeConnect: (m) => m.preloadZ(Z41) })
     const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
-    t.clock.advanceMs(3_600_000)
-    t.mock.setNow(t.clock.now())
+    tick(t)
     const { shiftId } = await t.api.finishCount({ actorUserId: STAFF.TungAo })
     expect(await t.api.fetchBotCash(shiftId)).toMatchObject({ after: '2026-09-24T12:00:00.000Z' }) // last_z_until, not 00:00 of the business date
     const sum = await t.api.countSummary(shiftId)
@@ -71,8 +72,7 @@ describe('Z numbering continues from dayo after a reinstall (spec 04 §6.6 · R4
   it('phase 1 dayo (no recompute) takes Z 42 as the next link: no chain break, not quarantined', async () => {
     const t = await openConnectedApi({ block3: true, beforeConnect: (m) => m.preloadZ(Z41) })
     const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
-    t.clock.advanceMs(3_600_000)
-    t.mock.setNow(t.clock.now())
+    tick(t)
     await closeCentral(t, true)
     await pushOnce(ctx); await pushOnce(ctx)
     expect(t.mock.zReports().find((z) => z.zNo === 42)).toMatchObject({ chainBreak: false, quarantined: false, firstOfKey: false, recomputeStatus: null })
@@ -81,16 +81,16 @@ describe('Z numbering continues from dayo after a reinstall (spec 04 §6.6 · R4
   it('bot bills between Z 41 and this count are in this Z (nothing falls between the two Zs)', async () => {
     const t = await openConnectedApi({ block3: true, beforeConnect: (m) => m.preloadZ(Z41) })
     t.mock.seedCentralOrders([{ order_no: 'L260924-950', sale_date: '2026-09-24', status: 'ok', source: 'line', external_ref: null, version: 1, channel: 'line', payment: 'cash', totals: { items_subtotal: 70, items_discount: 0, bill_discount: 0, total: 70 }, amount_mismatch: false, updated_at: '2026-09-24T13:00:00+00:00', sold_at: '2026-09-24T13:00:00+00:00' }])
-    t.clock.advanceMs(3_600_000)
+    tick(t)
     const { shiftId } = await t.api.finishCount({ actorUserId: STAFF.TungAo })
     expect((await t.api.fetchBotCash(shiftId)).bills.map((b) => b.orderNo)).toEqual(['L260924-950']) // 20:00 Bangkok the day before — after Z 41, before 00:00
   })
   it('the next Z is normal: 43, no question, prev_hash = hash of 42, window after = 42\'s until', async () => {
     const t = await openConnectedApi({ block3: true, beforeConnect: (m) => m.preloadZ(Z41) })
-    t.clock.advanceMs(3_600_000)
+    tick(t)
     const z42 = await closeCentral(t, true)
     await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
-    t.clock.advanceMs(3_600_000)
+    tick(t)
     const z43 = await closeCentral(t, false)
     expect(z43.z?.snapshot).toMatchObject({ zNo: 43, chainWarning: null, botWindow: { after: z42.z!.snapshot!.botWindow!.until } })
     const rows = await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'shift_close')).all()
@@ -107,11 +107,11 @@ describe('Z numbering continues from dayo after a reinstall (spec 04 §6.6 · R4
   })
   it('the same R7 line: two counts before the first central Z — the first takes last_z_until, the second the first count', async () => {
     const t = await openConnectedApi({ block3: true, beforeConnect: (m) => m.preloadZ(Z41) })
-    t.clock.advanceMs(3_600_000)
+    tick(t)
     const a = await t.api.finishCount({ actorUserId: STAFF.TungAo })
     await t.api.confirmCount({ shiftId: a.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: [{ denominationSatang: 100, count: 500 }], shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, z: null })
     await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
-    t.clock.advanceMs(3_600_000)
+    tick(t)
     const b = await t.api.finishCount({ actorUserId: STAFF.TungAo })
     expect(await t.api.fetchBotCash(a.shiftId)).toMatchObject({ after: '2026-09-24T12:00:00.000Z', until: a.countedAt })
     expect(await t.api.fetchBotCash(b.shiftId)).toMatchObject({ after: a.countedAt, until: b.countedAt })
@@ -159,7 +159,7 @@ describe('Z numbering continues from dayo after a reinstall (spec 04 §6.6 · R4
     t.mock.preloadZ({ zNo: 50, hash: H50, countedAt: '2026-09-24T20:00:00.000Z' })
     await t.api.replaceApiKey({ ...target, approverUserId: STAFF.TungAo, approverPin: '1111' })
     expect(await readKey(t.db, DAYO_KEYS.lastZNo)).toBe('50')
-    t.clock.advanceMs(3_600_000)
+    tick(t)
     const r = await closeCentral(t, true)
     expect(r.z?.snapshot).toMatchObject({ zNo: 51, chainWarning: { centralLastZ: { zNo: 50, hash: H50 } } })
   })
@@ -188,8 +188,7 @@ describe('Z numbering continues from dayo after a reinstall (spec 04 §6.6 · R4
   it('a Z of this device above dayo\'s last Z: the device\'s own chain goes on (the stored value is below it — no question)', async () => {
     const t = await openConnectedApi({ block3: true })
     const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
-    t.clock.advanceMs(3_600_000)
-    t.mock.setNow(t.clock.now())
+    tick(t)
     const z1 = await closeCentral(t, false)
     expect(z1.z?.snapshot?.zNo).toBe(1)
     await pushOnce(ctx); await pushOnce(ctx)
@@ -197,9 +196,94 @@ describe('Z numbering continues from dayo after a reinstall (spec 04 §6.6 · R4
     await t.api.replaceApiKey({ ...target, approverUserId: STAFF.TungAo, approverPin: '1111' })
     expect(await readKey(t.db, DAYO_KEYS.lastZNo)).toBe('1')
     await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
-    t.clock.advanceMs(3_600_000)
-    t.mock.setNow(t.clock.now())
+    tick(t)
     const z2 = await closeCentral(t, false)
     expect(z2.z?.snapshot).toMatchObject({ zNo: 2, chainWarning: null, botWindow: { after: z1.z!.snapshot!.botWindow!.until } })
   })
 })
+
+describe('Task 13 fix round 1 — a continuation is used once; a count before dayo\'s last Z; dayo\'s time for E4', () => {
+  /** Z 42 continued from dayo's Z 41, then the next shift opened and a later count taken (not yet confirmed). */
+  async function afterZ42() {
+    const t = await openConnectedApi({ block3: true, beforeConnect: (m) => m.preloadZ(Z41) })
+    tick(t)
+    const z42 = (await closeCentral(t, true)).z!
+    await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
+    tick(t)
+    return { t, z42 }
+  }
+  const breakZ = (t: Api, path: string, value: string | number) => {
+    t.raw.exec('DROP TRIGGER z_report_no_update')
+    t.raw.prepare(`update z_report set snapshot_json = json_set(snapshot_json, '${path}', ?)`).run(value)
+  }
+  it('Z 42 fails its hash later: Z_CHAIN_BROKEN names its shift (not "central"), the next Z is 43 — never a second 42 — and its window starts at 42\'s until', async () => {
+    const { t, z42 } = await afterZ42()
+    expect(await readKey(t.db, DAYO_KEYS.lastZContinued)).toBe('41')
+    breakZ(t, '$.sales.netSalesSatang', 1)
+    const confirm = await countedCentral(t)
+    expect((await t.api.countSummary((await t.api.bootstrap()).countingShift!.shiftId)).bot).toMatchObject({ after: z42.snapshot!.botWindow!.until })
+    const e = await expectCode(confirm(false), 'Z_CHAIN_BROKEN')
+    expect(String(e)).toContain(z42.shiftId)
+    expect(String(e)).not.toContain('central')
+    const z43 = (await confirm(true)).z!
+    expect(z43.snapshot).toMatchObject({ zNo: 43, botWindow: { after: z42.snapshot!.botWindow!.until }, chainWarning: { brokenShiftId: z42.shiftId } })
+    expect(z43.snapshot!.chainWarning).not.toHaveProperty('centralLastZ')
+    const rows = await t.db.select().from(s.outbox).where(eq(s.outbox.tableName, 'shift_close')).all()
+    expect(ShiftCloseRowData.parse(rows[1]!.rowJson).z_report).toMatchObject({ z_no: 43, prev_hash: z42.hash })
+  })
+  it('even with Z 42\'s own number unreadable, the used continuation does not come back (the marker)', async () => {
+    const { t, z42 } = await afterZ42()
+    breakZ(t, '$.zNo', 'x')
+    const e = await expectCode((await countedCentral(t))(false), 'Z_CHAIN_BROKEN')
+    expect(String(e)).toContain(z42.shiftId)
+  })
+  it('the marker is cleared by a new E1 read (replaceApiKey, dayo still at 41), yet the rows keep the path closed: 43 again', async () => {
+    const { t, z42 } = await afterZ42()
+    await t.api.replaceApiKey({ ...target, approverUserId: STAFF.TungAo, approverPin: '1111' }) // Z 42 not pushed: dayo says 41
+    expect([await readKey(t.db, DAYO_KEYS.lastZNo), await readKey(t.db, DAYO_KEYS.lastZContinued)]).toEqual(['41', null])
+    breakZ(t, '$.sales.netSalesSatang', 1)
+    const confirm = await countedCentral(t)
+    expect(String(await expectCode(confirm(false), 'Z_CHAIN_BROKEN'))).toContain(z42.shiftId)
+    expect((await confirm(true)).z?.snapshot?.zNo).toBe(43)
+  })
+  it('a count taken before the key swap read a later Z from dayo: E4 and the Z are refused (bot cash would be counted twice), nothing sent or written', async () => {
+    const t = await openConnectedApi({ block3: true })
+    tick(t)
+    const a = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    await t.api.fetchBotCash(a.shiftId) // a preview for (00:00, A] — stored before the swap
+    await t.api.confirmCount({ shiftId: a.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: [{ denominationSatang: 100, count: 500 }], shownFingerprint: (await t.api.countSummary(a.shiftId)).fingerprint, z: null })
+    tick(t)
+    t.mock.preloadZ({ zNo: 50, hash: H50, countedAt: new Date(Date.parse(a.countedAt) + 60_000).toISOString() }) // another install's Z, counted after A
+    await t.api.replaceApiKey({ ...target, approverUserId: STAFF.TungAo, approverPin: '1111' })
+    const sent = t.mock.requests().length
+    const refused = async (p: Promise<unknown>) => expect(String(await expectCode(p, 'BAD_INPUT'))).toMatch(/BAD_INPUT: COUNT_BEFORE_CENTRAL_Z: .*นับซ้ำ/)
+    await refused(t.api.fetchBotCash(a.shiftId))
+    expect(t.mock.requests().length).toBe(sent)
+    const sum = await t.api.countSummary(a.shiftId)
+    expect(sum.bot).toMatchObject({ until: a.countedAt }) // the old preview still reads — the Z itself refuses
+    await refused(t.api.issueZ({ shiftId: a.shiftId, ...owner2, shownFingerprint: sum.fingerprint, varianceReason: 'x', bankQrTotalSatang: null, acknowledgeZChainBroken: true }))
+    expect(await t.db.select().from(s.zReport).all()).toEqual([])
+    expect(await readKey(t.db, DAYO_KEYS.lastZContinued)).toBeNull()
+  })
+  it('E4 with no fresh skew asks E1 for dayo\'s time first: a tablet 1 h ahead of dayo is then refused; a failed E1 keeps the device-clock fallback', async () => {
+    const t = await openConnectedApi({ block3: true }) // skew measured at 03:00
+    t.clock.advanceMs(3_600_000)                        // the tablet runs 1 h ahead of dayo (still 03:00); the skew is now stale
+    const { shiftId } = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    const before = t.mock.requests().length
+    expect(String(await expectCode(t.api.fetchBotCash(shiftId), 'BAD_INPUT'))).toMatch(/CLOCK_AHEAD: .*ไม่ตรงกับระบบกลาง/)
+    expect(t.mock.requests().slice(before).map((r) => r.path)).toEqual(['/api/v1/pos/catalog', '/api/v1/pos/shift-cash'])
+    expect(Number(await readKey(t.db, DAYO_KEYS.clockSkewMs))).toBe(-3_600_000)
+    // E1 fails (5xx) once the skew is stale again: E4 still runs, judged by the device clock
+    const u = await createE1Failing(t)
+    expect(await t.api.fetchBotCash(shiftId)).toMatchObject({ until: (await t.api.countSummary(shiftId)).countedAt })
+    u()
+  })
+})
+
+/** The next E1 answers 500 (E4 untouched) and the stored skew is made stale; returns the undo. */
+async function createE1Failing(t: Api): Promise<() => void> {
+  t.clock.advanceMs(20 * 60_000)
+  const real = t.mock.fetch
+  t.deps.fetch = ((input: RequestInfo | URL, init?: RequestInit) => (String(input).includes('/pos/catalog') ? Promise.resolve(new Response('{}', { status: 500 })) : real(input, init))) as typeof fetch
+  return () => { t.deps.fetch = real }
+}

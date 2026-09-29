@@ -7,7 +7,7 @@ import { apiBlocked, rateLimitLeft, readDayoConfig, recordDayoFailure, type Sync
 import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from '../sync/dayo-client'
 import { DAYO_AHEAD_TOLERANCE_MS, DAYO_KEYS, estimatedServerMs, extendRateLimit, MAX_BACKOFF_WAIT_MS, readKey, writeKey } from '../sync/state'
 import { requireDevice } from './bootstrap'
-import { centralWindowStart } from './central-z'
+import { assertCountAfterCentralZ, centralWindowStart } from './central-z'
 import { PosError } from './errors'
 import { CLOCK_AHEAD_COUNT } from './rows'
 import type { BotCashDto } from './types'
@@ -66,12 +66,13 @@ const bad = (why: string): PosError => new PosError('DAYO_BAD_RESPONSE', `E4 ${w
  * counted_at would be in neither this Z (not listed now) nor the next (its window starts at counted_at). Refused as
  * BAD_INPUT `CLOCK_AHEAD:` + Thai text (the screen shows the detail), nothing stored; asking again once dayo's time has
  * passed the count works. E4 carries no server_time (0067): dayo's time is the tablet's estimate at the answer — the
- * last skew E1/E2 measured while fresh (D106 `estimatedServerMs`), else the device clock.
+ * last skew E1/E2 measured while fresh (D106 `estimatedServerMs`), else the device clock. fetchBotCash refreshes a
+ * stale skew with one E1 first (fix round 1 item 5), so the device-clock fallback is left for an E1 that failed.
  */
 async function assertWindowClosed(db: RemoteDb, until: string, answeredAt: string): Promise<void> {
   const server = (await estimatedServerMs(db, answeredAt)) ?? Date.parse(answeredAt)
   if (Date.parse(until) > server + DAYO_AHEAD_TOLERANCE_MS) {
-    throw new PosError('BAD_INPUT', `${CLOCK_AHEAD_COUNT}: เวลานับเงิน (${until}) ยังไม่ถึงในระบบกลาง (ตอนนี้ประมาณ ${new Date(server).toISOString()}) — นาฬิกาแท็บเล็ตเดินเร็ว บิลบอทที่จะเข้ามาก่อนถึงเวลานั้นจะไม่อยู่ในใบปิดกะใด ตั้งนาฬิกาให้ตรง แล้วรอให้ถึงเวลานับก่อนดึงยอดบิลบอทอีกครั้ง`)
+    throw new PosError('BAD_INPUT', `${CLOCK_AHEAD_COUNT}: เวลานับเงิน (${until}) ยังไม่ถึงในระบบกลาง (ตอนนี้ประมาณ ${new Date(server).toISOString()}) — นาฬิกาแท็บเล็ตไม่ตรงกับระบบกลาง บิลบอทที่จะเข้ามาก่อนถึงเวลานั้นจะไม่อยู่ในใบปิดกะใด ตั้งนาฬิกาให้ตรง แล้วรอให้ถึงเวลานับก่อนดึงยอดบิลบอทอีกครั้ง`)
   }
 }
 
@@ -116,8 +117,10 @@ export function checkedBotBills(data: { bills: readonly { order_no: string; vers
  * E4 for a counting/counted CENTRAL shift. The network wait is outside the serial queue (block 2 L-R3 — sales on another
  * shift keep going); the reads and writes around it are inside. A good answer is stored per shift (botPreviewKey) — the
  * count review, confirmCount and issueZ read it from there (review item 1). `beforeRequest` = the PosApi's pacing check.
+ * `refreshClock` (Task 13 fix round 1 item 5) = one E1 under the PosApi's sync budget, called when no fresh skew is
+ * stored — the "window closed" check then has dayo's time; it never throws, and a failed pull keeps the fallback.
  */
-export async function fetchBotCash(ctx: SyncContext, shiftId: string, opts: { beforeRequest?: () => void } = {}): Promise<BotCashDto> {
+export async function fetchBotCash(ctx: SyncContext, shiftId: string, opts: { beforeRequest?: () => void; refreshClock?: () => Promise<void> } = {}): Promise<BotCashDto> {
   const { cfg, window } = await ctx.serial(async () => {
     const shift = await ctx.db.select().from(s.shift).where(eq(s.shift.id, shiftId)).get()
     if (shift === undefined || shift.countedAt === null || (shift.status !== 'counting' && shift.status !== 'counted')) throw new PosError('SHIFT_NOT_COUNTING', shiftId)
@@ -128,8 +131,13 @@ export async function fetchBotCash(ctx: SyncContext, shiftId: string, opts: { be
     const now = ctx.deps.now()
     if (await apiBlocked(ctx.db, now)) throw await blockedError(ctx.db)
     if ((await rateLimitLeft(ctx.db, now)) > 0) throw new PosError('DAYO_UNREACHABLE', 'rate_limited')
-    return { cfg: c, window: await botWindowFor(ctx.db, { id: shift.id, deviceId: shift.deviceId, businessDate: shift.businessDate, countedAt: shift.countedAt }) }
+    const at = { id: shift.id, deviceId: shift.deviceId, countedAt: shift.countedAt }
+    await assertCountAfterCentralZ(ctx.db, at) // fix round 1 item 2: no E4 for a count before dayo's last Z (nothing sent)
+    return { cfg: c, window: await botWindowFor(ctx.db, { ...at, businessDate: shift.businessDate }) }
   })
+  if (opts.refreshClock !== undefined && (await ctx.serial(() => estimatedServerMs(ctx.db, ctx.deps.now()))) === null) {
+    try { await opts.refreshClock() } catch { /* the device-clock fallback stands */ }
+  }
   opts.beforeRequest?.()
   let client: DayoClient
   try {

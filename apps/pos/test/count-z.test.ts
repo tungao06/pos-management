@@ -148,6 +148,7 @@ describe('count and Z (D101 · spec 04 §6.8 · §4.10)', () => {
     await t.api.confirmCount({ shiftId: a.shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(545), shownFingerprint: sum.fingerprint, z: null })
     await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 50_000 })
     t.clock.advanceMs(3_600_000)
+    t.mock.setNow(t.clock.now()) // dayo's clock too (fix round 1: E4 without a fresh skew asks E1 for dayo's time first)
     const b = await t.api.finishCount({ actorUserId: STAFF.TungAo })
     sum = await t.api.countSummary(b.shiftId)
     expect(sum.zBlockedBy).toBe(a.shiftId) // R7: the screen knows a Z of b would be refused now

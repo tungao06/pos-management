@@ -9,12 +9,13 @@ import {
 import { countParentKey, enqueueLocalOnly, enqueuePush } from '../db/outbox'
 import { deleteKey } from '../sync/state'
 import { botPreviewKey } from './bot-cash'
-import { centralContinuation } from './central-z'
+import { assertCountAfterCentralZ, centralContinuation, markCentralContinued } from './central-z'
 import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { assertNoFarAheadCount, builtRow, notBefore } from './rows'
 import { PAYMENT_CODE, type CountSummaryDto, type StoredZSnapshot, type UserDto, type ZReportDto, type ZReportSummaryDto, type ZSettle } from './types'
+import { deviceZRows, expectedZNoGap, safeBoolOrNull, safeIntOrNull, safeStrOrNull, toLenientEntry, toZReportDto, tryParseJson, type ZRawRow } from './z-rows'
 
 /** audit_log action written when an owner acknowledges a previous Z that fails its hash (Q3b-11 · D53). */
 export const Z_CHAIN_ACK_ACTION = 'z_chain_broken_ack'
@@ -23,79 +24,7 @@ export const Z_CHAIN_ACK_ACTION = 'z_chain_broken_ack'
 export const CENTRAL_CHAIN_BREAK = 'central'
 
 export { centralContinuation, type CentralZ } from './central-z'
-
-/** `snapshot_json` read as raw text, never through the column's own JSON decode (review I-1) — a hand-edited row
- * can hold text that is not valid JSON at all, and letting the driver's `JSON.parse` run on it would throw before
- * this module ever sees the row, crashing `listZReports` for every Z on the device, not just the broken one. */
-type ZRawRow = { id: string; shiftId: string; hash: string; createdAt: string; snapshotText: string }
-
-/** `undefined` (not a throw) when `text` is not valid JSON. */
-function tryParseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
-}
-
-/** Narrows to "parsed enough to be treated as a snapshot": an object with a `sales` object (review I-1). Other
- * missing/malformed fields of an otherwise-parseable snapshot are handled by the safe accessors below, but a
- * missing `sales` is treated the same as unreadable JSON — the shape `listZReports` most depends on. */
-function hasSales(v: unknown): v is { sales: SalesSummary } {
-  return typeof v === 'object' && v !== null && typeof (v as { sales?: unknown }).sales === 'object' && (v as { sales?: unknown }).sales !== null
-}
-
-/** A number read from a snapshot that may have been edited by hand — null unless it is a safe integer. */
-function safeIntOrNull(v: unknown): number | null {
-  return typeof v === 'number' && Number.isSafeInteger(v) ? v : null
-}
-
-/** A string read from a snapshot that may have been edited by hand — null unless it actually is one. */
-function safeStrOrNull(v: unknown): string | null {
-  return typeof v === 'string' ? v : null
-}
-
-/** A boolean read from a snapshot that may have been edited by hand — null unless it actually is one. */
-function safeBoolOrNull(v: unknown): boolean | null {
-  return typeof v === 'boolean' ? v : null
-}
-
-/**
- * z_report.snapshot_json is written only by writeZ from buildZReport — read back as that shape, and `hashOk`
- * proves it is untouched. Review I-1: a row a person edited by hand may hold invalid JSON, or JSON missing `sales`
- * — `toZReportDto` never throws on either; it reports `hashOk: false` and `snapshot: null` instead, so a broken Z
- * shows up as a flagged row rather than crashing the whole list (or `getZReport`) for every Z on the device.
- */
-function toZReportDto(row: ZRawRow): ZReportDto {
-  const parsed = tryParseJson(row.snapshotText)
-  if (!hasSales(parsed)) return { id: row.id, shiftId: row.shiftId, createdAt: row.createdAt, hash: row.hash, hashOk: false, snapshot: null }
-  const snapshot = parsed as StoredZSnapshot
-  return { id: row.id, shiftId: row.shiftId, createdAt: row.createdAt, hash: row.hash, hashOk: zReportHash(snapshot) === row.hash, snapshot }
-}
-
-/** Newest first by **insertion order** (`rowid`), never by the snapshot's own `zNo` (review NF-1 · NF-3): `z_report`
- * is append-only (its `INSERT`-only trigger), so `rowid` — SQLite's own monotonic row-creation order, immune to any
- * `json_set` on `snapshot_json` — always finds the row `writeZ` really wrote last. Sorting by the *claimed*
- * `zNo` instead (the original bug) let a hand-edited last row's own `zNo` sort it out of the `rows[0]` position —
- * silently hiding the true last Z (and its money) from `zChain`'s "previous Z" check, and separately let a
- * hand-edited *middle* row's `zNo` sort it *into* that position forever, demanding the owner's PIN on every future
- * close for no reason. Exported for backup.ts. `snapshot_json` is still selected as raw text (review I-1).
- *
- * Review R2-7: this depends on `rowid` staying insertion order for `z_report`. A future migration that rebuilds
- * this table (drizzle's `INSERT INTO __new… SELECT …` has no `ORDER BY`) must copy it `ORDER BY rowid`, and any
- * restore/re-seed of a device's database from the server (Postgres has no `rowid`) must insert its Z rows back in
- * `zNo` (or `created_at`) order. Getting this wrong would misidentify the "previous Z" — but the `zNo === row
- * count` check below still catches it as a *false* `Z_CHAIN_BROKEN`, never as silent data loss. */
-export async function deviceZRows(db: RemoteDb, deviceId: string): Promise<ZRawRow[]> {
-  const rowid = sql`"z_report"."rowid"`
-  return db
-    .select({ id: s.zReport.id, shiftId: s.zReport.shiftId, hash: s.zReport.hash, createdAt: s.zReport.createdAt, snapshotText: sql<string>`${s.zReport.snapshotJson}` })
-    .from(s.zReport)
-    .innerJoin(s.shift, eq(s.shift.id, s.zReport.shiftId))
-    .where(eq(s.shift.deviceId, deviceId))
-    .orderBy(desc(rowid))
-    .all()
-}
+export { deviceZRows } from './z-rows' // backup.ts reads it from here
 
 /**
  * Closed shifts of this device, more recently closed than the last surviving Z's own shift, that have no
@@ -123,49 +52,6 @@ async function deletedShiftIds(db: RemoteDb, deviceId: string, rows: readonly ZR
   const lastShift = closed.find((c) => c.id === last.shiftId)
   if (lastShift === undefined) return closed.map((c) => c.id) // defensive: the last Z's own shift is not even closed — treat everything as suspect
   return closed.filter((c) => c.rowid > lastShift.rowid).map((c) => c.id)
-}
-
-/**
- * Reads a stored snapshot's individual sales fields for `recomputeZChainLenient` — every field is `null` when it
- * is missing or not a safe integer (never a throw: this only feeds the lenient recompute, review C-1). `zNo` too
- * is read defensively here; ordering by it is `orderForLenientRecompute`'s job, not this function's.
- */
-function toLenientEntry(row: ZRawRow): LenientZEntry {
-  const parsed = tryParseJson(row.snapshotText) as { zNo?: unknown; sales?: { grossSalesSatang?: unknown; discountSatang?: unknown; voidedSatang?: unknown; netSalesSatang?: unknown } } | undefined
-  const sales = parsed?.sales
-  return {
-    shiftId: row.shiftId,
-    zNo: safeIntOrNull(parsed?.zNo),
-    grossSalesSatang: safeIntOrNull(sales?.grossSalesSatang),
-    discountSatang: safeIntOrNull(sales?.discountSatang),
-    voidedSatang: safeIntOrNull(sales?.voidedSatang),
-    netSalesSatang: safeIntOrNull(sales?.netSalesSatang),
-  }
-}
-
-/**
- * 2026-09-21 · D55 (review R4-1, R4-2): the Z-row gap the chain is *expected* to carry — `chainWarning.zNoGap` of
- * the most recent row (insertion order, `rows` is newest first) whose hash verifies and which records one, or 0
- * when none does. An acknowledgement records how many Z rows were known missing at that moment (its own `zNo`
- * minus the row count including itself); every clean Z after it grows both by one, so the gap is unchanged until
- * a row is deleted again. Comparing against it — never skipping the check because some Z carries a warning —
- * means an acknowledged gap is never asked about twice, while any later deletion (of any row, including the
- * acknowledging Z itself, which takes its record with it) changes the gap and is caught at the very next close.
- *
- * A row whose hash does not verify is skipped (its record cannot be trusted), so a hand-edited acknowledgement
- * falls back to an older one or to 0 — a false alarm at worst, never a silent pass. The cheap text check skips
- * parsing and hashing every row that cannot hold a recorded gap (almost all of them).
- */
-function expectedZNoGap(rows: readonly ZRawRow[]): number {
-  for (const row of rows) {
-    if (!row.snapshotText.includes('"zNoGap"')) continue
-    const dto = toZReportDto(row)
-    if (!dto.hashOk || dto.snapshot === null) continue
-    const warning: unknown = dto.snapshot.chainWarning
-    const gap = typeof warning === 'object' && warning !== null ? safeIntOrNull((warning as { zNoGap?: unknown }).zNoGap) : null
-    if (gap !== null && gap >= 0) return gap
-  }
-  return 0
 }
 
 /**
@@ -314,6 +200,8 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
   // then continues dayo's numbering and hash; the grand total is this device's own (dayo's is not continued — R9).
   const central = await centralContinuation(tx, deviceId)
   if (central !== null) {
+    // fix round 1 item 2: a count before dayo's last Z cannot continue it (its bot window would overlap that Z)
+    if (shift.syncMode === 'central') await assertCountAfterCentralZ(tx, { id: shift.id, deviceId, countedAt })
     if (!settle.acknowledgeZChainBroken) throw new PosError('Z_CHAIN_BROKEN', CENTRAL_CHAIN_BREAK)
     const lenient = recomputeZChainLenient(orderForLenientRecompute(rows).map(toLenientEntry))
     maxStoredZNo = lenient.maxStoredZNo
@@ -335,6 +223,7 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
       centralLastZ: { zNo: central.lastZNo, hash: central.lastZHash },
     }
     prevHash = central.lastZHash
+    await markCentralContinued(tx, central) // fix round 1 item 1: used once — this transaction's Z is the continuation
   } else if (last !== undefined || deletedIds.length > 0) {
     if (lastHealthy && deletedIds.length === 0 && !unacknowledgedZNoGap && lastSnapshot !== null) {
       prev = { zNo: lastSnapshot.zNo, grandTotalSatang: lastSnapshot.grandTotalSatang }

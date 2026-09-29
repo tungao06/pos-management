@@ -115,6 +115,15 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
       // R1: never blocks the shift — the last stored E1 decides
     }
   }
+  // Task 13 fix round 1 item 5: E4 without a fresh skew first asks E1 for dayo's time (same budget and silence as pullBeforeShift)
+  const pullForClock = async (): Promise<void> => {
+    try {
+      if (pacer.waitFor(1, SYNC_BUDGET_PER_MIN) > 0) return
+      await pullCatalog({ db, deps, serial })
+    } catch {
+      // the device-clock fallback stands
+    }
+  }
   const api: PosApi = {
     bootstrap: () => serial(() => bootstrap(db, deps)),
     login: (userId, pin) => serial(() => login(db, deps, userId, pin)),
@@ -137,7 +146,7 @@ export function createPosRuntime(db: RemoteDb, baseDeps: ApiDeps, opts: PosApiOp
     finishCount: (input) => serial(() => finishCount(db, deps, input)),
     countSummary: (shiftId) => serial(() => countSummary(db, shiftId)),
     // E4: network OUTSIDE the serial queue (its reads and writes are inside), like syncNow / E3
-    fetchBotCash: (shiftId) => fetchBotCash({ db, deps, serial }, shiftId, { beforeRequest: e4Call }),
+    fetchBotCash: (shiftId) => fetchBotCash({ db, deps, serial }, shiftId, { beforeRequest: e4Call, refreshClock: pullForClock }),
     confirmCount: (input) => serial(() => confirmCount(db, deps, input)),
     issueZ: (input) => serial(() => issueZ(db, deps, input)),
     listZReports: () => serial(() => listZReports(db)),

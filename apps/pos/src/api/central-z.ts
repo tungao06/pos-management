@@ -1,10 +1,10 @@
-import { and, desc, eq, lt, ne, sql } from 'drizzle-orm'
+import { and, eq, lt, ne } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { IsoReceived } from '@dayo/contracts'
-import { zReportHash } from '@dayo/domain'
 import { DAYO_AHEAD_TOLERANCE_MS, DAYO_KEYS, deleteKey, readKey, writeKey } from '../sync/state'
 import { PosError } from './errors'
+import { deviceLastZNo } from './z-rows'
 
 /**
  * Task 13 · spec 04 §4.4 ข้อ 6 · §6.6 · §13.8 R5-1 · ruling R9 · D55: the key's last Z as dayo holds it (E1 client.last_z_no /
@@ -43,6 +43,7 @@ const CENTRAL_Z_KEYS = [DAYO_KEYS.lastZNo, DAYO_KEYS.lastZHash, DAYO_KEYS.lastZU
 
 /** Inside the setup / key-swap / recovery transaction: the three keys, or none (a key without a Z starts its own chain — §6.6). */
 export async function storeCentralZ(tx: RemoteDb, z: CentralZ | null): Promise<void> {
+  await deleteKey(tx, DAYO_KEYS.lastZContinued) // a new read of dayo: not continued yet (fix round 1)
   if (z === null) {
     for (const k of CENTRAL_Z_KEYS) await deleteKey(tx, k)
     return
@@ -71,43 +72,57 @@ export async function readCentralZ(db: RemoteDb): Promise<CentralZ | null> {
 }
 
 /**
- * This device's own last Z number: the zNo of its newest z_report row (insertion order — close.ts deviceZRows) when that
- * row's hash verifies, else its Z row count (close.ts's rule for an untrustworthy last row). 0 = no Z yet.
+ * Task 13 fix round 1 (security M): sync_state value of the stored central Z once a Z of this device continued it (written
+ * by writeZ in the Z's own transaction; cleared by storeCentralZ with every new E1 read). A continuation is used ONCE:
+ * without this, a later hash failure of that Z would lower deviceLastZNo, re-open the R9 path and issue the same Z number
+ * again (a fork of the chain, a bot window counted twice, the D53–D55 evidence hidden).
  */
-async function deviceLastZNo(db: RemoteDb, deviceId: string): Promise<number> {
-  const rows = (await db.values<[number]>(sql`select count(*) from z_report z join shift sh on sh.id = z.shift_id where sh.device_id = ${deviceId}`))[0]?.[0] ?? 0
-  if (rows === 0) return 0
-  const last = await db.select({ hash: s.zReport.hash, text: sql<string>`${s.zReport.snapshotJson}` }).from(s.zReport)
-    .innerJoin(s.shift, eq(s.shift.id, s.zReport.shiftId)).where(eq(s.shift.deviceId, deviceId))
-    .orderBy(desc(sql`"z_report"."rowid"`)).limit(1).get()
-  try {
-    const snap: unknown = JSON.parse(last!.text)
-    const zNo = (snap as { zNo?: unknown } | null)?.zNo
-    if (typeof snap === 'object' && snap !== null && typeof zNo === 'number' && Number.isSafeInteger(zNo) && zReportHash(snap) === last!.hash) return zNo
-  } catch {
-    // unreadable: the row count stands for it
-  }
-  return rows
+export async function markCentralContinued(tx: RemoteDb, z: CentralZ): Promise<void> {
+  await writeKey(tx, DAYO_KEYS.lastZContinued, String(z.lastZNo))
 }
 
-/** Ruling R9: the central last Z stored at setup/relink/recover, when it is above this device's own last Z (the R9 path), else null. */
+/** Ruling R9: the central last Z stored at setup/relink/recover, when it is above this device's own last Z and no Z has
+ * continued it yet (the R9 path), else null. */
 export async function centralContinuation(db: RemoteDb, deviceId: string): Promise<CentralZ | null> {
   const central = await readCentralZ(db)
   if (central === null) return null
+  if ((await readKey(db, DAYO_KEYS.lastZContinued)) === String(central.lastZNo)) return null
   return central.lastZNo > (await deviceLastZNo(db, deviceId)) ? central : null
+}
+
+/** The shift whose Z is the first of the R9 line (R7: no earlier counted shift of this device still waits for its Z), with the central Z it continues — or null. */
+async function firstOfCentralLine(db: RemoteDb, shift: { id: string; deviceId: string; countedAt: string }): Promise<CentralZ | null> {
+  const c = await centralContinuation(db, shift.deviceId)
+  if (c === null) return null
+  const earlier = await db.select({ id: s.shift.id }).from(s.shift)
+    .where(and(eq(s.shift.deviceId, shift.deviceId), eq(s.shift.status, 'counted'), lt(s.shift.countedAt, shift.countedAt), ne(s.shift.id, shift.id))).limit(1).get()
+  return earlier === undefined ? c : null
 }
 
 /**
  * spec §13.8 R5-1: where the E4 window of `shift` starts on the R9 path — dayo's last_z_until — or null (the usual rule).
  * Only for the first Z of the line: R7 issues Zs in count order, so that is the shift with no earlier counted shift of
  * this device still waiting for its Z; a later one starts at the previous local count as always (so its window never
- * moves when the first one's Z is written). A last_z_until at or after this count (a clock that was wrong) is not used:
- * the usual rule stands and dayo shows the mismatch — nothing is guessed.
+ * moves when the first one's Z is written). A count at or before last_z_until never gets here: rows.ts floors counts
+ * after it, and one taken before the key swap is refused by assertCountAfterCentralZ.
  */
 export async function centralWindowStart(db: RemoteDb, shift: { id: string; deviceId: string; countedAt: string }): Promise<string | null> {
-  const c = await centralContinuation(db, shift.deviceId)
-  if (c === null || !(Date.parse(c.lastZUntil) < Date.parse(shift.countedAt))) return null
-  const earlier = await db.select({ id: s.shift.id }).from(s.shift)
-    .where(and(eq(s.shift.deviceId, shift.deviceId), eq(s.shift.status, 'counted'), lt(s.shift.countedAt, shift.countedAt), ne(s.shift.id, shift.id))).limit(1).get()
-  return earlier === undefined ? c.lastZUntil : null
+  const c = await firstOfCentralLine(db, shift)
+  return c !== null && Date.parse(c.lastZUntil) < Date.parse(shift.countedAt) ? c.lastZUntil : null
+}
+
+/** BAD_INPUT detail prefix of assertCountAfterCentralZ (the screen shows the Thai text after it). */
+export const COUNT_BEFORE_CENTRAL_Z = 'COUNT_BEFORE_CENTRAL_Z'
+
+/**
+ * Task 13 fix round 1 (review item 2): a count taken BEFORE dayo's last Z of this key (counted, then replaceApiKey /
+ * recoverOwner read a later Z from dayo) cannot be the first Z of the R9 line: its number and hash would continue dayo's
+ * Z while its bot window (the usual rule) overlaps that Z — bot cash counted twice. Refused for E4 and for the Z of a
+ * central shift; counted_at is frozen, so the owner's way on is Task 14's escape. A local-only shift has no bot window.
+ */
+export async function assertCountAfterCentralZ(db: RemoteDb, shift: { id: string; deviceId: string; countedAt: string }): Promise<void> {
+  const c = await firstOfCentralLine(db, shift)
+  if (c !== null && !(Date.parse(c.lastZUntil) < Date.parse(shift.countedAt))) {
+    throw new PosError('BAD_INPUT', `${COUNT_BEFORE_CENTRAL_Z}: การนับนี้ (${shift.countedAt}) เกิดก่อนใบปิดกะล่าสุดในระบบกลาง (Z ${c.lastZNo} นับเมื่อ ${c.lastZUntil}) — ออกใบปิดกะต่อเลขนั้นไม่ได้ เพราะบิลบอทช่วงเดียวกันจะถูกนับซ้ำ ให้เจ้าของร้านตัดสินใจ`)
+  }
 }

@@ -41,6 +41,7 @@ export const DAYO_KEYS = {
   lastZNo: 'dayo.last_z_no',
   lastZHash: 'dayo.last_z_hash',
   lastZUntil: 'dayo.last_z_until',
+  lastZContinued: 'dayo.last_z_continued', // fix round 1: last_z_no a Z of this device has already continued (used once)
 } as const
 export type ApiState = 'ok' | 'unauthorized' | 'forbidden' | 'disabled' | 'bad_base_url'
 
