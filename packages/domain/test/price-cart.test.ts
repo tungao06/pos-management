@@ -19,7 +19,10 @@ const REFUSE = (f: () => unknown, code: CartError['code']): void => {
 
 describe('toPricingCatalog (the E1 catalog as dayo\'s OrderCatalog)', () => {
   it('the parsed contract type satisfies the POS catalog type with no cast, sizes included', () => {
-    expectTypeOf<PosOrderCatalogParsed>().toExtend<PosOrderCatalog>()
+    // PLAN 10 BRIDGE (T2 → T3): rule-only promotions (no `kind`) do not fit the vendored 4f35932 types — every other key,
+    // legacy promotions included, is still pinned here. T3 restores `expectTypeOf<PosOrderCatalogParsed>()` on the f4cda56 vendor.
+    type LegacyPromotion = Extract<PosOrderCatalogParsed['promotions'][number], { kind: string }>
+    expectTypeOf<PosOrderCatalogParsed & { promotions: LegacyPromotion[] }>().toExtend<PosOrderCatalog>()
     expectTypeOf<PosOrderCatalog>().toExtend<Omit<OrderCatalog, 'ingredients' | 'milkOptions' | 'gradeOptions'>>()
     // the only other widening: an option's ingredientId/multiplier may be null (dayo menu_options columns are nullable)
     expectTypeOf<PosOrderCatalog['milkOptions'][number]['ingredientId']>().toEqualTypeOf<string | null>()

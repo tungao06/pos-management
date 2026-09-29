@@ -253,8 +253,8 @@ describe('what the tablet receives stays tolerant', () => {
 })
 
 describe('detail prefixes', () => {
-  it('the ten prefixes of §4.10, in order', () => {
-    expect([...DETAIL_PREFIXES]).toEqual(['scope:', 'role:', 'rule:', 'exists:', 'off_catalog_exists:', 'receipt_taken:', 'key_changed:', 'counted:', 'z_no_taken:', 'data_conflict:'])
+  it('the ten prefixes of §4.10, in order, then plan 10\'s reason_required: (dayo 0069:1098)', () => {
+    expect([...DETAIL_PREFIXES]).toEqual(['scope:', 'role:', 'rule:', 'exists:', 'off_catalog_exists:', 'receipt_taken:', 'key_changed:', 'counted:', 'z_no_taken:', 'data_conflict:', 'reason_required:'])
   })
   it('only at the very start; never a longer word that merely begins alike', () => {
     expect(detailPrefix(' scope: x')).toBeNull()
