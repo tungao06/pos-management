@@ -83,6 +83,16 @@ describe('checkCatalogRules: a catalog the engine cannot read is refused whole (
     delete stackWithoutGroups.promotionGroups
     expect(checkCatalogRules(stackWithoutGroups).filter((s) => s.includes('stack')).length).toBe(2)
   })
+  it('an empty groupCode is main, as the engine reads it (promo.groupCode || main) — never an unknown group (T7 review L2)', () => {
+    expect(checkCatalogRules(editPromo(PROMO.M_FREE, (p) => { p['groupCode'] = '' }))).toEqual([])
+    expect(checkCatalogRules(editPromo(PROMO.B2G1, (p) => { p['groupCode'] = null }))).toEqual([])
+  })
+  it('stops at 3 problems (enough to refuse the catalog and to show why — T7 review L2)', () => {
+    const c = structuredClone(CAT)
+    for (const p of c.promotions) (p as unknown as Record<string, unknown>)['groupCode'] = 'ghost'
+    expect(c.promotions.length).toBeGreaterThan(3)
+    expect(checkCatalogRules(c)).toHaveLength(3)
+  })
   it('a legacy promotion with no rule is fine (the engine reads it with promoFromLegacy)', () => {
     const c = editPromo(PROMO.B2G1, (p) => { delete p['rule']; delete p['template']; delete p['timeWindows']; delete p['groupCode'] })
     expect(checkCatalogRules(c)).toEqual([])

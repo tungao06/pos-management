@@ -9,6 +9,8 @@ export const TABLET_PROMO_RULE_VERSION: number = Math.max(...PROMO_RULE_VERSIONS
 
 /** dayo's own group every promotion without one belongs to (promoRule.ts PROMO_MAIN_GROUP) — needs no promotionGroups row. */
 const MAIN_GROUP = 'main'
+/** checkCatalogRules returns at most this many problems (T7 review L2). */
+export const CATALOG_PROBLEMS_MAX = 3
 
 /**
  * What the vendored engine cannot read in an E1 catalog the contract already accepted (plan 10 §0.2 E1 · ruling R12):
@@ -16,11 +18,13 @@ const MAIN_GROUP = 'main'
  * TABLET_PROMO_RULE_VERSION, and its group a group of the catalog. Empty = usable. Any entry = refuse the catalog WHOLE
  * and keep the one before — never drop a promotion on its own (the tablet would price bills dayo prices otherwise).
  * A legacy promotion with no rule is read by the engine from kind/params (promoFromLegacy) and needs no check here.
+ * Stops at CATALOG_PROBLEMS_MAX: one problem already refuses the catalog; three are enough to say why.
  */
 export function checkCatalogRules(c: PosOrderCatalog): string[] {
   const groups = new Set([MAIN_GROUP, ...(c.promotionGroups ?? []).map((g) => g.code)])
   const out: string[] = []
   for (const p of c.promotions) {
+    if (out.length >= CATALOG_PROBLEMS_MAX) break
     const at = `promotion ${p.id} "${p.name}"`
     if (p.rule != null) {
       const v: unknown = (p.rule as { v?: unknown }).v
@@ -28,11 +32,11 @@ export function checkCatalogRules(c: PosOrderCatalog): string[] {
       for (const problem of validatePromoRule(p.rule)) out.push(`${at}: ${problem}`)
     }
     if (p.timeWindows != null) for (const problem of validateTimeWindows(p.timeWindows)) out.push(`${at}: ${problem}`)
-    // the engine reads `groupCode || main` (promotions.ts preparePromo)
+    // the engine reads `groupCode || main` (promotions.ts preparePromo): null, absent and '' are all main
     const group = p.groupCode || MAIN_GROUP
     if (!groups.has(group)) out.push(`${at}: groupCode "${group}" is not a group of the catalog`)
   }
-  return out
+  return out.slice(0, CATALOG_PROBLEMS_MAX)
 }
 
 /**
