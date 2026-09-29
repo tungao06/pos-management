@@ -353,6 +353,9 @@ export async function closeShift(db: RemoteDb, deps: ApiDeps, input: CloseShiftI
           closedAt: at,
           closedBy: approver.id,
           countedBy: actor.id,
+          countedAt: at, // R17: block 2 counts and closes in one step (Task 12 splits them)
+          botWindow: null,
+          botBills: [],
           sales: report.sales,
           cash: report.cash,
           countLines: tally.lines,

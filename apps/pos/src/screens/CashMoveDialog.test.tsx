@@ -18,7 +18,7 @@ const REPORT: ShiftReportDto = {
   shift: { id: 's1', businessDate: '2026-09-17', openedAt: '2026-09-17T00:00:00Z', openedBy: 'u1', openingFloatSatang: 50_000, openedByName: 'TungAo', openedQuick: false },
   generatedAt: '2026-09-17T10:00:00Z',
   sales: { orderCount: 0, voidCount: 0, grossSalesSatang: 0, discountSatang: 0, voidedSatang: 0, netSalesSatang: 0, cashSalesSatang: 0, qrSalesSatang: 0, qrRefundedSatang: 0, qrNetSatang: 0 },
-  cash: { openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0 },
+  cash: { openingFloatSatang: 50_000, cashSalesSatang: 0, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 0, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 },
   // expected drawer cash ฿500 — never rendered by this dialog (blind count, Q3b-3 · D52)
   expectedCashSatang: 50_000,
   varianceAlertSatang: 2_000,

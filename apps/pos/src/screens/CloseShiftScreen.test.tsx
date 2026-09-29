@@ -27,7 +27,7 @@ const REPORT: ShiftReportDto = {
   shift: { ...SHIFT, openedByName: 'TungAo', openedQuick: false },
   generatedAt: '2026-09-17T13:00:00.000Z',
   sales: { orderCount: 2, voidCount: 0, grossSalesSatang: 9_500, discountSatang: 0, voidedSatang: 0, netSalesSatang: 9_500, cashSalesSatang: 4_500, qrSalesSatang: 5_000, qrRefundedSatang: 0, qrNetSatang: 5_000 },
-  cash: { openingFloatSatang: 50_000, cashSalesSatang: 4_500, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 2_500, dropsSatang: 0 },
+  cash: { openingFloatSatang: 50_000, cashSalesSatang: 4_500, voidRefundsSatang: 0, paidInSatang: 0, paidOutSatang: 2_500, dropsSatang: 0, drawerExpensesSatang: 0, botCashSatang: 0 },
   expectedCashSatang: 52_000,
   varianceAlertSatang: 2_000,
   cashMovements: [],

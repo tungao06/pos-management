@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, lt } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { canonicalJson, cashInputsFromMovements, DEFAULT_VARIANCE_ALERT_SATANG, expectedCashSatang, sha256Hex, summarizeShiftSales, type ShiftOrder, type ZVoid } from '@dayo/domain'
+import { canonicalJson, cashInputsFromMovements, DEFAULT_VARIANCE_ALERT_SATANG, effectiveVarianceAlertSatang, expectedCashSatang, sha256Hex, summarizeShiftSales, type ShiftOrder, type ZVoid } from '@dayo/domain'
 import { toCashMovementDto } from './cash'
 import { countPendingSyncItems, currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
@@ -15,7 +15,7 @@ export const VARIANCE_ALERT_SETTING_KEY = 'cash.variance_alert_satang'
 
 export async function varianceAlertSatang(db: RemoteDb, atIso: string): Promise<number> {
   const v = await getSetting(db, VARIANCE_ALERT_SETTING_KEY, atIso)
-  return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : DEFAULT_VARIANCE_ALERT_SATANG
+  return effectiveVarianceAlertSatang(typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : DEFAULT_VARIANCE_ALERT_SATANG) // R4
 }
 
 /** The VOIDED event payload written when a bill is voided (plan 3 Task 13) — the only place the QR refund reference lives (plan 3 notes §5). */
