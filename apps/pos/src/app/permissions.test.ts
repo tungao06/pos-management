@@ -15,3 +15,16 @@ describe('fix round 1 [Important]: an unrecognized role is denied, not thrown', 
     expect(can('unknown' as PosRole, action)).toBe(false)
   })
 })
+
+it('only an owner closes a bill as off-catalog (D91 · D97 · spec §4.10 order_off_catalog)', () => {
+  expect(can('owner', 'close_off_catalog')).toBe(true)
+  expect(can('manager', 'close_off_catalog')).toBe(false)
+  expect(can('staff', 'close_off_catalog')).toBe(false)
+})
+
+it('everyone may count the drawer and start the Z; the owner PIN is the gate (D52 Q3b-2 · D101)', () => {
+  for (const r of ['staff', 'manager', 'owner'] as const) {
+    expect(can(r, 'count_cash')).toBe(true)
+    expect(can(r, 'close_shift')).toBe(true)
+  }
+})
