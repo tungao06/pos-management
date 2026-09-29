@@ -134,20 +134,42 @@ describe('IssueZScreen (D101 step 3)', () => {
     expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
   })
 
-  // fix round 2 item A (High): a wrong PIN in keepShiftLocal must show, not disappear because reset() ran.
-  it('a wrong PIN in keepShiftLocal shows an error (reset() never hides it)', async () => {
+  // fix round 3 item 2: prominent must come from the SAME allowlist `issueZ` uses (`isCentralZBlockedError`), not
+  // "not recoverable" — an unknown E4 error (a plain Error, SHIFT_NOT_COUNTING, the worker down, …) is not proof
+  // of a permanent block either, so it stays the secondary link too.
+  it('E4 refused with an unknown error (neither allowlisted nor recoverable) shows only the secondary link', async () => {
+    const api = fakeApi({
+      fetchBotCash: vi.fn(async () => { throw new Error('SHIFT_NOT_COUNTING: s1') }),
+      countSummary: vi.fn(async () => summary({ includesBotCash: false, bot: null })),
+    })
+    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    expect(await screen.findByTestId('keep-shift-local-link')).toBeVisible()
+    expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
+  })
+
+  // fix round 2 item A (High) · fix round 3 item 1: a wrong PIN in keepShiftLocal must show, not disappear
+  // because reset() ran — and it must show again after a SECOND wrong PIN (the exact same Thai string twice),
+  // clearing the field both times, with no PIN left in the mutation cache either time.
+  it('a wrong PIN in keepShiftLocal shows an error twice in a row, clearing the PIN field each time', async () => {
     const api = fakeApi({
       keepShiftLocal: vi.fn(async () => { throw new Error('PIN_WRONG: nope') }),
       fetchBotCash: vi.fn(async () => { throw new Error('DAYO_BAD_RESPONSE: unreadable') }),
       countSummary: vi.fn(async () => summary({ includesBotCash: false, bot: null })),
     })
-    render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
+    const { queryClient } = render(<IssueZScreen shiftId="s1" countedSatang={61_500} />, { api, session })
     await user.click(await screen.findByTestId('keep-shift-local-open'))
     await user.click(screen.getByTestId('approval-owner-TungAo'))
-    await user.type(screen.getByTestId('approval-pin'), '9999')
     await user.type(screen.getByTestId('approval-reason'), 'x')
-    await user.click(screen.getByTestId('approval-ok'))
-    expect(await screen.findByText(TH.errPinWrong)).toBeVisible()
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await user.type(screen.getByTestId('approval-pin'), '9999')
+      await user.click(screen.getByTestId('approval-ok'))
+      expect(await screen.findByText(TH.errPinWrong)).toBeVisible()
+      expect(screen.getByTestId('approval-pin')).toHaveValue('')
+      // no mutation in the cache ever keeps this PIN.
+      await waitFor(() =>
+        expect(queryClient.getMutationCache().getAll().some((m) => (m.state.variables as { approverPin?: string } | undefined)?.approverPin === '9999')).toBe(false),
+      )
+    }
   })
 
   // fix round 1 item 3: issueZ refused with CLOCK_AHEAD offers skipCountFloor, same as CloseShiftScreen.

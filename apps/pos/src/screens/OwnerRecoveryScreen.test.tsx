@@ -109,5 +109,9 @@ describe('OwnerRecoveryScreen (ruling N2 · R1)', () => {
     fireEvent.change(screen.getByTestId('recovery-pin2'), { target: { value: '2468' } })
     fireEvent.click(screen.getByTestId('recovery-save'))
     expect(await screen.findByText('ยังไม่ได้เพิกถอนกุญแจเก่าบนเว็บ — เพิกถอนก่อนแล้วกดอีกครั้ง')).toBeInTheDocument()
+    // fix round 3 item 4 (security): matches SetupScreen/SystemStatusScreen — a refused attempt must not leave
+    // the PIN sitting in the field.
+    expect(screen.getByTestId('recovery-pin')).toHaveValue('')
+    expect(screen.getByTestId('recovery-pin2')).toHaveValue('')
   })
 })

@@ -2,9 +2,10 @@ import { eq, inArray } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { CashCountRowData, ShiftCloseRowData, type CentralOrder } from '@dayo/contracts'
-import { posErrorCode } from '../src/api/errors'
+import { isCentralZBlockedError, posErrorCode } from '../src/api/errors'
 import { pushOnce } from '../src/sync/push'
 import { LOCAL_DEVICE_KEY } from '../src/api/bootstrap'
+import { writeZ } from '../src/api/close'
 import { botPreviewKey } from '../src/api/bot-cash'
 import { pullCatalog } from '../src/sync/catalog'
 import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
@@ -256,6 +257,41 @@ describe('count and Z — states, PINs, resend (D101 · R2 · R7)', () => {
     expect(await shiftOf(shiftId)).toMatchObject({ status: 'closed', countedAt, closedBy: STAFF.DCm })
     await expectCode(t.api.issueZ({ shiftId, ...owner2, shownFingerprint: 'x', ...settle }), 'Z_NOT_READY') // one Z per shift
   })
+
+  // fix round 3 item 3: a real `buildZReport` RangeError (not a hand-written PosError) still comes back as
+  // `BAD_INPUT Z_BUILD:` — the exact prefix `isCentralZBlockedError` (api/errors.ts) allowlists — proving the
+  // shared constant actually connects api/close.ts's writer to api/errors.ts's reader, not just two copies of the
+  // same string. `writeZ` is called directly (bypassing confirmCount/issueZ's own validation of `countLines`,
+  // which never lets an invalid denomination reach `cash_count.lines_json` in the first place) with a denomination
+  // `buildZReport` itself refuses.
+  it('a real buildZReport RangeError (writeZ) becomes BAD_INPUT Z_BUILD:, accepted by isCentralZBlockedError', async () => {
+    const { t } = await centralShift()
+    const { shiftId } = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    const sum = await t.api.countSummary(shiftId)
+    await t.api.confirmCount({ shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(545), shownFingerprint: sum.fingerprint, z: null })
+    await t.api.fetchBotCash(shiftId)
+    const shiftRow = await t.db.select().from(s.shift).where(eq(s.shift.id, shiftId)).get()
+    const countRow = await t.db.select().from(s.cashCount).where(eq(s.cashCount.shiftId, shiftId)).get()
+    const summary2 = await t.api.countSummary(shiftId)
+    const approver = { id: STAFF.DCm, displayName: 'DCm', role: 'owner' as const }
+    try {
+      await t.db.transaction((tx) =>
+        writeZ(tx, t.deps, {
+          shift: shiftRow!,
+          count: { id: countRow!.id, countedSatang: countRow!.countedSatang, countedBy: countRow!.countedBy, countedAt: countRow!.countedAt, linesJson: [{ denominationSatang: 3, count: 1 }] },
+          approver,
+          summary: summary2,
+          settle: { ...settle, varianceReason: 'บอท' },
+        }),
+      )
+      expect.unreachable()
+    } catch (e) {
+      expect(posErrorCode(e)).toBe('BAD_INPUT')
+      expect((e as Error).message).toMatch(/^BAD_INPUT: Z_BUILD: /)
+      expect(isCentralZBlockedError(e)).toBe(true)
+    }
+  })
+
   it('confirmCount and issueZ each need an owner PIN (D101: twice when offline) — a wrong PIN or a staff approver writes nothing', async () => {
     const { t } = await centralShift()
     const { shiftId } = await t.api.finishCount({ actorUserId: STAFF.TungAo })

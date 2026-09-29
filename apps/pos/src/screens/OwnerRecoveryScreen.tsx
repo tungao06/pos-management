@@ -46,7 +46,13 @@ export function OwnerRecoveryScreen(): JSX.Element {
       await Promise.all([queryClient.invalidateQueries({ queryKey: bootstrapKey }), queryClient.invalidateQueries({ queryKey: syncStatusKey })])
       void navigate({ to: '/login' })
     },
-    onError: (e) => setError(errorMessage(e)),
+    onError: (e) => {
+      // fix round 3 item 4 (security): matches SetupScreen/SystemStatusScreen — a refused attempt must not leave
+      // the PIN sitting in the field.
+      setError(errorMessage(e))
+      setPin('')
+      setPin2('')
+    },
   })
 
   if (boot.isPending) return <main className="page">{TH.loading}</main>

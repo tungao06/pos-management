@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useState, type JSX } from 'react'
-import { isCentralZBlockedError, isClockAheadCountError, isRecoverableE4Error, posErrorCode } from '../api/errors'
+import { isCentralZBlockedError, isClockAheadCountError, posErrorCode } from '../api/errors'
 import type { CountSummaryDto, IssueZInput, SkipCountFloorResult } from '../api/types'
 import { useApi } from '../app/api-context'
 import { bootstrapKey, issueZKey, useBootstrap, zKey, zListKey } from '../app/queries'
@@ -28,9 +28,10 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
   const [chainBroken, setChainBroken] = useState(false)
   const [chainCentralZNo, setChainCentralZNo] = useState<number | null>(null)
   const [botCashError, setBotCashError] = useState<string | null>(null)
-  // fix round 2 item B: prominent only for a real, lasting E4 refusal — an allowlisted "try again later/fix the
-  // key" answer (isRecoverableE4Error) stays the small secondary link, whatever the raw error text looks like.
-  const [botCashRecoverable, setBotCashRecoverable] = useState(true)
+  // fix round 2 item B · fix round 3 item 2: prominent only for the SAME allowlist `issueZ` itself uses
+  // (`isCentralZBlockedError`) — an unknown E4 error (a plain Error, SHIFT_NOT_COUNTING, the worker down, …) is
+  // not proof of a permanent block either, so it stays the small secondary link, same as a recoverable one.
+  const [botCashProminent, setBotCashProminent] = useState(false)
   // fix round 1 items 1a/3: issueZ refused for a reason this device's own retry can never fix — the owner keeps
   // the shift on the tablet for good (9a) or, for CLOCK_AHEAD specifically, skips the far-ahead count (9b).
   const [zBlockedPermanently, setZBlockedPermanently] = useState(false)
@@ -43,7 +44,7 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
       try {
         await api.fetchBotCash(shiftId)
         setBotCashError(null)
-        setBotCashRecoverable(true)
+        setBotCashProminent(false)
       } catch (e) {
         // fix round 1 item 2 (same as CloseShiftScreen): a plain OFFLINE means "no answer yet" — expected, silent —
         // but anything else (DAYO_BAD_RESPONSE, CLOCK_AHEAD, …) is worth telling the owner about, not swallowed.
@@ -51,7 +52,7 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
           setBotCashError(null)
         } else {
           setBotCashError(errorMessage(e))
-          setBotCashRecoverable(isRecoverableE4Error(e))
+          setBotCashProminent(isCentralZBlockedError(e))
         }
       }
       return api.countSummary(shiftId)
@@ -163,10 +164,11 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
         <button type="button" data-testid="z-retry" onClick={() => void load.refetch()}>
           {TH.retry}
         </button>
-        {/* fix round 1 item 1a/1b · fix round 2 item B: prominent only for a real, lasting E4 refusal — an
-            allowlisted "try again later/fix the key" answer (`isRecoverableE4Error`), or a plain OFFLINE (still
-            no answer, network may come back), gets the small secondary link only. */}
-        <KeepShiftLocalControl shiftId={shiftId} owners={owners} prominent={botCashError !== null && !botCashRecoverable} onDone={() => void load.refetch()} />
+        {/* fix round 1 item 1a/1b · fix round 2 item B · fix round 3 item 2: prominent only when the E4 error
+            itself is allowlisted as a permanent central-Z block (`isCentralZBlockedError`, the same allowlist
+            `issueZ` uses) — a recoverable answer, an unknown error, or a plain OFFLINE (still no answer, network
+            may come back) all get the small secondary link only. */}
+        <KeepShiftLocalControl shiftId={shiftId} owners={owners} prominent={botCashProminent} onDone={() => void load.refetch()} />
       </main>
     )
   }

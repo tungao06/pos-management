@@ -3,7 +3,7 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { IsoReceived } from '@dayo/contracts'
 import { DAYO_AHEAD_TOLERANCE_MS, DAYO_KEYS, deleteKey, readKey, writeKey } from '../sync/state'
-import { PosError } from './errors'
+import { COUNT_BEFORE_CENTRAL_Z, PosError } from './errors'
 import { deviceLastZNo, readCentralZFloor, readDeviceZHigh } from './z-rows'
 
 /**
@@ -114,9 +114,6 @@ export async function centralWindowStart(db: RemoteDb, shift: { id: string; devi
   const c = await firstOfCentralLine(db, shift)
   return c !== null && Date.parse(c.lastZUntil) < Date.parse(shift.countedAt) ? c.lastZUntil : null
 }
-
-/** BAD_INPUT detail prefix of assertCountAfterCentralZ (the screen shows the Thai text after it). */
-export const COUNT_BEFORE_CENTRAL_Z = 'COUNT_BEFORE_CENTRAL_Z'
 
 /**
  * Task 13 fix round 1 (review item 2): a count taken BEFORE dayo's last Z of this key (counted, then replaceApiKey /

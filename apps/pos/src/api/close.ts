@@ -12,7 +12,7 @@ import { botPreviewKey } from './bot-cash'
 import { assertCountAfterCentralZ, centralContinuation, markCentralContinued } from './central-z'
 import { requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
-import { PosError } from './errors'
+import { E2_SHIFT_CLOSE_ROW, PosError, Z_BUILD } from './errors'
 import { assertNoFarAheadCount, builtRow, notBefore } from './rows'
 import { PAYMENT_CODE, type CountSummaryDto, type StoredZSnapshot, type UserDto, type ZReportDto, type ZReportSummaryDto, type ZSettle } from './types'
 import { deviceZRows, expectedZNoGap, floorWithinReach, raiseDeviceZHigh, readCentralZFloor, safeBoolOrNull, safeIntOrNull, safeStrOrNull, toLenientEntry, toZReportDto, tryParseJson, type ZRawRow } from './z-rows'
@@ -103,7 +103,7 @@ export type ZCount = { id: string; countedSatang: number; countedBy: string; cou
 
 /** A shift_close row dayo would refuse forever is refused at save time (R20 caps → Z_TOO_LARGE, anything else BAD_INPUT). */
 function builtClose(build: () => ReturnType<typeof buildShiftCloseRowData>): ReturnType<typeof buildShiftCloseRowData> {
-  return builtRow('E2 shift_close row', () => {
+  return builtRow(E2_SHIFT_CLOSE_ROW, () => {
     try {
       return build()
     } catch (e) {
@@ -293,9 +293,10 @@ export async function writeZ(tx: RemoteDb, deps: ApiDeps, a: { shift: typeof s.s
       prev,
     )
   } catch (e) {
-    // fix round 2 item C: a structured detail prefix — `buildZReport` refusing forever (not a transient input
-    // slip) is the same "central Z can never issue" dead end `isCentralZBlockedError` (api/errors.ts) allowlists.
-    if (e instanceof RangeError) throw new PosError('BAD_INPUT', `Z_BUILD: ${e.message}`)
+    // fix round 2 item C · fix round 3 item 3: a structured detail prefix (from api/errors.ts, not re-typed here)
+    // — `buildZReport` refusing forever (not a transient input slip) is the same "central Z can never issue" dead
+    // end `isCentralZBlockedError` (api/errors.ts) allowlists.
+    if (e instanceof RangeError) throw new PosError('BAD_INPUT', `${Z_BUILD}: ${e.message}`)
     throw e
   }
 

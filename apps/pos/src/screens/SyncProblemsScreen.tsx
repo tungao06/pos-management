@@ -495,7 +495,13 @@ export function SyncProblemsScreen(): JSX.Element {
           defaultApproverId={user?.role === 'owner' ? user.id : null}
           busy={mutation.isPending}
           error={mutationError}
-          onSubmit={(approval) => mutation.mutate(approval)}
+          onSubmit={(approval) => {
+            // fix round 3 item 1 (M): the same reason as OwnerEscapeControls — a second wrong PIN in a row sets
+            // the exact same Thai error string, which the dialog's own "clear the PIN on error change" effect
+            // never sees as a change at all unless it goes through `null` first.
+            setMutationError(null)
+            mutation.mutate(approval)
+          }}
           onClose={closeDialog}
         />
       )}
@@ -522,7 +528,10 @@ export function SyncProblemsScreen(): JSX.Element {
               </p>
             ) : undefined
           }
-          onSubmit={(approval) => mutation.mutate(approval)}
+          onSubmit={(approval) => {
+            setMutationError(null)
+            mutation.mutate(approval)
+          }}
           onClose={closeDialog}
         />
       )}

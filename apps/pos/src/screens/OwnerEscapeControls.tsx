@@ -36,7 +36,15 @@ function useResettingMutation<T>(mutationFn: (approval: OwnerApproval) => Promis
     onError: (e) => setError(errorMessage(e)),
     onSettled: (): void => mutation.reset(),
   })
-  return { mutate: mutation.mutate, isPending: mutation.isPending, error, clearError: () => setError(null) }
+  // fix round 3 item 1 (M): `OwnerApprovalDialog` clears its PIN field only when `error` actually CHANGES (a
+  // `useEffect` on it) — a second wrong PIN in a row sets the exact same Thai string again, which React sees as no
+  // change at all, so the just-typed (wrong) PIN sat in the field forever. Clearing the saved error to `null`
+  // right before every submit guarantees the next `onError` (if any) is always a real `null` → text transition.
+  const mutate = (approval: OwnerApproval): void => {
+    setError(null)
+    mutation.mutate(approval)
+  }
+  return { mutate, isPending: mutation.isPending, error, clearError: () => setError(null) }
 }
 
 /** 9a "เก็บกะนี้ไว้ในเครื่อง" — `prominent` (fix round 1 item 1b) picks the banner button vs. a small secondary

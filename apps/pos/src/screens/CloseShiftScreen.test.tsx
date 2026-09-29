@@ -286,19 +286,28 @@ describe('CloseShiftScreen (D52 Q3b-3 · D101 · D102)', () => {
     expect(screen.queryByTestId('keep-shift-local-open')).toBeNull()
   })
 
-  // fix round 2 item A (High): a wrong PIN in skipCountFloor must show, not disappear because reset() ran.
-  it('a wrong PIN in skipCountFloor shows an error (reset() never hides it)', async () => {
+  // fix round 2 item A (High) · fix round 3 item 1: a wrong PIN in skipCountFloor must show, not disappear
+  // because reset() ran — and again after a SECOND wrong PIN (the exact same Thai string twice), clearing the
+  // field both times, with no PIN left in the mutation cache either time.
+  it('a wrong PIN in skipCountFloor shows an error twice in a row, clearing the PIN field each time', async () => {
     const api = fakeApi({
       skipCountFloor: vi.fn(async () => { throw new Error('PIN_WRONG: nope') }),
       finishCount: vi.fn(async () => { throw new PosError('BAD_INPUT', 'CLOCK_AHEAD: นาฬิกาเครื่องล้ำเวลาจริง') }),
     })
-    render(<CloseShiftScreen />, { api, session })
+    const { queryClient } = render(<CloseShiftScreen />, { api, session })
     await user.click(screen.getByTestId('count-finish'))
     await user.click(await screen.findByTestId('skip-count-floor-open'))
     await user.click(screen.getByTestId('approval-owner-DCm'))
-    await user.type(screen.getByTestId('approval-pin'), '9999')
     await user.type(screen.getByTestId('approval-reason'), 'x')
-    await user.click(screen.getByTestId('approval-ok'))
-    expect(await screen.findByText(TH.errPinWrong)).toBeVisible()
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await user.type(screen.getByTestId('approval-pin'), '9999')
+      await user.click(screen.getByTestId('approval-ok'))
+      expect(await screen.findByText(TH.errPinWrong)).toBeVisible()
+      expect(screen.getByTestId('approval-pin')).toHaveValue('')
+      // no mutation in the cache (this one, or any unrelated one like `finishCount`) ever keeps this PIN.
+      await waitFor(() =>
+        expect(queryClient.getMutationCache().getAll().some((m) => (m.state.variables as { approverPin?: string } | undefined)?.approverPin === '9999')).toBe(false),
+      )
+    }
   })
 })

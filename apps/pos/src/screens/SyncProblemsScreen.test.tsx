@@ -343,7 +343,32 @@ describe('SyncProblemsScreen — block 3 (spec 04 §6.4)', () => {
     for (const d of '9999') await user.click(within(dialog).getByTestId(`pin-${d}`))
     await user.click(within(dialog).getByTestId('off-catalog-confirm'))
     expect(await within(dialog).findByText(TH.errPinWrong)).toBeVisible()
-    await waitFor(() => expect(queryClient.getMutationCache().getAll().every((m) => m.state.status === 'idle')).toBe(true))
+    await waitFor(() =>
+      expect(queryClient.getMutationCache().getAll().some((m) => (m.state.variables as { approverPin?: string } | undefined)?.approverPin === '9999')).toBe(false),
+    )
+  })
+
+  // fix round 3 item 1 (M): the OwnerApprovalDialog-based remedies (text-input PIN) clear the field only when
+  // `error` CHANGES — the exact same Thai string twice in a row (a second wrong PIN) is no change at all unless
+  // the saved error is cleared to `null` before every submit. `RETRY` exercises that dialog (CloseOffCatalogDialog
+  // above uses `PinPad`, which already clears on every submit regardless of outcome — a different component, not
+  // the one this item fixes).
+  it('a wrong PIN in a text-input remedy dialog (RETRY) clears the field twice in a row', async () => {
+    const api = apiWith([problem({ remedies: ['RETRY'] })])
+    api.retrySyncRow = vi.fn(async () => { throw new Error('PIN_WRONG: nope') })
+    const { queryClient } = renderProblemsAs(api, OWNER_U1)
+    await user.click(await screen.findByTestId('remedy-retry'))
+    await screen.findByRole('dialog')
+    await user.type(screen.getByTestId('approval-reason'), 'x')
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await user.type(screen.getByTestId('approval-pin'), '9999')
+      await user.click(screen.getByTestId('approval-ok'))
+      expect(await screen.findByText(TH.errPinWrong)).toBeVisible()
+      expect(screen.getByTestId('approval-pin')).toHaveValue('')
+      await waitFor(() =>
+        expect(queryClient.getMutationCache().getAll().some((m) => (m.state.variables as { approverPin?: string } | undefined)?.approverPin === '9999')).toBe(false),
+      )
+    }
   })
   // deviation from task-16-brief.md: spec 04 §12 Q44 makes the WHOLE "ส่งไม่ผ่าน" page owner-only (already covered
   // by "a manager is sent away from /sync-problems too" above) — a manager never reaches a row to check the button

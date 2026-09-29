@@ -8,8 +8,7 @@ import { createDayoClient, DayoError, type DayoClient, type DayoFailure } from '
 import { DAYO_AHEAD_TOLERANCE_MS, DAYO_KEYS, estimatedServerMs, extendRateLimit, MAX_BACKOFF_WAIT_MS, readKey, writeKey } from '../sync/state'
 import { requireDevice } from './bootstrap'
 import { assertCountAfterCentralZ, centralWindowStart, readCentralZ } from './central-z'
-import { PosError } from './errors'
-import { CLOCK_AHEAD_COUNT } from './rows'
+import { CLOCK_AHEAD, PosError } from './errors'
 import type { BotCashDto } from './types'
 
 /** sync_state key of the last good E4 answer of a shift (local only — never sent; deleted when the Z is written). */
@@ -77,7 +76,7 @@ const bad = (why: string): PosError => new PosError('DAYO_BAD_RESPONSE', `E4 ${w
 async function assertWindowClosed(db: RemoteDb, until: string, answeredAt: string): Promise<void> {
   const server = (await estimatedServerMs(db, answeredAt)) ?? Date.parse(answeredAt)
   if (Date.parse(until) > server + DAYO_AHEAD_TOLERANCE_MS) {
-    throw new PosError('BAD_INPUT', `${CLOCK_AHEAD_COUNT}: เวลานับเงิน (${until}) ยังไม่ถึงในระบบกลาง (ตอนนี้ประมาณ ${new Date(server).toISOString()}) — นาฬิกาแท็บเล็ตไม่ตรงกับระบบกลาง บิลบอทที่จะเข้ามาก่อนถึงเวลานั้นจะไม่อยู่ในใบปิดกะใด ตั้งนาฬิกาให้ตรง แล้วรอให้ถึงเวลานับก่อนดึงยอดบิลบอทอีกครั้ง`)
+    throw new PosError('BAD_INPUT', `${CLOCK_AHEAD}: เวลานับเงิน (${until}) ยังไม่ถึงในระบบกลาง (ตอนนี้ประมาณ ${new Date(server).toISOString()}) — นาฬิกาแท็บเล็ตไม่ตรงกับระบบกลาง บิลบอทที่จะเข้ามาก่อนถึงเวลานั้นจะไม่อยู่ในใบปิดกะใด ตั้งนาฬิกาให้ตรง แล้วรอให้ถึงเวลานับก่อนดึงยอดบิลบอทอีกครั้ง`)
   }
 }
 

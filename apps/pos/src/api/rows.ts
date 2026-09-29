@@ -3,7 +3,7 @@ import type { RemoteDb } from '@dayo/db-schema/browser'
 import { CLOCK_AHEAD_FAR_MS } from '../sync/push'
 import { estimatedServerMs, readKey } from '../sync/state'
 import { centralContinuation } from './central-z'
-import { PosError } from './errors'
+import { CLOCK_AHEAD, PosError } from './errors'
 
 /**
  * A builder of @dayo/domain refuses (throws) a row dayo would reject forever: inside the caller's transaction that
@@ -27,8 +27,6 @@ export function notBefore(at: string, floor: string): string {
   return Date.parse(at) < Date.parse(floor) ? floor : at
 }
 
-/** BAD_INPUT detail prefix of a refusal by `countFloor` / `assertNoFarAheadCount` (the screen shows the Thai text after it). */
-export const CLOCK_AHEAD_COUNT = 'CLOCK_AHEAD'
 
 /**
  * Fix rounds 1–3 (security M1 · rule 5 offline-first): E4 windows start at the device's previous count, so a new shift
@@ -64,7 +62,7 @@ async function farAhead(db: RemoteDb, iso: string, deviceNow: string): Promise<b
 }
 
 function clockAheadError(last: string): PosError {
-  return new PosError('BAD_INPUT', `${CLOCK_AHEAD_COUNT}: การนับเงินครั้งล่าสุดของเครื่องนี้ (${last}) ล้ำเวลาจริงเกิน 24 ชม. — นาฬิกาแท็บเล็ตเคยตั้งผิด ขายต่อได้ แต่นับเงินและออกใบปิดกะไม่ได้จนกว่าเจ้าของร้านจะตัดสินใจ`)
+  return new PosError('BAD_INPUT', `${CLOCK_AHEAD}: การนับเงินครั้งล่าสุดของเครื่องนี้ (${last}) ล้ำเวลาจริงเกิน 24 ชม. — นาฬิกาแท็บเล็ตเคยตั้งผิด ขายต่อได้ แต่นับเงินและออกใบปิดกะไม่ได้จนกว่าเจ้าของร้านจะตัดสินใจ`)
 }
 
 /** Opening a shift: the floor (this device's last counted_at), or null = open at the device clock (no count yet, or it is far ahead). */

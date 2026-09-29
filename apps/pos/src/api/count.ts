@@ -9,7 +9,7 @@ import { botWindowFor, readBotPreview } from './bot-cash'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import { earlierCountWithoutZ, writeZ, type CloseShiftHooks } from './close'
 import type { ApiDeps } from './deps'
-import { PosError } from './errors'
+import { E2_CASH_COUNT_ROW, PosError } from './errors'
 import { builtRow, countFloor, notBefore } from './rows'
 import { requireActiveUser } from './shift'
 import { buildShiftReport } from './shift-report'
@@ -138,7 +138,7 @@ async function confirmInTx(
   } satisfies typeof s.cashCount.$inferInsert
   await tx.insert(s.cashCount).values(countRow)
   if (shift.syncMode === 'central') {
-    const data = builtRow('E2 cash_count row', () => buildCashCountRowData({ countId: countRow.id, shiftId: shift.id, lines: countRow.linesJson, countedBy: countRow.countedBy, countedAt }))
+    const data = builtRow(E2_CASH_COUNT_ROW, () => buildCashCountRowData({ countId: countRow.id, shiftId: shift.id, lines: countRow.linesJson, countedBy: countRow.countedBy, countedAt }))
     await enqueuePush(tx, { kind: 'cash_count', id: countRow.id, data, parentKey: shiftParentKey(shift.id) }, at, deps.newId)
   } else {
     await enqueueLocalOnly(tx, 'cash_count', countRow, at, deps.newId) // the shift stays on the tablet (spec 04 §6.1 · R1)
