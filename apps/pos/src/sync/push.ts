@@ -720,6 +720,24 @@ export async function clearFailureBackoff(db: RemoteDb, opts: { onlyNetwork?: bo
   }
 }
 
+/**
+ * Task 17 fix round 1 item 3 (ruling): a scope-wait row (`markScopeWait`, FORBIDDEN `scope:`) otherwise sits out its
+ * full SCOPE_RETRY_MS (15 real minutes) — even a manual "ส่งตอนนี้" wake would not resend it a moment sooner, since
+ * `pendingRows`'s `isShiftLane` only lets the lane picker SEE it early (so it keeps holding the lane), never send it
+ * again. The owner just added the scope back on dayo's website — nothing here is worth waiting 15 minutes for once
+ * they press "ส่งตอนนี้" — so a manual wake (already throttled to at most once per 30 s, same as the failure-backoff
+ * clear right above) also makes every scope-wait row due again right away. An automatic wake (the minute tick, a
+ * write) still waits the full 15 minutes — only 'manual' reaches this.
+ */
+export async function hasScopeWait(db: RemoteDb): Promise<boolean> {
+  const r = await db.values<[number]>(sql`select count(*) from outbox where status = 'pending' and json_valid(last_error) and json_extract(last_error, '$.prefix') = 'scope:'`)
+  return (r[0]?.[0] ?? 0) > 0
+}
+export async function clearScopeWait(db: RemoteDb, at: string): Promise<void> {
+  await db.update(s.outbox).set({ nextAttemptAt: at })
+    .where(and(eq(s.outbox.status, 'pending'), sql`json_valid(last_error) and json_extract(last_error, '$.prefix') = 'scope:'`))
+}
+
 /** Owner's "ลองใหม่" (spec §6.4): dead → pending with a fresh budget; children parked as PARENT_REJECTED come back too. */
 export async function retryRow(db: RemoteDb, outboxId: string): Promise<void> {
   const r = await db.select().from(s.outbox).where(eq(s.outbox.id, outboxId)).get()

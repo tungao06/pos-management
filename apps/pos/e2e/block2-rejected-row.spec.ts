@@ -24,5 +24,6 @@ test('block2: dayo rejects one bill (UNKNOWN_CODE) — the other still reaches d
   await expect(page.getByTestId('banner-problems')).toContainText('ส่งไม่ผ่าน 1 บิล', { timeout: 35_000 })
   await page.getByTestId('banner-problems').click()
   await expect(page).toHaveURL(/\/sync-problems$/)
-  await expect(page.getByTestId('problem-A-000001')).toBeVisible()
+  // Task 16: the row's testid is now `problem-<outboxId>` (always present, always unique) — no longer `problem-<receiptNo>`.
+  await expect(page.locator('[data-testid^="problem-"]', { hasText: 'A-000001' })).toBeVisible()
 })

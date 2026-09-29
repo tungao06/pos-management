@@ -6,7 +6,7 @@ import type { RecordSaleInput } from '../api/types'
 import { toCartDraft } from '../state/cart'
 import { useApi } from './api-context'
 import { useCart } from './cart-context'
-import { bootstrapKey, ordersKey, sellCatalogKey, shiftReportKey, stockKey } from './queries'
+import { bootstrapKey, ordersKey, sellCatalogKey, shiftReportKey, stockKey, syncStatusKey } from './queries'
 import { useSession } from './session'
 
 export type PriceChanged = { shownSatang: number; nowSatang: number }
@@ -39,6 +39,9 @@ export function useCommitSale() {
       clear()
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: bootstrapKey }),
+        // fix (Task 17): StatusBanners's badge-pending/banner-problems now read `syncStatus()`'s own cached answer
+        // once it has one (fix round 2 item E) — invalidating bootstrapKey alone left them stale right after a sale.
+        queryClient.invalidateQueries({ queryKey: syncStatusKey }),
         queryClient.invalidateQueries({ queryKey: sellCatalogKey }),
         queryClient.invalidateQueries({ queryKey: ordersKey }),
         // review m-2 (carried): a committed sale changes expectedCashSatang (cash) or qrSalesSatang (QR); without

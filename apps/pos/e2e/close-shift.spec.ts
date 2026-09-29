@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { TH } from '../src/ui/th'
-import { addItem, enterPin, firstRun, OWNER } from './helpers'
+import { enterPin, fillCount, firstRun, mock, OWNER } from './helpers'
 
 async function sellCash(page: Page, productCode: string): Promise<void> {
-  await addItem(page, productCode)
+  await page.getByTestId(`menu-${productCode}`).click()
+  await page.getByTestId('item-add').click()
   await page.getByTestId('pay-cash').click()
   await page.getByTestId('tender-exact').click()
   await page.getByTestId('confirm-cash').click()
@@ -13,15 +14,19 @@ async function sellCash(page: Page, productCode: string): Promise<void> {
 }
 
 async function sellQr(page: Page, productCode: string): Promise<void> {
-  await addItem(page, productCode)
+  await page.getByTestId(`menu-${productCode}`).click()
+  await page.getByTestId('item-add').click()
   await page.getByTestId('pay-qr').click()
   await page.getByTestId('qr-received').click()
   await page.getByTestId('done-new-sale').click()
   await expect(page).toHaveURL(/\/sell$/)
 }
 
-test('blind count from the sell screen → variance reason → owner PIN → Z with QR vs bank → backup confirmed → next shift (spec §4.8, §11)', async ({ page, request }) => {
+test('blind count from the sell screen → variance reason → owner PIN → Z with QR vs bank → backup confirmed → next shift (spec §4.8, §11 · Task 15 D101/D102)', async ({ page, request }) => {
   await firstRun(page, request) // float ฿500
+  // D101: `finishCount` → `countSummary` → (central + online) `fetchBotCash` before the review — E4 only answers on
+  // a block-3 mock (packages/dayo-mock/src/handler.ts), so this device is linked to one from here on.
+  await mock(request, 'block3', { on: true })
   await sellCash(page, 'Cocoa') // 16 oz / 100% preselected — ฿45
   await sellCash(page, 'Cocoa') // ฿45
   await sellQr(page, 'Pink Milk') // ฿65 PromptPay
@@ -34,25 +39,28 @@ test('blind count from the sell screen → variance reason → owner PIN → Z w
 
   // close from the sell screen: count first, the expected cash appears only after "นับเสร็จ" (Q3b-3 · D52)
   await page.getByTestId('close-shift-open').click()
-  await expect(page.getByTestId('count-50000')).toBeVisible()
-  await expect(page.getByTestId('close-expected')).toHaveCount(0)
-  await page.getByTestId('count-50000').fill('1') // ฿500
-  await page.getByTestId('count-2000').fill('2') // ฿40 → ฿540 counted
-  await expect(page.getByTestId('close-counted')).toHaveText('฿540')
+  await expect(page.getByTestId('count-input-500')).toBeVisible()
+  await expect(page.getByTestId('count-expected')).toHaveCount(0)
+  await fillCount(page, 540) // ฿500×1 + ฿20×2 = ฿540
+  await expect(page.getByTestId('count-total')).toHaveText('฿540')
   // review m-3: the blind count (Q3b-3 · D52) must hide the expected cash figure everywhere on the page before
-  // "นับเสร็จ" — not merely from the dedicated `close-expected` test id (M9b: rendering it in some other element
+  // "นับเสร็จ" — not merely from the dedicated `count-expected` test id (M9b: rendering it in some other element
   // would still pass a check scoped to that id alone).
   await expect(page.locator('body')).not.toContainText('฿570')
-  await page.getByTestId('count-done').click()
-  await expect(page.getByTestId('close-expected')).toHaveText('฿570') // 500 + 90 − 20
-  await expect(page.getByTestId('close-variance')).toHaveText('-฿30')
-  await expect(page.getByTestId('close-qr-net')).toHaveText('฿65') // Q3b-12
-  await page.getByTestId('close-bank-qr').fill('65')
+  await page.getByTestId('count-finish').click()
+  await expect(page.getByTestId('count-expected')).toHaveText('฿570.00') // 500 + 90 − 20
+  await expect(page.getByTestId('count-variance')).toHaveText('-฿30.00')
+  await expect(page.getByTestId('count-qr-net')).toHaveText('฿65') // Q3b-12
+  await page.getByTestId('count-bank-qr').fill('65')
+  await page.getByTestId(`count-approver-${OWNER.name}`).click()
 
-  await enterPin(page, OWNER.pin) // no reason yet → refused on screen, nothing sent
-  await expect(page.getByRole('alert')).toBeVisible()
-  await page.getByTestId('close-reason').fill('ทอนเงินผิด')
-  await enterPin(page, OWNER.pin)
+  // D102: a shortage past the alert threshold disables "ยืนยันและออกใบปิดกะ" until a reason is typed — never a
+  // submit-time refusal (the PIN pad's own `extraDisabled`, PinPad.tsx) — a PIN typed first still refuses to submit.
+  for (const digit of OWNER.pin) await page.getByTestId(`pin-${digit}`).click()
+  await expect(page.getByTestId('count-confirm')).toBeDisabled()
+  await page.getByTestId('count-reason').fill('ทอนเงินผิด')
+  await expect(page.getByTestId('count-confirm')).toBeEnabled()
+  await page.getByTestId('count-confirm').click()
 
   await expect(page).toHaveURL(/\/z\//)
   await expect(page.getByTestId('z-hash')).toHaveAttribute('data-ok', 'true')
@@ -91,17 +99,20 @@ test('blind count from the sell screen → variance reason → owner PIN → Z w
 
 test('quick open (spec §4.8 · Q3b-10): an owner opens with a 0 float and the X report marks it', async ({ page, request }) => {
   await firstRun(page, request)
+  await mock(request, 'block3', { on: true })
   // the close screen can always be left again, without closing anything
   await page.getByTestId('close-shift-open').click()
-  await expect(page.getByTestId('count-50000')).toBeVisible()
+  await expect(page.getByTestId('count-input-500')).toBeVisible()
   await page.getByTestId('nav-sell').click()
   await expect(page).toHaveURL(/\/sell$/)
 
   // close the first shift with an exact count so we reach the open-shift screen again
   await page.getByTestId('close-shift-open').click()
-  await page.getByTestId('count-50000').fill('1')
-  await page.getByTestId('count-done').click()
-  await enterPin(page, OWNER.pin)
+  await fillCount(page, 500)
+  await page.getByTestId('count-finish').click()
+  await expect(page.getByTestId('count-expected')).toBeVisible()
+  await page.getByTestId(`count-approver-${OWNER.name}`).click()
+  await enterPin(page, OWNER.pin, 'count-confirm')
   await expect(page).toHaveURL(/\/z\//)
   // the bank-app PromptPay total is optional: left empty, no figure and no difference are invented (Q3b-12 · D53)
   await expect(page.getByTestId('z-bank-qr')).toHaveText(TH.bankQrNotEntered)

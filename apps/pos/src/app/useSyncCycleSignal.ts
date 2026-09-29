@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { onSyncCycleDone } from '../sync/cycle-signal'
-import { bootstrapKey, ordersKey } from './queries'
+import { bootstrapKey, ordersKey, syncStatusKey } from './queries'
 
 /**
  * Task 21 hotfix 2: mounted once at the router root. When the worker's scheduler finishes a cycle (an 'online' wake, the
@@ -15,6 +15,10 @@ export function useSyncCycleSignal(): void {
       onSyncCycleDone(() => {
         void queryClient.invalidateQueries({ queryKey: bootstrapKey })
         void queryClient.invalidateQueries({ queryKey: ordersKey })
+        // fix (Task 17): StatusBanners prefers `syncStatus()`'s own cached data over `bootstrap().sync` once it has
+        // answered once (fix round 2 item E) — invalidating bootstrapKey alone left the badge/every banner stuck on
+        // a stale syncStatus answer until its own 30 s poll caught up.
+        void queryClient.invalidateQueries({ queryKey: syncStatusKey })
       }),
     [queryClient],
   )

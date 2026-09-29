@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
-import { MOCK_API_KEY } from '@dayo/dayo-mock'
+import { MOCK_API_KEY, type MockShift, type MockZ } from '@dayo/dayo-mock'
+import { CASH_DENOMINATIONS_SATANG } from '@dayo/domain'
 
 export const DAYO_BASE = 'http://localhost:8787/api/v1'
 export const MOCK_KEY = MOCK_API_KEY // `dayo_${'0123456789abcdef'.repeat(4)}` — kept identical to @dayo/dayo-mock's own default key
@@ -15,7 +16,10 @@ const MOCK_URL = 'http://localhost:8787'
 /** Every `/__mock/*` test-control route the mock server answers (packages/dayo-mock/src/control.ts). */
 export async function mock(
   request: APIRequestContext,
-  path: 'reset' | 'mode' | 'now' | 'override' | 'bump-catalog' | 'seed-orders' | 'edit-pos-order',
+  path:
+    | 'reset' | 'mode' | 'now' | 'override' | 'bump-catalog' | 'seed-orders' | 'edit-pos-order'
+    // Task 17 (block 3): the remaining `/__mock/*` control routes (packages/dayo-mock/src/control.ts).
+    | 'block3' | 'scopes' | 'preload-z' | 'off-catalog-cap' | 'block3-live-from' | 'close-promotion',
   body?: unknown,
 ): Promise<void> {
   const res = await request.post(`${MOCK_URL}/__mock/${path}`, { data: body ?? {} })
@@ -24,7 +28,11 @@ export async function mock(
 
 export type MockOrderState = { posOrderId: string; orderNo: string; receiptNo: string; status: string; total: number }
 export type MockRequestLog = { method: string; path: string; rows: number; status: number }
-export async function mockState(request: APIRequestContext): Promise<{ orders: MockOrderState[]; requests: MockRequestLog[] }> {
+/** Task 17: the full `/__mock/state` answer (packages/dayo-mock/src/control.ts) — block 3's own `shifts`/`zReports`/
+ * `conflicts`/`rejections` alongside the orders/requests block 2 already read. */
+export async function mockState(
+  request: APIRequestContext,
+): Promise<{ orders: MockOrderState[]; requests: MockRequestLog[]; shifts: MockShift[]; zReports: MockZ[]; conflicts: string[]; rejections: { posOrderId: string; reasons: string[] }[] }> {
   const res = await request.get(`${MOCK_URL}/__mock/state`)
   expect(res.ok(), `GET /__mock/state → ${res.status()}`).toBe(true)
   return res.json()
@@ -46,6 +54,10 @@ export async function setupDevice(page: Page): Promise<void> {
   await page.getByTestId('setup-pin').fill(OWNER.pin)
   await page.getByTestId('setup-pin2').fill(OWNER.pin)
   await page.getByTestId('setup-promptpay').fill(PROMPTPAY_ID)
+  // Task 13 (ruling R9) · Task 16 MERGE GATE: dayo already has a Z (a preloaded one, or a re-linked key) — the
+  // owner must tick "ตรวจแล้ว" before "setup-save" unlocks (SetupScreen.tsx).
+  await expect(page.getByTestId('setup-last-z')).toBeVisible()
+  if (await page.getByTestId('setup-last-z-confirm').isVisible()) await page.getByTestId('setup-last-z-confirm').check()
   await page.getByTestId('setup-save').click()
   // quality review (fix round 1): the persist-storage result is shown and waited on now, not flashed and
   // immediately navigated past (spec §6.9) — "setup-continue" is what leaves the setup screen.
@@ -56,18 +68,27 @@ export async function setupDevice(page: Page): Promise<void> {
 
 /** DCm (the second dayo owner) gets a PIN, approved by TungAo, from the login screen — several e2e specs approve a void with DCm's PIN. */
 export async function setOtherPin(page: Page): Promise<void> {
-  await expect(page.getByTestId(`needs-pin-${OTHER.name}`)).toBeVisible()
-  await page.getByTestId(`needs-pin-${OTHER.name}`).click()
-  await page.getByTestId('staff-pin-approver-pin').fill(OWNER.pin) // TungAo is the only (and default-selected) approver
-  await page.getByTestId('staff-pin-new').fill(OTHER.pin)
-  await page.getByTestId('staff-pin-new2').fill(OTHER.pin)
-  await page.getByTestId('staff-pin-save').click()
-  await expect(page.getByTestId(`user-${OTHER.name}`)).toBeVisible()
+  await setStaffPin(page, OTHER.name, OTHER.pin)
 }
 
-export async function enterPin(page: Page, pin: string): Promise<void> {
+/**
+ * Task 17: gives any staff/manager of the e1-catalog-rich.json fixture (e.g. "Beam" the manager, "Mint" the
+ * staff — `packages/contracts/fixtures/pos-test/e1-catalog-rich.json`) their own PIN, approved by TungAo, from the
+ * login screen — the same dialog `setOtherPin` uses for DCm.
+ */
+export async function setStaffPin(page: Page, name: string, pin: string): Promise<void> {
+  await expect(page.getByTestId(`needs-pin-${name}`)).toBeVisible()
+  await page.getByTestId(`needs-pin-${name}`).click()
+  await page.getByTestId('staff-pin-approver-pin').fill(OWNER.pin) // TungAo is the only (and default-selected) approver
+  await page.getByTestId('staff-pin-new').fill(pin)
+  await page.getByTestId('staff-pin-new2').fill(pin)
+  await page.getByTestId('staff-pin-save').click()
+  await expect(page.getByTestId(`user-${name}`)).toBeVisible()
+}
+
+export async function enterPin(page: Page, pin: string, okTestId = 'pin-ok'): Promise<void> {
   for (const digit of pin) await page.getByTestId(`pin-${digit}`).click()
-  await page.getByTestId('pin-ok').click()
+  await page.getByTestId(okTestId).click()
 }
 
 export async function login(page: Page, user: { name: string; pin: string } = OWNER): Promise<void> {
@@ -126,4 +147,39 @@ export async function sellOne(page: Page, code: string, payment: 'cash' | 'qr'):
 /** /status → "ส่งตอนนี้" — the one manual sync trigger every e2e spec that needs to force a push uses. */
 export async function syncNow(page: Page): Promise<void> {
   await page.getByTestId('status-sync-now').click()
+}
+
+/**
+ * Task 17 (D101 · D102): fills every `count-input-<baht>` of `CountReview` (`apps/pos/src/screens/CountReview.tsx`)
+ * with the fewest notes/coins that add up to `baht` — greedy, largest denomination first, same as a real count.
+ * Every denomination gets a value (never left blank), since a blank input makes the whole count unparsable
+ * (`parseCountInput`) and freezes `count-total` on `TH.errCountFormat` instead of a real figure.
+ */
+export async function fillCount(page: Page, baht: number): Promise<void> {
+  let remaining = Math.round(baht * 100) // satang, to stay exact
+  for (const denominationSatang of CASH_DENOMINATIONS_SATANG) {
+    const count = Math.floor(remaining / denominationSatang)
+    remaining -= count * denominationSatang
+    await page.getByTestId(`count-input-${denominationSatang / 100}`).fill(String(count))
+  }
+}
+
+/**
+ * Task 17: the shared "count → นับเสร็จ → (reason) → approver → PIN → นับเสร็จ/ออกใบปิดกะ" ending every block 3
+ * count screen shares (`CountReview.tsx`) — `pin` picks the approving owner too (`OWNER`/`OTHER` of this file,
+ * the only two owners the mock fixture ships), so a caller never has to name both separately. `okTestId` lets a
+ * caller reuse this for `/shift/z/$shiftId` (`IssueZScreen`'s own confirm button), never just `/shift/close`.
+ */
+export async function countAndConfirm(
+  page: Page,
+  baht: number,
+  opts: { reason?: string; pin: string; okTestId?: string } = { pin: OWNER.pin },
+): Promise<void> {
+  const owner = opts.pin === OTHER.pin ? OTHER : OWNER
+  await fillCount(page, baht)
+  if (await page.getByTestId('count-finish').isVisible()) await page.getByTestId('count-finish').click()
+  await expect(page.getByTestId('count-expected')).toBeVisible()
+  if (opts.reason !== undefined) await page.getByTestId('count-reason').fill(opts.reason)
+  await page.getByTestId(`count-approver-${owner.name}`).click()
+  await enterPin(page, opts.pin, opts.okTestId ?? 'count-confirm')
 }
