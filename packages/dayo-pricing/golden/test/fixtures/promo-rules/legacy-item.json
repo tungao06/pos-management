@@ -1,0 +1,1860 @@
+{
+  "description": "ลดรายเมนู (item_discount) — % ปัดสตางค์ · บาทไม่เกินราคา · stackable=false · priority เท่ากันเรียง code · ช่องทาง/เวลา/วัน/วันที่/ปิดอยู่",
+  "form": "legacy",
+  "promotions": [
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ชาไทยลด 15%",
+      "kind": "item_discount",
+      "priority": 10,
+      "params": {
+        "menu_codes": [
+          "TT01"
+        ],
+        "percent": 15
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ชาไทยมะพร้าวลด 50 บาท",
+      "kind": "item_discount",
+      "priority": 11,
+      "params": {
+        "menu_codes": [
+          "TT02"
+        ],
+        "amount_baht": 50
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ทุกเมนูลด 5 บาท",
+      "kind": "item_discount",
+      "priority": 50,
+      "params": {
+        "menu_codes": [],
+        "amount_baht": 5
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ชาเขียวลด 33%",
+      "kind": "item_discount",
+      "priority": 12,
+      "params": {
+        "menu_codes": [
+          "GT01"
+        ],
+        "percent": 33
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": false,
+      "isActive": true,
+      "name": "มัตจะลด 10 ไม่ซ้อน",
+      "kind": "item_discount",
+      "priority": 5,
+      "params": {
+        "menu_codes": [
+          "MT01"
+        ],
+        "amount_baht": 10
+      }
+    },
+    {
+      "code": "TIEZ",
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": false,
+      "isActive": true,
+      "name": "เสมอกัน Z ลด 10",
+      "kind": "item_discount",
+      "priority": 60,
+      "params": {
+        "menu_codes": [
+          "TT01"
+        ],
+        "amount_baht": 10
+      }
+    },
+    {
+      "code": "TIEA",
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": false,
+      "isActive": true,
+      "name": "เสมอกัน A ลด 5",
+      "kind": "item_discount",
+      "priority": 60,
+      "params": {
+        "menu_codes": [
+          "TT01"
+        ],
+        "amount_baht": 5
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": [
+        "grab"
+      ],
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "Grab ชาไทยลด 3",
+      "kind": "item_discount",
+      "priority": 8,
+      "params": {
+        "menu_codes": [
+          "TT01"
+        ],
+        "amount_baht": 3
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": "14:00",
+      "timeTo": "16:00",
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "บ่ายชาไทยลด 7",
+      "kind": "item_discount",
+      "priority": 7,
+      "params": {
+        "menu_codes": [
+          "TT01"
+        ],
+        "amount_baht": 7
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": [
+        0,
+        6
+      ],
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "วันหยุดชาไทยลด 4",
+      "kind": "item_discount",
+      "priority": 6,
+      "params": {
+        "menu_codes": [
+          "TT01"
+        ],
+        "amount_baht": 4
+      }
+    },
+    {
+      "code": null,
+      "startsOn": "2026-08-01",
+      "endsOn": "2026-09-01",
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "โปรหมดแล้วลด 9",
+      "kind": "item_discount",
+      "priority": 4,
+      "params": {
+        "menu_codes": [
+          "TT01"
+        ],
+        "amount_baht": 9
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": false,
+      "name": "โปรปิดอยู่ลด 11",
+      "kind": "item_discount",
+      "priority": 3,
+      "params": {
+        "menu_codes": [
+          "TT01"
+        ],
+        "amount_baht": 11
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "น้ำเปล่าลด 20% หรือ 6 บาท",
+      "kind": "item_discount",
+      "priority": 13,
+      "params": {
+        "menu_codes": [
+          "WT01"
+        ],
+        "percent": 20,
+        "amount_baht": 6
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "15% ของ 35 และ Grab 46",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 10.5,
+        "billDiscountAmount": 0,
+        "totalAmount": 59.5,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 5.25,
+            "promotion": "ชาไทยลด 15%",
+            "lineTotal": 59.5
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 15%",
+            "kind": "item_discount",
+            "discountAmount": 10.5
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "15% Grab",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 151,
+        "itemsDiscount": 22.65,
+        "billDiscountAmount": 0,
+        "totalAmount": 128.35,
+        "channelFeeAmount": 38.51,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 46,
+            "discountPerCup": 6.9,
+            "promotion": "ชาไทยลด 15%",
+            "lineTotal": 78.2
+          },
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 59,
+            "discountPerCup": 8.85,
+            "promotion": "ชาไทยลด 15%",
+            "lineTotal": 50.15
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 15%",
+            "kind": "item_discount",
+            "discountAmount": 22.65
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ลด 50 บาทเกินราคา 45 → ลดเต็มราคา",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 90,
+        "itemsDiscount": 90,
+        "billDiscountAmount": 0,
+        "totalAmount": 0,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 45,
+            "discountPerCup": 45,
+            "promotion": "ชาไทยมะพร้าวลด 50 บาท",
+            "lineTotal": 0
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยมะพร้าวลด 50 บาท",
+            "kind": "item_discount",
+            "discountAmount": 90
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกเมนูลด 5 รวมน้ำเปล่า",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 20,
+        "billDiscountAmount": 0,
+        "totalAmount": 150,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "ทุกเมนูลด 5 บาท",
+            "lineTotal": 30
+          },
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 10,
+            "discountPerCup": 5,
+            "promotion": "ทุกเมนูลด 5 บาท",
+            "lineTotal": 5
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 5,
+            "promotion": "ทุกเมนูลด 5 บาท",
+            "lineTotal": 80
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 5,
+            "promotion": "ทุกเมนูลด 5 บาท",
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ทุกเมนูลด 5 บาท",
+            "kind": "item_discount",
+            "discountAmount": 20
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "33% หน้าร้านและ Lineman",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 90,
+        "itemsDiscount": 29.7,
+        "billDiscountAmount": 0,
+        "totalAmount": 60.3,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 13.2,
+            "promotion": "ชาเขียวลด 33%",
+            "lineTotal": 26.8
+          },
+          {
+            "menuCode": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 50,
+            "discountPerCup": 16.5,
+            "promotion": "ชาเขียวลด 33%",
+            "lineTotal": 33.5
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาเขียวลด 33%",
+            "kind": "item_discount",
+            "discountAmount": 29.7
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "33% Lineman",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "lineman",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 107.5,
+        "itemsDiscount": 35.48,
+        "billDiscountAmount": 0,
+        "totalAmount": 72.02,
+        "channelFeeAmount": 14.4,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 48,
+            "discountPerCup": 15.84,
+            "promotion": "ชาเขียวลด 33%",
+            "lineTotal": 32.16
+          },
+          {
+            "menuCode": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 59.5,
+            "discountPerCup": 19.64,
+            "promotion": "ชาเขียวลด 33%",
+            "lineTotal": 39.86
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาเขียวลด 33%",
+            "kind": "item_discount",
+            "discountAmount": 35.48
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ไม่ซ้อน: มัตจะใช้แล้วหยุดชาไทย",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 120,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 0,
+        "totalAmount": 110,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 10,
+            "promotion": "มัตจะลด 10 ไม่ซ้อน",
+            "lineTotal": 75
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "มัตจะลด 10 ไม่ซ้อน",
+            "kind": "item_discount",
+            "discountAmount": 10
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ไม่ซ้อน: ไม่มีมัตจะ ไม่หยุด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 5.25,
+        "billDiscountAmount": 0,
+        "totalAmount": 29.75,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5.25,
+            "promotion": "ชาไทยลด 15%",
+            "lineTotal": 29.75
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 15%",
+            "kind": "item_discount",
+            "discountAmount": 5.25
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "priority เท่ากัน → code TIEA ก่อน TIEZ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 0,
+        "totalAmount": 60,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "เสมอกัน A ลด 5",
+            "lineTotal": 60
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เสมอกัน A ลด 5",
+            "kind": "item_discount",
+            "discountAmount": 10
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "Grab เท่านั้น — หน้าร้าน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "Grab เท่านั้น — Grab",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 46,
+        "itemsDiscount": 3,
+        "billDiscountAmount": 0,
+        "totalAmount": 43,
+        "channelFeeAmount": 12.9,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 46,
+            "discountPerCup": 3,
+            "promotion": "Grab ชาไทยลด 3",
+            "lineTotal": 43
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "Grab ชาไทยลด 3",
+            "kind": "item_discount",
+            "discountAmount": 3
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "บ่าย 15:00 ในช่วง",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "15:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 7,
+        "billDiscountAmount": 0,
+        "totalAmount": 28,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 7,
+            "promotion": "บ่ายชาไทยลด 7",
+            "lineTotal": 28
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "บ่ายชาไทยลด 7",
+            "kind": "item_discount",
+            "discountAmount": 7
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "บ่าย 16:00 ขอบบน รวมนาทีนั้น",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "16:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 7,
+        "billDiscountAmount": 0,
+        "totalAmount": 28,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 7,
+            "promotion": "บ่ายชาไทยลด 7",
+            "lineTotal": 28
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "บ่ายชาไทยลด 7",
+            "kind": "item_discount",
+            "discountAmount": 7
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "บ่าย 16:01 นอกช่วง",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "16:01",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ไม่รู้เวลาขาย → ไม่ให้โปรจำกัดเวลา",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "วันหยุด — พฤหัส",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "วันหยุด — เสาร์",
+      "draft": {
+        "saleDate": "2026-09-26",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 4,
+        "billDiscountAmount": 0,
+        "totalAmount": 31,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 4,
+            "promotion": "วันหยุดชาไทยลด 4",
+            "lineTotal": 31
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "วันหยุดชาไทยลด 4",
+            "kind": "item_discount",
+            "discountAmount": 4
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "หมดอายุ + ปิดอยู่",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "มีทั้ง % และบาท → ใช้บาท",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยลด 15%",
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 20,
+        "itemsDiscount": 12,
+        "billDiscountAmount": 0,
+        "totalAmount": 8,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 10,
+            "discountPerCup": 6,
+            "promotion": "น้ำเปล่าลด 20% หรือ 6 บาท",
+            "lineTotal": 8
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "น้ำเปล่าลด 20% หรือ 6 บาท",
+            "kind": "item_discount",
+            "discountAmount": 12
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "แก้วที่ลดเองไม่รับโปร",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "discountBaht": 5
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 10.25,
+        "billDiscountAmount": 0,
+        "totalAmount": 59.75,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": null,
+            "lineTotal": 30
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5.25,
+            "promotion": "ชาไทยลด 15%",
+            "lineTotal": 29.75
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 15%",
+            "kind": "item_discount",
+            "discountAmount": 5.25
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นมโอ๊ต 45 → 15%",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "milk": "oat"
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยมะพร้าวลด 50 บาท",
+          "ทุกเมนูลด 5 บาท",
+          "ชาเขียวลด 33%",
+          "มัตจะลด 10 ไม่ซ้อน",
+          "เสมอกัน Z ลด 10",
+          "เสมอกัน A ลด 5",
+          "Grab ชาไทยลด 3",
+          "บ่ายชาไทยลด 7",
+          "วันหยุดชาไทยลด 4",
+          "โปรหมดแล้วลด 9",
+          "โปรปิดอยู่ลด 11",
+          "น้ำเปล่าลด 20% หรือ 6 บาท"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 45,
+        "itemsDiscount": 6.75,
+        "billDiscountAmount": 0,
+        "totalAmount": 38.25,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 6.75,
+            "promotion": "ชาไทยลด 15%",
+            "lineTotal": 38.25
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 15%",
+            "kind": "item_discount",
+            "discountAmount": 6.75
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกโปรพร้อมกัน หน้าร้าน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 165,
+        "itemsDiscount": 74.7,
+        "billDiscountAmount": 0,
+        "totalAmount": 90.3,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 5.25,
+            "promotion": "ชาไทยลด 15%",
+            "lineTotal": 59.5
+          },
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 45,
+            "promotion": "ชาไทยมะพร้าวลด 50 บาท",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 13.2,
+            "promotion": "ชาเขียวลด 33%",
+            "lineTotal": 26.8
+          },
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 10,
+            "discountPerCup": 6,
+            "promotion": "น้ำเปล่าลด 20% หรือ 6 บาท",
+            "lineTotal": 4
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 15%",
+            "kind": "item_discount",
+            "discountAmount": 10.5
+          },
+          {
+            "name": "ชาไทยมะพร้าวลด 50 บาท",
+            "kind": "item_discount",
+            "discountAmount": 45
+          },
+          {
+            "name": "ชาเขียวลด 33%",
+            "kind": "item_discount",
+            "discountAmount": 13.2
+          },
+          {
+            "name": "น้ำเปล่าลด 20% หรือ 6 บาท",
+            "kind": "item_discount",
+            "discountAmount": 6
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกโปรพร้อมกัน Grab มีมัตจะ Isuzu",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "grade": "Isuzu",
+            "milk": "oat"
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 287,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 0,
+        "totalAmount": 277,
+        "channelFeeAmount": 83.1,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": "Isuzu",
+            "qty": 1,
+            "unitPrice": 241,
+            "discountPerCup": 10,
+            "promotion": "มัตจะลด 10 ไม่ซ้อน",
+            "lineTotal": 231
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 46,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 46
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "มัตจะลด 10 ไม่ซ้อน",
+            "kind": "item_discount",
+            "discountAmount": 10
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}

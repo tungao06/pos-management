@@ -1,0 +1,1049 @@
+{
+  "description": "time_windows: ข้ามเที่ยงคืนเป็นของวันเริ่ม (เสาร์ 22:00–02:00 ใช้ได้ถึงตี 2 วันอาทิตย์) · หลายช่วง · ทั้งวันไม่ต้องรู้เวลา · ช่วงวันที่ตรวจกับวันเริ่ม · คำเตือนโค้ดหลายช่วง",
+  "form": "rule",
+  "groups": [
+    {
+      "code": "main",
+      "name": "ทั่วไป",
+      "sortOrder": 0,
+      "stackMode": "separate",
+      "isActive": true
+    }
+  ],
+  "promotions": [
+    {
+      "code": null,
+      "timeWindows": [
+        {
+          "days": [
+            6
+          ],
+          "from": "22:00",
+          "to": "02:00"
+        }
+      ],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "เสาร์ดึก 22:00–02:00 ลด 5",
+      "template": "item_discount",
+      "priority": 10,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "TT01"
+          ]
+        },
+        "reward": {
+          "type": "amount",
+          "baht": 5
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [
+        {
+          "days": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "from": "14:00",
+          "to": "16:00"
+        },
+        {
+          "days": [
+            0
+          ],
+          "from": null,
+          "to": null
+        }
+      ],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+      "template": "item_discount",
+      "priority": 11,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "TT01"
+          ]
+        },
+        "reward": {
+          "type": "amount",
+          "baht": 3
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [
+        {
+          "days": [],
+          "from": "23:00",
+          "to": "01:00"
+        }
+      ],
+      "groupCode": "main",
+      "startsOn": "2026-09-26",
+      "endsOn": "2026-09-26",
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+      "template": "item_discount",
+      "priority": 12,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "TT01"
+          ]
+        },
+        "reward": {
+          "type": "amount",
+          "baht": 4
+        }
+      }
+    },
+    {
+      "code": "NIGHT",
+      "timeWindows": [
+        {
+          "days": [
+            5,
+            6
+          ],
+          "from": "22:00",
+          "to": "02:00"
+        }
+      ],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "code",
+      "isActive": true,
+      "name": "โค้ดดึก ศ-ส",
+      "template": "item_discount",
+      "priority": 13,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "TT01"
+          ]
+        },
+        "reward": {
+          "type": "amount",
+          "baht": 2
+        }
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "เสาร์ 23:00",
+      "draft": {
+        "saleDate": "2026-09-26",
+        "saleTime": "23:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 5,
+        "billDiscountAmount": 0,
+        "totalAmount": 30,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "เสาร์ดึก 22:00–02:00 ลด 5",
+            "lineTotal": 30
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เสาร์ดึก 22:00–02:00 ลด 5",
+            "kind": "item_discount",
+            "discountAmount": 5
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "เสาร์ 22:00 ขอบล่าง",
+      "draft": {
+        "saleDate": "2026-09-26",
+        "saleTime": "22:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 5,
+        "billDiscountAmount": 0,
+        "totalAmount": 30,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "เสาร์ดึก 22:00–02:00 ลด 5",
+            "lineTotal": 30
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เสาร์ดึก 22:00–02:00 ลด 5",
+            "kind": "item_discount",
+            "discountAmount": 5
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "อาทิตย์ 00:00",
+      "draft": {
+        "saleDate": "2026-09-27",
+        "saleTime": "00:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 5,
+        "billDiscountAmount": 0,
+        "totalAmount": 30,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "เสาร์ดึก 22:00–02:00 ลด 5",
+            "lineTotal": 30
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เสาร์ดึก 22:00–02:00 ลด 5",
+            "kind": "item_discount",
+            "discountAmount": 5
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "อาทิตย์ 02:00 ขอบบน",
+      "draft": {
+        "saleDate": "2026-09-27",
+        "saleTime": "02:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 5,
+        "billDiscountAmount": 0,
+        "totalAmount": 30,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "เสาร์ดึก 22:00–02:00 ลด 5",
+            "lineTotal": 30
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เสาร์ดึก 22:00–02:00 ลด 5",
+            "kind": "item_discount",
+            "discountAmount": 5
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "อาทิตย์ 02:01",
+      "draft": {
+        "saleDate": "2026-09-27",
+        "saleTime": "02:01",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "เสาร์ 01:00 (คืนวันศุกร์)",
+      "draft": {
+        "saleDate": "2026-09-26",
+        "saleTime": "01:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ศุกร์ 23:59",
+      "draft": {
+        "saleDate": "2026-09-25",
+        "saleTime": "23:59",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "จันทร์ 15:00",
+      "draft": {
+        "saleDate": "2026-09-28",
+        "saleTime": "15:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 3,
+        "billDiscountAmount": 0,
+        "totalAmount": 32,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 3,
+            "promotion": "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+            "lineTotal": 32
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+            "kind": "item_discount",
+            "discountAmount": 3
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "จันทร์ 13:00",
+      "draft": {
+        "saleDate": "2026-09-28",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "อาทิตย์ ไม่รู้เวลา (ช่วงทั้งวัน)",
+      "draft": {
+        "saleDate": "2026-09-27",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 3,
+        "billDiscountAmount": 0,
+        "totalAmount": 32,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 3,
+            "promotion": "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+            "lineTotal": 32
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+            "kind": "item_discount",
+            "discountAmount": 3
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "พฤหัส ไม่รู้เวลา",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "คืน 26 เวลา 23:30",
+      "draft": {
+        "saleDate": "2026-09-26",
+        "saleTime": "23:30",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 4,
+        "billDiscountAmount": 0,
+        "totalAmount": 31,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 4,
+            "promotion": "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+            "lineTotal": 31
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+            "kind": "item_discount",
+            "discountAmount": 4
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "27 เวลา 00:30 (ของคืน 26)",
+      "draft": {
+        "saleDate": "2026-09-27",
+        "saleTime": "00:30",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 4,
+        "billDiscountAmount": 0,
+        "totalAmount": 31,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 4,
+            "promotion": "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+            "lineTotal": 31
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "คืน 26 ก.ย. 23:00–01:00 ลด 4",
+            "kind": "item_discount",
+            "discountAmount": 4
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "27 เวลา 23:30 (คืน 27 เลยวันสิ้นสุด)",
+      "draft": {
+        "saleDate": "2026-09-27",
+        "saleTime": "23:30",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "26 เวลา 00:30 (คืน 25 ก่อนวันเริ่ม)",
+      "draft": {
+        "saleDate": "2026-09-26",
+        "saleTime": "00:30",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "โค้ดดึก ศ-ส"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "โค้ดดึก พฤหัส 13:00",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "promoCode": "night",
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดดึก ศ-ส: ไม่อยู่ในช่วงวัน/เวลาของโปร (ใช้ได้ ศ. ส. 22:00–02:00)"
+        ]
+      }
+    },
+    {
+      "name": "โค้ดดึก ไม่รู้เวลา",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "promoCode": "NIGHT",
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 35,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดดึก ศ-ส: ไม่รู้เวลาขาย (โปรจำกัดเวลา)"
+        ]
+      }
+    },
+    {
+      "name": "โค้ดดึก อาทิตย์ 01:00",
+      "draft": {
+        "saleDate": "2026-09-27",
+        "saleTime": "01:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "promoCode": "NIGHT",
+        "skipPromotions": [
+          "เสาร์ดึก 22:00–02:00 ลด 5",
+          "จ-ศ บ่าย หรือ อาทิตย์ทั้งวัน ลด 3",
+          "คืน 26 ก.ย. 23:00–01:00 ลด 4"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 2,
+        "billDiscountAmount": 0,
+        "totalAmount": 33,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 2,
+            "promotion": "โค้ดดึก ศ-ส",
+            "lineTotal": 33
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "โค้ดดึก ศ-ส",
+            "kind": "item_discount",
+            "discountAmount": 2
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}

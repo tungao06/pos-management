@@ -1,0 +1,74 @@
+{
+  "ingredients": [
+    { "code": "RM-TEA", "name": "ชาไทยเบส", "type": "วัตถุดิบ", "subcategory": null, "useUnit": "ml", "buyUnit": "หน่วย", "packToUseFactor": 1, "buyPrice": 0.1, "reorderPoint": null, "note": null, "sortOrder": 0, "isActive": true },
+    { "code": "RM-GREEN", "name": "ชาเขียวเบส", "type": "วัตถุดิบ", "subcategory": null, "useUnit": "ml", "buyUnit": "หน่วย", "packToUseFactor": 1, "buyPrice": 0.12, "reorderPoint": null, "note": null, "sortOrder": 1, "isActive": true },
+    { "code": "RM-FRESH", "name": "นมสด", "type": "วัตถุดิบ", "subcategory": null, "useUnit": "ml", "buyUnit": "หน่วย", "packToUseFactor": 1, "buyPrice": 0.05, "reorderPoint": null, "note": null, "sortOrder": 2, "isActive": true },
+    { "code": "RM-OAT", "name": "นมโอ๊ต", "type": "วัตถุดิบ", "subcategory": null, "useUnit": "ml", "buyUnit": "หน่วย", "packToUseFactor": 1, "buyPrice": 0.09, "reorderPoint": null, "note": null, "sortOrder": 3, "isActive": true },
+    { "code": "RM-EXC", "name": "ผงมัตจะ Excellent", "type": "วัตถุดิบ", "subcategory": null, "useUnit": "g", "buyUnit": "หน่วย", "packToUseFactor": 1, "buyPrice": 8, "reorderPoint": null, "note": null, "sortOrder": 4, "isActive": true },
+    { "code": "RM-DAI", "name": "ผงมัตจะ Daizu", "type": "วัตถุดิบ", "subcategory": null, "useUnit": "g", "buyUnit": "หน่วย", "packToUseFactor": 1, "buyPrice": 10, "reorderPoint": null, "note": null, "sortOrder": 5, "isActive": true },
+    { "code": "RM-ISU", "name": "ผงมัตจะ Isuzu", "type": "วัตถุดิบ", "subcategory": null, "useUnit": "g", "buyUnit": "หน่วย", "packToUseFactor": 1, "buyPrice": 12, "reorderPoint": null, "note": null, "sortOrder": 6, "isActive": true },
+    { "code": "RM-WATER", "name": "น้ำดื่ม", "type": "วัตถุดิบ", "subcategory": null, "useUnit": "ml", "buyUnit": "หน่วย", "packToUseFactor": 1, "buyPrice": 0.01, "reorderPoint": null, "note": null, "sortOrder": 7, "isActive": true }
+  ],
+  "bases": [],
+  "menus": [
+    { "code": "TT01", "nameTh": "ชาไทย", "family": "ชาไทย", "categoryLabel": "ชาไทย", "allowOatMilk": true, "isMatcha": false, "aliases": [], "sortOrder": 0, "isActive": true },
+    { "code": "TT02", "nameTh": "ชาไทยมะพร้าว", "family": "ชาไทย", "categoryLabel": "ชาไทย", "allowOatMilk": false, "isMatcha": false, "aliases": [], "sortOrder": 1, "isActive": true },
+    { "code": "GT01", "nameTh": "ชาเขียว", "family": "ชาเขียว", "categoryLabel": "ชาเขียว", "allowOatMilk": true, "isMatcha": false, "aliases": [], "sortOrder": 2, "isActive": true },
+    { "code": "MT01", "nameTh": "มัตจะลาเต้", "family": "มัตจะ", "categoryLabel": "มัตจะ", "allowOatMilk": true, "isMatcha": true, "aliases": [], "sortOrder": 3, "isActive": true },
+    { "code": "WT01", "nameTh": "น้ำเปล่า", "family": "อื่นๆ", "categoryLabel": null, "allowOatMilk": false, "isMatcha": false, "aliases": [], "sortOrder": 4, "isActive": true }
+  ],
+  "variants": [
+    { "menuCode": "TT01", "size": "16 oz", "sweetness": "100%", "price": 35, "note": null, "isActive": true },
+    { "menuCode": "TT01", "size": "16 oz", "sweetness": "50%", "price": 35, "note": null, "isActive": true },
+    { "menuCode": "TT01", "size": "20 oz", "sweetness": "100%", "price": 45, "note": null, "isActive": true },
+    { "menuCode": "TT02", "size": "16 oz", "sweetness": "100%", "price": 45, "note": null, "isActive": true },
+    { "menuCode": "TT02", "size": "20 oz", "sweetness": "100%", "price": 55, "note": null, "isActive": true },
+    { "menuCode": "GT01", "size": "16 oz", "sweetness": "100%", "price": 40, "note": null, "isActive": true },
+    { "menuCode": "GT01", "size": "20 oz", "sweetness": "100%", "price": 50, "note": null, "isActive": true },
+    { "menuCode": "MT01", "size": "16 oz", "sweetness": "100%", "price": 85, "note": null, "isActive": true },
+    { "menuCode": "MT01", "size": "16 oz", "sweetness": "50%", "price": 85, "note": null, "isActive": true },
+    { "menuCode": "MT01", "size": "20 oz", "sweetness": "100%", "price": 95, "note": null, "isActive": true },
+    { "menuCode": "WT01", "size": "16 oz", "sweetness": "100%", "price": 10, "note": null, "isActive": true }
+  ],
+  "recipeLines": [
+    { "menuCode": "TT01", "size": "16 oz", "sweetness": "100%", "lineNo": 1, "ingredientCode": "RM-TEA", "baseCode": null, "qty": 150, "unit": "ml" },
+    { "menuCode": "TT01", "size": "16 oz", "sweetness": "100%", "lineNo": 2, "ingredientCode": "RM-FRESH", "baseCode": null, "qty": 50, "unit": "ml" },
+    { "menuCode": "TT01", "size": "16 oz", "sweetness": "50%", "lineNo": 1, "ingredientCode": "RM-TEA", "baseCode": null, "qty": 150, "unit": "ml" },
+    { "menuCode": "TT01", "size": "16 oz", "sweetness": "50%", "lineNo": 2, "ingredientCode": "RM-FRESH", "baseCode": null, "qty": 50, "unit": "ml" },
+    { "menuCode": "TT01", "size": "20 oz", "sweetness": "100%", "lineNo": 1, "ingredientCode": "RM-TEA", "baseCode": null, "qty": 200, "unit": "ml" },
+    { "menuCode": "TT01", "size": "20 oz", "sweetness": "100%", "lineNo": 2, "ingredientCode": "RM-FRESH", "baseCode": null, "qty": 70, "unit": "ml" },
+    { "menuCode": "TT02", "size": "16 oz", "sweetness": "100%", "lineNo": 1, "ingredientCode": "RM-TEA", "baseCode": null, "qty": 150, "unit": "ml" },
+    { "menuCode": "TT02", "size": "20 oz", "sweetness": "100%", "lineNo": 1, "ingredientCode": "RM-TEA", "baseCode": null, "qty": 200, "unit": "ml" },
+    { "menuCode": "GT01", "size": "16 oz", "sweetness": "100%", "lineNo": 1, "ingredientCode": "RM-GREEN", "baseCode": null, "qty": 150, "unit": "ml" },
+    { "menuCode": "GT01", "size": "16 oz", "sweetness": "100%", "lineNo": 2, "ingredientCode": "RM-FRESH", "baseCode": null, "qty": 50, "unit": "ml" },
+    { "menuCode": "GT01", "size": "20 oz", "sweetness": "100%", "lineNo": 1, "ingredientCode": "RM-GREEN", "baseCode": null, "qty": 200, "unit": "ml" },
+    { "menuCode": "GT01", "size": "20 oz", "sweetness": "100%", "lineNo": 2, "ingredientCode": "RM-FRESH", "baseCode": null, "qty": 70, "unit": "ml" },
+    { "menuCode": "MT01", "size": "16 oz", "sweetness": "100%", "lineNo": 1, "ingredientCode": "RM-EXC", "baseCode": null, "qty": 3.5, "unit": "g" },
+    { "menuCode": "MT01", "size": "16 oz", "sweetness": "100%", "lineNo": 2, "ingredientCode": "RM-FRESH", "baseCode": null, "qty": 150, "unit": "ml" },
+    { "menuCode": "MT01", "size": "16 oz", "sweetness": "50%", "lineNo": 1, "ingredientCode": "RM-EXC", "baseCode": null, "qty": 3.5, "unit": "g" },
+    { "menuCode": "MT01", "size": "16 oz", "sweetness": "50%", "lineNo": 2, "ingredientCode": "RM-FRESH", "baseCode": null, "qty": 150, "unit": "ml" },
+    { "menuCode": "MT01", "size": "20 oz", "sweetness": "100%", "lineNo": 1, "ingredientCode": "RM-EXC", "baseCode": null, "qty": 4.5, "unit": "g" },
+    { "menuCode": "MT01", "size": "20 oz", "sweetness": "100%", "lineNo": 2, "ingredientCode": "RM-FRESH", "baseCode": null, "qty": 200, "unit": "ml" },
+    { "menuCode": "WT01", "size": "16 oz", "sweetness": "100%", "lineNo": 1, "ingredientCode": "RM-WATER", "baseCode": null, "qty": 400, "unit": "ml" }
+  ],
+  "options": [
+    { "kind": "milk", "code": "fresh", "label": "นมสด", "aliases": [], "ingredientCode": "RM-FRESH", "priceAdd": 0, "multiplier": null, "isDefault": true, "note": null, "sortOrder": 0, "isActive": true },
+    { "kind": "milk", "code": "oat", "label": "นมโอ๊ต", "aliases": ["นมโอ๊ต"], "ingredientCode": "RM-OAT", "priceAdd": 10, "multiplier": null, "isDefault": false, "note": null, "sortOrder": 1, "isActive": true },
+    { "kind": "matcha_grade", "code": "Excellent", "label": "Excellent", "aliases": ["excellent"], "ingredientCode": "RM-EXC", "priceAdd": 0, "multiplier": 1, "isDefault": true, "note": null, "sortOrder": 0, "isActive": true },
+    { "kind": "matcha_grade", "code": "Daizu", "label": "Daizu", "aliases": ["daizu"], "ingredientCode": "RM-DAI", "priceAdd": 40, "multiplier": 0.9, "isDefault": false, "note": null, "sortOrder": 1, "isActive": true },
+    { "kind": "matcha_grade", "code": "Isuzu", "label": "Isuzu", "aliases": ["isuzu"], "ingredientCode": "RM-ISU", "priceAdd": 90, "multiplier": 0.8, "isDefault": false, "note": null, "sortOrder": 2, "isActive": true }
+  ],
+  "sops": [],
+  "sections": [],
+  "stockCounts": [],
+  "channels": [],
+  "paymentMethods": [
+    { "code": "cash", "name": "เงินสด", "aliases": ["เงินสด"], "sortOrder": 0, "isActive": true },
+    { "code": "platform", "name": "แพลตฟอร์ม", "aliases": [], "sortOrder": 1, "isActive": true }
+  ],
+  "salesChannels": [
+    { "code": "store", "name": "หน้าร้าน", "aliases": ["หน้าร้าน"], "priceMarkupPct": 0, "priceAddBaht": 0, "rounding": "ceil_baht", "feePct": 0, "defaultPaymentMethodCode": "cash", "sortOrder": 0, "isActive": true },
+    { "code": "grab", "name": "Grab", "aliases": ["grab"], "priceMarkupPct": 0.3, "priceAddBaht": 0, "rounding": "ceil_baht", "feePct": 0.3, "defaultPaymentMethodCode": "platform", "sortOrder": 1, "isActive": true },
+    { "code": "lineman", "name": "LINE MAN", "aliases": ["lineman"], "priceMarkupPct": 0.15, "priceAddBaht": 2, "rounding": "none", "feePct": 0.2, "defaultPaymentMethodCode": "platform", "sortOrder": 2, "isActive": true }
+  ]
+}

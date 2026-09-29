@@ -1,0 +1,1222 @@
+{
+  "description": "ลดทั้งบิล (bill_discount) — max_amount · min_subtotal · เลือกตัวที่ลดมากสุด · เท่ากัน = ตัวแรก · ไม่เกินยอด · โค้ด · กรอกเองชนะ · เลือกเอง + เหตุผลบิล 0",
+  "form": "legacy",
+  "promotions": [
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ลดบิล 10% สูงสุด 50",
+      "kind": "bill_discount",
+      "priority": 10,
+      "params": {
+        "percent": 10,
+        "max_amount": 50
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ลดบิล 30 ครบ 300",
+      "kind": "bill_discount",
+      "priority": 20,
+      "params": {
+        "amount_baht": 30,
+        "min_subtotal": 300
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ลดบิล 100 บาท",
+      "kind": "bill_discount",
+      "priority": 30,
+      "params": {
+        "amount_baht": 100
+      }
+    },
+    {
+      "code": "SAVE20",
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "code",
+      "stackable": true,
+      "isActive": true,
+      "name": "โค้ดลดบิล 20%",
+      "kind": "bill_discount",
+      "priority": 40,
+      "params": {
+        "percent": 20
+      }
+    },
+    {
+      "code": "SMALL5",
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "code",
+      "stackable": true,
+      "isActive": true,
+      "name": "โค้ดลดบิล 5 บาท",
+      "kind": "bill_discount",
+      "priority": 41,
+      "params": {
+        "amount_baht": 5
+      }
+    },
+    {
+      "code": "MIN500",
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "code",
+      "stackable": true,
+      "isActive": true,
+      "name": "โค้ดลดบิล 50 ครบ 500",
+      "kind": "bill_discount",
+      "priority": 42,
+      "params": {
+        "amount_baht": 50,
+        "min_subtotal": 500
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "manual",
+      "stackable": true,
+      "isActive": true,
+      "name": "ชงผิดฟรีทั้งบิล",
+      "kind": "bill_discount",
+      "priority": 50,
+      "params": {
+        "percent": 100
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ชาไทยลด 5",
+      "kind": "item_discount",
+      "priority": 5,
+      "params": {
+        "menu_codes": [
+          "TT01"
+        ],
+        "amount_baht": 5
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "10% ของ 70",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 7,
+        "totalAmount": 63,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 10% สูงสุด 50",
+            "kind": "bill_discount",
+            "discountAmount": 7
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "10% ติดเพดาน 50",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 6
+          }
+        ],
+        "skipPromotions": [
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 510,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 50,
+        "totalAmount": 460,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 6,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 510
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 10% สูงสุด 50",
+            "kind": "bill_discount",
+            "discountAmount": 50
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ยอด 300 พอดี: 10%=30 เท่ากับ 30 บาท → ตัวแรก",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 300,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 30,
+        "totalAmount": 270,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 255
+          },
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 45
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 10% สูงสุด 50",
+            "kind": "bill_discount",
+            "discountAmount": 30
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ยอด 295 ไม่ถึงขั้นต่ำ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 295,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 29.5,
+        "totalAmount": 265.5,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 255
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 10% สูงสุด 50",
+            "kind": "bill_discount",
+            "discountAmount": 29.5
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ลด 100 เกินยอด 10 → ลด 10",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ลดบิล 10% สูงสุด 50",
+          "ลดบิล 30 ครบ 300",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 10,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 10,
+        "totalAmount": 0,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 10,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 10
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 100 บาท",
+            "kind": "bill_discount",
+            "discountAmount": 10
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "โค้ดตัวเล็ก save20",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "promoCode": "save20",
+        "skipPromotions": [
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 34,
+        "totalAmount": 136,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "โค้ดลดบิล 20%",
+            "kind": "bill_discount",
+            "discountAmount": 34
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "โค้ดผิด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "promoCode": "SAVE21",
+        "skipPromotions": [
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 17,
+        "totalAmount": 153,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 10% สูงสุด 50",
+            "kind": "bill_discount",
+            "discountAmount": 17
+          }
+        ],
+        "warnings": [
+          "ไม่ใช้โปร SAVE21: ไม่พบโค้ดนี้ในร้าน"
+        ]
+      }
+    },
+    {
+      "name": "กรอกลด 15 บาทเอง ชนะโปร",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "billDiscountBaht": 15,
+        "skipPromotions": [
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 15,
+        "totalAmount": 155,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "กรอกลด 10% เอง",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "billDiscountPercent": 10,
+        "skipPromotions": [
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 205,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 20.5,
+        "totalAmount": 184.5,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "โค้ดทั้งบิลแต่กรอกเอง → เตือน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "promoCode": "SAVE20",
+        "billDiscountBaht": 15,
+        "skipPromotions": [
+          "ลดบิล 10% สูงสุด 50",
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 15,
+        "totalAmount": 155,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดลดบิล 20%: ใช้ส่วนลดทั้งบิลที่กรอกเองแทน"
+        ]
+      }
+    },
+    {
+      "name": "โค้ดลด 5 แพ้โปร 10% → เตือน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "promoCode": "SMALL5",
+        "skipPromotions": [
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 17,
+        "totalAmount": 153,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 10% สูงสุด 50",
+            "kind": "bill_discount",
+            "discountAmount": 17
+          }
+        ],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดลดบิล 5 บาท: ใช้โปร ลดบิล 10% สูงสุด 50 แทน (ส่วนลดทั้งบิลใช้ได้ตัวเดียว)"
+        ]
+      }
+    },
+    {
+      "name": "โค้ดขั้นต่ำ 500 ไม่ถึง → เตือน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "promoCode": "MIN500",
+        "skipPromotions": [
+          "ลดบิล 10% สูงสุด 50",
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "ชงผิดฟรีทั้งบิล",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 170,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": [
+          "ไม่ใช้โปร โค้ดลดบิล 50 ครบ 500: ยอดหลังส่วนลดรายแก้วยังไม่ถึงขั้นต่ำ ฿500"
+        ]
+      }
+    },
+    {
+      "name": "เลือกเองฟรีทั้งบิล ไม่มีเหตุผล",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "manualPromotions": [
+          "ชงผิดฟรีทั้งบิล"
+        ],
+        "skipPromotions": [
+          "ลดบิล 10% สูงสุด 50",
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": false,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 70,
+        "totalAmount": 0,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": true,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชงผิดฟรีทั้งบิล",
+            "kind": "bill_discount",
+            "discountAmount": 70
+          }
+        ],
+        "warnings": [
+          "โปรที่เลือกเองทำให้บิลเหลือ ฿0 ต้องใส่เหตุผลค่ะ"
+        ]
+      }
+    },
+    {
+      "name": "เลือกเองฟรีทั้งบิล มีเหตุผล",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "manualPromotions": [
+          "ชงผิดฟรีทั้งบิล"
+        ],
+        "manualPromotionReason": "ชงผิด",
+        "skipPromotions": [
+          "ลดบิล 10% สูงสุด 50",
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชาไทยลด 5"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 70,
+        "totalAmount": 0,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": true,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชงผิดฟรีทั้งบิล",
+            "kind": "bill_discount",
+            "discountAmount": 70
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ลดรายแก้วก่อน แล้ว 10% บนยอดที่เหลือ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ลดบิล 30 ครบ 300",
+          "ลดบิล 100 บาท",
+          "โค้ดลดบิล 20%",
+          "โค้ดลดบิล 5 บาท",
+          "โค้ดลดบิล 50 ครบ 500",
+          "ชงผิดฟรีทั้งบิล"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 6,
+        "totalAmount": 54,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "ชาไทยลด 5",
+            "lineTotal": 60
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 5",
+            "kind": "item_discount",
+            "discountAmount": 10
+          },
+          {
+            "name": "ลดบิล 10% สูงสุด 50",
+            "kind": "bill_discount",
+            "discountAmount": 6
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกโปรอัตโนมัติ Grab",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 425,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 100,
+        "totalAmount": 315,
+        "channelFeeAmount": 94.5,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 111,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 333
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 46,
+            "discountPerCup": 5,
+            "promotion": "ชาไทยลด 5",
+            "lineTotal": 82
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 5",
+            "kind": "item_discount",
+            "discountAmount": 10
+          },
+          {
+            "name": "ลดบิล 100 บาท",
+            "kind": "bill_discount",
+            "discountAmount": 100
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกโปร + กรอกเองลดเต็มยอดไม่มีหมายเหตุ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "billDiscountBaht": 100
+      },
+      "expected": {
+        "ok": false,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 5,
+        "billDiscountAmount": 30,
+        "totalAmount": 0,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "ชาไทยลด 5",
+            "lineTotal": 30
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 5",
+            "kind": "item_discount",
+            "discountAmount": 5
+          }
+        ],
+        "warnings": [
+          "ส่วนลดทั้งบิลเต็มยอดต้องมีหมายเหตุ (ADR-0023)"
+        ]
+      }
+    },
+    {
+      "name": "ทุกโปร + กรอกเองลดเต็มยอดมีหมายเหตุ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "billDiscountBaht": 100,
+        "billDiscountReason": "ลูกค้าประจำ"
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 35,
+        "itemsDiscount": 5,
+        "billDiscountAmount": 30,
+        "totalAmount": 0,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5,
+            "promotion": "ชาไทยลด 5",
+            "lineTotal": 30
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยลด 5",
+            "kind": "item_discount",
+            "discountAmount": 5
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}
