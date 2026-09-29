@@ -20,8 +20,8 @@ CREATE TRIGGER `cash_count_no_delete` BEFORE DELETE ON `cash_count` BEGIN SELECT
 CREATE TRIGGER `shift_status_forward_only` BEFORE UPDATE OF `status` ON `shift`
 WHEN NEW.`status` NOT IN ('open', 'counting', 'counted', 'closed')
   OR (CASE NEW.`status` WHEN 'open' THEN 0 WHEN 'counting' THEN 1 WHEN 'counted' THEN 2 ELSE 3 END) < (CASE OLD.`status` WHEN 'open' THEN 0 WHEN 'counting' THEN 1 WHEN 'counted' THEN 2 ELSE 3 END)
-  OR (NEW.`status` IN ('counting', 'counted') AND NEW.`counted_at` IS NULL)
-BEGIN SELECT RAISE(ABORT, 'shift.status only moves forward: open → counting → counted → closed; counting and counted need counted_at (D101)'); END;
+  OR (NEW.`status` IN ('counting', 'counted', 'closed') AND NEW.`counted_at` IS NULL)
+BEGIN SELECT RAISE(ABORT, 'shift.status only moves forward: open → counting → counted → closed; counting, counted and closed need counted_at (D101)'); END;
 --> statement-breakpoint
 CREATE TRIGGER `shift_sync_mode_one_way` BEFORE UPDATE OF `sync_mode` ON `shift`
 WHEN NEW.`sync_mode` NOT IN ('central','local_only') OR (OLD.`sync_mode` = 'local_only' AND NEW.`sync_mode` <> 'local_only')
@@ -38,3 +38,6 @@ BEGIN SELECT RAISE(ABORT, 'cash_movement needs an open shift (D101: a counted sh
 --> statement-breakpoint
 CREATE TRIGGER `order_open_shift_only` BEFORE INSERT ON `order` WHEN NEW.`shift_id` IS NOT NULL AND (SELECT `status` FROM `shift` WHERE `id` = NEW.`shift_id`) IS NOT 'open'
 BEGIN SELECT RAISE(ABORT, 'a bill needs an open shift (D101)'); END;
+--> statement-breakpoint
+CREATE TRIGGER `outbox_row_json_frozen` BEFORE UPDATE OF `row_json` ON `outbox` WHEN OLD.`status` IN ('sent', 'closed_off_catalog')
+BEGIN SELECT RAISE(ABORT, 'outbox.row_json is frozen once the row is sent or closed_off_catalog (spec 04 §6.1)'); END;

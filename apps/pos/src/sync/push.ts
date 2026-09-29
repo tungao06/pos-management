@@ -2,8 +2,8 @@ import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lte, or, sql,
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import {
-  CashCountAcceptedData, CashMovementAcceptedData, clipCodePoints, detailPrefix, ExistsConflictData, isRowSupported, laneOf, MAX_DETAIL_CODE_POINTS, MAX_PUSH_BODY_BYTES, MAX_PUSH_ROWS,
-  OffCatalogAcceptedData, OrderAcceptedData, OrderVoidAcceptedData, PUSH_KINDS, rowKey, SHIFT_LANE_KINDS, ShiftCloseAcceptedData, ShiftOpenAcceptedData,
+  BOT_ORDER_NO_RE, CashCountAcceptedData, CashMovementAcceptedData, clipCodePoints, detailPrefix, ExistsConflictData, isRowSupported, laneOf, MAX_DETAIL_CODE_POINTS, MAX_PUSH_BODY_BYTES, MAX_PUSH_ROWS,
+  OffCatalogAcceptedData, OrderAcceptedData, OrderVoidAcceptedData, PUSH_KINDS, PushRow, rowKey, SHIFT_LANE_KINDS, ShiftCloseAcceptedData, ShiftOpenAcceptedData,
   type PushRequest, type ReceivedRowResult, type Supported,
 } from '@dayo/contracts'
 import { edgeBahtToSatang } from '@dayo/domain'
@@ -414,18 +414,27 @@ function rejectedResult(data: unknown): Record<string, unknown> | null {
   return { order_no: clipCodePoints(d.data.order_no, ORDER_NO_MAX), version: d.data.version, reported_total: d.data.reported_total, payment_is_cash: d.data.payment_is_cash, off_catalog: d.data.off_catalog }
 }
 
+/**
+ * final fix S5: order.central_order_no takes only a real dayo order number (L<yymmdd>-<seq> — BOT_ORDER_NO_RE, the same check
+ * sync-problems.ts makes on an `exists:` conflict); anything else = null (the row stays sent, its result kept as it came).
+ */
+function centralOrderNoOf(known: Record<string, unknown>): string | null {
+  const no = known['order_no']
+  return typeof no === 'string' && BOT_ORDER_NO_RE.test(no) ? no : null
+}
+
 /** `from` = the status the row must still have (pending; local_only for a verdict that arrived after the owner closed it). */
 async function markSent(db: RemoteDb, r: Row, v: ReceivedRowResult, at: string, from: 'pending' | 'local_only' = 'pending'): Promise<void> {
   const known = knownResult(r.tableName, v.data)
   await db.update(s.outbox).set({ status: 'sent', sentAt: at, attempts: r.attempts + 1, lastError: null, nextAttemptAt: null, resultJson: known as never }).where(and(eq(s.outbox.id, r.id), eq(s.outbox.status, from)))
   if (r.tableName === 'order_off_catalog' && known !== null) { // spec §6.4: the bill now carries dayo's number of its off-catalog bill
-    await db.update(s.order).set({ centralOrderNo: known['order_no'] as string }).where(eq(s.order.id, String((r.rowJson as { pos_order_id: string }).pos_order_id)))
+    await db.update(s.order).set({ centralOrderNo: centralOrderNoOf(known) }).where(eq(s.order.id, String((r.rowJson as { pos_order_id: string }).pos_order_id)))
     return
   }
   if (r.tableName !== 'order' || known === null) return // stored by dayo all the same; the bill just shows no central number · shift kinds: result only
   let computed: number | null = null
   try { computed = edgeBahtToSatang(known['computed_total'] as number) } catch { computed = null }
-  await db.update(s.order).set({ centralOrderNo: known['order_no'] as string, centralComputedTotalSatang: computed, centralAmountMismatch: known['amount_mismatch'] as boolean, centralDuplicateOfJson: known['duplicate_of'] as string[] })
+  await db.update(s.order).set({ centralOrderNo: centralOrderNoOf(known), centralComputedTotalSatang: computed, centralAmountMismatch: known['amount_mismatch'] as boolean, centralDuplicateOfJson: known['duplicate_of'] as string[] })
     .where(eq(s.order.id, String((r.rowJson as { pos_order_id: string }).pos_order_id)))
 }
 
@@ -525,14 +534,15 @@ async function applyVerdicts(db: RemoteDb, deps: ApiDeps, batch: Row[], answer: 
         let previousExcludedAt: string | null = null
         let restored: string[] = []
         let queuedVoid: string | null = null
+        let queuedVoidError: string | null = null
         if (r.tableName === 'order' || r.tableName === 'order_off_catalog') {
           const orderId = String((r.rowJson as { pos_order_id: string }).pos_order_id)
           previousExcludedAt = (await tx.select({ x: s.order.excludedAt }).from(s.order).where(eq(s.order.id, orderId)).get())?.x ?? null
           await tx.update(s.order).set({ excludedAt: null }).where(eq(s.order.id, orderId))
           restored = await restoreExcludedChildren(tx, r, orderId) // fix round 2: its void must reach dayo too
-          queuedVoid = await queueMissingVoid(tx, deps, r, orderId, at) // fix round 3: a void cancelSale did not queue (the bill was excluded then)
+          ;({ key: queuedVoid, error: queuedVoidError } = await queueMissingVoid(tx, deps, r, orderId, at)) // fix round 3: a void cancelSale did not queue (the bill was excluded then)
         }
-        await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'sync_row', entityId: r.idempotencyKey, action: SENT_AFTER_LOCAL_ACTION, beforeJson: { status: 'local_only', excludedAt: previousExcludedAt }, afterJson: { status: 'sent', verdict: v.status, restoredChildren: restored, queuedVoid }, actorUserId: null, at })
+        await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'sync_row', entityId: r.idempotencyKey, action: SENT_AFTER_LOCAL_ACTION, beforeJson: { status: 'local_only', excludedAt: previousExcludedAt }, afterJson: { status: 'sent', verdict: v.status, restoredChildren: restored, queuedVoid, ...(queuedVoidError === null ? {} : { queuedVoidError }) }, actorUserId: null, at })
         t.sent++
         continue
       }
@@ -591,18 +601,30 @@ async function restoreExcludedChildren(tx: RemoteDb, r: Row, orderId: string): P
  * the reason · voided_at = the bill's voided_at), under this row as its parent (enqueuePush's parent rule), so dayo does
  * not keep a cancelled bill as a sale. Nothing when the bill is not voided, has no sold_at, or already has a void row.
  * Returns the queued key, or null.
+ * final fix S1: runs inside applyVerdicts' transaction — a void row that cannot be built (PushRow or the parent rule refuses
+ * it) must never throw there, or the whole batch's verdicts roll back and the queue stalls on one row (Iron Rule 5). It is
+ * checked first and left unqueued; the error goes into the SENT_AFTER_LOCAL audit row for the owner to see.
  */
-async function queueMissingVoid(tx: RemoteDb, deps: ApiDeps, r: Row, orderId: string, at: string): Promise<string | null> {
+async function queueMissingVoid(tx: RemoteDb, deps: ApiDeps, r: Row, orderId: string, at: string): Promise<{ key: string | null; error: string | null }> {
+  const none = { key: null, error: null }
   const order = await tx.select().from(s.order).where(eq(s.order.id, orderId)).get()
-  if (order === undefined || order.status !== 'voided' || order.voidedAt === null || order.soldAt === null) return null
+  if (order === undefined || order.status !== 'voided' || order.voidedAt === null || order.soldAt === null) return none
   const key = rowKey('order_void', orderId)
-  if ((await tx.select({ id: s.outbox.id }).from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get()) !== undefined) return null
+  if ((await tx.select({ id: s.outbox.id }).from(s.outbox).where(eq(s.outbox.idempotencyKey, key)).get()) !== undefined) return none
   const voided = await tx.select().from(s.orderEvent).where(and(eq(s.orderEvent.orderId, orderId), eq(s.orderEvent.type, 'VOIDED'))).orderBy(desc(s.orderEvent.seq)).limit(1).get()
   const p = (voided?.payloadJson ?? {}) as { reason?: unknown; approvedBy?: unknown }
-  if (voided === undefined || typeof p.reason !== 'string') return null
+  if (voided === undefined || typeof p.reason !== 'string') return none
   const data = { pos_order_id: orderId, voided_at: order.voidedAt, staff_id: voided.actorId, approved_by: typeof p.approvedBy === 'string' ? p.approvedBy : null, reason: p.reason }
-  await enqueuePush(tx, { kind: 'order_void', id: orderId, data, parentKey: r.idempotencyKey }, notBeforeIso(at, order.voidedAt), deps.newId)
-  return key
+  const checked = PushRow.safeParse({ key, kind: 'order_void', data })
+  if (!checked.success) {
+    return { key: null, error: clipCodePoints(`E2 order_void row: ${checked.error.issues.slice(0, 3).map((x) => `${x.path.join('.')} ${x.message}`).join(' · ')}`, MAX_DETAIL_CODE_POINTS) }
+  }
+  try {
+    await enqueuePush(tx, { kind: 'order_void', id: orderId, data, parentKey: r.idempotencyKey }, notBeforeIso(at, order.voidedAt), deps.newId)
+  } catch (e) {
+    return { key: null, error: clipCodePoints(e instanceof Error ? e.message : String(e), MAX_DETAIL_CODE_POINTS) }
+  }
+  return { key, error: null }
 }
 const notBeforeIso = (a: string, b: string): string => (Date.parse(a) < Date.parse(b) ? b : a)
 

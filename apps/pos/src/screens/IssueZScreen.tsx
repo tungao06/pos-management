@@ -13,7 +13,8 @@ import { KeepShiftLocalControl, SkipCountFloorControl } from './OwnerEscapeContr
 /**
  * D101 step 3 (spec §6.8): once online again, a counted shift's Z is issued from its already-saved count —
  * `countedSatang` (from `bootstrap().zWaiting`) is shown fixed, never re-typed (the drawer was already counted at
- * `/shift/close`). E4 (fetchBotCash) runs first so `countSummary` can answer with the real bot cash; on any E4
+ * `/shift/close`). For a central shift without a stored E4 answer, E4 (fetchBotCash) runs between two `countSummary`
+ * reads so the second can answer with the real bot cash (a local-only shift never asks E4 — final fix C1); on any E4
  * failure the count stays saved and waiting — this screen offers only "ลองใหม่", never a confirm button, so a Z is
  * never issued from stale or missing bot cash (ruling R7's whole point).
  */
@@ -41,6 +42,15 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
   const load = useQuery({
     queryKey: issueZKey(shiftId),
     queryFn: async (): Promise<CountSummaryDto> => {
+      // final fix C1: the same rule as CloseShiftScreen — countSummary first; E4 only for a CENTRAL shift whose stored
+      // answer does not cover this count yet. A local-only shift has no bot cash (ruling R6): asking E4 for it is a
+      // refusal, which painted an error on every local-only Z (after keepShiftLocal).
+      const first = await api.countSummary(shiftId)
+      if (first.syncMode !== 'central' || first.includesBotCash) {
+        setBotCashError(null)
+        setBotCashProminent(false)
+        return first
+      }
       try {
         await api.fetchBotCash(shiftId)
         setBotCashError(null)
@@ -54,8 +64,9 @@ export function IssueZScreen({ shiftId, countedSatang }: { shiftId: string; coun
           setBotCashError(errorMessage(e))
           setBotCashProminent(isCentralZBlockedError(e))
         }
+        return first // nothing stored: the first read still stands
       }
-      return api.countSummary(shiftId)
+      return api.countSummary(shiftId) // E4's answer is stored: read again with the bot cash in
     },
   })
 

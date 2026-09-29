@@ -143,7 +143,7 @@ describe('block 3 migration (D101 · spec §4.10 ข้อ 4)', () => {
     expect(objectsAfter.filter((o) => !objectsBefore.some((b) => b[1] === o[1])).map((o) => `${String(o[0])} ${String(o[1])}`).sort()).toEqual([
       'index cash_count_shift_uq', 'index shift_counting_uq',
       'trigger cash_count_no_delete', 'trigger cash_count_no_update', 'trigger cash_movement_open_shift_only', 'trigger order_open_shift_only',
-      'trigger shift_counted_at_once', 'trigger shift_status_forward_only', 'trigger shift_sync_mode_one_way', 'trigger shift_sync_mode_valid',
+      'trigger outbox_row_json_frozen', 'trigger shift_counted_at_once', 'trigger shift_status_forward_only', 'trigger shift_sync_mode_one_way', 'trigger shift_sync_mode_valid',
     ])
     expect(one(raw, `select name, sql from sqlite_master where type = 'table' and name not in ('shift', 'cash_count', 'order') order by name`)).toEqual(tableSqlBefore)
     expect(one(raw, `PRAGMA foreign_key_check`)).toEqual([])
@@ -204,10 +204,22 @@ describe('block 3 freeze rules on the tablet (D101 · R2 · R5)', () => {
     await db.run(`update shift set counted_at='2026-09-25T12:00:00.000Z', status='counted' where id='s'`) // no change of counted_at
     expect(await db.all(`select status, counted_at from shift`)).toEqual([{ status: 'counted', counted_at: '2026-09-25T12:00:00.000Z' }])
   })
-  it('the block-2 close (open → closed in one step) still works', async () => {
+  it('a shift closed without a count moment is refused (final fix S3): the old open → closed step with no counted_at', async () => {
     const db = await migratedAll(); await seedOpenShift(db, { shiftId: 's' })
-    await db.run(`update shift set status='closed', closed_by='u1', closed_at='${NOW}' where id='s'`)
-    expect(await db.all(`select status from shift`)).toEqual([{ status: 'closed' }])
+    await expect(db.run(`update shift set status='closed', closed_by='u1', closed_at='${NOW}' where id='s'`)).rejects.toThrow(/counted_at/)
+    expect(await db.all(`select status, counted_at from shift`)).toEqual([{ status: 'open', counted_at: null }])
+    await db.run(`update shift set status='closed', counted_at='${NOW}', closed_by='u1', closed_at='${NOW}' where id='s'`) // with its count moment: fine
+    expect(await db.all(`select status, counted_at from shift`)).toEqual([{ status: 'closed', counted_at: NOW }])
+  })
+  it('an old closed shift the backfill left without counted_at stays readable and untouched (final fix S3)', async () => {
+    const db = await migratedTo(BEFORE)
+    await seedDeviceAndUser(db)
+    await db.run(`insert into shift (id, device_id, business_date, status, opened_by, opened_at, opening_float_satang, closed_by, closed_at)
+      values ('sh0', 'dev-1', '2026-09-19', 'closed', 'u1', '${NOW}', 0, 'u1', '${NOW}')`)
+    await applyRemaining(db)
+    await db.run(`update shift set sync_mode='local_only' where id='sh0'`) // an UPDATE that leaves status alone never meets the guard
+    await expect(db.run(`update shift set status='closed' where id='sh0'`)).rejects.toThrow(/counted_at/)
+    expect(await db.all(`select status, counted_at from shift`)).toEqual([{ status: 'closed', counted_at: null }])
   })
   it('a counting shift takes no bill and no cash movement (D101)', async () => {
     const db = await migratedAll(); await seedOpenShift(db, { shiftId: 's' })
@@ -261,13 +273,12 @@ describe('block 3 freeze rules on the tablet (D101 · R2 · R5)', () => {
     d.update(s.order).set({ centralMismatchJson: mismatch, offCatalogAt: NOW }).where(eq(s.order.id, bill)).run()
     expect(d.select({ m: s.order.centralMismatchJson, at: s.order.offCatalogAt }).from(s.order).where(eq(s.order.id, bill)).get()).toEqual({ m: mismatch, at: NOW })
   })
-  it('counting and counted need counted_at (D101) — the block-2 open → closed step does not', async () => {
+  it('counting, counted and closed all need counted_at (D101 · final fix S3)', async () => {
     const db = await migratedAll(); await seedOpenShift(db, { shiftId: 's' })
     await expect(db.run(`update shift set status='counting' where id='s'`)).rejects.toThrow(/counted_at/)
     await expect(db.run(`update shift set status='counted' where id='s'`)).rejects.toThrow(/counted_at/)
+    await expect(db.run(`update shift set status='closed', closed_by='u1', closed_at='${NOW}' where id='s'`)).rejects.toThrow(/counted_at/)
     expect(await db.all(`select status, counted_at from shift`)).toEqual([{ status: 'open', counted_at: null }])
-    await db.run(`update shift set status='closed', closed_by='u1', closed_at='${NOW}' where id='s'`)
-    expect(await db.all(`select status, counted_at from shift`)).toEqual([{ status: 'closed', counted_at: null }])
   })
   it('sync_mode moves central → local_only only (R1 · R19); a value outside the two is refused on insert and update', async () => {
     const db = await migratedAll(); await seedDeviceAndUser(db)
@@ -282,10 +293,31 @@ describe('block 3 freeze rules on the tablet (D101 · R2 · R5)', () => {
     await db.run(`update shift set sync_mode='central' where id='cen'`) // same value: no move
     await db.run(`update shift set sync_mode='local_only' where id='cen'`) // R19: the owner keeps a stuck shift on the tablet
     await expect(db.run(`update shift set sync_mode='central' where id='cen'`)).rejects.toThrow(/only moves central → local_only/)
-    await db.run(`update shift set status='closed' where id='cen'`) // one open shift per device: close it before the next
+    await db.run(`update shift set status='closed', counted_at='${NOW}' where id='cen'`) // one open shift per device: close it before the next
     await seedOpenShift(db, { shiftId: 'dflt' }) // no sync_mode given: the default passes the insert guard
     expect(await db.all(`select id, sync_mode from shift order by id`)).toEqual([
       { id: 'cen', sync_mode: 'local_only' }, { id: 'dflt', sync_mode: 'local_only' }, { id: 'loc', sync_mode: 'local_only' },
+    ])
+  })
+  it('outbox row_json is frozen once dayo stored the row or the owner closed it off-catalog (spec §6.1 · final fix S4)', async () => {
+    const db = await migratedAll()
+    const statuses = ['pending', 'dead', 'local_only', 'sent', 'closed_off_catalog'] as const
+    for (const st of statuses) {
+      await db.run(`insert into outbox (id, table_name, row_json, idempotency_key, status, created_at, attempts) values ('ob-${st}', 'order', '{"v":1}', 'order:${st}', '${st}', '${NOW}', 0)`)
+    }
+    for (const st of ['sent', 'closed_off_catalog']) {
+      await expect(db.run(`update outbox set row_json='{"v":2}' where id='ob-${st}'`)).rejects.toThrow(/row_json is frozen/)
+      await expect(db.run(`update outbox set row_json=row_json, status='pending' where id='ob-${st}'`)).rejects.toThrow(/row_json is frozen/) // naming the column is enough
+      await db.run(`update outbox set result_json='{"order_no":"L260925-001"}', last_error=null where id='ob-${st}'`) // every other column stays writable
+    }
+    for (const st of ['pending', 'dead', 'local_only']) await db.run(`update outbox set row_json='{"v":2}' where id='ob-${st}'`) // the owner's remedies rewrite these
+    await db.run(`update outbox set status='sent' where id='ob-pending'`) // a pending row still becomes sent
+    expect(await db.all(`select id, row_json, status from outbox order by id`)).toEqual([
+      { id: 'ob-closed_off_catalog', row_json: '{"v":1}', status: 'closed_off_catalog' },
+      { id: 'ob-dead', row_json: '{"v":2}', status: 'dead' },
+      { id: 'ob-local_only', row_json: '{"v":2}', status: 'local_only' },
+      { id: 'ob-pending', row_json: '{"v":2}', status: 'sent' },
+      { id: 'ob-sent', row_json: '{"v":1}', status: 'sent' },
     ])
   })
   it('foreign_key_check stays empty', async () => { const db = await migratedAll(); expect(await db.all('pragma foreign_key_check')).toEqual([]) })

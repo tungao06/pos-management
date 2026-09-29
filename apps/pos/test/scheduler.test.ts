@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as s from '@dayo/db-schema/sqlite'
 import { MOCK_API_KEY } from '@dayo/dayo-mock'
-import { createPosApi, SETUP_CALLS_PER_MIN } from '../src/api/pos-api'
+import { createPosApi, createPosRuntime, SETUP_CALLS_PER_MIN } from '../src/api/pos-api'
 import { createSyncScheduler, FOLLOW_UP_GAP_MS, MANUAL_CLEAR_GAP_MS, SYNC_BUDGET_PER_MIN, type DayoPacer } from '../src/sync/scheduler'
 import { pushOnce } from '../src/sync/push'
 import { DAYO_KEYS, readKey, writeKey } from '../src/sync/state'
@@ -590,5 +590,40 @@ describe('sync scheduler — the Web Locks it uses without ctx.locks (follow-up 
     await locks.request('dayo-push', { ifAvailable: true }, async (lock) => { seen.push(lock) })
     expect(seen[0]).toBeNull()
     expect(seen[1]).not.toBeNull()
+  })
+})
+
+describe('the before_close wake (spec 04 §6.2 "ก่อนปิดกะ" · final fix C3)', () => {
+  /** A Worker-like PosApi (autoSync) whose scheduler wakes are only recorded — no cycle, no timer, no request from them. */
+  async function recorded() {
+    const t = await openConnectedApi({ block3: true })
+    const noTimers = { setTimeout: () => 0, clearTimeout: () => undefined, setInterval: () => 0, clearInterval: () => undefined } as unknown as NonNullable<Parameters<typeof createPosRuntime>[2]>['timers']
+    const rt = createPosRuntime(t.db, t.deps, { autoSync: true, locks: createTestLocks(), timers: noTimers })
+    const kick = vi.spyOn(rt.scheduler, 'kick').mockImplementation(() => undefined)
+    const closeWakes = () => kick.mock.calls.filter(([r]) => r === 'before_close').length
+    t.clock.advanceMs(3_600_000); t.mock.setNow(t.clock.now())
+    return { t, rt, closeWakes }
+  }
+  const owner2 = { approverUserId: STAFF.DCm, approverPin: '2222' }
+  const settle = { varianceReason: null, bankQrTotalSatang: null, acknowledgeZChainBroken: false }
+
+  it('finishCount and issueZ wake the sender with before_close once they succeed', async () => {
+    const { rt, closeWakes } = await recorded()
+    const { shiftId } = await rt.api.finishCount({ actorUserId: STAFF.TungAo })
+    expect(closeWakes()).toBe(1) // the count moment is fixed: unsent bills of the shift should go now
+    await rt.api.confirmCount({ shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: [{ denominationSatang: 100, count: 500 }], shownFingerprint: (await rt.api.countSummary(shiftId)).fingerprint, z: null })
+    await rt.api.fetchBotCash(shiftId)
+    await rt.api.issueZ({ shiftId, ...owner2, shownFingerprint: (await rt.api.countSummary(shiftId)).fingerprint, ...settle })
+    expect(closeWakes()).toBe(2) // the Z (shift_close) is queued: send it now, not after the 2 s write debounce
+    rt.scheduler.stop()
+  })
+  it('a refused finishCount or issueZ does not wake it', async () => {
+    const { rt, closeWakes } = await recorded()
+    const { shiftId } = await rt.api.finishCount({ actorUserId: STAFF.TungAo })
+    await expect(rt.api.finishCount({ actorUserId: STAFF.TungAo })).rejects.toThrow(/NO_OPEN_SHIFT/)
+    await rt.api.confirmCount({ shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: [{ denominationSatang: 100, count: 500 }], shownFingerprint: (await rt.api.countSummary(shiftId)).fingerprint, z: null })
+    await expect(rt.api.issueZ({ shiftId, approverUserId: STAFF.DCm, approverPin: '9999', shownFingerprint: 'x', ...settle })).rejects.toThrow()
+    expect(closeWakes()).toBe(1)
+    rt.scheduler.stop()
   })
 })

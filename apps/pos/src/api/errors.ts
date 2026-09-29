@@ -111,17 +111,3 @@ export function isCentralZBlockedError(e: unknown): boolean {
   if (code !== 'BAD_INPUT' || !(e instanceof Error)) return false
   return CENTRAL_Z_BLOCKED_BAD_INPUT_PREFIXES.some((prefix) => e.message.startsWith(`BAD_INPUT: ${prefix}`))
 }
-
-/**
- * Fix round 2 item B: E4 (`fetchBotCash`) failures this tablet's own retry (or time passing) can still fix —
- * `keepShiftLocal` must stay the small secondary link for these, prominent only for a real, lasting refusal.
- * `DAYO_UNREACHABLE` (network/5xx/429/timeout), a scope/key problem dayo's own web fixes (`DAYO_BAD_KEY`,
- * `DAYO_KEY_NO_SCOPE`, `DAYO_API_DISABLED`), and `CLOCK_AHEAD` (bot-cash.ts `assertWindowClosed` — waits for the
- * count moment to actually pass, then answers) are all "try again later/after fixing the key", never "this
- * shift's Z can never issue".
- */
-export function isRecoverableE4Error(e: unknown): boolean {
-  const code = posErrorCode(e)
-  if (code === 'DAYO_UNREACHABLE' || code === 'DAYO_BAD_KEY' || code === 'DAYO_KEY_NO_SCOPE' || code === 'DAYO_API_DISABLED') return true
-  return isClockAheadCountError(e)
-}

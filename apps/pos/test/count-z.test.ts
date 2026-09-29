@@ -60,6 +60,16 @@ describe('count and Z (D101 · spec 04 §6.8 · §4.10)', () => {
     await pushOnce(ctx)
     expect(await t.db.select().from(s.outbox).where(inArray(s.outbox.status, ['pending', 'dead'])).all()).toEqual([])
   })
+  it('final fix S2: an oversized created_by_name from E4 is clipped before it is stored and frozen into the Z', async () => {
+    const { t } = await centralShift()
+    t.mock.seedCentralOrders([{ ...bot('L260925-902', 35, '2026-09-25T04:30:00+00:00'), created_by_name: 'ส'.repeat(5_000) }])
+    const { shiftId } = await t.api.finishCount({ actorUserId: STAFF.TungAo })
+    const dto = await t.api.fetchBotCash(shiftId)
+    expect(dto.bills.find((b) => b.orderNo === 'L260925-902')!.createdByName).toBe('ส'.repeat(100))
+    const sum = await t.api.countSummary(shiftId)
+    const r = await t.api.confirmCount({ shiftId, actorUserId: STAFF.TungAo, ...owner2, countLines: lines(650), shownFingerprint: sum.fingerprint, z: settle }) // 500 + 45 + 70 + 35
+    expect(r.z?.snapshot?.botBills).toContainEqual(expect.objectContaining({ orderNo: 'L260925-902', createdByName: 'ส'.repeat(100), totalSatang: 3_500 }))
+  })
   it('offline: the count is saved without bot cash, the next shift opens, the Z comes when online (D101 step 3 · D68)', async () => {
     const { t, ctx } = await centralShift()
     const { shiftId } = await t.api.finishCount({ actorUserId: STAFF.TungAo })

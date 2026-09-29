@@ -289,6 +289,30 @@ describe('pushOnce — block 3 lanes and verdicts (spec 04 §6.2 · §4.10)', ()
     expect(await row(t, `order_off_catalog:${bill.orderId}`)).toMatchObject({ status: 'sent', resultJson: { order_no: 'L260925-777', version: 1 } })
     expect((await t.db.select().from(s.order).where(eq(s.order.id, bill.orderId)).get())!.centralOrderNo).toBe('L260925-777')
   })
+  // final fix S5: order.central_order_no takes only a real dayo order number (L<yymmdd>-<seq>, as sync-problems.ts) — the
+  // row is still sent (dayo stored it) and its result kept, the bill just shows no central number
+  it('an accepted order whose order_no is not a dayo order number is sent, but the bill keeps no central number', async () => {
+    const { t, ctx } = await ready()
+    const bill = await sellOne(t)
+    t.mock.override({ match: { key: `order:${bill.orderId}` }, verdict: { status: 'accepted', data: { order_no: 'x<script>', version: 1, computed_total: 45, amount_mismatch: false, duplicate_of: [], warnings: [] } }, times: 1 })
+    await pushOnce(ctx)
+    expect(await row(t, `order:${bill.orderId}`)).toMatchObject({ status: 'sent', resultJson: { order_no: 'x<script>' } })
+    expect((await t.db.select().from(s.order).where(eq(s.order.id, bill.orderId)).get())).toMatchObject({ centralOrderNo: null, centralComputedTotalSatang: 4_500, centralAmountMismatch: false })
+  })
+  it('an accepted order_off_catalog whose order_no is not a dayo order number leaves the bill with no central number', async () => {
+    const { t, ctx } = await connect({ block3: true, block3Phase2: true })
+    const bill = await sellOne(t)
+    const orderRow = await row(t, `order:${bill.orderId}`)
+    await t.db.update(s.outbox).set({ status: 'closed_off_catalog' }).where(eq(s.outbox.id, orderRow.id))
+    const order = orderRow.rowJson as OrderRowData
+    const sub = edgeBahtToSatang(order.totals.items_subtotal)
+    const data = buildOffCatalogRowData({ order, items: [{ menuCode: 'Cocoa', menuNameTh: 'โกโก้', size: '16 oz', sweetness: '50%', qty: 1, unitPriceSatang: sub, discountPerCupSatang: 0, lineTotalSatang: sub }], closedBy: STAFF.TungAo, closedAt: t.clock.now(), reason: 'เมนูเลิกขายแล้ว', originalReason: 'UNKNOWN_CODE' })
+    await t.db.transaction((tx) => enqueuePush(tx, { kind: 'order_off_catalog', id: bill.orderId, data, parentKey: null }, t.clock.now(), t.deps.newId))
+    t.mock.override({ match: { key: `order_off_catalog:${bill.orderId}` }, verdict: { status: 'accepted', data: { order_no: 'D260925-777', version: 1 } }, times: 1 })
+    await pushOnce(ctx)
+    expect(await row(t, `order_off_catalog:${bill.orderId}`)).toMatchObject({ status: 'sent' })
+    expect((await t.db.select().from(s.order).where(eq(s.order.id, bill.orderId)).get())!.centralOrderNo).toBeNull()
+  })
   it('a shift row more than 24 h ahead of dayo stays pending, flagged, not counted — and holds the lane (N5 in the shift lane)', async () => {
     const { t, ctx } = await ready()
     t.clock.advanceMs(CLOCK_AHEAD_FAR_MS + 3_600_000)
