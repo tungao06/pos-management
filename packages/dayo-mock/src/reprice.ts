@@ -25,7 +25,9 @@ function quote(s: MockState, o: MockOrderData, promotions: CatalogPromotion[]): 
   // E1 = OrderCatalog without cost; milk/grade ingredientId and multiplier may be null like dayo's menu_options rows — passed
   // through unchanged, dayo's pricing code runs on the same nulls
   const options = { milkOptions: c.milkOptions as MenuOptionMilkEntry[], gradeOptions: c.gradeOptions as MenuOptionGradeEntry[] }
-  const catalog: OrderCatalog = { ...c, ...options, ingredients, promotions: active }
+  // plan 10 bridge (T2 → T5): the contract's promotion type now includes rule-only promotions, which the vendored 4f35932
+  // types cannot hold; the mock only serves legacy-shape catalogs until T5 (which removes this cast on the f4cda56 vendor)
+  const catalog: OrderCatalog = { ...c, ...options, ingredients, promotions: active as OrderCatalog['promotions'] }
   const draft: OrderDraft = {
     saleDate: o.sale_date, saleTime: bkkTime(o.sold_at), channelCode: o.channel, paymentCode: o.payment,
     lines: o.lines.map((l) => ({

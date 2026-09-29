@@ -63,6 +63,10 @@ export const MESSAGES: Record<PosErrorCode, string> = {
   DAYO_Z_STATE_INVALID: TH.dayoZStateInvalidGeneric,
   Z_TOO_LARGE: TH.errZTooLarge,
   OFF_CATALOG_NOT_POSSIBLE: TH.errOffCatalogNotPossible,
+  // plan 10 T0 — manual promotions + rule-engine catalogs
+  MANUAL_REASON_REQUIRED: TH.errManualReasonRequired,
+  MANUAL_PROMO_UNSUPPORTED: TH.errManualPromoUnsupported,
+  ZERO_TOTAL_NOT_ALLOWED: TH.errZeroTotalNotAllowed,
 }
 
 /** dayo's `CartError` code → Thai. `UNKNOWN_VARIANT` is refined by `CartError.reason` below (never by parsing the
