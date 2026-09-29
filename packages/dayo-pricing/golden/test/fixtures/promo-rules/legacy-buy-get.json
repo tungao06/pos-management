@@ -1,0 +1,1077 @@
+{
+  "description": "ซื้อ N แถม M (buy_n_get_m) — แก้วถูกสุดฟรี · max_sets · หลายโปร · แก้วฝั่งซื้อไม่ถูกจองข้ามโปร",
+  "form": "legacy",
+  "promotions": [
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ชาไทยซื้อ 2 แถม 1",
+      "kind": "buy_n_get_m",
+      "priority": 10,
+      "params": {
+        "buy_qty": 2,
+        "get_qty": 1,
+        "menu_codes": [
+          "TT01"
+        ]
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+      "kind": "buy_n_get_m",
+      "priority": 20,
+      "params": {
+        "buy_qty": 1,
+        "get_qty": 1,
+        "menu_codes": [],
+        "max_sets": 2
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "ชาเขียวซื้อ 3 แถม 2",
+      "kind": "buy_n_get_m",
+      "priority": 30,
+      "params": {
+        "buy_qty": 3,
+        "get_qty": 2,
+        "menu_codes": [
+          "GT01"
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "ครบ 3 แก้ว → แถม 1",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          }
+        ],
+        "skipPromotions": [
+          "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+          "ชาเขียวซื้อ 3 แถม 2"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 105,
+        "itemsDiscount": 35,
+        "billDiscountAmount": 0,
+        "totalAmount": 70,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": "ชาไทยซื้อ 2 แถม 1",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยซื้อ 2 แถม 1",
+            "kind": "buy_n_get_m",
+            "discountAmount": 35
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ราคาต่างขนาด → แก้วถูกสุดฟรี",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+          "ชาเขียวซื้อ 3 แถม 2"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 115,
+        "itemsDiscount": 35,
+        "billDiscountAmount": 0,
+        "totalAmount": 80,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 45
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": "ชาไทยซื้อ 2 แถม 1",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยซื้อ 2 แถม 1",
+            "kind": "buy_n_get_m",
+            "discountAmount": 35
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "5 แก้ว = 1 ชุด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 5
+          }
+        ],
+        "skipPromotions": [
+          "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+          "ชาเขียวซื้อ 3 แถม 2"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 175,
+        "itemsDiscount": 35,
+        "billDiscountAmount": 0,
+        "totalAmount": 140,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": "ชาไทยซื้อ 2 แถม 1",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 4,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 140
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยซื้อ 2 แถม 1",
+            "kind": "buy_n_get_m",
+            "discountAmount": 35
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "6 แก้วผสมขนาด = 2 ชุด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 4
+          }
+        ],
+        "skipPromotions": [
+          "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+          "ชาเขียวซื้อ 3 แถม 2"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 230,
+        "itemsDiscount": 70,
+        "billDiscountAmount": 0,
+        "totalAmount": 160,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 90
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": "ชาไทยซื้อ 2 แถม 1",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยซื้อ 2 แถม 1",
+            "kind": "buy_n_get_m",
+            "discountAmount": 70
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "2 แก้ว ไม่ครบชุด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+          "ชาเขียวซื้อ 3 แถม 2"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 70,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 70,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกเมนู 1+1 จำกัด 2 ชุด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยซื้อ 2 แถม 1",
+          "ชาเขียวซื้อ 3 แถม 2"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 215,
+        "itemsDiscount": 45,
+        "billDiscountAmount": 0,
+        "totalAmount": 170,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 85
+          },
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 45
+          },
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 10,
+            "discountPerCup": 10,
+            "promotion": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "lineTotal": 0
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "kind": "buy_n_get_m",
+            "discountAmount": 45
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกเมนู 1+1 ช่องทาง Grab",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยซื้อ 2 แถม 1",
+          "ชาเขียวซื้อ 3 แถม 2"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 222,
+        "itemsDiscount": 59,
+        "billDiscountAmount": 0,
+        "totalAmount": 163,
+        "channelFeeAmount": 48.9,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 46,
+            "discountPerCup": 46,
+            "promotion": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 52,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 52
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 111,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 111
+          },
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 13,
+            "discountPerCup": 13,
+            "promotion": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "lineTotal": 0
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "kind": "buy_n_get_m",
+            "discountAmount": 59
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ชาเขียว 3+2 ผสมขนาด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยซื้อ 2 แถม 1",
+          "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 230,
+        "itemsDiscount": 80,
+        "billDiscountAmount": 0,
+        "totalAmount": 150,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 50,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 150
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 40,
+            "discountPerCup": 40,
+            "promotion": "ชาเขียวซื้อ 3 แถม 2",
+            "lineTotal": 0
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาเขียวซื้อ 3 แถม 2",
+            "kind": "buy_n_get_m",
+            "discountAmount": 80
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "แก้วที่ใส่ฟรีเองไม่นับ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "free": true,
+            "discountReason": "ชงผิด"
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+          "ชาเขียวซื้อ 3 แถม 2"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 105,
+        "itemsDiscount": 35,
+        "billDiscountAmount": 0,
+        "totalAmount": 70,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": null,
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          }
+        ],
+        "promotionsApplied": [],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ชาไทยกับชาเขียวพร้อมกัน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 5
+          }
+        ],
+        "skipPromotions": [
+          "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 305,
+        "itemsDiscount": 115,
+        "billDiscountAmount": 0,
+        "totalAmount": 190,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": "ชาไทยซื้อ 2 แถม 1",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 70
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 40,
+            "discountPerCup": 40,
+            "promotion": "ชาเขียวซื้อ 3 แถม 2",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 120
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยซื้อ 2 แถม 1",
+            "kind": "buy_n_get_m",
+            "discountAmount": 35
+          },
+          {
+            "name": "ชาเขียวซื้อ 3 แถม 2",
+            "kind": "buy_n_get_m",
+            "discountAmount": 80
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกโปร: แก้วฝั่งซื้อยังใช้ต่อได้",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 4
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 310,
+        "itemsDiscount": 105,
+        "billDiscountAmount": 0,
+        "totalAmount": 205,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": "ชาไทยซื้อ 2 แถม 1",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 35,
+            "promotion": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยซื้อ 2 แถม 1",
+            "kind": "buy_n_get_m",
+            "discountAmount": 35
+          },
+          {
+            "name": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "kind": "buy_n_get_m",
+            "discountAmount": 70
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกโปร: Lineman",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "lineman",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 5
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "milk": "oat"
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 535.5,
+        "itemsDiscount": 245.75,
+        "billDiscountAmount": 0,
+        "totalAmount": 289.75,
+        "channelFeeAmount": 57.95,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 42.25,
+            "discountPerCup": 42.25,
+            "promotion": "ชาไทยซื้อ 2 แถม 1",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 42.25,
+            "discountPerCup": 42.25,
+            "promotion": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 59.5,
+            "discountPerCup": 59.5,
+            "promotion": "ชาเขียวซื้อ 3 แถม 2",
+            "lineTotal": 0
+          },
+          {
+            "menuCode": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 59.5,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 178.5
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 111.25,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 111.25
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยซื้อ 2 แถม 1",
+            "kind": "buy_n_get_m",
+            "discountAmount": 42.25
+          },
+          {
+            "name": "ทุกเมนูซื้อ 1 แถม 1 สูงสุด 2 ชุด",
+            "kind": "buy_n_get_m",
+            "discountAmount": 84.5
+          },
+          {
+            "name": "ชาเขียวซื้อ 3 แถม 2",
+            "kind": "buy_n_get_m",
+            "discountAmount": 119
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}
