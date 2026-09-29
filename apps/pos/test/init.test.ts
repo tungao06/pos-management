@@ -18,6 +18,6 @@ describe('initDatabase', () => {
 
   it('a fresh device asks for setup', async () => {
     const { api } = await openTestApi()
-    expect(await api.bootstrap()).toEqual({ needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl: null, staffNeedingPin: [], ownerRecovery: false, sync: expect.objectContaining({ linked: false, pendingBills: 0 }) })
+    expect(await api.bootstrap()).toEqual({ needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl: null, staffNeedingPin: [], ownerRecovery: false, sync: expect.objectContaining({ linked: false, pendingBills: 0 }), countingShift: null, zWaiting: [] })
   })
 })

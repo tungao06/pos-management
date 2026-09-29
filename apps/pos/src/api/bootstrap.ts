@@ -10,7 +10,7 @@ import { isDayoLinked, ownerRecoveryAllowed, storedBaseUrl } from './connect'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { staffNeedingPin } from './staff'
-import type { BootstrapState, DeviceDto, ShiftDto, SyncStatusDto, UserDto } from './types'
+import type { BootstrapState, DeviceDto, ShiftDto, SyncStatusDto, UserDto, WaitingZDto } from './types'
 
 /** sync_state key holding this device's id (decision T7). */
 export const LOCAL_DEVICE_KEY = 'local.device_id'
@@ -36,6 +36,24 @@ export async function currentOpenShift(db: RemoteDb, deviceId: string): Promise<
     .limit(1)
     .get()
   return row ? { id: row.id, businessDate: row.businessDate, openedAt: row.openedAt, openedBy: row.openedBy, openingFloatSatang: row.openingFloatSatang, syncMode: row.syncMode } : null
+}
+
+/** D101 · R2: the shift of this device after "นับเสร็จ" whose count is not confirmed yet (at most one — shift_counting_uq). */
+export async function countingShiftOf(db: RemoteDb, deviceId: string): Promise<{ shiftId: string; countedAt: string } | null> {
+  const r = await db.select({ shiftId: s.shift.id, countedAt: s.shift.countedAt }).from(s.shift).where(and(eq(s.shift.deviceId, deviceId), eq(s.shift.status, 'counting'))).get()
+  return r === undefined || r.countedAt === null ? null : { shiftId: r.shiftId, countedAt: r.countedAt }
+}
+
+/** D68 · spec §6.8: counted shifts of this device with no Z yet ("ใบปิดกะ <วันที่> รอออนไลน์"), oldest count first (R7). */
+export async function waitingZs(db: RemoteDb, deviceId: string): Promise<WaitingZDto[]> {
+  const rows = await db
+    .select({ shiftId: s.shift.id, businessDate: s.shift.businessDate, countedAt: s.shift.countedAt, syncMode: s.shift.syncMode, countedSatang: s.cashCount.countedSatang })
+    .from(s.shift)
+    .innerJoin(s.cashCount, eq(s.cashCount.shiftId, s.shift.id))
+    .where(and(eq(s.shift.deviceId, deviceId), eq(s.shift.status, 'counted'), isNotNull(s.shift.countedAt)))
+    .orderBy(asc(s.shift.countedAt), asc(s.shift.id))
+    .all()
+  return rows.map((r) => ({ shiftId: r.shiftId, businessDate: r.businessDate, countedAt: r.countedAt!, syncMode: r.syncMode, countedSatang: r.countedSatang }))
 }
 
 /** Active users with a PIN — in the order of dayo's staff list (E1) when there is one (owners first there), else by creation. */
@@ -138,7 +156,7 @@ export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapS
   // null in exactly the cases `replaceApiKey`/`recoverOwner` themselves would refuse (e.g. a corrupt stored value).
   const dayoBaseUrl = await storedBaseUrl(db)
   if ((await localDeviceId(db)) === null) {
-    return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl, staffNeedingPin: [], ownerRecovery: false, sync: await syncStatus(db, deps) }
+    return { needsSetup: true, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: false, dayoBaseUrl, staffNeedingPin: [], ownerRecovery: false, sync: await syncStatus(db, deps), countingShift: null, zWaiting: [] }
   }
   const device = await requireDevice(db)
   const lastAt = await lastBackupAt(db)
@@ -157,5 +175,7 @@ export async function bootstrap(db: RemoteDb, deps: ApiDeps): Promise<BootstrapS
     staffNeedingPin: dayoLinked ? await staffNeedingPin(db) : [],
     ownerRecovery: dayoLinked && (await ownerRecoveryAllowed(db)),
     sync: await syncStatus(db, deps),
+    countingShift: await countingShiftOf(db, device.id),
+    zWaiting: await waitingZs(db, device.id),
   }
 }

@@ -1,4 +1,5 @@
-import type { RecordSaleResult } from '../../src/api/types'
+import type { CashCountLine } from '@dayo/domain'
+import type { ConfirmCountResult, RecordSaleResult } from '../../src/api/types'
 import { PINS, sellCode, type ReadyApi } from './db'
 
 export type Scenario = { cashVoided: RecordSaleResult; qrVoided: RecordSaleResult; cashKept: RecordSaleResult }
@@ -28,3 +29,11 @@ export const COUNT_520 = [
   { denominationSatang: 50_000, count: 1 },
   { denominationSatang: 2_000, count: 1 },
 ]
+
+/** Test shortcut for a whole close: finishCount → (E4 when central and online) → confirmCount with the Z. */
+export async function countAndClose(t: ReadyApi, countLines: CashCountLine[], opts: { approverUserId: string; approverPin: string; varianceReason?: string | null; acknowledgeZChainBroken?: boolean }): Promise<ConfirmCountResult> {
+  const { shiftId } = await t.api.finishCount({ actorUserId: t.owner.id })
+  if ((await t.api.countSummary(shiftId)).syncMode === 'central') await t.api.fetchBotCash(shiftId)
+  const sum = await t.api.countSummary(shiftId)
+  return t.api.confirmCount({ shiftId, actorUserId: t.owner.id, approverUserId: opts.approverUserId, approverPin: opts.approverPin, countLines, shownFingerprint: sum.fingerprint, z: { varianceReason: opts.varianceReason ?? null, bankQrTotalSatang: null, acknowledgeZChainBroken: opts.acknowledgeZChainBroken ?? false } })
+}

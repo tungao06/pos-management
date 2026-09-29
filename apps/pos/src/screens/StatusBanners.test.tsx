@@ -36,6 +36,8 @@ function bootstrapWith(sync: SyncStatusDto, overrides: Partial<BootstrapState> =
     staffNeedingPin: [],
     ownerRecovery: false,
     sync,
+    countingShift: null,
+    zWaiting: [],
     ...overrides,
   }
 }

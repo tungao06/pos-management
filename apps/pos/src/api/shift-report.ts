@@ -1,14 +1,14 @@
 import { and, asc, eq, inArray, isNotNull, lt } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { canonicalJson, cashInputsFromMovements, DEFAULT_VARIANCE_ALERT_SATANG, effectiveVarianceAlertSatang, expectedCashSatang, sha256Hex, summarizeShiftSales, type ShiftOrder, type ZVoid } from '@dayo/domain'
+import { canonicalJson, cashInputsFromMovements, DEFAULT_VARIANCE_ALERT_SATANG, effectiveVarianceAlertSatang, expectedCashSatang, sha256Hex, summarizeShiftSales, withBotCash, type ShiftOrder, type ZVoid } from '@dayo/domain'
 import { toCashMovementDto } from './cash'
 import { countPendingSyncItems, currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { getSetting } from './setup'
 import { wasQuickOpened } from './shift'
-import type { NegativeBaseDto, ShiftDto, ShiftReportDto } from './types'
+import type { BotCashDto, NegativeBaseDto, ShiftDto, ShiftReportDto } from './types'
 
 /** spec §3.1 setting key; not seeded — the default ฿20 applies until plan 5 syncs a value. */
 export const VARIANCE_ALERT_SETTING_KEY = 'cash.variance_alert_satang'
@@ -53,9 +53,11 @@ async function negativeBases(db: RemoteDb): Promise<NegativeBaseDto[]> {
 
 /**
  * Everything the X report shows and the Z report freezes, computed from the rows of one shift (spec §4.8).
- * Only receipts (paid, or paid then voided) count; money math is all in @dayo/domain.
+ * Only receipts (paid, or paid then voided) count; money math is all in @dayo/domain. `bot` = the E4 bot/web cash of
+ * the count window (D68 · spec §4.10): added to the cash once, through `withBotCash` — null for the X report, a
+ * local-only shift, or a count still without E4.
  */
-export async function buildShiftReport(db: RemoteDb, shift: ShiftDto, atIso: string): Promise<ShiftReportDto> {
+export async function buildShiftReport(db: RemoteDb, shift: ShiftDto, atIso: string, bot: BotCashDto | null = null): Promise<ShiftReportDto> {
   const users = await db.select({ id: s.user.id, displayName: s.user.displayName }).from(s.user).all()
   const names = new Map(users.map((u) => [u.id, u.displayName]))
   const orders = await db
@@ -82,7 +84,13 @@ export async function buildShiftReport(db: RemoteDb, shift: ShiftDto, atIso: str
   }
 
   const movements = await db.select().from(s.cashMovement).where(eq(s.cashMovement.shiftId, shift.id)).orderBy(asc(s.cashMovement.createdAt), asc(s.cashMovement.id)).all()
-  const cash = cashInputsFromMovements(shift.openingFloatSatang, sales.cashSalesSatang, movements)
+  let cash
+  try {
+    const base = cashInputsFromMovements(shift.openingFloatSatang, sales.cashSalesSatang, movements)
+    cash = bot === null ? base : withBotCash(base, bot.cashTotalSatang)
+  } catch (e) {
+    throw new PosError('BAD_INPUT', e instanceof Error ? e.message : String(e))
+  }
 
   const voided = orders.filter((o) => o.status === 'voided')
   const voidEvents =
@@ -110,7 +118,7 @@ export async function buildShiftReport(db: RemoteDb, shift: ShiftDto, atIso: str
   // review NF-6: computed here and handed back as `fingerprint` on the DTO itself, so the close-shift screen (Task
   // 11) just echoes `shiftReport().fingerprint` into `closeShift`'s input — it never needs to import this helper,
   // or drizzle/@dayo/db-schema through it.
-  return { ...core, fingerprint: shiftReportFingerprint(core) }
+  return { ...core, fingerprint: shiftReportFingerprint(core, bot) }
 }
 
 /**
@@ -122,7 +130,7 @@ export async function buildShiftReport(db: RemoteDb, shift: ShiftDto, atIso: str
  * DTO (review NF-6); `closeShift` recomputes it from a fresh report and refuses (SHIFT_CHANGED) on any mismatch —
  * not only when `expectedCashSatang` itself moved. Exported for tests, which read `report.fingerprint` in practice.
  */
-export function shiftReportFingerprint(report: Omit<ShiftReportDto, 'fingerprint'>): string {
+export function shiftReportFingerprint(report: Omit<ShiftReportDto, 'fingerprint'>, bot: BotCashDto | null = null): string {
   return sha256Hex(
     canonicalJson({
       shiftId: report.shift.id,
@@ -132,6 +140,10 @@ export function shiftReportFingerprint(report: Omit<ShiftReportDto, 'fingerprint
       expectedCashSatang: report.expectedCashSatang,
       varianceAlertSatang: report.varianceAlertSatang,
       voids: report.voids,
+      // block 3 (ruling R8): the bot bills and their window the screen showed — a bill that appears (or changes version)
+      // after the screen was shown is SHIFT_CHANGED even when the cash total happens to match. null without E4.
+      botBills: bot?.bills ?? null,
+      botWindow: bot === null ? null : { after: bot.after, until: bot.until },
     }),
   )
 }

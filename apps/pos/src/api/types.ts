@@ -2,7 +2,7 @@ import type { AdjustReason, CashMovementKind, MovementKind, ShiftSyncMode, UseUn
 import type { Size, Sweetness } from '@dayo/dayo-pricing'
 import type { SyncCycleResult } from '../sync/scheduler'
 import type { ApiState } from '../sync/state'
-import type { CartDraft, CashCountLine, CashInputs, ExpiryState, PosOrderCatalog, SalesSummary, StockStatus, ZSnapshot, ZVoid } from '@dayo/domain'
+import type { CartDraft, CashCountLine, CashInputs, ExpiryState, PosOrderCatalog, SalesSummary, StockStatus, ZBotBill, ZSnapshot, ZVoid } from '@dayo/domain'
 
 export const PIN_RE = /^\d{4,6}$/
 
@@ -36,6 +36,10 @@ export type BootstrapState = {
   ownerRecovery: boolean
   /** Task 14: the health of the link to dayo (spec 04 §4.3, §6.7, §10.5 · D80). */
   sync: SyncStatusDto
+  /** D101 · R2: this device's shift after "นับเสร็จ" whose count is not confirmed yet — a reload goes back to the count review. */
+  countingShift: { shiftId: string; countedAt: string } | null
+  /** D68 · spec §6.8: counted shifts of this device with no Z yet (the red "ใบปิดกะ <วันที่> รอออนไลน์" bar), oldest count first. */
+  zWaiting: WaitingZDto[]
 }
 /** Task 14 (spec 04 §4.3, §4.4 rule 9, §6.7, §10.5 · D80). Never carries the API key — only its masked form. */
 export type SyncStatusDto = {
@@ -315,7 +319,33 @@ export type CloseShiftInput = {
  * `sales` (review I-1). `hashOk` is then always false: a snapshot the UI cannot read is never trusted. The UI
  * (Task 9) must show "ไฟล์เสีย" rather than assume `snapshot` is present.
  */
-export type ZReportDto = { id: string; shiftId: string; createdAt: string; hash: string; hashOk: boolean; snapshot: ZSnapshot | null }
+export type ZReportDto = { id: string; shiftId: string; createdAt: string; hash: string; hashOk: boolean; snapshot: StoredZSnapshot | null }
+/** Block-3 fields of a Z snapshot (D101 · spec 04 §4.10): absent from every Z frozen before block 3 (the hash covers the
+ * stored JSON as it is — an old Z is never filled in). */
+type Block3ZField = 'countedAt' | 'botWindow' | 'botBills'
+type Block3CashField = 'drawerExpensesSatang' | 'botCashSatang'
+/** A Z snapshot as read back from `z_report.snapshot_json`: a pre-block-3 Z has no countedAt/botWindow/botBills and its
+ * `cash` has no drawerExpensesSatang/botCashSatang (carried from Task 2 review) — readers must treat them as optional. */
+export type StoredZSnapshot = Omit<ZSnapshot, Block3ZField | 'cash'> & Partial<Pick<ZSnapshot, Block3ZField>> & {
+  cash: Omit<CashInputs, Block3CashField> & Partial<Pick<CashInputs, Block3CashField>>
+}
+
+// ── block 3 count and Z (D101 · spec 04 §6.8 · §4.10) ────────────────────────────────────────────────────────────────
+/** E4 as the tablet keeps it (spec §4.10): the bot/web cash bills of (after, until], until = the shift's counted_at. */
+export type BotCashDto = { shiftId: string; after: string; until: string; bills: ZBotBill[]; cashTotalSatang: number; fetchedAt: string }
+/** The count review screen: the shift's figures at counted_at, with the stored E4 bot cash when there is one (includesBotCash). */
+/** zBlockedBy (ruling R7): the id of an earlier counted shift of this device still waiting for its Z — while set, a Z of
+ * this shift is refused (Z_NOT_READY): the screen confirms the count only (z: null) and points at that shift first. */
+export type CountSummaryDto = ShiftReportDto & { countedAt: string; syncMode: ShiftSyncMode; includesBotCash: boolean; bot: BotCashDto | null; zBlockedBy: string | null }
+/** What the owner settles when the Z is issued: the reason (asked when |variance| ≥ the threshold, D102), the bank-app QR total, a chain acknowledgement. */
+export type ZSettle = { varianceReason: string | null; bankQrTotalSatang: number | null; acknowledgeZChainBroken: boolean }
+/** D101 step 2/3 · owner PIN · `z` null = count only (offline: no reason asked yet) · `z` set = count and Z in one transaction. */
+export type ConfirmCountInput = { shiftId: string; actorUserId: string; approverUserId: string; approverPin: string; countLines: CashCountLine[]; shownFingerprint: string; z: ZSettle | null }
+export type ConfirmCountResult = { countId: string; z: ZReportDto | null }
+/** D101 step 3 (online again): the Z of a counted shift — owner PIN again. */
+export type IssueZInput = ZSettle & { shiftId: string; approverUserId: string; approverPin: string; shownFingerprint: string }
+/** A counted shift waiting for its Z · countedSatang = the saved cash_count (IssueZScreen shows the variance from it). */
+export type WaitingZDto = { shiftId: string; businessDate: string; countedAt: string; syncMode: ShiftSyncMode; countedSatang: number }
 /** Summary fields are null when the underlying snapshot could not be read (review I-1) — `hashOk` says so; `shiftId` and `hashOk` are always readable from their own columns. */
 export type ZReportSummaryDto = {
   shiftId: string
@@ -489,7 +519,19 @@ export interface PosApi {
   quickOpenShift(input: QuickOpenShiftInput): Promise<ShiftDto>
   recordCashMovement(input: CashMovementInput): Promise<CashMovementDto>
   shiftReport(): Promise<ShiftReportDto>
+  /** One-step close of a LOCAL-ONLY shift (block 2 behaviour = finishCount + confirmCount with the Z) · central → BOT_CASH_REQUIRED. */
   closeShift(input: CloseShiftInput): Promise<ZReportDto>
+  /** "นับเสร็จ" (D101 step 1 · R3): the open shift takes no more bills or cash movements; counted_at is set once. */
+  finishCount(input: { actorUserId: string }): Promise<{ shiftId: string; countedAt: string }>
+  /** The count review of a counting/counted shift — the one rule confirmCount and issueZ use too (stored E4 when there is one). */
+  countSummary(shiftId: string): Promise<CountSummaryDto>
+  /** E4 (spec §4.10) — not in the serial queue · network failure = OFFLINE · 401/403/404 = DAYO_BAD_KEY/DAYO_KEY_NO_SCOPE/DAYO_API_DISABLED ·
+   * > 500 bills = Z_TOO_LARGE · 5xx/429/timeout = DAYO_UNREACHABLE · an answer that fails the tablet's checks = DAYO_BAD_RESPONSE. */
+  fetchBotCash(shiftId: string): Promise<BotCashDto>
+  /** owner PIN · z != null: count + Z in one transaction (D101 step 2). */
+  confirmCount(input: ConfirmCountInput): Promise<ConfirmCountResult>
+  /** owner PIN again (D101 step 3) · Zs in count order (R7). */
+  issueZ(input: IssueZInput): Promise<ZReportDto>
   listZReports(): Promise<ZReportSummaryDto[]>
   getZReport(shiftId: string): Promise<ZReportDto>
   exportBackup(actorUserId: string): Promise<BackupFileDto>
@@ -546,6 +588,11 @@ export const POS_API_METHODS = [
   'recordCashMovement',
   'shiftReport',
   'closeShift',
+  'finishCount',
+  'countSummary',
+  'fetchBotCash',
+  'confirmCount',
+  'issueZ',
   'listZReports',
   'getZReport',
   'exportBackup',

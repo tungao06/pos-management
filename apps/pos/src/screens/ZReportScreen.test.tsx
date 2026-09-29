@@ -25,6 +25,8 @@ const bootstrap: BootstrapState = {
   staffNeedingPin: [],
   ownerRecovery: false,
   sync: HEALTHY_SYNC,
+  countingShift: null,
+  zWaiting: [],
 }
 
 function renderZReport(shiftId: string, api: Partial<PosApi>): void {

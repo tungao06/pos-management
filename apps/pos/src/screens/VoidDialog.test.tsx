@@ -58,6 +58,8 @@ const BOOT: BootstrapState = {
   staffNeedingPin: [],
   ownerRecovery: false,
   sync: HEALTHY_SYNC,
+  countingShift: null,
+  zWaiting: [],
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

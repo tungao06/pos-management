@@ -78,7 +78,7 @@ const DONE: StockAdjustmentDto = {
 }
 
 function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
-  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, dayoBaseUrl: 'https://dayo.example/api/v1', staffNeedingPin: [], ownerRecovery: false, sync: HEALTHY_SYNC, ...overrides }
+  return { needsSetup: false, device: null, users: [], openShift: null, pendingSyncItems: 0, lastBackupAt: null, backupDue: false, legacyDevice: false, dayoLinked: true, dayoBaseUrl: 'https://dayo.example/api/v1', staffNeedingPin: [], ownerRecovery: false, sync: HEALTHY_SYNC, countingShift: null, zWaiting: [], ...overrides }
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {
