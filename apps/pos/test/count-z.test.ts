@@ -349,6 +349,49 @@ describe('count and Z — states, PINs, resend (D101 · R2 · R7)', () => {
     await pushOnce(ctx); await pushOnce(ctx)
     expect(await t.db.select().from(s.outbox).where(inArray(s.outbox.status, ['pending', 'dead'])).all()).toEqual([])
   })
+  it('a count taken while the tablet clock was far ahead does not drag later shifts into the future: opening is refused with a clock warning, nothing written (fix round 2)', async () => {
+    const t = await openConnectedApi({ block3: false }) // server and tablet both 2026-09-25T03:00Z
+    t.clock.set('2027-09-25T03:00:00.000Z')              // the tablet clock jumps a year ahead…
+    await countAndClose(t, lines(500), owner2)            // …and a count is taken then
+    t.clock.set('2026-09-25T03:30:00.000Z')              // set right again
+    const shifts = await t.db.select().from(s.shift).all()
+    const outbox = await t.db.select().from(s.outbox).all()
+    for (const open of [() => t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 0 }), () => t.api.quickOpenShift({ userId: STAFF.TungAo })]) {
+      try { await open(); expect.unreachable() } catch (e) {
+        expect(posErrorCode(e)).toBe('BAD_INPUT')
+        expect((e as Error).message).toMatch(/^BAD_INPUT: CLOCK_AHEAD: .*นาฬิกา/)
+      }
+    }
+    expect(await t.db.select().from(s.shift).all()).toEqual(shifts)
+    expect(await t.db.select().from(s.outbox).all()).toEqual(outbox)
+  })
+  it('a clock set back less than 24 h still floors the opening at the last count (fix round 2 keeps round 1)', async () => {
+    const t = await openConnectedApi({ block3: false })
+    t.clock.set('2026-09-25T20:00:00.000Z') // 17 h ahead of dayo — under the 24 h line
+    await countAndClose(t, lines(500), owner2)
+    t.clock.set('2026-09-25T03:30:00.000Z')
+    expect((await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 0 })).openedAt).toBe('2026-09-25T20:00:00.000Z')
+  })
+  it("clock set back across midnight after a count: the bill is sold on its shift's day, so its void is the same Thai day and dayo takes both (fix round 2)", async () => {
+    const t = await openConnectedApi({ now: '2026-09-25T17:10:00.000Z' }) // 00:10 on the 26th, Bangkok
+    t.mock.setNow(t.clock.now())
+    await countAndClose(t, lines(500), owner2)
+    t.clock.set('2026-09-25T16:52:00.000Z')                               // 23:52 on the 25th
+    const shift = await t.api.openShift({ userId: STAFF.TungAo, openingFloatSatang: 0 })
+    expect(shift).toMatchObject({ openedAt: '2026-09-25T17:10:00.000Z', businessDate: '2026-09-26' })
+    const sale = await sellCode(t, [{ code: 'Cocoa', qty: 1 }], { method: 'CASH', tenderedSatang: 5_000 })
+    const order = await t.db.select().from(s.order).where(eq(s.order.id, sale.orderId)).get()
+    expect(order).toMatchObject({ soldAt: '2026-09-25T17:10:00.000Z', paidAt: '2026-09-25T17:10:00.000Z', businessDate: '2026-09-26' })
+    await t.api.cancelSale({ orderId: sale.orderId, actorUserId: STAFF.TungAo, ...owner2, reason: 'กดผิด', made: false, refundReference: null })
+    const rows = await t.db.select().from(s.outbox).where(inArray(s.outbox.tableName, ['order', 'order_void'])).all()
+    const row = (k: string) => rows.find((r) => r.idempotencyKey === `${k}:${sale.orderId}`)!.rowJson as Record<string, unknown>
+    expect(row('order')).toMatchObject({ sale_date: '2026-09-26', sold_at: '2026-09-25T17:10:00.000Z' })
+    expect(row('order_void')).toMatchObject({ voided_at: '2026-09-25T17:10:00.000Z' })
+    const ctx = { db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() }
+    await pushOnce(ctx)
+    expect(await t.db.select().from(s.outbox).where(inArray(s.outbox.status, ['pending', 'dead'])).all()).toEqual([])
+    expect(t.mock.orders()).toMatchObject([{ posOrderId: sale.orderId, status: 'cancelled' }])
+  })
   it('closeShift (one step) stays for local-only shifts; a central shift must go the count way (BOT_CASH_REQUIRED, nothing written)', async () => {
     const { t } = await centralShift()
     const report = await t.api.shiftReport()

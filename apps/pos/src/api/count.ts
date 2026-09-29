@@ -10,7 +10,7 @@ import { currentOpenShift, requireDevice } from './bootstrap'
 import { earlierCountWithoutZ, writeZ, type CloseShiftHooks } from './close'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
-import { builtRow, notBefore } from './rows'
+import { builtRow, countFloor, notBefore } from './rows'
 import { requireActiveUser } from './shift'
 import { buildShiftReport } from './shift-report'
 import {
@@ -78,11 +78,13 @@ async function summarize(db: RemoteDb, shift: ShiftRow): Promise<CountSummaryDto
 async function freezeOpen(tx: RemoteDb, deps: ApiDeps, shift: ShiftDto, actorId: string): Promise<string> {
   const bills = await tx.values<[string | null, string | null]>(sql`select max(coalesce(sold_at, paid_at, created_at)), max(voided_at) from "order" where shift_id = ${shift.id} and receipt_no is not null`)
   const moves = await tx.values<[string | null]>(sql`select max(created_at) from cash_movement where shift_id = ${shift.id}`)
-  const counts = await tx.values<[string | null]>(sql`select max(counted_at) from shift where device_id = (select device_id from shift where id = ${shift.id}) and counted_at is not null`)
-  const lastCount = counts[0]?.[0] ?? null
-  const afterLastCount = lastCount === null ? null : new Date(Date.parse(lastCount) + 1).toISOString()
   const at = deps.now()
-  const countedAt = [shift.openedAt, bills[0]?.[0] ?? null, bills[0]?.[1] ?? null, moves[0]?.[0] ?? null, afterLastCount].reduce<string>((a, b) => (b !== null && Date.parse(b) > Date.parse(a) ? b : a), at)
+  const later = (a: string, b: string | null): string => (b !== null && Date.parse(b) > Date.parse(a) ? b : a)
+  const base = [shift.openedAt, bills[0]?.[0] ?? null, bills[0]?.[1] ?? null, moves[0]?.[0] ?? null].reduce<string>(later, at)
+  // fix round 2: the +1 ms floor over this device's last count only while that count is not far ahead of real time
+  const deviceId = (await tx.select({ d: s.shift.deviceId }).from(s.shift).where(eq(s.shift.id, shift.id)).get())!.d
+  const lastCount = await countFloor(tx, deviceId, base)
+  const countedAt = later(base, lastCount === null ? null : new Date(Date.parse(lastCount) + 1).toISOString())
   await tx.update(s.shift).set({ status: 'counting', countedAt }).where(and(eq(s.shift.id, shift.id), eq(s.shift.status, 'open')))
   await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'shift', entityId: shift.id, action: 'count_finished', beforeJson: null, afterJson: { countedAt }, actorUserId: actorId, at })
   return countedAt

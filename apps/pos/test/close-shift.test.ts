@@ -5,6 +5,7 @@ import { MAX_ZNO_LIST_LENGTH, zReportHash } from '@dayo/domain'
 import { closeShift } from '../src/api/count'
 import type { CloseShiftInput } from '../src/api/types'
 import { hashPin } from '../src/lib/pin'
+import { openConnectedApi } from './helpers/dayo'
 import { openReadyApi, PINS, legacySale, TEST_PIN_COST, type ReadyApi } from './helpers/db'
 import { COUNT_520, sellVoidScenario } from './helpers/shift'
 
@@ -218,11 +219,14 @@ describe('closeShift — count by denomination, frozen Z (spec §4.8, D22, D36)'
   })
 
   it('the grand total follows the Z number, not the clock (a clock set back cannot skip a Z)', async () => {
-    const t = await openReadyApi()
+    const t = await openConnectedApi({ now: '2026-09-17T03:00:00.000Z' }) // = openReadyApi, with its mock dayo
     await sellVoidScenario(t)
-    t.clock.set('2026-09-18T13:00:00.000Z') // tablet clock a day ahead
+    t.clock.set('2026-09-18T13:00:00.000Z') // tablet clock a day ahead (23 h)
     const z1 = await t.api.closeShift(await closeInput(t))
     t.clock.set('2026-09-17T14:00:00.000Z') // corrected
+    // dayo's clock is real time too (the mock's is fixed at 03:00): the next opening measures the skew against it, and
+    // task 12 fix round 2 refuses a count more than 24 h ahead of dayo's time — this one is 23 h ahead, so it floors
+    t.mock.setNow('2026-09-17T14:00:00.000Z')
     for (const n of [2, 3]) {
       await t.api.openShift({ userId: t.owner.id, openingFloatSatang: 0 })
       await legacySale(t, 'Latte-16oz', 1, { method: 'PROMPTPAY' })

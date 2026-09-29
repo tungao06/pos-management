@@ -10,6 +10,7 @@ import { DAYO_KEYS, readKey } from '../sync/state'
 import { currentOpenShift, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
+import { notBefore } from './rows'
 import { getSetting, PROMPTPAY_SETTING_KEY } from './setup'
 import { PAYMENT_CODE, REASON_MAX_LENGTH, type DeviceDto, type RecordSaleInput, type RecordSaleResult } from './types'
 
@@ -111,7 +112,9 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
   const result = await db.transaction(async (tx) => {
     const shift = await currentOpenShift(tx, device.id)
     if (shift === null) throw new PosError('NO_OPEN_SHIFT', 'open a shift before selling')
-    const soldAt = deps.now()
+    // fix round 2: never before the shift opened (its opening may be floored at the last count — a clock set back across
+    // midnight must not give the bill a Thai day before its shift's, or its void a day after its sale: dayo 0052:512)
+    const soldAt = notBefore(deps.now(), shift.openedAt)
     let priced: PricedCart
     try {
       priced = priceCart(cart, stored.catalog, soldAt)
