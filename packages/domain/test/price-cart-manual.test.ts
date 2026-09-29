@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { computeOrder, type QuoteResult } from '@dayo/dayo-pricing'
 import { MAX_MANUAL_PROMOTIONS } from '@dayo/contracts'
 import {
-  CartError, checkCart, priceCart, toOrderDraft, withZeroCosts,
+  CartError, checkCart, manualPromotionsOf, priceCart, toOrderDraft, withZeroCosts, zeroTotalVerdict,
   type CartDraft, type CartLineDraft, type PosOrderCatalog,
 } from '../src/price-cart.js'
 import { pricedFromQuote } from '../src/priced-from-quote.js'
@@ -52,6 +52,16 @@ describe('manual promotions (ADR-0070 · plan 10 §0.2) go to dayo\'s engine onl
     expect('manualPromotionReason' in d).toBe(false)
     const p = priceCart(c, CAT, FRI_1030)
     expect([p.totalSatang, p.promotionsApplied]).toEqual([3_500, []])
+  })
+  it('a cart frozen before plan 10 (no manual keys at all) still checks, prices and judges like an empty pick (review L2)', () => {
+    const fresh = cart([line()])
+    const { manualPromotionIds: _i, manualPromotionReason: _r, ...rest } = fresh
+    const old = rest as unknown as CartDraft // pricing_json.cart of a bill paid before plan 10
+    expect(() => checkCart(old, CAT)).not.toThrow()
+    const p = priceCart(old, CAT, FRI_1030)
+    expect(p).toEqual(priceCart(fresh, CAT, FRI_1030))
+    expect(manualPromotionsOf(old)).toEqual({ ids: [], reason: null })
+    expect(zeroTotalVerdict(old, p)).toBe('ok')
   })
   it('a cart with no manual promotion prices the same draft as before plan 10 (no new keys)', () => {
     const d = toOrderDraft(cart([line()], { manualPromotionReason: 'ไม่มีโปรเลือกเอง' }), CAT, FRI_1030)

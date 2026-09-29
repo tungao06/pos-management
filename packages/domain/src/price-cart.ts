@@ -154,10 +154,11 @@ export function checkCart(cart: CartDraft, catalog: PosOrderCatalog): void {
   const d = cart.billDiscount
   if (d !== null && d.kind === 'satang' && (!Number.isSafeInteger(d.satang) || d.satang <= 0)) throw new CartError('BAD_DISCOUNT', 'bill discount must be whole satang > 0')
   if (d !== null && d.kind === 'percent' && !(d.percent > 0 && d.percent <= 100)) throw new CartError('BAD_DISCOUNT', 'bill percent must be 0–100')
-  const unique = new Set(cart.manualPromotionIds).size
+  // `?? []` / `!= null`: a cart frozen before plan 10 (pricing_json.cart) has neither key (review L2)
+  const unique = new Set(cart.manualPromotionIds ?? []).size
   if (unique > MAX_MANUAL_PROMOTIONS) throw new CartError('BAD_MANUAL_PROMOTION', `${unique} manual promotions (dayo takes at most ${MAX_MANUAL_PROMOTIONS} — DY422)`)
   // dayo_draft_manual_reason (0069): a reason dayo refuses must never reach a paid bill — the same rule the E2 row is checked with
-  if (cart.manualPromotionReason !== null && !ManualPromotionReason.safeParse(cart.manualPromotionReason).success) {
+  if (cart.manualPromotionReason != null && !ManualPromotionReason.safeParse(cart.manualPromotionReason).success) {
     throw new CartError('BAD_MANUAL_PROMOTION', 'the reason must be trimWs(typed): 1–200 characters, one line, no invisible characters')
   }
 }
@@ -168,8 +169,9 @@ export function checkCart(cart: CartDraft, catalog: PosOrderCatalog): void {
  * so the price and the row can never disagree.
  */
 export function manualPromotionsOf(cart: CartDraft): { ids: string[]; reason: string | null } {
-  const ids = cart.noPromotions ? [] : [...new Set(cart.manualPromotionIds)]
-  return { ids, reason: ids.length > 0 ? cart.manualPromotionReason : null }
+  // `?? []` / `?? null`: a cart frozen before plan 10 has neither key (review L2)
+  const ids = cart.noPromotions ? [] : [...new Set(cart.manualPromotionIds ?? [])]
+  return { ids, reason: ids.length > 0 ? (cart.manualPromotionReason ?? null) : null }
 }
 
 /** The ids every promotion-condition check skips: all of the catalog when noPromotions (spec §4.5 — OrderDraft has no such field). */
@@ -210,19 +212,39 @@ export function priceCart(cart: CartDraft, catalog: PosOrderCatalog, soldAtIso: 
   return pricedFromQuote(computeOrder(draft, withZeroCosts(catalog)), draft, soldAtIso, catalog)
 }
 
+/** D124: a ฿0 bill is paid in cash only (the payment row of ฿0 — migration 0007). The tablet's cash payment code. */
+export const ZERO_TOTAL_PAYMENT_CODE = 'cash'
+
+export type ZeroTotalVerdict = 'ok' | 'MANUAL_REASON_REQUIRED' | 'ZERO_TOTAL_NOT_ALLOWED' | 'ZERO_TOTAL_CASH_ONLY'
+
 /**
- * Whether a ฿0 bill may be sold (owner Q1 = ข · plan 10 T3): a bill above ฿0 is always 'ok'. At ฿0 —
- * - any typed discount in the cart (a free cup, a line discount, a bill discount — whatever its amount) →
- *   'ZERO_TOTAL_NOT_ALLOWED': a zero bill may only come from promotions, never from a discount someone typed;
- * - else the engine's flag with no reason → 'MANUAL_REASON_REQUIRED' (dayo would reject it `reason_required:`);
- * - else 'ok' (a ฿0 from promotions alone, with its reason when a manual promotion made it).
+ * Whether a ฿0 bill must carry a manual-promotion reason — the ONE place of this rule (T3 review L1).
+ * - dayo's engine flag (ADR-0070 rule 4): ฿0 and a manual promotion gave a discount here;
+ * - PROVISIONAL (review L1 option ก, pending the owner): ฿0 and any manual promotion is sent. dayo judges the reason on
+ *   the POS total AND its own quote (0069:406-414), which counts uses the tablet cannot: a promotion exhausted on dayo can
+ *   leave a manual one discounting there, and the row is rejected `reason_required:`. If the owner picks (ข), drop the
+ *   second clause.
+ */
+export function zeroBillNeedsReason(cart: CartDraft, priced: PricedCart): boolean {
+  return priced.manualPromotionReasonRequired || (priced.totalSatang === 0 && manualPromotionsOf(cart).ids.length > 0)
+}
+
+/**
+ * Whether a bill may be sold at its total (D124 · owner Q1 = ข). A bill above ฿0 is always 'ok'. At ฿0, in this order —
+ * - a typed discount anywhere in the cart (a free cup, a line discount, a bill discount — whatever its amount), or no
+ *   applied promotion that discounted anything (e.g. a ฿0 menu) → 'ZERO_TOTAL_NOT_ALLOWED': ฿0 only from promotions;
+ * - zeroBillNeedsReason and no reason sent → 'MANUAL_REASON_REQUIRED' (dayo would reject it `reason_required:`);
+ * - paid other than ZERO_TOTAL_PAYMENT_CODE → 'ZERO_TOTAL_CASH_ONLY';
+ * - else 'ok'.
  * It judges the zero only; `priced.ok` is still the caller's to check.
  */
-export function zeroTotalVerdict(cart: CartDraft, priced: PricedCart): 'ok' | 'MANUAL_REASON_REQUIRED' | 'ZERO_TOTAL_NOT_ALLOWED' {
+export function zeroTotalVerdict(cart: CartDraft, priced: PricedCart): ZeroTotalVerdict {
   if (priced.totalSatang > 0) return 'ok'
   const typed = cart.billDiscount !== null || cart.lines.some((l) => l.free || l.discountSatang !== null || l.discountPercent !== null)
   if (typed) return 'ZERO_TOTAL_NOT_ALLOWED'
-  if (priced.manualPromotionReasonRequired && manualPromotionsOf(cart).reason === null) return 'MANUAL_REASON_REQUIRED'
+  if (!priced.promotionsApplied.some((p) => p.discountSatang > 0)) return 'ZERO_TOTAL_NOT_ALLOWED'
+  if (zeroBillNeedsReason(cart, priced) && manualPromotionsOf(cart).reason === null) return 'MANUAL_REASON_REQUIRED'
+  if (cart.paymentCode !== ZERO_TOTAL_PAYMENT_CODE) return 'ZERO_TOTAL_CASH_ONLY'
   return 'ok'
 }
 
