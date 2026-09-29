@@ -26,7 +26,11 @@ export class DayoError extends Error {
 
 export type Timed<T> = { value: T; sentAtMs: number; receivedAtMs: number }
 export type DayoClient = {
-  getCatalog(knownVersion: number): Promise<Timed<PosCatalogLooseData>>
+  /**
+   * E1 · plan 10 §0.2: `promo_rule_version` is always sent (a dayo before 0071 ignores it); the answer's promotions depend
+   * on it while `catalog_version` does not — the caller asks known_version=0 when it changes (R6).
+   */
+  getCatalog(knownVersion: number, promoRuleVersion: number): Promise<Timed<PosCatalogLooseData>>
   push(body: PushRequest): Promise<Timed<PushResponseData>>
   /** E3 · `updatedSince` = dayo's `updated_since` (coalesce(updated_at, created_at) > it — 0052_pos_push.sql:840). */
   listOrders(q: { from: string; to: string; updatedSince?: string }): Promise<Timed<CentralOrder[]>>
@@ -101,7 +105,7 @@ export function createDayoClient(cfg: { baseUrl: string; apiKey: string; fetch: 
     }
   }
   return {
-    getCatalog: (known) => call(`/pos/catalog?known_version=${Math.max(0, Math.trunc(known))}`, { method: 'GET' }, (b) => PosCatalogLooseResponse.parse(b).data), // `catalog` checked by the caller (R12)
+    getCatalog: (known, rules) => call(`/pos/catalog?known_version=${Math.max(0, Math.trunc(known))}&promo_rule_version=${Math.max(0, Math.trunc(rules))}`,{ method: 'GET' }, (b) => PosCatalogLooseResponse.parse(b).data), // `catalog` checked by the caller (R12)
     push: (body) => call('/pos/push', { method: 'POST', body: JSON.stringify(body) }, (b) => PushResponse.parse(b).data),
     shiftCash: (q) => call(`/pos/shift-cash?after=${encodeURIComponent(q.after)}&until=${encodeURIComponent(q.until)}`, { method: 'GET' }, (b) => ShiftCashResponse.parse(b).data),
     listOrders: (q) => call(`/orders?from=${encodeURIComponent(q.from)}&to=${encodeURIComponent(q.to)}${q.updatedSince === undefined ? '' : `&updated_since=${encodeURIComponent(q.updatedSince)}`}`, { method: 'GET' }, (b) => OrdersListResponse.parse(b).data),

@@ -43,7 +43,16 @@ export type BootstrapState = {
   /** Task 13 (ruling R9): dayo's last Z number of this key as stored at setup / key swap / recovery (sync_state
    * dayo.last_z_no), or null — the close screen names it on Z_CHAIN_BROKEN 'central'. */
   centralLastZNo: number | null
+  /** plan 10 (§0.2 · T7): what dayo's last E1 said about promotions — see PromoSupportDto. */
+  promo: PromoSupportDto
 }
+/**
+ * plan 10 §0.2 (dayo รุ่นเก่า): read from the stored E1 `supported_*` (every answer, unchanged included).
+ * manualSupported = `supported_fields.order` lists `manual_promotion_ids` (no = hide manual promotions — old dayo) ·
+ * ruleVersions = `promotion_rule_versions` ([] = dayo before 0071) · ruleBehind = dayo lists a rule version above the
+ * tablet's (the "ระบบกลางมีโปรรุ่นใหม่กว่าแอปนี้" bar). All false / [] before any E1.
+ */
+export type PromoSupportDto = { manualSupported: boolean; ruleBehind: boolean; ruleVersions: number[] }
 /** Task 14 (spec 04 §4.3, §4.4 rule 9, §6.7, §10.5 · D80). Never carries the API key — only its masked form. */
 export type SyncStatusDto = {
   linked: boolean

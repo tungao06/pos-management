@@ -63,6 +63,7 @@ const BOOT: BootstrapState = {
   countingShift: null,
   zWaiting: [],
   centralLastZNo: null,
+  promo: { manualSupported: false, ruleBehind: false, ruleVersions: [] },
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

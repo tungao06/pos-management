@@ -1,13 +1,14 @@
 import { and, eq } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { API_KEY_RE, PosOrderCatalog, RECEIPT_NO_RE, type PosCatalogLooseData } from '@dayo/contracts'
+import { API_KEY_RE, RECEIPT_NO_RE, type PosCatalogLooseData } from '@dayo/contracts'
 import { classifyPromptPayId, parseReceiptNo } from '@dayo/domain'
 import vendor from '@dayo/dayo-pricing/VENDOR.json' with { type: 'json' }
 import { hashPin } from '../lib/pin'
 import { normalizeBaseUrl, storedBaseUrl } from '../sync/base-url'
-import { roleOf, staffDisplayName, writeCatalogAnswer } from '../sync/catalog'
+import { checkCatalog, roleOf, staffDisplayName, writeCatalogAnswer } from '../sync/catalog'
 import { createDayoClient, DayoError, type Timed } from '../sync/dayo-client'
+import { TABLET_PROMO_RULE_VERSION } from '../sync/promo-rules-stub'
 import { DAYO_KEYS, readKey, writeKey } from '../sync/state'
 import { requireOwnerPin } from './auth'
 import { LOCAL_DEVICE_KEY, localDeviceId } from './bootstrap'
@@ -43,7 +44,7 @@ async function fetchFullCatalog(deps: ApiDeps, target: { baseUrl: string; apiKey
   const client = createDayoClient({ ...target, fetch: deps.fetch, nowMs: () => Date.parse(deps.now()) })
   let r: Timed<PosCatalogLooseData>
   try {
-    r = await client.getCatalog(0)
+    r = await client.getCatalog(0, TABLET_PROMO_RULE_VERSION) // plan 10 §0.2: the same parameter as pullCatalog
   } catch (e) {
     if (!(e instanceof DayoError)) throw e
     const f = e.failure
@@ -54,8 +55,10 @@ async function fetchFullCatalog(deps: ApiDeps, target: { baseUrl: string; apiKey
     throw new PosError('DAYO_UNREACHABLE', f.kind)
   }
   if (!r.value.changed) throw new PosError('DAYO_BAD_RESPONSE', 'known_version=0 answered unchanged')
-  // setup needs a catalog the tablet can sell with (R12 lets a running tablet keep its old one — a new one has none)
-  if (!PosOrderCatalog.safeParse(r.value.catalog).success) throw new PosError('DAYO_BAD_RESPONSE', 'catalog unreadable by this tablet version')
+  // setup needs a catalog the tablet can sell with (R12 lets a running tablet keep its old one — a new one has none) —
+  // its shape AND its promotion rules (plan 10 T7), the same check as the periodic pull
+  const checked = checkCatalog(r.value.catalog)
+  if (!checked.ok) throw new PosError('DAYO_BAD_RESPONSE', `catalog unreadable by this tablet version: ${checked.problem}`)
   return { ...r, value: r.value }
 }
 
@@ -161,7 +164,7 @@ export async function connectShop(db: RemoteDb, deps: ApiDeps, input: ConnectSho
       await writeKey(tx, DAYO_KEYS.baseUrl, target.baseUrl)
       if (last !== null) await writeKey(tx, DAYO_KEYS.lastReceiptNo, last)
       await storeCentralZ(tx, cz) // ruling R9: here, key swap and recovery only — never the periodic E1
-      await writeCatalogAnswer(tx, deps, v, answer) // catalog + staff (disables plan-3 owners — ruling R7) + api_state ok
+      await writeCatalogAnswer(tx, deps, v, answer, TABLET_PROMO_RULE_VERSION) // catalog + staff (disables plan-3 owners — ruling R7) + api_state ok
     })
   } catch (e) {
     await deps.secrets.clearApiKey() // nothing saved → no key left behind
@@ -227,7 +230,7 @@ export async function replaceApiKey(db: RemoteDb, deps: ApiDeps, input: ReplaceA
   await withNewKey(deps, target.apiKey, () => db.transaction(async (tx) => {
     if (last !== null) await writeKey(tx, DAYO_KEYS.lastReceiptNo, last)
     await storeCentralZ(tx, cz)
-    await writeCatalogAnswer(tx, deps, v, answer) // api_state = ok, api_retry_at cleared
+    await writeCatalogAnswer(tx, deps, v, answer, TABLET_PROMO_RULE_VERSION) // api_state = ok, api_retry_at cleared
     await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: device.id, action: 'api_key_replaced', beforeJson: null, afterJson: { baseUrl: stored, by: 'replaceApiKey' }, actorUserId: input.approverUserId, at: deps.now() }) // never the key
   }))
   deps.afterWrite?.()
@@ -260,7 +263,7 @@ export async function recoverOwner(db: RemoteDb, deps: ApiDeps, input: RecoverOw
   if (!(await ownerRecoveryAllowed(db))) throw new PosError('RECOVERY_NOT_ALLOWED', 'an owner with a PIN can still approve — use replaceApiKey')
   if (target.apiKey === oldKey) throw new PosError('KEY_NOT_NEW', 'issue a new key on the dayo web')
   const oldClient = createDayoClient({ baseUrl: stored, apiKey: oldKey, fetch: deps.fetch, nowMs: () => Date.parse(deps.now()) })
-  const oldRevoked = await oldClient.getCatalog(0).then(() => false, (e: unknown) => {
+  const oldRevoked = await oldClient.getCatalog(0, TABLET_PROMO_RULE_VERSION).then(() => false, (e: unknown) => {
     if (!(e instanceof DayoError)) throw e
     if (e.failure.kind === 'unauthorized') return true
     if (e.failure.kind === 'forbidden') return false // the key still exists (a scope was removed) — not revoked
@@ -279,7 +282,7 @@ export async function recoverOwner(db: RemoteDb, deps: ApiDeps, input: RecoverOw
     const at = deps.now()
     if (last !== null) await writeKey(tx, DAYO_KEYS.lastReceiptNo, last)
     await storeCentralZ(tx, cz)
-    await writeCatalogAnswer(tx, deps, v, answer) // staff from dayo + api_state = ok
+    await writeCatalogAnswer(tx, deps, v, answer, TABLET_PROMO_RULE_VERSION) // staff from dayo + api_state = ok
     await giveOwnerPin(tx, owner, pinHash, at)
     await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'user', entityId: owner.id, action: 'owner_recovered', beforeJson: null, afterJson: { staffId: owner.id, role: 'owner', by: 'recoverOwner' }, actorUserId: owner.id, at })
     await tx.insert(s.auditLog).values({ id: deps.newId(), entity: 'device', entityId: device.id, action: 'api_key_replaced', beforeJson: null, afterJson: { baseUrl: stored, by: 'recoverOwner' }, actorUserId: owner.id, at }) // never the key
