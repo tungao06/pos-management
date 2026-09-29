@@ -5,12 +5,24 @@ import { BLOCK3_PHASE1_KINDS, BLOCK3_PHASE1_SUPPORTED_FIELDS, BLOCK3_PHASE2_KIND
 import { bodyJsonbRefuses, judgeRow } from './judge.js'
 import { highestGoodZ, highestZNo } from './judge-shift.js'
 import { utcMs } from './judge-util.js'
+import { clearRecompute, recomputeAll } from './recompute.js'
 import { shiftCashAnswer } from './shift-cash.js'
 import { ALL_SCOPES, BLOCK3_SCOPES, emptyKnown, freshCatalog, learnCatalog, type MockDayo, type MockOptions, type MockState, type StoredOrder } from './state.js'
 
 export const MOCK_API_KEY = `dayo_${'0123456789abcdef'.repeat(4)}`
 const utf8 = new TextEncoder()
 const E1_SCOPES = ['catalog:read', 'staff:read']
+/** D103: shop_settings.off_catalog_max_total default (baht). */
+export const DEFAULT_OFF_CATALOG_CAP = 3000
+
+/**
+ * What `handle`/`fetch` throw in mode 'offline' — a TypeError('Failed to fetch') like a browser's network failure. The Node
+ * server drops the socket for this one error only; any other exception is a mock bug and must surface (server.ts answers 500).
+ */
+export class MockOfflineError extends TypeError {
+  constructor() { super('Failed to fetch') }
+}
+export const isMockOffline = (e: unknown): boolean => e instanceof MockOfflineError
 
 /** Postgres timestamptz → JSON text: UTC as +00:00, fractional seconds without trailing zeros ("…03.12+00:00"). */
 export function pgTimestamp(t: number): string {
@@ -32,8 +44,11 @@ function setPhases(s: MockState, phase1: boolean, phase2: boolean, scopes: boole
   c.supported_kinds = [...c.supported_kinds.filter((k) => !p1.includes(k) && !p2.includes(k)), ...want]
   for (const k of [...p1, ...p2]) delete c.supported_fields[k]
   for (const k of want) c.supported_fields[k] = [...fields[k]!]
+  const wasPhase2 = s.block3Phase2
   s.block3 = phase1
   s.block3Phase2 = phase2
+  if (phase2 && !wasPhase2) recomputeAll(s)      // dayo phase 2 judges the Zs it already holds
+  if (!phase2 && wasPhase2) clearRecompute(s)    // back to phase 1: recompute_status null
   if (scopes) s.scopes = phase1 ? [...new Set([...s.scopes, 'shift:write'])] : s.scopes.filter((x) => x !== 'shift:write')
 }
 
@@ -50,6 +65,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       scopes: [...(opts.scopes ?? (phase1 ? BLOCK3_SCOPES : ALL_SCOPES))], catalog, pricing: opts.pricing ?? null, known, closedPromotions: new Map(),
       orders: new Map(), receipts: new Map(), keys: new Map(), seq: new Map(), overrides: [], seedOrders: [...(opts.seedOrders ?? [])], log: [],
       block3: false, block3Phase2: false, shifts: new Map(), movements: new Map(), counts: new Map(), zReports: new Map(), preloadedZ: null, conflicts: [], block3LiveFrom: null,
+      offCatalogCap: DEFAULT_OFF_CATALOG_CAP, rejections: new Map(),
     }
     if (phase1) setPhases(s, phase1, phase2, false) // no bump · explicit opts.scopes win (the default block 3 key has shift:write)
     return s
@@ -66,7 +82,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
 
   /** Every /api/v1 request is logged WITH its status — refused ones too (review item 14: a revoked key must stay silent). */
   async function handle(req: Request): Promise<Response> {
-    if (s.mode === 'offline') throw new TypeError('Failed to fetch') // a real network failure: never reaches dayo, not logged
+    if (s.mode === 'offline') throw new MockOfflineError() // a real network failure: never reaches dayo, not logged
     const url = new URL(req.url)
     let rows = 0
     if (req.method === 'POST') {
@@ -216,6 +232,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       o.updatedAt = at
       const owner = s.catalog.staff.find((x) => x.role === 'owner')?.display_name ?? null
       o.dayoEdit = { kind: e.kind, edited_at: pgTimestamp(at), edited_by_name: e.editedByName === undefined ? owner : e.editedByName, reason: e.reason, version: o.version }
+      if (e.kind === 'cancel') recomputeAll(s) // rule 6 · R3-m1: a web cancel can end a Z's wait for an order_void (phase 2 only)
     },
     seedCentralOrders: (orders) => { s.seedOrders.push(...orders) },
     preloadAccepted: (row, result) => {
@@ -225,7 +242,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       s.keys.set(row.key, { ...s.keys.get(row.key)!, result: { key: row.key, status: 'accepted', data: result } })
     },
     preloadOrder: (o) => {
-      s.orders.set(o.posOrderId, { ...o, status: 'ok', version: 1, staffId: null, data: null, computedTotal: o.total, amountMismatch: false, createdAt: Date.parse(o.soldAt), updatedAt: null, dayoEdit: null })
+      s.orders.set(o.posOrderId, { ...o, status: 'ok', version: 1, staffId: null, data: null, offCatalog: false, computedTotal: o.total, amountMismatch: false, createdAt: Date.parse(o.soldAt), updatedAt: null, dayoEdit: null })
       s.receipts.set(o.receiptNo, o.posOrderId)
     },
     setNextOrderNo: (saleDate, n) => { s.seq.set(saleDate, n) },
@@ -240,5 +257,9 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     zReports: () => [...s.zReports.values()], // live objects on purpose — tests only (see MockDayo.zReports)
     preloadZ: (z) => { s.preloadedZ = { zNo: z.zNo, hash: z.hash, countedAt: Date.parse(z.countedAt) } },
     conflicts: () => [...s.conflicts],
+    setBlock3LiveFrom: (d) => { s.block3LiveFrom = d },
+    setOffCatalogCap: (baht) => { s.offCatalogCap = baht },
+    rejections: () => [...s.rejections].map(([posOrderId, reasons]) => ({ posOrderId, reasons: [...reasons] })),
+    recomputeAll: () => { recomputeAll(s) },
   }
 }

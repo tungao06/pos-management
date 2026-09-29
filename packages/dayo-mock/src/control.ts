@@ -48,7 +48,9 @@ export async function mockControl(mock: MockDayo, path: string, body: unknown): 
       return { status: 200, body: { catalog_version: version } }
     }
     case '/__mock/preload-z': mock.preloadZ(body as { zNo: number; hash: string; countedAt: string }); return ok
-    case '/__mock/state': return { status: 200, body: { orders: mock.orders(), requests: mock.requests(), shifts: mock.shifts(), zReports: mock.zReports(), conflicts: mock.conflicts() } }
+    case '/__mock/off-catalog-cap': mock.setOffCatalogCap((body as { baht: number }).baht); return ok       // D103 (phase 2)
+    case '/__mock/block3-live-from': mock.setBlock3LiveFrom((body as { date: string | null }).date); return ok // D100
+    case '/__mock/state': return { status: 200, body: { orders: mock.orders(), requests: mock.requests(), shifts: mock.shifts(), zReports: mock.zReports(), conflicts: mock.conflicts(), rejections: mock.rejections() } }
     default: return { status: 404, body: { ok: false } }
   }
 }

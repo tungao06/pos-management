@@ -1,6 +1,6 @@
 // Block 3 contract fixtures (plan 09 Task 7 · spec 04 §4.11 rule 2 · D84) replayed on the block 3 mock. The mock is dayo main
 // 12885fe (ADR-0069 phase 1 — preflight P3); the phase-2 files (order_off_catalog, prefixes on order rows) run on
-// `block3Phase2` and wait for Task 8's off-catalog judge (`setOffCatalogCap`). The block-2 files stay in replay.test.ts.
+// `block3Phase2` with Task 8's off-catalog judge. The block-2 files stay in replay.test.ts.
 import { describe, expect, it } from 'vitest'
 import { BLOCK3_FIXTURE_NAMES, BLOCK3_PHASE2_FIXTURE_NAMES, type CentralOrder, type PosContractFixture } from '@dayo/contracts'
 import { loadContractFixture } from '@dayo/contracts/fixture-files'
@@ -26,6 +26,9 @@ const CASH_COUNT = { count_id: C, shift_id: S, lines: lines({ 500: 1, 100: 1, 10
 const SHIFT_OPEN_2 = { shift_id: S2, business_date: '2026-09-25', opened_at: '2026-09-25T12:06:00.000Z', opened_by: U, opening_float: 500, quick_open: false }
 const CASH_COUNT_2 = { count_id: C2, shift_id: S2, lines: lines({ 500: 1 }), counted: 500, counted_by: U, counted_at: '2026-09-25T12:08:00.000Z' }
 const sampleShiftClose = () => (loadContractFixture('e2-shift-close-accepted').request.body as { rows: unknown[] }).rows[0]!
+const rowsOf = (name: string) => (loadContractFixture(name).request.body as { rows: { key: string; kind: string; data: Record<string, unknown> }[] }).rows
+/** The normal `order` row of bill O (฿70 cash) — the exists-order fixture's request. */
+const orderRowO = () => rowsOf('e2-order-off-catalog-exists-order')[0]!
 /** e2-order-accepted's `duplicate_of` bot bill (replay.test.ts SETUP) — the scope fixture sends that same order row. */
 const BOT_013: CentralOrder = { order_no: 'L260925-013', sale_date: '2026-09-25', status: 'ok', source: 'line', external_ref: null, version: 1, channel: 'store', payment: 'cash', totals: { items_subtotal: 155, items_discount: 0, bill_discount: 0, total: 155, fee: 0 }, amount_mismatch: false, updated_at: null, sold_at: '2026-09-25T03:10:00+00:00', created_by_name: 'TungAo' }
 /** The bot cash bill E4 finds in (after, until] and the shift_close fixture's z_report.bot_bills names. */
@@ -45,9 +48,19 @@ async function pushAccepted(mock: MockDayo, rows: unknown[]): Promise<void> {
   expect(results.filter((r) => r.status !== 'accepted')).toEqual([])
 }
 
+/**
+ * S1 of an off-catalog bill, the way dayo gets there: the shop's first shift_open sets block3_live_from (2026-09-25, D100) and
+ * dayo rejects the bill's `order` row UNKNOWN_CODE (a menu code the shop never had) — pos_push_rejections records it.
+ */
+async function offCatalogReady(mock: MockDayo, posOrderId: string, receiptNo: string): Promise<void> {
+  await pushAccepted(mock, [row('shift_open', S, SHIFT_OPEN)])
+  const d = { ...orderRowO().data, pos_order_id: posOrderId, receipt_no: receiptNo, lines: [{ code: 'Retired Tea', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 }] }
+  const res = await send(mock, 'POST', '/api/v1/pos/push', { device_time: '2026-09-25T12:10:00.000Z', rows: [row('order', posOrderId, d)] })
+  expect(((await res.json()) as { data: { results: unknown[] } }).data.results).toEqual([{ key: `order:${posOrderId}`, status: 'rejected', reason: 'UNKNOWN_CODE', detail: 'ไม่พบเมนู "Retired Tea"' }])
+}
+
 /** The state dayo's harness gets from `rpc`, recreated on the mock by its own API (never by editing the fixture). */
 async function arrangeBlock3(mock: MockDayo, name: string): Promise<void> {
-  const m = mock as MockDayo & { setOffCatalogCap?: (baht: number) => void }
   switch (name) {
     case 'e1-catalog-changed-block3':
       mock.preloadZ({ zNo: 41, hash: H, countedAt: '2026-09-24T12:00:00.000Z' }) // an earlier Z of this key → E1 last_z_* (0067:134-155)
@@ -68,19 +81,22 @@ async function arrangeBlock3(mock: MockDayo, name: string): Promise<void> {
     case 'e4-shift-cash':
       mock.seedCentralOrders([BOT_901])
       return
-    // phase 2 — Task 8 (the off-catalog judge) may refine these
+    // phase 2 (block3Phase2 · the off-catalog judge of Task 8)
     case 'e2-order-off-catalog-accepted':
+      await offCatalogReady(mock, O, 'A-000001')
       mock.setNextOrderNo('2026-09-25', 15)
       return
-    case 'e2-order-off-catalog-exists': // the bill is already a normal bill of dayo (total ฿70)
-      mock.preloadOrder({ posOrderId: O, receiptNo: 'A-000001', saleDate: '2026-09-25', soldAt: '2026-09-25T03:00:00.000Z', orderNo: 'L260925-014', total: 70 })
+    case 'e2-order-off-catalog-exists': // the bill is already a normal bill of dayo: L260925-014, ฿70 cash (its order row accepted)
+      mock.setNextOrderNo('2026-09-25', 14)
+      await pushAccepted(mock, [orderRowO()])
       return
-    case 'e2-order-off-catalog-rule':
-      m.setOffCatalogCap?.(3000) // D103 default
+    case 'e2-order-off-catalog-rule': // every S1 condition holds but the cap: ฿3,000.01 > the D103 default ฿3,000 (never set here)
+      await offCatalogReady(mock, '0b0b0b0b-0000-4000-8000-000000000004', 'A-000004')
       return
-    case 'e2-order-off-catalog-exists-order': // the bill is already an off-catalog bill of dayo
+    case 'e2-order-off-catalog-exists-order': // the bill is already an off-catalog bill of dayo (L260925-015)
+      await offCatalogReady(mock, O, 'A-000001')
       mock.setNextOrderNo('2026-09-25', 15)
-      await pushAccepted(mock, (loadContractFixture('e2-order-off-catalog-accepted').request.body as { rows: unknown[] }).rows)
+      await pushAccepted(mock, rowsOf('e2-order-off-catalog-accepted'))
       return
     default:
       throw new Error(`arrangeBlock3: no arrangement for ${name}`)
@@ -119,10 +135,7 @@ async function replay(name: string): Promise<void> {
   expect(normalize(await res.json())).toEqual(normalize(fx.response.body))
 }
 
-/** Task 8 adds the off-catalog judge (and setOffCatalogCap) — until then the phase-2 files are skipped, visibly. */
-const OFF_CATALOG_JUDGE = 'setOffCatalogCap' in createMockDayo()
-
 describe('block 3 contract fixtures replay on the mock', () => {
   it.each(BLOCK3_FIXTURE_NAMES.filter((n) => !PHASE2.has(n)))('%s (phase 1): status, headers, verdicts, details and data', replay)
-  it.skipIf(!OFF_CATALOG_JUDGE).each([...BLOCK3_PHASE2_FIXTURE_NAMES])('%s (phase 2): status, headers, verdicts, details and data', replay) // Task 8 drops skipIf
+  it.each([...BLOCK3_PHASE2_FIXTURE_NAMES])('%s (phase 2): status, headers, verdicts, details and data', replay)
 })

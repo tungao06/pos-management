@@ -16,7 +16,10 @@ export const MIDNIGHT = '2026-09-24T17:00:00.000Z'                       // 00:0
 /** dayo's to_char(… 'YYYY-MM-DD"T"HH24:MI:SS.MS"+00:00"') form of an instant (E1 last_z_until · E4 sold_at — preflight P7). */
 export const pg = (iso: string): string => new Date(iso).toISOString().replace('Z', '+00:00')
 
-export const newMock = (): MockDayo => createMockDayo({ now: NOW, block3: true })
+/** A dayo with ADR-0069 phase 2 (preflight P3/D1): recompute, order_off_catalog, prefixes on bill rows — Task 8's tests and z-chain. */
+export const newMock = (): MockDayo => createMockDayo({ now: NOW, block3Phase2: true })
+/** dayo main 12885fe exactly (phase 1): no recompute (recomputeStatus null), order_off_catalog = deferred UNSUPPORTED. */
+export const newMockPhase1 = (): MockDayo => createMockDayo({ now: NOW, block3: true })
 export const row = (kind: string, key: string, data: unknown) => ({ key: `${kind}:${key}`, kind, data })
 export async function push(mock: MockDayo, rows: unknown[]) {
   const r = await mock.fetch('http://localhost:8787/api/v1/pos/push', { method: 'POST', headers: { authorization: `Bearer ${MOCK_API_KEY}`, 'content-type': 'application/json' }, body: JSON.stringify({ device_time: NOW, rows }) })
@@ -57,3 +60,15 @@ export const movementRow = (n: number, shiftN: number, kind: 'PAID_IN' | 'PAID_O
   ({ movement_id: mid(n), shift_id: sid(shiftN), kind, amount, pos_order_id: posOrderN === null ? null : oid(posOrderN), reason: kind === 'VOID_REFUND' ? null : 'ทดสอบ', created_by: U, created_at: createdAt })
 export const botBill = (no: string, total: number, soldAt: string): CentralOrder => ({ order_no: no, sale_date: soldAt.slice(0, 10), status: 'ok', source: 'line', external_ref: null, version: 1, channel: 'line', payment: 'cash',
   totals: { items_subtotal: total, items_discount: 0, bill_discount: 0, total }, amount_mismatch: false, updated_at: soldAt, sold_at: soldAt })
+export const offCatalogRow = (n: number, o: { shiftId?: string | null; total?: number; soldAt?: string; closedBy?: string; originalReason?: string } = {}) => {
+  const total = o.total ?? 35
+  return { pos_order_id: oid(n), receipt_no: `A-${String(n).padStart(6, '0')}`, queue_no: n, sale_date: '2026-09-25', sold_at: o.soldAt ?? at(1), channel: 'store', payment: 'cash',
+    staff_id: U, catalog_version: 1, shift_id: o.shiftId ?? null, note: null,
+    lines: [{ code: 'Thai Tea', name: 'ชาไทย', size: '16 oz', sweetness: '50%', qty: 1, unit_price: total, discount_per_cup: 0, line_total: total }],
+    totals: { items_subtotal: total, items_discount: 0, bill_discount: 0, total }, closed_by: o.closedBy ?? U, closed_at: at(6), reason: 'เมนูถูกลบในระบบกลาง', original_reason: o.originalReason ?? 'UNKNOWN_CODE' }
+}
+/** dayo rejects the bill's `order` row (and records it in pos_push_rejections — even when a test override decides). */
+export async function rejectOrder(mock: MockDayo, n: number, shiftId: string | null = null) {
+  mock.override({ match: { key: `order:${oid(n)}` }, verdict: { status: 'rejected', reason: 'UNKNOWN_CODE', detail: 'ไม่พบเมนู' }, times: 1 })
+  return push(mock, [row('order', oid(n), orderRow(n, { shiftId }))])
+}
