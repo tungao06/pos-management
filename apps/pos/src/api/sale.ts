@@ -162,6 +162,7 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
       && priceCart({ ...cart, manualPromotionReason: REASON_PROBE }, stored.catalog, soldAt).ok
     if (!priced.ok && !onlyReasonMissing) throw new PosError('PRICE_NOT_OK', priced.warnings.join(' · '))
     if (zero !== 'ok') throw new PosError(zero, `total ${totalSatang}`)
+    if (!priced.ok) throw new PosError('PRICE_NOT_OK', priced.warnings.join(' · ')) // never sell a cart the engine refused
     if (totalSatang !== input.expectedTotalSatang) throw new PosError('PRICE_CHANGED', `shown ${input.expectedTotalSatang}, now ${totalSatang}`)
     let tenderedSatang: number | null = null
     let changeSatang: number | null = null
