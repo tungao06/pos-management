@@ -1,13 +1,13 @@
 import { and, desc, eq, isNotNull, max } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
-import { OrderRowData, RECEIPT_NO_RE, Text200 } from '@dayo/contracts'
-import { buildOrderRowData, CartError, cashChangeSatang, nextReceiptNo, parseReceiptNo, priceCart, promptPayPayload, type CartDraft, type PricedCart } from '@dayo/domain'
+import { ManualPromotionReason, OrderRowData, RECEIPT_NO_RE, Text200, trimWs } from '@dayo/contracts'
+import { buildOrderRowData, CartError, cashChangeSatang, manualPromotionsOf, nextReceiptNo, parseReceiptNo, priceCart, promptPayPayload, zeroTotalVerdict, type CartDraft, type PricedCart } from '@dayo/domain'
 import { appendOrderEvents, type NewEvent } from '../db/events'
 import { enqueuePush } from '../db/outbox'
 import { readCatalog } from '../sync/catalog'
 import { DAYO_KEYS, readKey } from '../sync/state'
-import { currentOpenShift, requireDevice } from './bootstrap'
+import { currentOpenShift, promoSupport, requireDevice } from './bootstrap'
 import type { ApiDeps } from './deps'
 import { PosError } from './errors'
 import { notBefore } from './rows'
@@ -36,27 +36,45 @@ async function lastQueueNo(db: RemoteDb, deviceId: string, businessDate: string)
   return row?.q ?? 0
 }
 
-/** The cart as the caller sent it, reasons trimmed, with its payment code — what a bill is priced from and stored as. */
+/**
+ * The cart as the caller sent it, reasons trimmed, with its payment code — what a bill is priced from and stored as.
+ * The manual-promotion reason is cut with dayo's own trim (trimWs — the text dayo stores, byte for byte); one that trims
+ * to nothing is no reason at all (null), so a ฿0 bill that needs one is refused MANUAL_REASON_REQUIRED, never frozen blank.
+ * A reason left over with no manual promotion leaving the tablet (none picked, or noPromotions) is dropped here (T8 fix
+ * round 1 L2): it neither blocks the sale in checkCart nor is frozen in pricing_json.cart.
+ * A caller of before plan 10 may send neither manual key: they read as none.
+ */
 function normalizeCart(input: RecordSaleInput): CartDraft {
   const d = input.cart.billDiscount
-  return {
+  const typed = input.cart.manualPromotionReason ?? null
+  const trimmed = typed === null ? null : trimWs(typed)
+  const cart: CartDraft = {
     ...input.cart,
     billDiscount: d === null ? null : { ...d, reason: d.reason === null ? null : d.reason.trim() },
     lines: input.cart.lines.map((l) => ({ ...l, discountReason: l.discountReason === null ? null : l.discountReason.trim() })),
+    manualPromotionIds: [...(input.cart.manualPromotionIds ?? [])],
+    manualPromotionReason: trimmed === '' ? null : trimmed,
     paymentCode: PAYMENT_CODE[input.payment.method],
   }
+  return manualPromotionsOf(cart).ids.length > 0 ? cart : { ...cart, manualPromotionReason: null }
 }
 
-/** Everything that decides what a bill is — lines (in any order), channel, payment code, bill discount and promotions. */
+/**
+ * Everything that decides what a bill is — lines (in any order), channel, payment code, bill discount and promotions,
+ * the manual ones included AS THEY LEAVE THE TABLET (manualPromotionsOf: the ids in the order picked, each once, and the
+ * reason sent with them — plan 10 T8). A cart frozen before plan 10 has no manual keys: manualPromotionsOf reads it as none.
+ */
 function cartSignature(c: CartDraft): string {
   const lines = c.lines.map((l) => JSON.stringify([l.code, l.size, l.sweetness, l.milk, l.grade, l.qty, l.free, l.discountSatang, l.discountPercent, l.discountReason])).sort()
   const d = c.billDiscount
   const bill = d === null ? null : d.kind === 'satang' ? ['satang', d.satang, d.reason] : ['percent', d.percent, d.reason]
-  return JSON.stringify({ channel: c.channelCode, payment: c.paymentCode, bill, promo: c.promoCode, skip: [...c.skipPromotionIds].sort(), none: c.noPromotions, lines })
+  const manual = manualPromotionsOf(c)
+  return JSON.stringify({ channel: c.channelCode, payment: c.paymentCode, bill, promo: c.promoCode, skip: [...c.skipPromotionIds].sort(), none: c.noPromotions, lines, manual: [manual.ids, manual.reason] })
 }
 
 /**
- * plan 3 M12 for block 2: the same orderId must be the same cart — lines, channel, payment and bill discount — compared
+ * plan 3 M12 for block 2: the same orderId must be the same cart — lines, channel, payment, bill discount and the manual
+ * promotions with their reason (plan 10 T8) — compared
  * on the satang cart stored at payment (pricing_json.cart). A resend that differs is refused, never answered with the
  * first bill.
  */
@@ -82,6 +100,9 @@ export async function lastReceiptNoOverall(db: RemoteDb, device: DeviceDto): Pro
   return counter(best) > 0 ? best : null
 }
 
+/** A valid manual-promotion reason, only ever priced to ask the engine whether a missing reason is its only problem — never stored. */
+const REASON_PROBE = 'probe'
+
 /** Every free-text reason that travels in the E2 row must pass dayo's Text200 (1–200 code points, no control character). */
 function checkReason(text: string | null, what: string): void {
   if (text !== null && !Text200.safeParse(text.trim()).success) throw new PosError('BAD_INPUT', `${what} needs a reason of 1–${REASON_MAX_LENGTH} characters`)
@@ -102,6 +123,13 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
   if (d !== null && d.reason === null) throw new PosError('BAD_INPUT', `a bill discount needs a reason of 1–${REASON_MAX_LENGTH} characters`) // D48 Q3-6
   checkReason(d?.reason ?? null, 'a bill discount')
   for (const l of input.cart.lines) checkReason(l.discountReason, 'a line discount')
+  // dayo_draft_manual_reason (0069): the reason as it leaves the tablet must pass dayo's own check — before anything is written
+  const manual = manualPromotionsOf(cart)
+  if (cart.manualPromotionReason !== null && !ManualPromotionReason.safeParse(cart.manualPromotionReason).success) {
+    throw new PosError('BAD_INPUT', `a manual promotion needs a reason of 1–${REASON_MAX_LENGTH} characters on one line`)
+  }
+  // plan 10 §0.2: a dayo whose supported_fields.order lacks manual_promotion_ids would hold the row UNSUPPORTED — never sell one
+  if (manual.ids.length > 0 && !(await promoSupport(db)).manualSupported) throw new PosError('MANUAL_PROMO_UNSUPPORTED', 'dayo does not take manual promotions yet')
   const device = await requireDevice(db)
   const actor = await db.select().from(s.user).where(eq(s.user.id, input.actorUserId)).get()
   if (!actor || !actor.isActive) throw new PosError('BAD_INPUT', `unknown or inactive user ${input.actorUserId}`)
@@ -122,13 +150,25 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
       if (e instanceof CartError) throw new PosError('BAD_INPUT', e.message) // inactive size, no such variant, qty, grade rule
       throw e
     }
-    if (!priced.ok) throw new PosError('PRICE_NOT_OK', priced.warnings.join(' · '))
     const totalSatang = priced.totalSatang
-    if (totalSatang <= 0) throw new PosError('DISCOUNT_TOO_BIG', 'the total must stay above 0') // D50 Q3-20, ruling R5
+    if (totalSatang < 0) throw new PosError('DISCOUNT_TOO_BIG', 'the total must not go below 0') // never: the domain cross-checks the quote
+    // D124 · owner Q1 = ข: a ฿0 bill only from promotions, with a reason when a manual one needs it, paid in cash — the
+    // domain's ONE rule. A cart the engine refused is PRICE_NOT_OK first (an unknown channel prices to 0 too) — unless the
+    // engine's ONLY problem is the missing manual reason (it sets ok=false for that alone): then the ฿0 verdict speaks, so a
+    // reason typed next never meets another refusal (fix round 1 L1). "Only" = the same cart with a reason prices ok —
+    // asked of the engine itself, never read from its warning text.
+    const zero = zeroTotalVerdict(cart, priced)
+    const onlyReasonMissing = !priced.ok && priced.manualPromotionReasonRequired && manual.reason === null
+      && priceCart({ ...cart, manualPromotionReason: REASON_PROBE }, stored.catalog, soldAt).ok
+    if (!priced.ok && !onlyReasonMissing) throw new PosError('PRICE_NOT_OK', priced.warnings.join(' · '))
+    if (zero !== 'ok') throw new PosError(zero, `total ${totalSatang}`)
+    if (!priced.ok) throw new PosError('PRICE_NOT_OK', priced.warnings.join(' · ')) // never sell a cart the engine refused
     if (totalSatang !== input.expectedTotalSatang) throw new PosError('PRICE_CHANGED', `shown ${input.expectedTotalSatang}, now ${totalSatang}`)
     let tenderedSatang: number | null = null
     let changeSatang: number | null = null
     if (input.payment.method === 'CASH') {
+      // Q1 = ข: a ฿0 bill is a cash payment of 0 — nothing handed over, no change (migration 0007's ฿0 payment row)
+      if (totalSatang === 0 && input.payment.tenderedSatang !== 0) throw new PosError('BAD_INPUT', 'a ฿0 bill takes no cash: tendered must be 0')
       if (!Number.isSafeInteger(input.payment.tenderedSatang)) throw new PosError('BAD_INPUT', 'tendered must be whole satang')
       if (input.payment.tenderedSatang < totalSatang) throw new PosError('TENDER_TOO_LOW', `tendered ${input.payment.tenderedSatang} < total ${totalSatang}`)
       tenderedSatang = input.payment.tenderedSatang
@@ -168,10 +208,14 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
     }
     const events: NewEvent[] = [{ type: 'CREATED', payload: { origin: 'device', channelCode: cart.channelCode, catalogVersion: stored.catalogVersion, shiftId: shift.id, businessDate: shift.businessDate, soldAt } }]
     for (const [i, l] of priced.lines.entries()) {
-      events.push({ type: 'LINE_ADDED', payload: { lineNo: i + 1, code: l.code, size: l.size, sweetness: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty, unitPriceSatang: l.unitPriceSatang, discountPerCupSatang: l.discountPerCupSatang, promotionId: l.promotionId, lineTotalSatang: l.lineTotalSatang } })
+      // R2: a cup discounted by more than one promotion keeps its split under the hash (the key only then — other lines as before)
+      const breakdown = l.promoBreakdown ?? null
+      events.push({ type: 'LINE_ADDED', payload: { lineNo: i + 1, code: l.code, size: l.size, sweetness: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty, unitPriceSatang: l.unitPriceSatang, discountPerCupSatang: l.discountPerCupSatang, promotionId: l.promotionId, lineTotalSatang: l.lineTotalSatang, ...(breakdown === null ? {} : { promoBreakdown: breakdown }) } })
     }
     if (billReason !== null && priced.billDiscountSatang > 0) events.push({ type: 'DISCOUNT_APPLIED', payload: { amountSatang: priced.billDiscountSatang, reason: billReason, approvedBy: actor.id } })
-    events.push({ type: 'PAID', payload: { receiptNo, queueNo, method: input.payment.method, paymentCode: cart.paymentCode, subtotalSatang: priced.itemsSubtotalSatang, discountSatang, totalSatang, tenderedSatang, changeSatang, promotions: priced.promotionsApplied.map((p) => ({ id: p.promotionId, discountSatang: p.discountSatang })) } })
+    events.push({ type: 'PAID', payload: { receiptNo, queueNo, method: input.payment.method, paymentCode: cart.paymentCode, subtotalSatang: priced.itemsSubtotalSatang, discountSatang, totalSatang, tenderedSatang, changeSatang, promotions: priced.promotionsApplied.map((p) => ({ id: p.promotionId, discountSatang: p.discountSatang })),
+      // R2: the manual promotions and reason exactly as the E2 row sends them (manualPromotionsOf) — the keys only when picked
+      ...(manual.ids.length > 0 ? { manualPromotionIds: manual.ids, manualPromotionReason: manual.reason } : {}) } })
     await appendOrderEvents(tx, { orderId: input.orderId, deviceId: device.id, actorType: 'user', actorId: actor.id, at: soldAt, newId: deps.newId }, events)
     await enqueuePush(tx, { kind: 'order', id: input.orderId, data: parsed.data, parentKey: null }, soldAt, deps.newId)
     return { orderId: input.orderId, receiptNo, queueNo, businessDate: shift.businessDate, totalSatang, changeSatang, method: input.payment.method }

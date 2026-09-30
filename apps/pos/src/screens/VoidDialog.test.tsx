@@ -41,6 +41,7 @@ const ORDER: OrderDetailDto = {
   channelCode: null,
   catalogVersion: null,
   promotions: [],
+  manualPromotionReason: null,
   lines: [],
   events: [],
   voidable: true,
@@ -63,6 +64,7 @@ const BOOT: BootstrapState = {
   countingShift: null,
   zWaiting: [],
   centralLastZNo: null,
+  promo: { manualSupported: false, ruleBehind: false, ruleVersions: [] },
 }
 
 function SignedIn({ children }: { children: JSX.Element }): JSX.Element {

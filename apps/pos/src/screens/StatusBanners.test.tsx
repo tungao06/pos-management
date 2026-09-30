@@ -43,6 +43,7 @@ function bootstrapWith(sync: SyncStatusDto, overrides: Partial<BootstrapState> =
     countingShift: null,
     zWaiting: [],
     centralLastZNo: null,
+    promo: { manualSupported: false, ruleBehind: false, ruleVersions: [] },
     ...overrides,
   }
 }

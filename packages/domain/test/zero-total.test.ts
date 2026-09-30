@@ -94,7 +94,7 @@ describe('zeroTotalVerdict — D124 / owner Q1 = (ข): ฿0 only from promotion
   })
 })
 
-describe('zeroBillNeedsReason — PROVISIONAL review L1 (option ก, pending the owner)', () => {
+describe('zeroBillNeedsReason — owner Q7 = ก (D133): any manual promotion on a ฿0 bill needs a reason', () => {
   it('the engine flag asks for a reason', () => {
     const c = cart([matcha()], { manualPromotionIds: [PROMO.M_FREE] })
     const p = priced(c)

@@ -43,7 +43,16 @@ export type BootstrapState = {
   /** Task 13 (ruling R9): dayo's last Z number of this key as stored at setup / key swap / recovery (sync_state
    * dayo.last_z_no), or null — the close screen names it on Z_CHAIN_BROKEN 'central'. */
   centralLastZNo: number | null
+  /** plan 10 (§0.2 · T7): what dayo's last E1 said about promotions — see PromoSupportDto. */
+  promo: PromoSupportDto
 }
+/**
+ * plan 10 §0.2 (dayo รุ่นเก่า): read from the stored E1 `supported_*` (every answer, unchanged included).
+ * manualSupported = `supported_fields.order` lists `manual_promotion_ids` (no = hide manual promotions — old dayo) ·
+ * ruleVersions = `promotion_rule_versions` ([] = dayo before 0071) · ruleBehind = dayo lists a rule version above the
+ * tablet's (the "ระบบกลางมีโปรรุ่นใหม่กว่าแอปนี้" bar). All false / [] before any E1.
+ */
+export type PromoSupportDto = { manualSupported: boolean; ruleBehind: boolean; ruleVersions: number[] }
 /** Task 14 (spec 04 §4.3, §4.4 rule 9, §6.7, §10.5 · D80). Never carries the API key — only its masked form. */
 export type SyncStatusDto = {
   linked: boolean
@@ -133,9 +142,14 @@ export type RecordSaleResult = {
 /** The local payment method → dayo's payment code of the catalog (spec 04 §4.5 `payment`). */
 export const PAYMENT_CODE = { CASH: 'cash', PROMPTPAY: 'qr' } as const
 
-/** A sale priced with dayo's catalog (spec 04 §4.5, §5.1). The payment code comes from `payment.method` (PAYMENT_CODE). */
+/**
+ * A sale priced with dayo's catalog (spec 04 §4.5, §5.1). The payment code comes from `payment.method` (PAYMENT_CODE).
+ * plan 10 T8: `cart.manualPromotionIds` = the manual promotions staff picked (refused MANUAL_PROMO_UNSUPPORTED while dayo's
+ * E1 does not list manual_promotion_ids) · `cart.manualPromotionReason` = the reason typed, cut with dayo's trimWs here.
+ * A ฿0 bill (zeroTotalVerdict, D124 · Q1 = ข) is paid `{ method: 'CASH', tenderedSatang: 0 }`.
+ */
 export type RecordSaleInput = {
-  /** Created when the cart starts; resending the same id with the same lines returns the first result (plan 3 M12). */
+  /** Created when the cart starts; resending the same id with the same cart returns the first result (plan 3 M12). */
   orderId: string
   actorUserId: string
   cart: Omit<CartDraft, 'paymentCode'>
@@ -230,6 +244,12 @@ export type OrderLineDto = {
   qty: number
   unitPriceSatang: number
   lineTotalSatang: number
+  /**
+   * plan 10 R2: how each promotion shares this line's per-cup discount, in satang, frozen at payment
+   * (pricing_json.priced.lines[].promoBreakdown) — only on a cup discounted by more than one promotion, else null (and on
+   * every bill frozen before plan 10 and every plan-3 bill). `name` = the promotion's name as applied on that bill.
+   */
+  promoBreakdown: { promotionId: string; name: string; satang: number }[] | null
 }
 export type OrderEventDto = { seq: number; type: string; at: string; actorId: string; payload: unknown }
 export type OrderDetailDto = OrderSummaryDto & {
@@ -247,6 +267,8 @@ export type OrderDetailDto = OrderSummaryDto & {
   catalogVersion: number | null
   /** Promotions dayo's pricing code applied at soldAt. */
   promotions: { name: string; discountSatang: number }[]
+  /** plan 10 T8: the reason sent with the bill's manual promotions (as frozen at payment) — null when none was sent. */
+  manualPromotionReason: string | null
   lines: OrderLineDto[]
   events: OrderEventDto[]
   /** false also when dayo reports the bill cancelled on its web (dayoEdit.kind 'cancel' — it cannot be cancelled twice). */
