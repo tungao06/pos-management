@@ -14,7 +14,7 @@ import type { OrderDraft } from '@dayo/dayo-pricing'
 import { ParityFile, PosOrderCatalog, type ParityCase, type ParityDraft, type ParityMoney } from '@dayo/contracts'
 import { CartError, checkCatalogRules, TABLET_PROMO_RULE_VERSION, toPricingCatalog, type CartErrorCode, type PosOrderCatalog as Catalog } from '../src/index.js'
 import { priceParityCase } from '../src/parity-support.js'
-import { engineLayer, exportExpectedView, pricedView } from './parity-view.js'
+import { engineLayer, exportExpectedView, pricedView, withDefaultedGrades, type MoneyView } from './parity-view.js'
 import { appliedRuleVersions } from './rule-versions.js'
 
 const at = (p: string): string => fileURLToPath(new URL(p, import.meta.url))
@@ -33,9 +33,9 @@ const rawOf = (file: string): unknown => JSON.parse(readFileSync(file, 'utf8'))
  * tablet must give, with its reason, and needs the head's OK. Keys: `spec` of `cases[]`, `<fixture> › <name>` of
  * `rule_fixtures`. None of the export's manual-promotion reasons is one dayo rejects (no BAD_MANUAL_PROMOTION entry).
  */
-const TABLET_REFUSES = new Map<string, { code: CartErrorCode; why: string }>([
-  ['9a', { code: 'QTY_OUT_OF_RANGE', why: 'qty 150 > maxQtyPerLine 99: dayo clamps to 99 with a warning; the tablet refuses rather than charge 99 cups for 150' }],
-  ['9b', { code: 'CART_TOO_LARGE', why: '51 lines: dayo prices with a DY422 warning and its API then refuses the bill; the tablet refuses first' }],
+const TABLET_REFUSES = new Map<string, { code: CartErrorCode; why: string; dayoWarns: RegExp }>([
+  ['9a', { code: 'QTY_OUT_OF_RANGE', why: 'qty 150 > maxQtyPerLine 99: dayo clamps to 99 with a warning; the tablet refuses rather than charge 99 cups for 150', dayoWarns: /จำนวน 150 ปรับเป็น 99 แก้ว/ }],
+  ['9b', { code: 'CART_TOO_LARGE', why: '51 lines: dayo prices with a DY422 warning and its API then refuses the bill; the tablet refuses first', dayoWarns: /\[DY422\] too_large/ }],
 ])
 
 /**
@@ -65,9 +65,11 @@ const sale = (c: Case): ReturnType<typeof priceParityCase> | CartError => {
     throw e
   }
 }
+/** What the sale path must give for a case: dayo's expected result, with the counted grade exception only (review L1). */
+const saleExpected = (c: Case): { view: MoneyView; defaulted: number } => withDefaultedGrades(exportExpectedView(c.expected), c.draft, c.catalog)
 const salePasses = (c: Case): boolean => {
   const got = sale(c)
-  return !(got instanceof CartError) && isDeepStrictEqual(pricedView(got, true), exportExpectedView(c.expected))
+  return !(got instanceof CartError) && isDeepStrictEqual(pricedView(got, true, c.catalog), saleExpected(c).view)
 }
 
 /** The sale-path test of one case: 0 satang, or the listed refusal. `lenient` (seed only): a CartError is fine where the seed says not ok. */
@@ -75,7 +77,8 @@ function saleTest(c: Case, label: string, lenient: boolean): void {
   const refusal = TABLET_REFUSES.get(c.key)
   if (refusal !== undefined && !lenient) {
     it(`${label}: the tablet refuses (${refusal.code}) where dayo warns — ${refusal.why}`, () => {
-      expect(c.expected['warnings'], 'dayo must flag this bill').toEqual(expect.arrayContaining([expect.any(String)]))
+      // the very warning dayo gives for this refusal (review L3) — not just any warning
+      expect(c.expected['warnings'], `dayo must flag this bill with ${String(refusal.dayoWarns)}`).toEqual(expect.arrayContaining([expect.stringMatching(refusal.dayoWarns)]))
       const got = sale(c)
       expect(got).toBeInstanceOf(CartError)
       expect((got as CartError).code).toBe(refusal.code)
@@ -88,7 +91,7 @@ function saleTest(c: Case, label: string, lenient: boolean): void {
       expect(lenient && !c.expected.ok, `the tablet refuses ${c.key} (${got.code}) but dayo prices it — list it in TABLET_REFUSES only if intended`).toBe(true)
       return
     }
-    expect(pricedView(got, true)).toEqual(exportExpectedView(c.expected))
+    expect(pricedView(got, true, c.catalog)).toEqual(saleExpected(c).view)
   })
 }
 
@@ -115,12 +118,22 @@ describe('one pin (plan 10 T4): VENDOR.json, the seed and dayo\'s export are the
   })
 })
 
+/**
+ * Matcha lines whose draft names no grade, on the sale path (review L1 · withDefaultedGrades): dayo records no grade, the
+ * tablet the catalog default. Counted per part so a new one shows; the seed is the tablet's own path, so it has none.
+ */
+const GRADE_DEFAULTED_LINES = { cases: 6, seed: 0, rule_fixtures: 35 } as const
+const defaultedLines = (cases: Case[]): number => cases.filter((c) => !TABLET_REFUSES.has(c.key) && c.draft.saleTime !== undefined).reduce((n, c) => n + saleExpected(c).defaulted, 0)
+
 function casesSuite(parity: ReturnType<typeof ParityFile.parse>, isReal: boolean, expectedCases: number): void {
   const catalog = toPricingCatalog(parity.catalog)
   const cases: Case[] = parity.cases.map((c) => ({ key: c.spec, draft: c.draft, expected: c.expected, catalog, dayoOnlyExhausted: false }))
   describe(isReal
     ? `parity layer C (spec 04 §5.2) — dayo export ${parity.dayo_commit.slice(0, 7)} cases[]: the sale path vs dayo's real SQL pricing on dayo's sample catalog`
     : 'parity layer C (spec 04 §5.2) — POS SEED: wrapper check only, NOT the block-2 gate', () => {
+    it(`matcha lines without a grade in the draft: exactly ${GRADE_DEFAULTED_LINES[isReal ? 'cases' : 'seed']} (dayo: none · tablet: the default grade)`, () => {
+      expect(defaultedLines(cases)).toBe(GRADE_DEFAULTED_LINES[isReal ? 'cases' : 'seed'])
+    })
     it(`holds all ${expectedCases} cases, uniquely named — a thinner export fails loudly`, () => {
       expect(parity.cases.length).toBe(expectedCases)
       expect(new Set(parity.cases.map((c) => c.spec)).size).toBe(parity.cases.length)
@@ -160,6 +173,15 @@ describe(`parity layer C — dayo export ${real.dayo_commit.slice(0, 7)} rule_fi
     expect(Object.fromEntries(fixtures.map((f) => [f.fixture, f.cases.length]))).toEqual(EXPECTED_RULE_CASES)
     expect(new Set(ruleCases.map((c) => c.key)).size).toBe(ruleCases.length)
   })
+  for (const f of fixtures) {
+    it(`${f.fixture}: the same cases, by name, as the vendored golden ${f.fixture} at the pin (review L2 — a count alone is not enough)`, () => {
+      const golden = rawOf(at(`../../dayo-pricing/golden/test/fixtures/promo-rules/${f.fixture}`)) as { cases: Array<{ name: string }> }
+      expect(f.cases.map((c) => c.name).sort()).toEqual(golden.cases.map((c) => c.name).sort())
+    })
+  }
+  it(`matcha lines without a grade in the draft: exactly ${GRADE_DEFAULTED_LINES.rule_fixtures} (dayo: none · tablet: the default grade)`, () => {
+    expect(defaultedLines(ruleCases)).toBe(GRADE_DEFAULTED_LINES.rule_fixtures)
+  })
   it(`the cases without a saleTime are exactly ENGINE_ONLY_NO_TIME (${ENGINE_ONLY_NO_TIME.size}) — a new one fails here, not silently`, () => {
     expect(ruleCases.filter((c) => c.draft.saleTime === undefined).map((c) => c.key).sort()).toEqual([...ENGINE_ONLY_NO_TIME].sort())
   })
@@ -183,7 +205,7 @@ describe(`parity layer C — dayo export ${real.dayo_commit.slice(0, 7)} rule_fi
     if (ENGINE_ONLY_NO_TIME.has(c.key)) {
       it(`${c.key}: no saleTime — the sale path refuses to invent one; dayo's draft through the engine layer matches dayo`, () => {
         expect(() => priceParityCase(c.draft, c.catalog)).toThrow(/^NO_SALE_TIME/)
-        expect(pricedView(engineLayer(c.orderDraft, c.catalog), true)).toEqual(exportExpectedView(c.expected))
+        expect(pricedView(engineLayer(c.orderDraft, c.catalog), true, c.catalog)).toEqual(exportExpectedView(c.expected))
       })
       continue
     }

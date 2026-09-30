@@ -23,10 +23,11 @@ const cases = PARITY_CASES.map(({ id, spec: specRef, draft }) => {
   return { ...head, draft, expected: {
     ok: q.ok, itemsSubtotal: r2(q.itemsSubtotal), itemsDiscount: r2(q.itemsDiscount), billDiscountAmount: r2(q.billDiscountAmount), totalAmount: r2(q.totalAmount), channelFeeAmount: r2(q.channelFeeAmount),
     lines: q.lines.map((l) => ({
-      lineNo: l.lineNo, unitPrice: r2(l.unitPrice), discountPerCup: r2(l.discountPerCup), promotionId: l.promotionId, lineTotal: r2(l.lineTotal),
+      lineNo: l.lineNo, menuCode: l.menuCode, size: l.size, sweetness: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty,
+      unitPrice: r2(l.unitPrice), discountPerCup: r2(l.discountPerCup), promotionId: l.promotionId, lineTotal: r2(l.lineTotal),
       promoBreakdown: l.promoBreakdown == null ? null : l.promoBreakdown.map((b) => ({ promotionId: b.promotionId, amount: r2(b.amount) })),
     })),
-    promotionsApplied: q.promotionsApplied.map((p) => ({ promotionId: p.promotionId, discountAmount: r2(p.discountAmount) })),
+    promotionsApplied: q.promotionsApplied.map((p) => ({ promotionId: p.promotionId, discountAmount: r2(p.discountAmount), ...(p.detail === undefined ? {} : { detail: p.detail }) })),
     manualPromotionReasonRequired: q.manualPromotionReasonRequired, warnings: q.warnings,
   } }
 })

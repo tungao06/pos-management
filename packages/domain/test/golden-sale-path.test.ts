@@ -15,7 +15,7 @@ import { CartError, checkCatalogRules, TABLET_PROMO_RULE_VERSION, type CartError
 import { priceParityCase } from '../src/parity-support.js'
 import { GOLDEN_FILES, goldenCases, type GoldenCase } from './golden-cases.js'
 import { appliedRuleVersions } from './rule-versions.js'
-import { engineLayer, goldenExpectedView, pricedView } from './parity-view.js'
+import { engineLayer, goldenExpectedView, pricedView, withDefaultedGrades, type MoneyView } from './parity-view.js'
 
 /** Cases per golden file at the pin — the same table as dayo-pricing's golden.test.ts (a thinner re-vendor fails here too). */
 const EXPECTED_CASES: Record<string, number> = {
@@ -43,6 +43,12 @@ const ENGINE_ONLY_NO_TIME: ReadonlySet<string> = new Set([
  */
 const TABLET_REFUSES = new Map<string, { code: CartErrorCode; why: string }>()
 
+/**
+ * Matcha lines whose draft names no grade, on the sale path (review L1 · withDefaultedGrades): dayo records no grade, the
+ * tablet the catalog default. Counted so a new one shows here; every other line field is compared as dayo recorded it.
+ */
+const GRADE_DEFAULTED_LINES = 70
+
 const USAGE_FILE = 'rules-usage.json'
 const CASES = goldenCases()
 
@@ -55,9 +61,11 @@ function sale(c: GoldenCase): ReturnType<typeof priceParityCase> | CartError {
     throw e
   }
 }
+/** What the sale path must give for a case: dayo's expected result, with the counted grade exception only. */
+const saleExpected = (c: GoldenCase): { view: MoneyView; defaulted: number } => withDefaultedGrades(goldenExpectedView(c.expected, c.form === 'rule'), c.draft, c.catalog)
 const salePasses = (c: GoldenCase): boolean => {
   const got = sale(c)
-  return !(got instanceof CartError) && isDeepStrictEqual(pricedView(got, c.form === 'rule'), goldenExpectedView(c.expected, c.form === 'rule'))
+  return !(got instanceof CartError) && isDeepStrictEqual(pricedView(got, c.form === 'rule', c.catalog), saleExpected(c).view)
 }
 const onSalePath = (c: GoldenCase): boolean => !ENGINE_ONLY_NO_TIME.has(c.key) && !TABLET_REFUSES.has(c.key)
 
@@ -82,6 +90,9 @@ describe('golden sale path — inventory (plan 10 T4)', () => {
     expect(withList.length).toBeGreaterThan(0)
     expect([...new Set(withList.map((c) => c.file))]).toEqual([USAGE_FILE])
   })
+  it(`matcha lines without a grade in the draft, on the sale path: exactly ${GRADE_DEFAULTED_LINES} (dayo: none · tablet: the default grade)`, () => {
+    expect(CASES.filter(onSalePath).reduce((n, c) => n + saleExpected(c).defaulted, 0)).toBe(GRADE_DEFAULTED_LINES)
+  })
   for (const f of GOLDEN_FILES) {
     it(`${f}: the catalog passes checkCatalogRules — the tablet would accept it`, () => {
       expect(checkCatalogRules(CASES.find((c) => c.file === f)!.catalog)).toEqual([])
@@ -95,7 +106,7 @@ describe('golden sale path — 0 satang difference (plan 10 §0.2 parity (3))', 
     if (ENGINE_ONLY_NO_TIME.has(c.key)) {
       it(`${c.key}: no sale time — the sale path refuses to invent one; the engine layer matches dayo`, () => {
         expect(() => priceParityCase(c.draft, c.catalog)).toThrow(/^NO_SALE_TIME/)
-        expect(pricedView(engineLayer(c.orderDraft, c.catalog), breakdown)).toEqual(goldenExpectedView(c.expected, breakdown))
+        expect(pricedView(engineLayer(c.orderDraft, c.catalog), breakdown, c.catalog)).toEqual(goldenExpectedView(c.expected, breakdown))
       })
       continue
     }
@@ -111,7 +122,7 @@ describe('golden sale path — 0 satang difference (plan 10 §0.2 parity (3))', 
     it(`${c.key}: 0 satang difference`, () => {
       const got = sale(c)
       if (got instanceof CartError) expect.unreachable(`the tablet refuses ${c.key} (${got.code}) but dayo prices it — add it to TABLET_REFUSES with a reason only if that is intended`)
-      else expect(pricedView(got, breakdown)).toEqual(goldenExpectedView(c.expected, breakdown))
+      else expect(pricedView(got, breakdown, c.catalog)).toEqual(saleExpected(c).view)
     })
   }
 })
