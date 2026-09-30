@@ -229,7 +229,7 @@ export async function promoSupport(db: RemoteDb): Promise<PromoSupportDto> {
   const sup = await readSupported(db)
   if (sup === null) return { manualSupported: false, ruleBehind: false, ruleVersions: [] }
   return {
-    manualSupported: sup.fields.order?.includes('manual_promotion_ids') ?? false,
+    manualSupported: ['manual_promotion_ids', 'manual_promotion_reason'].every((f) => sup.fields.order?.includes(f) ?? false), // the row sends both keys
     ruleBehind: sup.promoRuleVersions.some((v) => v > TABLET_PROMO_RULE_VERSION),
     ruleVersions: [...sup.promoRuleVersions],
   }

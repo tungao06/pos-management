@@ -103,7 +103,7 @@ test('promo rules 1: a promotion by category and size applies on its own, with t
   expect(pushed).toHaveLength(1)
   expect(Object.keys(pushed[0]!)).not.toContain('manual_promotion_ids')
   expect(Object.keys(pushed[0]!)).not.toContain('manual_promotion_reason')
-  expect(Object.keys(pushed[0]!)).not.toContain('exhaustedPromotions')
+  expect(Object.keys(pushed[0]!)).not.toContain('exhausted_promotions')
 })
 
 test('promo rules 2: a manual promotion chip lowers the total and the row dayo gets carries manual_promotion_ids', async ({ page, request }) => {
@@ -232,7 +232,7 @@ test('promo rules 5: a dayo from before promotion rules has no manual chip, stil
   await payCashExact(page)
   await expect.poll(async () => (await mockState(request)).orders.find((o) => o.receiptNo === 'A-000001')).toMatchObject({ status: 'ok', total: 70 })
   expect(pushed).toHaveLength(1)
-  for (const key of ['manual_promotion_ids', 'manual_promotion_reason', 'exhaustedPromotions']) expect(Object.keys(pushed[0]!)).not.toContain(key)
+  for (const key of ['manual_promotion_ids', 'manual_promotion_reason', 'exhausted_promotions']) expect(Object.keys(pushed[0]!)).not.toContain(key)
 })
 
 test('promo rules 5b: a dayo with promotion rules but no manual order fields hides the chips of its manual promotions', async ({ page, request }) => {

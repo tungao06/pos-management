@@ -234,7 +234,6 @@ export const TH = {
   // review I4: a bill discount left with a reason still clamps to ฿0 (dayo never goes negative) — the tablet must
   // still refuse to pay a ฿0 bill (D50 Q3-20) and say why, instead of a silent disabled button.
   errBillDiscountTooBig: 'ส่วนลดท้ายบิลมากกว่าหรือเท่ากับยอดรวม — บิลเหลือ 0 บาท ขายไม่ได้ ลดส่วนลดหรือลบบรรทัด',
-  errZeroTotal: 'ยอดสุทธิเป็น 0 บาท ขายไม่ได้ — บิลต้องมากกว่า 0 บาท',
   // minor: a line dayo priced some units at ฿0 from a promotion (buy-2-get-1) — shown next to that cart line.
   freeUnits: (n: number): string => `แถม ${n} แก้ว`,
   errStockCountNotOpen: 'ใบนับนี้ปิดไปแล้ว — เปิดหน้านับสต็อกใหม่',

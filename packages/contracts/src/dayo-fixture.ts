@@ -49,7 +49,7 @@ export const BLOCK3_PHASE2_FIXTURE_NAMES = [
 /**
  * Plan 10 (§1 · dayo main f4cda56 · ADR-0070/0071/0072): E1 at promo_rule_version=2 on a dayo with the rule engine
  * (changed/unchanged) and on an older dayo that ignores the parameter · E2 rows with manual promotions. A subset of
- * CONTRACT_FIXTURE_NAMES; the mock replays them from plan 10 Task 5 on (dayo-mock test/replay.test.ts skips them until then).
+ * CONTRACT_FIXTURE_NAMES; the mock replays them (dayo-mock test/replay.test.ts).
  */
 export const PROMO_RULES_FIXTURE_NAMES = [
   'e1-catalog-changed-old-dayo', 'e1-catalog-changed-promo-rules', 'e1-catalog-unchanged-promo-rules', 'e2-order-manual-promo-accepted', 'e2-order-manual-reason-required',
