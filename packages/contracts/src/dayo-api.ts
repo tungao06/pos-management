@@ -570,7 +570,7 @@ export const BLOCK3_PHASE2_SUPPORTED_FIELDS = {
 export const BLOCK3_SUPPORTED_FIELDS = { ...BLOCK3_PHASE1_SUPPORTED_FIELDS, ...BLOCK3_PHASE2_SUPPORTED_FIELDS } as const
 
 // ── parity file = pos-parity.json of dayo scripts/export-pos-parity.ts:230-238 (spec §5.2 layer B → C) ─────────────────
-// {dayo_commit, generated_at, pricing_files_sha256, catalog, cases:[{spec, note, draft, expected}]} — no catalog_version, cases named by `spec`.
+// {dayo_commit, generated_at, pricing_files_sha256, catalog, cases:[{spec, note, draft, expected}], catalog_version (written since 7a90847), rule_fixtures} — cases named by `spec`.
 // draft = dayo's own OrderDraft (camelCase); expected = dayo's QuoteResult in baht (ParityMoney reads the money part).
 const DraftLine = z.looseObject({
   code: z.string(), size: SizeCode.nullable().optional(), sweetness: SweetnessCode.nullable().optional(), milk: MilkCodeSchema.nullable().optional(),
@@ -605,7 +605,7 @@ export const ParityCase = z.looseObject({ spec: z.string().min(1), note: z.strin
 export type ParityCase = z.infer<typeof ParityCase>
 /**
  * One file of dayo's shared golden set `packages/shared/test/fixtures/promo-rules/rules-*.json` priced by dayo's database
- * (F8 · export-pos-parity.ts:433-496 at f4cda56): the catalog is `api_pos_catalog` at the highest rule version.
+ * (F8 · export-pos-parity.ts:433-496 as first seen at f4cda56; pinned at 7a90847): the catalog is `api_pos_catalog` at the highest rule version.
  */
 export const ParityRuleCase = z.looseObject({ name: z.string().min(1), draft: ParityDraft, expected: ParityMoney })
 export type ParityRuleCase = z.infer<typeof ParityRuleCase>
@@ -615,11 +615,11 @@ export const ParityRuleFixture = z.looseObject({
 export type ParityRuleFixture = z.infer<typeof ParityRuleFixture>
 export const ParityFile = z.looseObject({
   dayo_commit: z.string(), pricing_files_sha256: z.record(z.string(), z.string()), generated_at: z.string(),
-  /** dayo's export does not write it yet. */
+  /** The 7a90847 export writes it (31 in the pinned file); kept optional so exports from before that still parse. */
   catalog_version: z.number().int().optional(),
   catalog: PosOrderCatalog,
   cases: z.array(ParityCase).min(1),
-  /** dayo f4cda56 and later (F8) — none in older exports. */
+  /** dayo f4cda56 and later, incl. the pinned 7a90847 (F8) — none in older exports. */
   rule_fixtures: z.array(ParityRuleFixture).exactOptional(),
 })
 
