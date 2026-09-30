@@ -220,10 +220,9 @@ export type ZeroTotalVerdict = 'ok' | 'MANUAL_REASON_REQUIRED' | 'ZERO_TOTAL_NOT
 /**
  * Whether a ฿0 bill must carry a manual-promotion reason — the ONE place of this rule (T3 review L1).
  * - dayo's engine flag (ADR-0070 rule 4): ฿0 and a manual promotion gave a discount here;
- * - PROVISIONAL (review L1 option ก, pending the owner): ฿0 and any manual promotion is sent. dayo judges the reason on
- *   the POS total AND its own quote (0069:406-414), which counts uses the tablet cannot: a promotion exhausted on dayo can
- *   leave a manual one discounting there, and the row is rejected `reason_required:`. If the owner picks (ข), drop the
- *   second clause.
+ * - owner Q7 = ก (D133): ฿0 and any manual promotion is sent. dayo judges the reason on the POS total AND its own quote
+ *   (0069:406-414), which counts uses the tablet cannot: a promotion exhausted on dayo can leave a manual one discounting
+ *   there, and the row is rejected `reason_required:`.
  */
 export function zeroBillNeedsReason(cart: CartDraft, priced: PricedCart): boolean {
   return priced.manualPromotionReasonRequired || (priced.totalSatang === 0 && manualPromotionsOf(cart).ids.length > 0)
