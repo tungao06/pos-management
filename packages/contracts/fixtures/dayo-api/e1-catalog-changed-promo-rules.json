@@ -46,8 +46,7 @@
     "headers": {
       "Access-Control-Allow-Origin": "https://pos.dayo.test",
       "Vary": "Origin",
-      "Access-Control-Expose-Headers": "Retry-After",
-      "Cache-Control": "no-store"
+      "Access-Control-Expose-Headers": "Retry-After"
     },
     "body": {
       "ok": true,

@@ -31,7 +31,7 @@
   "request": { "method": "GET", "path": "/api/v1/pos/catalog?known_version=0", "headers": { "Origin": "https://pos.dayo.test", "Authorization": "Bearer dayo_fixture_key_0001" } },
   "response": {
     "status": 200,
-    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After", "Cache-Control": "no-store" },
+    "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
     "body": {
       "ok": true,
       "data": {

@@ -107,8 +107,10 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     const h = cors(req.headers.get('origin'))
     if (!url.pathname.startsWith('/api/v1/')) return new Response('not found', { status: 404 })
     if (req.method === 'OPTIONS') { // 204 always, even with the API off (spec §4.1)
-      const allowed = 'Access-Control-Allow-Origin' in h
-      return new Response(null, { status: 204, headers: { ...h, ...(allowed ? { 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Max-Age': '7200' } : {}) } })
+      // Expose-Headers belongs to the real answer only — it does nothing on a preflight (dayo cors.ts:69-82 · Task 19 report #7)
+      const { 'Access-Control-Expose-Headers': _expose, ...pre } = h
+      const allowed = 'Access-Control-Allow-Origin' in pre
+      return new Response(null, { status: 204, headers: { ...pre, ...(allowed ? { 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Idempotency-Key', 'Access-Control-Max-Age': '7200' } : {}) } })
     }
     if (s.mode === 'hang') {
       return new Promise((_, reject) => {
@@ -134,7 +136,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     if (req.method === 'GET' && url.pathname === '/api/v1/pos/catalog') return catalogAnswer(url, h)
     if (isPush) return push(req, h)
     if (req.method === 'GET' && url.pathname === '/api/v1/orders') return listOrders(url, h)
-    if (isShiftCash) { const r = shiftCashAnswer(s, url); return json(r.status, r.body, h) } // E4 (0067:31-75)
+    if (isShiftCash) { const r = shiftCashAnswer(s, url, serverTime()); return json(r.status, r.body, h) } // E4 (0067:31-75)
     return err(404, 'DY404', 'not_found', h)
   }
 
@@ -155,10 +157,10 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     if (asked === null) return err(422, 'DY422', PROMO_RULE_VERSION_INVALID, h)
     const supported_fields = versions === null ? c.supported_fields : { ...c.supported_fields, promotion_rule_versions: [...versions] }
     const common = { pricing: s.pricing ?? c.pricing, catalog_version: c.catalog_version, server_time: serverTime(), supported_kinds: c.supported_kinds, supported_fields }
-    if (known === c.catalog_version) return json(200, { ok: true, data: { ...common, changed: false } }, { ...h, 'Cache-Control': 'no-store' })
+    if (known === c.catalog_version) return json(200, { ok: true, data: { ...common, changed: false } }, h)
     const { promotionGroups, ...rest } = c.catalog
     const catalog = { ...rest, promotions: promotionsFor(c.catalog.promotions, asked), ...(versions === null ? {} : { promotionGroups: promotionGroups ?? [MAIN_GROUP] }) }
-    return json(200, { ok: true, data: { ...c, ...common, catalog, client: clientOf(c.client), changed: true } }, { ...h, 'Cache-Control': 'no-store' })
+    return json(200, { ok: true, data: { ...c, ...common, catalog, client: clientOf(c.client), changed: true } }, h)
   }
 
   /**

@@ -19,12 +19,12 @@ export function botCashBills(s: MockState, after: number, until: number): BotCas
     .map((o) => ({ order_no: o.order_no, version: o.version, source: o.source, sold_at: utcMs(Date.parse(o.sold_at!)), total: o.totals.total, created_by_name: staffRead ? (o.created_by_name ?? null) : null }))
 }
 
-/** api_shift_cash (0067:31-75): after/until = dayo_pos_ts (ISO-8601 with a zone) else DY422 · after ≥ until = DY422 · no cap on bills. */
-export function shiftCashAnswer(s: MockState, url: URL): { status: number; body: unknown } {
+/** api_shift_cash (0067:31-75 · server_time since 0076:50-52 = the mock's clock, …mmm+00:00): after/until = dayo_pos_ts (ISO-8601 with a zone) else DY422 · after ≥ until = DY422 · no cap on bills. */
+export function shiftCashAnswer(s: MockState, url: URL, serverTime: string): { status: number; body: unknown } {
   const after = ts(url.searchParams.get('after'))
   const until = ts(url.searchParams.get('until'))
   if (after === null || until === null) return { status: 422, body: { ok: false, error: { code: 'DY422', message: 'invalid: after และ until ต้องเป็นเวลา ISO-8601 ที่มีเขตเวลา' } } }
   if (after >= until) return { status: 422, body: { ok: false, error: { code: 'DY422', message: 'invalid: after ต้องน้อยกว่า until' } } }
   const bills = botCashBills(s, after, until)
-  return { status: 200, body: { ok: true, data: { bills, cash_total: bills.reduce((a, b) => a + Math.round(b.total * 100), 0) / 100 } } }
+  return { status: 200, body: { ok: true, data: { bills, cash_total: bills.reduce((a, b) => a + Math.round(b.total * 100), 0) / 100, server_time: serverTime } } }
 }

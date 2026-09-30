@@ -7,8 +7,9 @@
   "response": {
     "status": 204,
     "headers": {
-      "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Max-Age": "7200"
-    }
+      "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Authorization, Content-Type, Idempotency-Key", "Access-Control-Max-Age": "7200"
+    },
+    "headers_absent": ["Access-Control-Expose-Headers"]
   }
 }
