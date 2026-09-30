@@ -36,6 +36,7 @@ function bootWithSync(sync: Partial<SyncStatusDto>, overrides: Partial<Bootstrap
     countingShift: null,
     zWaiting: [],
     centralLastZNo: null,
+    promo: { manualSupported: false, ruleBehind: false, ruleVersions: [] },
     ...overrides,
   }
 }

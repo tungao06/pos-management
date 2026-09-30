@@ -19,9 +19,10 @@ export type PosContractFixture = z.infer<typeof PosContractFixture>
  * dayo main's SQL and handed to dayo. Adding or dropping one = change this list.
  */
 export const CONTRACT_FIXTURE_NAMES = [
-  'e1-catalog-changed', 'e1-catalog-changed-block3', 'e1-catalog-unchanged', 'e1-missing-staff-scope', 'e2-cash-count-counted-conflict',
+  'e1-catalog-changed', 'e1-catalog-changed-block3', 'e1-catalog-changed-old-dayo', 'e1-catalog-changed-promo-rules', 'e1-catalog-unchanged',
+  'e1-catalog-unchanged-promo-rules', 'e1-missing-staff-scope', 'e2-cash-count-counted-conflict',
   'e2-envelope-invalid', 'e2-key-reused-different-content', 'e2-missing-orders-write-scope', 'e2-order-accepted', 'e2-order-and-void-same-batch',
-  'e2-order-duplicate', 'e2-order-off-catalog-accepted', 'e2-order-off-catalog-exists', 'e2-order-off-catalog-exists-order',
+  'e2-order-duplicate', 'e2-order-manual-promo-accepted', 'e2-order-manual-reason-required', 'e2-order-off-catalog-accepted', 'e2-order-off-catalog-exists', 'e2-order-off-catalog-exists-order',
   'e2-order-off-catalog-rule', 'e2-order-promo-closed-before-sale', 'e2-order-sale-date-tomorrow', 'e2-receipt-conflict', 'e2-row-server-error',
   'e2-shift-close-accepted', 'e2-shift-close-z-no-taken', 'e2-shift-rows-accepted', 'e2-shift-scope-forbidden', 'e2-unknown-code-other-row-ok',
   'e2-unknown-size', 'e2-unsupported-kind-and-field', 'e2-void-clock-ahead', 'e2-void-cross-day', 'e2-void-too-old', 'e3-orders-today',
@@ -44,6 +45,15 @@ export const BLOCK3_FIXTURE_NAMES = [
 export const BLOCK3_PHASE2_FIXTURE_NAMES = [
   'e2-order-off-catalog-accepted', 'e2-order-off-catalog-exists', 'e2-order-off-catalog-exists-order', 'e2-order-off-catalog-rule',
 ] as const satisfies readonly (typeof BLOCK3_FIXTURE_NAMES)[number][]
+
+/**
+ * Plan 10 (§1 · dayo main f4cda56 · ADR-0070/0071/0072): E1 at promo_rule_version=2 on a dayo with the rule engine
+ * (changed/unchanged) and on an older dayo that ignores the parameter · E2 rows with manual promotions. A subset of
+ * CONTRACT_FIXTURE_NAMES; the mock replays them (dayo-mock test/replay.test.ts).
+ */
+export const PROMO_RULES_FIXTURE_NAMES = [
+  'e1-catalog-changed-old-dayo', 'e1-catalog-changed-promo-rules', 'e1-catalog-unchanged-promo-rules', 'e2-order-manual-promo-accepted', 'e2-order-manual-reason-required',
+] as const satisfies readonly (typeof CONTRACT_FIXTURE_NAMES)[number][]
 
 /** Header lookup ignoring case — the fixtures write `Access-Control-Allow-Origin`, fetch lower-cases. */
 export function header(h: Record<string, string> | undefined, name: string): string | undefined {

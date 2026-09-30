@@ -5,6 +5,10 @@ import {
 } from '../src/dayo-api.js'
 import { loadContractFixture, loadRichCatalog } from '../src/dayo-fixture-files.js'
 
+/** A promotion in the old shape (kind + params + stackable) — the only shape the fixtures of block 1A and 2 have. */
+type LegacyPromo = Extract<PosOrderCatalogParsed['promotions'][number], { kind: string }>
+const timeFromOf = (p: PosOrderCatalogParsed['promotions'][number]): string | null => (typeof p.timeFrom === 'string' ? p.timeFrom : null)
+
 const SIZES = [
   { code: '16 oz', label: '16 oz', sortOrder: 0, isActive: true },
   { code: '20 oz', label: '20 oz', sortOrder: 1, isActive: true },
@@ -73,7 +77,7 @@ describe('E1 values dayo sends as-is', () => {
     expect(PosOrderCatalog.safeParse(catalog({ variants: [noSort] })).success).toBe(false)
   })
   it('optional catalog keys infer without `| undefined`, so the parsed catalog assigns to dayo\'s interfaces under exactOptionalPropertyTypes', () => {
-    type Promo = PosOrderCatalogParsed['promotions'][number]
+    type Promo = LegacyPromo // a rule-only promotion (plan 10) has no timeFrom at all
     expectTypeOf<Promo['timeFrom']>().toEqualTypeOf<string | null | undefined>()
     expectTypeOf<{ timeFrom?: string | null }>().toExtend<Pick<Promo, 'timeFrom'>>()
     expectTypeOf<Pick<Promo, 'timeFrom'>>().toExtend<{ timeFrom?: string | null }>()
@@ -146,7 +150,7 @@ describe('contract fixtures mirror dayo main', () => {
     if (!d.changed) throw new Error('changed:true expected')
     expect(d.catalog.sizes.some((s) => !s.isActive)).toBe(true)
     expect(d.catalog.variants.some((v) => v.categoryLabel === null)).toBe(true)
-    expect(d.catalog.promotions.some((p) => /^\d{2}:\d{2}:\d{2}$/.test(p.timeFrom ?? ''))).toBe(true)
+    expect(d.catalog.promotions.some((p) => /^\d{2}:\d{2}:\d{2}$/.test(timeFromOf(p) ?? ''))).toBe(true)
     const active = new Set(d.catalog.sizes.filter((s) => s.isActive).map((s) => s.code))
     expect(d.catalog.variants.every((v) => active.has(v.size))).toBe(true) // 0048:1503-1504 sends only active sizes' variants
   })
@@ -161,6 +165,6 @@ describe('contract fixtures mirror dayo main', () => {
   it('the POS test catalog has sizes with an inactive one and HH:MM:SS times', () => {
     const c = loadRichCatalog().catalog
     expect(c.sizes.some((s) => !s.isActive)).toBe(true)
-    expect(c.promotions.filter((p) => p.timeFrom != null).every((p) => /^\d{2}:\d{2}:\d{2}$/.test(p.timeFrom!))).toBe(true)
+    expect(c.promotions.map(timeFromOf).filter((t) => t !== null).every((t) => /^\d{2}:\d{2}:\d{2}$/.test(t))).toBe(true)
   })
 })

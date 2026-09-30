@@ -41,6 +41,7 @@ const ORDER: OrderDetailDto = {
   channelCode: 'store',
   catalogVersion: 42,
   promotions: [],
+  manualPromotionReason: null,
   lines: [],
   events: [],
   voidable: true,
@@ -161,5 +162,25 @@ describe('OrderDetailScreen — block 3 (spec §6.4 · m2)', () => {
     expect(await screen.findByTestId('order-off-catalog-badge')).toHaveTextContent(TH.offCatalogBadge)
     expect(screen.getByTestId('order-central-mismatch')).toHaveTextContent(TH.centralMismatchLine('L260925-014', '40.00', '45.00'))
     expect(screen.queryByTestId('order-edit')).toBeNull()
+  })
+})
+
+describe('OrderDetailScreen — manual promotion reason and per-cup split (plan 10 T9)', () => {
+  it('shows the reason the manual promotion was chosen with, and each promotion of a split cup in satang', async () => {
+    renderDetail(
+      fakeOrderApi({
+        manualPromotionReason: 'ชงผิดสูตร',
+        lines: [{ lineNo: 1, productName: 'ชาไทย', sizeName: '16 oz', sweetnessName: '50%', milk: 'fresh', grade: null, qty: 1, unitPriceSatang: 3_500, lineTotalSatang: 2_000, promoBreakdown: [{ promotionId: 'p1', name: 'ลด 10', satang: 1_000 }, { promotionId: 'p2', name: 'ลด 5', satang: 500 }] }],
+      }),
+    )
+    expect(await screen.findByTestId('order-manual-reason')).toHaveTextContent('ชงผิดสูตร')
+    expect(screen.getByTestId('order-line-breakdown-0')).toHaveTextContent('ลด 10 −฿10.00')
+    expect(screen.getByTestId('order-line-breakdown-0')).toHaveTextContent('ลด 5 −฿5.00')
+  })
+
+  it('shows neither on a bill without them', async () => {
+    renderDetail(fakeOrderApi())
+    await screen.findByTestId('order-status')
+    expect(screen.queryByTestId('order-manual-reason')).toBeNull()
   })
 })

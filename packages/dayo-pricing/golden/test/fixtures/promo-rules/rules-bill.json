@@ -1,0 +1,203 @@
+{
+  "description": "โปรทั้งบิล: floor_baht → cap_baht → ไม่เกินยอด · ขั้นต่ำเทียบยอดปัจจุบัน · กลุ่มเดียวเลือกตัวที่ลดมากสุด",
+  "form": "rule",
+  "groups": [
+    {
+      "code": "main",
+      "name": "ทั่วไป",
+      "sortOrder": 0,
+      "stackMode": "separate",
+      "isActive": true
+    }
+  ],
+  "promotions": [
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ลดบิล 15% ปัดบาท ไม่เกิน 30",
+      "template": "bill_discount",
+      "priority": 10,
+      "rule": {
+        "v": 1,
+        "scope": "bill",
+        "reward": {
+          "type": "bill_percent",
+          "percent": 15
+        },
+        "rounding": "floor_baht",
+        "cap_baht": 30
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ลดบิล 25 ครบ 200",
+      "template": "bill_discount",
+      "priority": 20,
+      "rule": {
+        "v": 1,
+        "scope": "bill",
+        "reward": {
+          "type": "bill_amount",
+          "baht": 25
+        },
+        "min_subtotal": 200
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "170: 15% = 25.5 ปัดเป็น 25",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 25,
+        "totalAmount": 145,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 170
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 15% ปัดบาท ไม่เกิน 30",
+            "kind": "bill_discount",
+            "discountAmount": 25
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "255: 15% = 38.25 → 38 → เพดาน 30",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 255,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 30,
+        "totalAmount": 225,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 255
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 15% ปัดบาท ไม่เกิน 30",
+            "kind": "bill_discount",
+            "discountAmount": 30
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "10: 15% = 1.5 → 1",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 10,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 1,
+        "totalAmount": 9,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 10,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 10
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ลดบิล 15% ปัดบาท ไม่เกิน 30",
+            "kind": "bill_discount",
+            "discountAmount": 1
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}

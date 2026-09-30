@@ -140,9 +140,11 @@ describe('sqlite: D47 items 5–9 (order/shift uniques, CHECK constraints, setti
     expect(() => db.insert(sqlite.order).values({ ...base, id: 'order-neg-4', subtotalSatang: 100, discountSatang: 101, totalSatang: -1 }).run()).toThrow(/CHECK/)
   })
 
-  it('item 7: payment.amount_satang must be > 0', () => {
+  // plan 10 T6 (Q1 = ข) relaxed the tablet side: ฿0 is allowed for a ฿0 bill only (zero-bill.test.ts) — order-1 is ฿1.00
+  it('item 7: payment.amount_satang is never negative, and never 0 on a bill above 0', () => {
     const base = { orderId: 'order-1', method: 'CASH' as const, verifyStatus: 'manual' as const, createdBy: 'u1', createdAt: NOW }
-    expect(() => db.insert(sqlite.payment).values({ ...base, id: 'pay-1', amountSatang: 0 }).run()).toThrow(/CHECK/)
+    expect(() => db.insert(sqlite.payment).values({ ...base, id: 'pay-1', amountSatang: -1 }).run()).toThrow(/CHECK/)
+    expect(() => db.insert(sqlite.payment).values({ ...base, id: 'pay-1', amountSatang: 0 }).run()).toThrow(/฿0 payment only for a bill whose total is 0/)
     expect(() => db.insert(sqlite.payment).values({ ...base, id: 'pay-2', amountSatang: 100 }).run()).not.toThrow()
   })
 

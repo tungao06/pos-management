@@ -1,4 +1,4 @@
-import { createMockDayo, MOCK_API_KEY, type MockDayo } from '@dayo/dayo-mock'
+import { createMockDayo, MOCK_API_KEY, type MockDayo, type PromoRulesOption } from '@dayo/dayo-mock'
 import type { ShiftDto } from '../../src/api/types'
 import { openTestApi, type ReadyApi } from './db'
 
@@ -12,8 +12,10 @@ export const STAFF = {
  * block3 = a dayo main 12885fe mock (ADR-0069 phase 1: the four shift kinds, shift:write, E4, E1 last_z_*) · block3Phase2 =
  * + dayo phase 2 (order_off_catalog, recompute, prefixes on order rows — preflight P3). Both default false (block-2 dayo).
  * beforeConnect (Task 13): runs on the mock before the setup — e.g. `preloadZ` (a Z another install of this key sent).
+ * promoRules (plan 10 Task 5): the promotion-rule release the mock plays — e.g. `{ versions: [1, 2], manualFields: true }` =
+ * dayo f4cda56 · `{ versions: null, manualFields: false }` (the default) = dayo before 0069. Promotions: `mock.setPromotions`.
  */
-type ConnectOpts = { now?: string; block3?: boolean; block3Phase2?: boolean; beforeConnect?: (mock: MockDayo) => void }
+type ConnectOpts = { now?: string; block3?: boolean; block3Phase2?: boolean; promoRules?: PromoRulesOption; beforeConnect?: (mock: MockDayo) => void }
 type Connected = Omit<ReadyApi, 'shift'> & { mock: MockDayo }
 /** A device linked to the mock dayo: TungAo (owner, PIN 1111) + DCm (owner, PIN 2222) + (unless openShift: false) an open shift with ฿500. */
 // the `openShift: false` overload comes FIRST: `ReturnType<typeof openConnectedApi>` reads the last one, and the block-2 tests type
@@ -22,7 +24,7 @@ export async function openConnectedApi(opts: ConnectOpts & { openShift: false })
 export async function openConnectedApi(opts?: ConnectOpts & { openShift?: true }): Promise<Connected & { shift: ShiftDto }>
 export async function openConnectedApi(opts: ConnectOpts & { openShift?: boolean } = {}): Promise<Connected & { shift: ShiftDto | null }> {
   const now = opts.now ?? '2026-09-25T03:00:00.000Z'
-  const mock = createMockDayo({ now, block3: opts.block3 ?? false, block3Phase2: opts.block3Phase2 ?? false })
+  const mock = createMockDayo({ now, block3: opts.block3 ?? false, block3Phase2: opts.block3Phase2 ?? false, ...(opts.promoRules === undefined ? {} : { promoRules: opts.promoRules }) })
   opts.beforeConnect?.(mock)
   const t = await openTestApi({ fetch: mock.fetch, now })
   const target = { baseUrl: 'http://localhost:8787/api/v1', apiKey: MOCK_API_KEY }

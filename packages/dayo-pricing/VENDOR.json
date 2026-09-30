@@ -1,13 +1,34 @@
 {
   "repo": "dayo-shop-system",
-  "commit": "4f359320b68e8b4cc7713e4c6b3123615f5cfa7d",
+  "commit": "7a90847c0a0e85c439082079c35119436a5f7f1d",
   "files": {
-    "packages/shared/src/money.ts": "9fc84edb98244b60454d0da8cad1abe8f17ff7dfefc503c7d4cde192b7e0e5c7",
-    "packages/shared/src/promotions.ts": "4850b98d5084e703bb1deb84ea4629253f510f37d6e0ab80161e2e5dab15ea11",
+    "packages/shared/src/money.ts": "ce25e987128a72bcfb558ab965968e8f6deb6139af3f12e217bc619566da7383",
+    "packages/shared/src/promotions.ts": "82edee23ff047dd987458baff8e34086853ac32f20204dc94a4405d67516703c",
+    "packages/shared/src/promoRule.ts": "13cf6f844112791b8047ed69c2e83f57661a32da5f81968cd7c61cee789e795f",
     "packages/shared/src/cost.ts": "83df8f024306ad4e4575d84e3b2b32b0ff1579d765138d76c4eacfb7160202a8",
-    "packages/shared/src/fmt.ts": "df31505296c9c99d2e1cc984d02a7fc86706b7ce668b7680554008fbc74334ac",
+    "packages/shared/src/fmt.ts": "5cc30701f428603550cbb2c93db1b3393d9d6f9c90c4eb764aeeae411f91e777",
     "packages/shared/src/shopSettings.ts": "7b1fdd25231fece6527bd82b938217ec94f0cb403e14071d4a4edb6edd5ec34d",
-    "packages/shared/src/types.ts": "10d4eb777fb4ca2f8174dd9bd07e5e40e3a10b2244a78bc025673c2b44b33db9",
-    "packages/shared/src/time.ts": "c634692b8b9c5dd30876cca15e94b3b642da7c685966db5017a34682c3cc1de1"
+    "packages/shared/src/types.ts": "1cb65434c7d17c70b157f8c2317a2285a8b77d19a62a5213757e43d108245001",
+    "packages/shared/src/time.ts": "4ffa2cada840210382d2de309f275673674d1fd8ec82a40dd081a0ac46861504"
+  },
+  "fixtures": {
+    "packages/shared/test/fixtures/promo-rules/catalog.json": "504eb5ab8c92c0677d534196e245c985b628176c405e6af818d379327c2b4c60",
+    "packages/shared/test/fixtures/promo-rules/functions.json": "1cff60e7dd716c6c860ffeea765e7689750cfc396dee34c5cad8d5a13c407be6",
+    "packages/shared/test/fixtures/promo-rules/legacy-bill.json": "455d082059df1c4ac26f7f236378aa1d3f2b24c13201890f1d2c4bcc5790bf97",
+    "packages/shared/test/fixtures/promo-rules/legacy-bundle.json": "a9f79f9ee6c19156ad1bd3bfcaed5ce108d02bb3b674996f10a172fe701accc7",
+    "packages/shared/test/fixtures/promo-rules/legacy-buy-get.json": "be63c2f14dd35d4501606562a167359c7fa3f717538fefd1319277780f53fc96",
+    "packages/shared/test/fixtures/promo-rules/legacy-item.json": "5c864047a99cc05e1e5492c2160371c1289fe2bc13282fc1e8834185fa693899",
+    "packages/shared/test/fixtures/promo-rules/legacy-mixed.json": "a01bc33d17b228f44c6019cba1c949c047560bf090aa1943c0a3be8a6cf350a4",
+    "packages/shared/test/fixtures/promo-rules/legacy-modes.json": "9ba8897b80460a1bc34566701a07c0f93b05cadbd29b9df4851c8a37d7fa8a7d",
+    "packages/shared/test/fixtures/promo-rules/load.ts": "ff4ebb1181a94d62604681a5fb3a0ae04eafd910b8c1dea0a84882b7053ed0d3",
+    "packages/shared/test/fixtures/promo-rules/rules-bill.json": "401f8d9f4afc3d83743216442a0b63933b37f293e70acbcb10d0f73fb8da70db",
+    "packages/shared/test/fixtures/promo-rules/rules-breakdown.json": "35124948e1ac75e4d5ded38f3917b145572fe84004f9fd18eab0d339370e1be2",
+    "packages/shared/test/fixtures/promo-rules/rules-buy-get.json": "5faacc6f4e0e92266bb7b9f68a39f7efcdaa624fa4138080e9a942e8eb8a5a88",
+    "packages/shared/test/fixtures/promo-rules/rules-cup.json": "afa0afb6ac683f965c0cbc80e8715dbd26c8d74e22d6fc223395a3521300dc6e",
+    "packages/shared/test/fixtures/promo-rules/rules-groups.json": "62ba6331968ea6208c4b0fd846066a81644fac29fc97ebfd497885219cb2f318",
+    "packages/shared/test/fixtures/promo-rules/rules-tiers.json": "9b128aded60bd52366e90b029e251a86e54e136d718b8836b483b81d146f6edc",
+    "packages/shared/test/fixtures/promo-rules/rules-usage.json": "77ccf29ba5fb6283051813cd93efbbeb4b0c92ea26881dc1ddd14447c16cd6c4",
+    "packages/shared/test/fixtures/promo-rules/rules-windows.json": "cdff6dcdf7f58f5430d0e89128c71c28342609c9dcd7374cbf6603bffe6bb674",
+    "packages/shared/test/fixtures/promo-rules/sql-golden.json": "10656111d5484c4d4f62eedef8df05773b34ec7985e1ac51f39a87457ce8f903"
   }
 }

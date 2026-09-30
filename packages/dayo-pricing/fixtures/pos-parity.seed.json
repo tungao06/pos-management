@@ -1,13 +1,14 @@
 {
-  "dayo_commit": "4f359320b68e8b4cc7713e4c6b3123615f5cfa7d",
+  "dayo_commit": "7a90847c0a0e85c439082079c35119436a5f7f1d",
   "pricing_files_sha256": {
-    "packages/shared/src/money.ts": "9fc84edb98244b60454d0da8cad1abe8f17ff7dfefc503c7d4cde192b7e0e5c7",
-    "packages/shared/src/promotions.ts": "4850b98d5084e703bb1deb84ea4629253f510f37d6e0ab80161e2e5dab15ea11",
+    "packages/shared/src/money.ts": "ce25e987128a72bcfb558ab965968e8f6deb6139af3f12e217bc619566da7383",
+    "packages/shared/src/promotions.ts": "82edee23ff047dd987458baff8e34086853ac32f20204dc94a4405d67516703c",
+    "packages/shared/src/promoRule.ts": "13cf6f844112791b8047ed69c2e83f57661a32da5f81968cd7c61cee789e795f",
     "packages/shared/src/cost.ts": "83df8f024306ad4e4575d84e3b2b32b0ff1579d765138d76c4eacfb7160202a8",
-    "packages/shared/src/fmt.ts": "df31505296c9c99d2e1cc984d02a7fc86706b7ce668b7680554008fbc74334ac",
+    "packages/shared/src/fmt.ts": "5cc30701f428603550cbb2c93db1b3393d9d6f9c90c4eb764aeeae411f91e777",
     "packages/shared/src/shopSettings.ts": "7b1fdd25231fece6527bd82b938217ec94f0cb403e14071d4a4edb6edd5ec34d",
-    "packages/shared/src/types.ts": "10d4eb777fb4ca2f8174dd9bd07e5e40e3a10b2244a78bc025673c2b44b33db9",
-    "packages/shared/src/time.ts": "c634692b8b9c5dd30876cca15e94b3b642da7c685966db5017a34682c3cc1de1"
+    "packages/shared/src/types.ts": "1cb65434c7d17c70b157f8c2317a2285a8b77d19a62a5213757e43d108245001",
+    "packages/shared/src/time.ts": "4ffa2cada840210382d2de309f275673674d1fd8ec82a40dd081a0ac46861504"
   },
   "generated_at": "1970-01-01T00:00:00.000Z",
   "catalog_version": 42,
@@ -765,15 +766,15 @@
         "name": "ชาไทย ซื้อ 2 แถม 1",
         "startsOn": null,
         "endsOn": null,
-        "daysOfWeek": null,
-        "timeFrom": null,
-        "timeTo": null,
         "channelCodes": [],
         "requiresCode": false,
         "autoApply": true,
         "priority": 10,
-        "stackable": false,
         "isActive": true,
+        "daysOfWeek": null,
+        "timeFrom": null,
+        "timeTo": null,
+        "stackable": false,
         "kind": "buy_n_get_m",
         "params": {
           "buy_qty": 2,
@@ -789,6 +790,11 @@
         "name": "มัตฉะบ่าย ลด 15%",
         "startsOn": null,
         "endsOn": null,
+        "channelCodes": [],
+        "requiresCode": false,
+        "autoApply": true,
+        "priority": 20,
+        "isActive": true,
         "daysOfWeek": [
           1,
           2,
@@ -798,12 +804,7 @@
         ],
         "timeFrom": "14:00:00",
         "timeTo": "16:00:00",
-        "channelCodes": [],
-        "requiresCode": false,
-        "autoApply": true,
-        "priority": 20,
         "stackable": true,
-        "isActive": true,
         "kind": "item_discount",
         "params": {
           "menu_codes": [
@@ -818,15 +819,15 @@
         "name": "DAYO10 ลด 10% ทั้งบิล",
         "startsOn": null,
         "endsOn": null,
-        "daysOfWeek": null,
-        "timeFrom": null,
-        "timeTo": null,
         "channelCodes": [],
         "requiresCode": true,
         "autoApply": false,
         "priority": 30,
-        "stackable": true,
         "isActive": true,
+        "daysOfWeek": null,
+        "timeFrom": null,
+        "timeTo": null,
+        "stackable": true,
         "kind": "bill_discount",
         "params": {
           "min_subtotal": 200,
@@ -840,15 +841,15 @@
         "name": "โกโก้ + ชาไทย ฿70",
         "startsOn": null,
         "endsOn": null,
-        "daysOfWeek": null,
-        "timeFrom": null,
-        "timeTo": null,
         "channelCodes": [],
         "requiresCode": false,
         "autoApply": true,
         "priority": 5,
-        "stackable": false,
         "isActive": true,
+        "daysOfWeek": null,
+        "timeFrom": null,
+        "timeTo": null,
+        "stackable": false,
         "kind": "bundle",
         "params": {
           "items": [
@@ -874,17 +875,17 @@
         "name": "Grab โกโก้ลด 5 บาท",
         "startsOn": null,
         "endsOn": null,
-        "daysOfWeek": null,
-        "timeFrom": null,
-        "timeTo": null,
         "channelCodes": [
           "grab"
         ],
         "requiresCode": false,
         "autoApply": true,
         "priority": 15,
-        "stackable": true,
         "isActive": true,
+        "daysOfWeek": null,
+        "timeFrom": null,
+        "timeTo": null,
+        "stackable": true,
         "kind": "item_discount",
         "params": {
           "menu_codes": [
@@ -930,10 +931,20 @@
             "lineNo": 1,
             "unitPrice": 35,
             "discountPerCup": 5.25,
-            "lineTotal": 29.75
+            "lineTotal": 29.75,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -970,10 +981,20 @@
             "lineNo": 1,
             "unitPrice": 45,
             "discountPerCup": 6.75,
-            "lineTotal": 38.25
+            "lineTotal": 38.25,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "20 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1010,10 +1031,20 @@
             "lineNo": 1,
             "unitPrice": 85,
             "discountPerCup": 5.95,
-            "lineTotal": 79.05
+            "lineTotal": 79.05,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": "Excellent",
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1050,10 +1081,20 @@
             "lineNo": 1,
             "unitPrice": 65,
             "discountPerCup": 21.45,
-            "lineTotal": 43.55
+            "lineTotal": 43.55,
+            "promoBreakdown": null,
+            "menuCode": "Pink Milk",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1089,10 +1130,20 @@
             "lineNo": 1,
             "unitPrice": 43,
             "discountPerCup": 0,
-            "lineTotal": 43
+            "lineTotal": 43,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1128,10 +1179,20 @@
             "lineNo": 1,
             "unitPrice": 59,
             "discountPerCup": 0,
-            "lineTotal": 59
+            "lineTotal": 59,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "20 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1167,15 +1228,28 @@
             "lineNo": 1,
             "unitPrice": 59,
             "discountPerCup": 5,
-            "lineTotal": 108
+            "lineTotal": 108,
+            "promoBreakdown": null,
+            "menuCode": "Cocoa",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000005"
           }
         ],
         "promotionsApplied": [
           {
             "promotionId": "9f8e0000-0000-4000-8000-000000000005",
-            "discountAmount": 10
+            "discountAmount": 10,
+            "detail": {
+              "applyMode": "auto"
+            }
           }
-        ]
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1216,10 +1290,20 @@
             "lineNo": 1,
             "unitPrice": 35,
             "discountPerCup": 5,
-            "lineTotal": 60
+            "lineTotal": 60,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1255,15 +1339,28 @@
             "lineNo": 1,
             "unitPrice": 95,
             "discountPerCup": 0,
-            "lineTotal": 285
+            "lineTotal": 285,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "20 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": "Excellent",
+            "qty": 3,
+            "promotionId": null
           }
         ],
         "promotionsApplied": [
           {
             "promotionId": "9f8e0000-0000-4000-8000-000000000003",
-            "discountAmount": 28.5
+            "discountAmount": 28.5,
+            "detail": {
+              "applyMode": "code"
+            }
           }
-        ]
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1307,21 +1404,43 @@
             "lineNo": 1,
             "unitPrice": 45,
             "discountPerCup": 5.63,
-            "lineTotal": 39.37
+            "lineTotal": 39.37,
+            "promoBreakdown": null,
+            "menuCode": "Cocoa",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000004"
           },
           {
             "lineNo": 2,
             "unitPrice": 35,
             "discountPerCup": 4.37,
-            "lineTotal": 30.63
+            "lineTotal": 30.63,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000004"
           }
         ],
         "promotionsApplied": [
           {
             "promotionId": "9f8e0000-0000-4000-8000-000000000004",
-            "discountAmount": 10
+            "discountAmount": 10,
+            "detail": {
+              "sets": 1,
+              "applyMode": "auto"
+            }
           }
-        ]
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1357,21 +1476,44 @@
             "lineNo": 1,
             "unitPrice": 35,
             "discountPerCup": 35,
-            "lineTotal": 0
+            "lineTotal": 0,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000001"
           },
           {
             "lineNo": 2,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 105
+            "lineTotal": 105,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "promotionId": null
           }
         ],
         "promotionsApplied": [
           {
             "promotionId": "9f8e0000-0000-4000-8000-000000000001",
-            "discountAmount": 35
+            "discountAmount": 35,
+            "detail": {
+              "sets": 1,
+              "freeCount": 1,
+              "applyMode": "auto"
+            }
           }
-        ]
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1407,10 +1549,20 @@
             "lineNo": 1,
             "unitPrice": 120,
             "discountPerCup": 0,
-            "lineTotal": 120
+            "lineTotal": 120,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "oat",
+            "grade": "Premium",
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1442,7 +1594,11 @@
         "totalAmount": 0,
         "channelFeeAmount": 0,
         "lines": [],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": [
+          "⚠ โกโก้ ไม่มีตัวเลือกนมโอ๊ต"
+        ]
       }
     },
     {
@@ -1478,10 +1634,20 @@
             "lineNo": 1,
             "unitPrice": 85,
             "discountPerCup": 0,
-            "lineTotal": 85
+            "lineTotal": 85,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": "Excellent",
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1517,15 +1683,28 @@
             "lineNo": 1,
             "unitPrice": 85,
             "discountPerCup": 12.75,
-            "lineTotal": 72.25
+            "lineTotal": 72.25,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": "Excellent",
+            "qty": 1,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000002"
           }
         ],
         "promotionsApplied": [
           {
             "promotionId": "9f8e0000-0000-4000-8000-000000000002",
-            "discountAmount": 12.75
+            "discountAmount": 12.75,
+            "detail": {
+              "applyMode": "auto"
+            }
           }
-        ]
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1561,10 +1740,20 @@
             "lineNo": 1,
             "unitPrice": 85,
             "discountPerCup": 0,
-            "lineTotal": 85
+            "lineTotal": 85,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": "Excellent",
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1600,10 +1789,20 @@
             "lineNo": 1,
             "unitPrice": 85,
             "discountPerCup": 0,
-            "lineTotal": 85
+            "lineTotal": 85,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": "Excellent",
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1641,10 +1840,20 @@
             "lineNo": 1,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 105
+            "lineTotal": 105,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1686,10 +1895,20 @@
             "lineNo": 1,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 105
+            "lineTotal": 105,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1725,10 +1944,20 @@
             "lineNo": 1,
             "unitPrice": 95,
             "discountPerCup": 0,
-            "lineTotal": 285
+            "lineTotal": 285,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "20 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": "Excellent",
+            "qty": 3,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -1764,21 +1993,44 @@
             "lineNo": 1,
             "unitPrice": 35,
             "discountPerCup": 35,
-            "lineTotal": 0
+            "lineTotal": 0,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 33,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000001"
           },
           {
             "lineNo": 2,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 2310
+            "lineTotal": 2310,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 66,
+            "promotionId": null
           }
         ],
         "promotionsApplied": [
           {
             "promotionId": "9f8e0000-0000-4000-8000-000000000001",
-            "discountAmount": 1155
+            "discountAmount": 1155,
+            "detail": {
+              "sets": 33,
+              "freeCount": 33,
+              "applyMode": "auto"
+            }
           }
-        ]
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -2206,99 +2458,226 @@
             "lineNo": 1,
             "unitPrice": 35,
             "discountPerCup": 35,
-            "lineTotal": 0
+            "lineTotal": 0,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "0%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 40,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000001"
           },
           {
             "lineNo": 2,
             "unitPrice": 45,
             "discountPerCup": 0,
-            "lineTotal": 2250
+            "lineTotal": 2250,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "20 oz",
+            "sweetness": "25%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 50,
+            "promotionId": null
           },
           {
             "lineNo": 3,
             "unitPrice": 35,
             "discountPerCup": 35,
-            "lineTotal": 0
+            "lineTotal": 0,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 36,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000001"
           },
           {
             "lineNo": 4,
             "unitPrice": 45,
             "discountPerCup": 0,
-            "lineTotal": 2250
+            "lineTotal": 2250,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "20 oz",
+            "sweetness": "75%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 50,
+            "promotionId": null
           },
           {
             "lineNo": 5,
             "unitPrice": 35,
             "discountPerCup": 35,
-            "lineTotal": 0
+            "lineTotal": 0,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 30,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000001"
           },
           {
             "lineNo": 6,
             "unitPrice": 45,
             "discountPerCup": 0,
-            "lineTotal": 2250
+            "lineTotal": 2250,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "20 oz",
+            "sweetness": "0%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 50,
+            "promotionId": null
           },
           {
             "lineNo": 7,
             "unitPrice": 35,
             "discountPerCup": 35,
-            "lineTotal": 0
+            "lineTotal": 0,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "25%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 30,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000001"
           },
           {
             "lineNo": 8,
             "unitPrice": 45,
             "discountPerCup": 0,
-            "lineTotal": 2250
+            "lineTotal": 2250,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "20 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 50,
+            "promotionId": null
           },
           {
             "lineNo": 9,
             "unitPrice": 35,
             "discountPerCup": 35,
-            "lineTotal": 0
+            "lineTotal": 0,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "75%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 30,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000001"
           },
           {
             "lineNo": 10,
             "unitPrice": 45,
             "discountPerCup": 0,
-            "lineTotal": 2250
+            "lineTotal": 2250,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 50,
+            "promotionId": null
           },
           {
             "lineNo": 11,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 490
+            "lineTotal": 490,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 14,
+            "promotionId": null
           },
           {
             "lineNo": 12,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 700
+            "lineTotal": 700,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 20,
+            "promotionId": null
           },
           {
             "lineNo": 13,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 700
+            "lineTotal": 700,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "25%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 20,
+            "promotionId": null
           },
           {
             "lineNo": 14,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 700
+            "lineTotal": 700,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "75%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 20,
+            "promotionId": null
           },
           {
             "lineNo": 15,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 350
+            "lineTotal": 350,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "0%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 10,
+            "promotionId": null
           }
         ],
         "promotionsApplied": [
           {
             "promotionId": "9f8e0000-0000-4000-8000-000000000001",
-            "discountAmount": 5810
+            "discountAmount": 5810,
+            "detail": {
+              "sets": 166,
+              "freeCount": 166,
+              "applyMode": "auto"
+            }
           }
-        ]
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -2331,7 +2710,11 @@
         "totalAmount": 0,
         "channelFeeAmount": 0,
         "lines": [],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": [
+          "\"Thai Tea\" ให้ฟรีต้องมีหมายเหตุ (ADR-0023)"
+        ]
       }
     },
     {
@@ -2369,10 +2752,20 @@
             "lineNo": 1,
             "unitPrice": 35,
             "discountPerCup": 35,
-            "lineTotal": 0
+            "lineTotal": 0,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -2408,10 +2801,20 @@
             "lineNo": 1,
             "unitPrice": 35,
             "discountPerCup": 0,
-            "lineTotal": 35
+            "lineTotal": 35,
+            "promoBreakdown": null,
+            "menuCode": "Thai Tea",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -2447,10 +2850,20 @@
             "lineNo": 1,
             "unitPrice": 45,
             "discountPerCup": 0,
-            "lineTotal": 45
+            "lineTotal": 45,
+            "promoBreakdown": null,
+            "menuCode": "Cocoa",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": null
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -2486,15 +2899,28 @@
             "lineNo": 1,
             "unitPrice": 59,
             "discountPerCup": 5,
-            "lineTotal": 54
+            "lineTotal": 54,
+            "promoBreakdown": null,
+            "menuCode": "Cocoa",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000005"
           }
         ],
         "promotionsApplied": [
           {
             "promotionId": "9f8e0000-0000-4000-8000-000000000005",
-            "discountAmount": 5
+            "discountAmount": 5,
+            "detail": {
+              "applyMode": "auto"
+            }
           }
-        ]
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -2521,19 +2947,37 @@
       "expected": {
         "ok": true,
         "itemsSubtotal": 85,
-        "itemsDiscount": 0,
+        "itemsDiscount": 12.75,
         "billDiscountAmount": 0,
-        "totalAmount": 85,
+        "totalAmount": 72.25,
         "channelFeeAmount": 0,
         "lines": [
           {
             "lineNo": 1,
             "unitPrice": 85,
-            "discountPerCup": 0,
-            "lineTotal": 85
+            "discountPerCup": 12.75,
+            "lineTotal": 72.25,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": "Excellent",
+            "qty": 1,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000002"
           }
         ],
-        "promotionsApplied": []
+        "promotionsApplied": [
+          {
+            "promotionId": "9f8e0000-0000-4000-8000-000000000002",
+            "discountAmount": 12.75,
+            "detail": {
+              "applyMode": "auto"
+            }
+          }
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -2569,15 +3013,28 @@
             "lineNo": 1,
             "unitPrice": 85,
             "discountPerCup": 12.75,
-            "lineTotal": 72.25
+            "lineTotal": 72.25,
+            "promoBreakdown": null,
+            "menuCode": "Matcha Latte",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": "Excellent",
+            "qty": 1,
+            "promotionId": "9f8e0000-0000-4000-8000-000000000002"
           }
         ],
         "promotionsApplied": [
           {
             "promotionId": "9f8e0000-0000-4000-8000-000000000002",
-            "discountAmount": 12.75
+            "discountAmount": 12.75,
+            "detail": {
+              "applyMode": "auto"
+            }
           }
-        ]
+        ],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     },
     {
@@ -2612,7 +3069,9 @@
         "totalAmount": 0,
         "channelFeeAmount": 0,
         "lines": [],
-        "promotionsApplied": []
+        "promotionsApplied": [],
+        "manualPromotionReasonRequired": false,
+        "warnings": []
       }
     }
   ],

@@ -39,8 +39,10 @@ export const KNOWN_DEFER_REASONS = ['PARENT_PENDING', 'BUSY', 'CLOCK_AHEAD', 'UN
  * spec §4.10 · §13.8 R5-2: the fixed machine prefixes of `detail` (`data_conflict:` = the INVALID verdicts of the S5 class:
  * Z counted ≠ the count in dayo · z_no above max + 50 — dayo 0066:495-498, 0066:519-523). dayo phase 1 writes them on the
  * shift kinds only; on order/order_void rows they are phase 2 (0066:5 · preflight D3) — no prefix = the block-2 rule of that reason.
+ * `reason_required:` (plan 10 §0.2 · dayo 0069:1098 via dayo_pos_map_error 0074:2555-2560): an `order` row whose manual
+ * promotion made the bill ฿0 without a reason — a tablet bug (it blocks before payment), handled as the INVALID it is.
  */
-export const DETAIL_PREFIXES = ['scope:', 'role:', 'rule:', 'exists:', 'off_catalog_exists:', 'receipt_taken:', 'key_changed:', 'counted:', 'z_no_taken:', 'data_conflict:'] as const
+export const DETAIL_PREFIXES = ['scope:', 'role:', 'rule:', 'exists:', 'off_catalog_exists:', 'receipt_taken:', 'key_changed:', 'counted:', 'z_no_taken:', 'data_conflict:', 'reason_required:'] as const
 export type DetailPrefix = (typeof DETAIL_PREFIXES)[number]
 /** spec §4.10: the tablet decides from this fixed prefix only — never from the Thai text after it. */
 export function detailPrefix(detail: string | null | undefined): DetailPrefix | null {
@@ -117,19 +119,89 @@ const MilkOption = z.looseObject({ code: MilkCodeSchema, ingredientId: z.string(
 const GradeOption = z.looseObject({ code: z.string().min(1), ingredientId: z.string().nullable(), multiplier: z.number().finite().nullable(), priceAdd: z.number().finite(), isDefault: z.boolean(), aliases: z.array(z.string()) })
 const Channel = z.looseObject({ code: z.string().min(1), name: z.string(), aliases: z.array(z.string()), priceMarkupPct: z.number().finite(), priceAddBaht: z.number().finite(), rounding: z.enum(['ceil_baht', 'none']), feePct: z.number().finite(), defaultPaymentMethodCode: z.string().nullable() })
 const PaymentMethod = z.looseObject({ code: z.string().min(1), name: z.string(), aliases: z.array(z.string()) })
-const promoCommon = {
-  id: z.string(), code: z.string().nullable(), name: z.string(),
-  startsOn: Ymd.nullable().exactOptional(), endsOn: Ymd.nullable().exactOptional(), daysOfWeek: z.array(z.number().int().min(0).max(6)).nullable().exactOptional(),
-  timeFrom: PromoTime.nullable().exactOptional(), timeTo: PromoTime.nullable().exactOptional(), channelCodes: z.array(z.string()).nullable().exactOptional(),
-  requiresCode: z.boolean(), autoApply: z.boolean(), priority: z.number().finite(), stackable: z.boolean(), isActive: z.boolean(),
-}
 const codes = z.array(z.string())
-const Promotion = z.discriminatedUnion('kind', [
+// ── promotion rules (dayo ADR-0071/0072 · types.ts:179-301 at f4cda56) ──────────────────────────────────────────────────
+// The SHAPE of every reward of rule versions 1–2, so the parsed type is dayo's own. The MEANING (ranges, 2–5 tiers, one
+// value key per tier, keys a reward may not carry, byte limits …) is vendor validatePromoRule/validateTimeWindows' (T3):
+// every object here is loose, so an unknown key is KEPT for the validator to refuse — z.object would strip it silently
+// and the tablet would price a rule dayo reads differently. Required keys and known keys of the wrong type fail here.
+/** Rule versions the contract knows the shape of = PROMO_RULE_VERSIONS of promoRule.ts:45 at f4cda56. */
+export const CONTRACT_PROMO_RULE_VERSIONS = [1, 2] as const
+export const PROMO_TEMPLATES = ['buy_n_get_m', 'item_discount', 'bill_discount', 'bundle', 'buy_a_get_b', 'nth_cup', 'fixed_price', 'tiered_item', 'tiered_bill', 'custom'] as const
+const Num = z.number().finite()
+const ApplyTo = z.enum(['cup', 'option'])
+export const PromoTargetSchema = z.looseObject({
+  menus: codes.exactOptional(), categories: codes.exactOptional(),
+  variants: z.array(z.looseObject({ menu: z.string(), size: z.string(), sweetness: SweetnessCode.exactOptional() })).exactOptional(),
+  sizes: codes.exactOptional(), options: z.looseObject({ milk: codes.exactOptional(), grade: codes.exactOptional() }).exactOptional(),
+  exclude_menus: codes.exactOptional(),
+})
+const GetDiscount = z.union([z.looseObject({ percent: Num }), z.looseObject({ baht: Num }), z.looseObject({ fixed_price: Num })])
+const CupTier = z.union([z.looseObject({ min: Num, percent: Num }), z.looseObject({ min: Num, baht: Num }), z.looseObject({ min: Num, fixed_price: Num })])
+const BillTier = z.union([z.looseObject({ min: Num, percent: Num }), z.looseObject({ min: Num, baht: Num })])
+const MaxSets = Num.nullable().exactOptional()
+export const PromoRewardSchema = z.discriminatedUnion('type', [
+  z.looseObject({ type: z.literal('percent'), percent: Num, apply_to: ApplyTo.exactOptional() }),
+  z.looseObject({ type: z.literal('amount'), baht: Num, apply_to: ApplyTo.exactOptional() }),
+  z.looseObject({ type: z.literal('fixed_price'), price: Num, apply_to: ApplyTo.exactOptional() }),
+  z.looseObject({
+    type: z.literal('buy_get'), buy: Num, get: Num, get_target: PromoTargetSchema.nullable().exactOptional(), get_discount: GetDiscount,
+    get_pick: z.enum(['cheapest', 'most_expensive']).exactOptional(), max_sets: MaxSets,
+  }),
+  z.looseObject({ type: z.literal('bundle'), items: z.array(z.looseObject({ target: PromoTargetSchema, qty: Num })), price: Num, max_sets: MaxSets }),
+  z.looseObject({ type: z.literal('bill_percent'), percent: Num }),
+  z.looseObject({ type: z.literal('bill_amount'), baht: Num }),
+  z.looseObject({ type: z.literal('tiered'), basis: z.enum(['qty', 'amount']), apply_to: ApplyTo.exactOptional(), tiers: z.array(CupTier) }),
+  z.looseObject({ type: z.literal('bill_tiers'), basis: z.enum(['subtotal', 'qty']), tiers: z.array(BillTier) }),
+])
+/** `promotions.rule` (types.ts:266-282). `v` above what the contract knows = the whole catalog is refused (ruling R12). */
+export const PromoRuleSchema = z.looseObject({
+  v: z.union([z.literal(1), z.literal(2)]), scope: z.enum(['cup', 'bill']), target: PromoTargetSchema.exactOptional(), reward: PromoRewardSchema,
+  min_subtotal: Num.nullable().exactOptional(), cap_baht: Num.nullable().exactOptional(), rounding: z.enum(['round2', 'floor_baht']).exactOptional(),
+  stop_group: z.boolean().exactOptional(), manual_bill: z.enum(['yield', 'combine']).exactOptional(),
+})
+/** One time window (types.ts:285-289): days [] = every day · from/to both null = all day · from > to = across midnight. */
+export const TimeWindowSchema = z.looseObject({ days: z.array(Num), from: z.string().nullable(), to: z.string().nullable() })
+/** promotion_groups (types.ts:292-298 · 0071:4163): E1 sends every group, whatever promo_rule_version (docs/API.md:181). */
+export const PromotionGroupSchema = z.looseObject({ code: z.string().min(1), name: z.string(), sortOrder: Num, stackMode: z.enum(['separate', 'stack']), isActive: z.boolean().exactOptional() })
+export type PromotionGroupParsed = z.infer<typeof PromotionGroupSchema>
+
+/** Keys every promotion carries (dayo_promo_json, 0074:163-185). requiresCode/autoApply = generated columns, always sent. */
+const promoBase = {
+  id: z.string(), code: z.string().nullable(), name: z.string(),
+  startsOn: Ymd.nullable().exactOptional(), endsOn: Ymd.nullable().exactOptional(), channelCodes: z.array(z.string()).nullable().exactOptional(),
+  requiresCode: z.boolean(), autoApply: z.boolean(), priority: z.number().finite(), isActive: z.boolean(),
+  /** ADR-0070 source of truth (0069) — none on dayo before 0069 (then promoApplyMode() reads requiresCode/autoApply). */
+  applyMode: z.enum(['auto', 'code', 'manual']).exactOptional(),
+  /** ADR-0072 rule 2: display only, sent when promo_rule_version ≥ 2 (0074:201) — the tablet never counts uses. */
+  usageLimitTotal: z.number().int().nullable().exactOptional(), usageLimitPerDay: z.number().int().nullable().exactOptional(),
+  summaryTh: z.string().nullable().exactOptional(),
+}
+const promoCommon = {
+  ...promoBase,
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).nullable().exactOptional(),
+  timeFrom: PromoTime.nullable().exactOptional(), timeTo: PromoTime.nullable().exactOptional(), stackable: z.boolean(),
+  // the rule fields a legacy promotion also carries when rule.v ≤ the asked version (0074:198); none on older dayo
+  template: z.enum(PROMO_TEMPLATES).exactOptional(), rule: PromoRuleSchema.nullable().exactOptional(),
+  timeWindows: z.array(TimeWindowSchema).nullable().exactOptional(), groupCode: z.string().nullable().exactOptional(),
+}
+/** A promotion in the old shape (ADR-0030): kind + params + stackable — possibly with the rule fields too. */
+const LegacyPromotion = z.discriminatedUnion('kind', [
   z.looseObject({ ...promoCommon, kind: z.literal('buy_n_get_m'), params: z.looseObject({ buy_qty: z.number().int().min(1), get_qty: z.number().int().min(1), menu_codes: codes, max_sets: z.number().int().exactOptional() }) }),
   z.looseObject({ ...promoCommon, kind: z.literal('item_discount'), params: z.looseObject({ menu_codes: codes, amount_baht: z.number().finite().exactOptional(), percent: z.number().finite().exactOptional() }) }),
   z.looseObject({ ...promoCommon, kind: z.literal('bill_discount'), params: z.looseObject({ min_subtotal: z.number().finite().exactOptional(), amount_baht: z.number().finite().exactOptional(), percent: z.number().finite().exactOptional(), max_amount: z.number().finite().exactOptional() }) }),
   z.looseObject({ ...promoCommon, kind: z.literal('bundle'), params: z.looseObject({ items: z.array(z.looseObject({ menu_codes: codes, qty: z.number().int().min(1) })).min(1), bundle_price: z.number().finite(), max_sets: z.number().int().exactOptional() }) }),
 ])
+/**
+ * A promotion dayo cannot turn back into the old shape (F3 · 0074:199): no kind, params, daysOfWeek, timeFrom, timeTo or
+ * stackable — the rule, its time windows and its group are all there is. `kind` present at all = not this shape.
+ */
+const RulePromotion = z.looseObject({
+  ...promoBase, kind: z.never().exactOptional(),
+  template: z.enum(PROMO_TEMPLATES), rule: PromoRuleSchema, timeWindows: z.array(TimeWindowSchema), groupCode: z.string().min(1),
+})
+export const Promotion = z.union([RulePromotion, LegacyPromotion])
+export type PromotionParsed = z.infer<typeof Promotion>
 const SaleSettings = z.looseObject({
   shopName: z.string().exactOptional(), defaultSize: SizeCode.exactOptional(), defaultSweetness: SweetnessCode.exactOptional(), defaultChannelCode: z.string().exactOptional(),
   defaultMilk: MilkCodeSchema.exactOptional(), maxQtyPerLine: z.number().int().min(1).exactOptional(), backdateDays: z.number().int().exactOptional(), recentOrdersCount: z.number().int().exactOptional(),
@@ -146,6 +218,8 @@ export const PosOrderCatalog = z.looseObject({
   sizes: z.array(CupSize),
   variants: z.array(Variant), ingredients: z.record(z.string(), Ingredient), bases: z.record(z.string(), Base),
   milkOptions: z.array(MilkOption), gradeOptions: z.array(GradeOption), channels: z.array(Channel), paymentMethods: z.array(PaymentMethod), promotions: z.array(Promotion),
+  /** ADR-0071 · none on dayo before 0071 (= one `main` group, separate). A groupCode missing from it is T3's check. */
+  promotionGroups: z.array(PromotionGroupSchema).exactOptional(),
 })
 export type PosOrderCatalogParsed = z.infer<typeof PosOrderCatalog>
 
@@ -167,9 +241,15 @@ export const ClientInfo = z.looseObject({
    */
   last_z_no: z.number().int().nullable().optional(), last_z_hash: z.string().nullable().optional(), last_z_until: z.string().nullable().optional(),
 })
+/**
+ * E1 `supported_fields` as received (plan 10 §0.2 · F2): since dayo 0071 it also carries `promotion_rule_versions` as
+ * NUMBERS ([1] at 0071:3414, [1, 2] at 0073:1715 — docs/API.md:97), in changed AND unchanged answers. A value of any shape
+ * under any key must never fail E1 — that would throw away the staff list too (ruling R12). `supportedOf` reads it.
+ */
+export const SupportedFieldsRaw = z.record(z.string(), z.unknown())
 const e1Common = {
   catalog_version: z.number().int().min(1), server_time: IsoReceived, pricing: PricingInfo,
-  supported_kinds: z.array(z.string()), supported_fields: z.record(z.string(), z.array(z.string())),
+  supported_kinds: z.array(z.string()), supported_fields: SupportedFieldsRaw,
 }
 export const PosCatalogUnchanged = z.looseObject({ changed: z.literal(false), ...e1Common })
 export const PosCatalogChanged = z.looseObject({ changed: z.literal(true), ...e1Common, client: ClientInfo, staff: z.array(StaffEntry), catalog: PosOrderCatalog })
@@ -196,6 +276,42 @@ export const OrderLineData = z.strictObject({
 }).refine((l) => l.discount_baht == null || l.discount_percent == null, 'not both discount_baht and discount_percent')
 const BillDiscountData = z.strictObject({ baht: Baht.optional(), percent: z.number().min(0).max(100).optional(), reason: Text200.nullable().optional() })
   .refine((b) => (b.baht === undefined) !== (b.percent === undefined), 'exactly one of baht or percent')
+/** dayo 0069 manual_promotion_ids: ≤ 20 per bill after de-duplication (dayo_draft_manual_promotions → DY422 too_large). */
+export const MAX_MANUAL_PROMOTIONS = 20
+/**
+ * What dayo refuses in manual_promotion_reason ON TOP of dayo_pos_is_text (0069 dayo_pos_order · dayo_draft_manual_reason):
+ * C1 controls, zero-width, bidi override/isolate, line/paragraph separators — the frozen reason shows on web, bot and receipt.
+ */
+const MANUAL_REASON_BANNED: readonly (readonly [number, number])[] = [[0x7f, 0x9f], [0x200b, 0x200f], [0x202a, 0x202e], [0x2028, 0x2029], [0x2066, 0x2069]]
+const hasBannedReasonChar = (s: string): boolean => [...s].some((ch) => { const c = ch.codePointAt(0) ?? 0; return MANUAL_REASON_BANNED.some(([lo, hi]) => c >= lo && c <= hi) })
+/**
+ * dayo_trim_ws (0069:28-38): the characters dayo strips from both ends — \t\n\v\f\r, space, U+00A0, U+1680, U+2000–U+200A,
+ * U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF (= JS String.prototype.trim, written out so no engine can differ).
+ * All are BMP, so a UTF-16 unit never matches half a surrogate pair.
+ */
+const DAYO_TRIM_WS: readonly (readonly [number, number])[] = [
+  [0x09, 0x0d], [0x20, 0x20], [0xa0, 0xa0], [0x1680, 0x1680], [0x2000, 0x200a], [0x2028, 0x2029], [0x202f, 0x202f], [0x205f, 0x205f], [0x3000, 0x3000], [0xfeff, 0xfeff],
+]
+const isDayoWs = (unit: number): boolean => DAYO_TRIM_WS.some(([lo, hi]) => unit >= lo && unit <= hi)
+/**
+ * The text dayo keeps after trimming (dayo_trim_ws) — the ONE trim for manual_promotion_reason: the tablet freezes
+ * `trimWs(typed)`, so its reason equals what dayo stores byte for byte (dayo_draft_manual_reason, 0069:322-345).
+ */
+export function trimWs(s: string): string {
+  let start = 0
+  let end = s.length
+  while (start < end && isDayoWs(s.charCodeAt(start))) start++
+  while (end > start && isDayoWs(s.charCodeAt(end - 1))) end--
+  return s.slice(start, end)
+}
+/**
+ * 1–200 code points, one line, no invisible or direction-changing characters (dayo 0069 · docs/API.md:308) — and already
+ * trimmed with trimWs (fix round 1): a reason dayo trims down to nothing (NBSP, U+3000, U+FEFF …) would freeze a paid ฿0
+ * bill that dayo then rejects `reason_required:`; one with edge whitespace would freeze text dayo stores differently.
+ */
+export const ManualPromotionReason = Text200
+  .refine((s) => !hasBannedReasonChar(s), 'no C1, zero-width, bidi or line/paragraph separator characters')
+  .refine((s) => trimWs(s) !== '' && trimWs(s) === s, 'must be trimWs(reason): not blank, no whitespace at either end (dayo_trim_ws)')
 export const OrderRowData = z.strictObject({
   pos_order_id: Uuid, receipt_no: z.string().regex(RECEIPT_NO_RE), queue_no: z.number().int().min(1).max(9999),
   sale_date: Ymd, sold_at: IsoSent, channel: posText(100), payment: posText(100),
@@ -204,10 +320,18 @@ export const OrderRowData = z.strictObject({
   promo_code: posText(100).nullable(), skip_promotion_ids: z.array(Uuid), no_promotions: z.boolean(),
   totals: z.strictObject({ items_subtotal: Baht, items_discount: Baht, bill_discount: Baht, total: Baht }),
   note: Text200.nullable(),
+  /**
+   * Plan 10 §0.2 (dayo 0069:1484-1632 · ADR-0070): BOTH keys only when the cart picked ≥ 1 manual promotion, so a row
+   * without one stays byte-identical to the row of before — dayo that does not list them holds it `UNSUPPORTED`.
+   */
+  manual_promotion_ids: z.array(Uuid).min(1).max(MAX_MANUAL_PROMOTIONS).exactOptional(),
+  manual_promotion_reason: ManualPromotionReason.nullable().exactOptional(),
 }).superRefine((d, ctx) => {
   // sold_at may have failed IsoSent already: bangkokDateOf would throw on it, and safeParse must answer, never throw
   if (typeof d.sold_at === 'string' && isInstant(d.sold_at) && bangkokDateOf(d.sold_at) !== d.sale_date) ctx.addIssue({ code: 'custom', path: ['sale_date'], message: 'sale_date must be the Thai date of sold_at' })
   if (Array.isArray(d.lines) && d.lines.reduce((a, l) => a + (typeof l?.qty === 'number' ? l.qty : 0), 0) > 500) ctx.addIssue({ code: 'custom', path: ['lines'], message: 'more than 500 cups' })
+  if (isArr(d.manual_promotion_ids) && hasDuplicate(d.manual_promotion_ids)) ctx.addIssue({ code: 'custom', path: ['manual_promotion_ids'], message: 'each manual promotion once (de-duplicate before sending)' })
+  if ('manual_promotion_reason' in d && !isArr(d.manual_promotion_ids)) ctx.addIssue({ code: 'custom', path: ['manual_promotion_reason'], message: 'manual_promotion_reason only with manual_promotion_ids' })
 })
 export type OrderRowData = z.infer<typeof OrderRowData>
 export const OrderVoidRowData = z.strictObject({ pos_order_id: Uuid, voided_at: IsoSent, staff_id: Uuid, approved_by: Uuid.nullable(), reason: Text200 })
@@ -403,8 +527,27 @@ export function fieldsUsed(data: Record<string, unknown>): string[] {
   }
   return [...out].sort()
 }
-export type Supported = { kinds: readonly string[]; fields: Readonly<Record<string, readonly string[]>> }
-export function isRowSupported(kind: string, data: Record<string, unknown>, s: Supported): boolean {
+/**
+ * What E1 says dayo takes (spec §4.4 rule 10 · plan 10 §0.2): `fields` = the push field lists per kind; `promoRuleVersions`
+ * = the promotion rule versions dayo understands (`[]` = dayo before 0071, which has no rule engine).
+ */
+export type Supported = { kinds: readonly string[]; fields: Readonly<Record<string, readonly string[]>>; promoRuleVersions: readonly number[] }
+/** The one key of `supported_fields` that is not a push field list (0071:3414 — "not a field of dayo_pos_supported()", docs/API.md:184). */
+export const PROMO_RULE_VERSIONS_KEY = 'promotion_rule_versions'
+const isStringList = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string')
+/**
+ * Reads E1 `supported_kinds` + raw `supported_fields`: `fields` = only the values that are string[] (anything else is
+ * dropped, so a row using such a kind is held — never sent on a guess); `promoRuleVersions` = the integers ≥ 0 of
+ * `promotion_rule_versions`, once each, ascending (anything else there = none). Copies — never shares the input's arrays.
+ */
+export function supportedOf(kinds: readonly string[], raw: Readonly<Record<string, unknown>>): Supported {
+  const fields: Record<string, readonly string[]> = {}
+  for (const [k, v] of Object.entries(raw)) if (k !== PROMO_RULE_VERSIONS_KEY && isStringList(v)) fields[k] = [...v]
+  const listed = raw[PROMO_RULE_VERSIONS_KEY]
+  const versions = Array.isArray(listed) ? listed.filter((x): x is number => Number.isSafeInteger(x) && x >= 0) : []
+  return { kinds: [...kinds], fields, promoRuleVersions: [...new Set(versions)].sort((a, b) => a - b) }
+}
+export function isRowSupported(kind: string, data: Record<string, unknown>, s: Pick<Supported, 'kinds' | 'fields'>): boolean {
   if (!s.kinds.includes(kind)) return false
   const allowed = new Set(s.fields[kind] ?? [])
   return fieldsUsed(data).every((f) => allowed.has(f))
@@ -427,7 +570,7 @@ export const BLOCK3_PHASE2_SUPPORTED_FIELDS = {
 export const BLOCK3_SUPPORTED_FIELDS = { ...BLOCK3_PHASE1_SUPPORTED_FIELDS, ...BLOCK3_PHASE2_SUPPORTED_FIELDS } as const
 
 // ── parity file = pos-parity.json of dayo scripts/export-pos-parity.ts:230-238 (spec §5.2 layer B → C) ─────────────────
-// {dayo_commit, generated_at, pricing_files_sha256, catalog, cases:[{spec, note, draft, expected}]} — no catalog_version, cases named by `spec`.
+// {dayo_commit, generated_at, pricing_files_sha256, catalog, cases:[{spec, note, draft, expected}], catalog_version (written since 7a90847), rule_fixtures} — cases named by `spec`.
 // draft = dayo's own OrderDraft (camelCase); expected = dayo's QuoteResult in baht (ParityMoney reads the money part).
 const DraftLine = z.looseObject({
   code: z.string(), size: SizeCode.nullable().optional(), sweetness: SweetnessCode.nullable().optional(), milk: MilkCodeSchema.nullable().optional(),
@@ -438,22 +581,46 @@ export const ParityDraft = z.looseObject({
   saleDate: Ymd, saleTime: HHMM.optional(), channelCode: z.string(), paymentCode: z.string().nullable().optional(), lines: z.array(DraftLine).min(1),
   billDiscountBaht: z.number().nullable().optional(), billDiscountPercent: z.number().nullable().optional(), billDiscountReason: z.string().nullable().optional(),
   promoCode: z.string().nullable().optional(), skipPromotionIds: z.array(z.string()).optional(),
+  /** ADR-0070 (types.ts:401-404) — dayo's export writes [] / null when none. */
+  manualPromotionIds: z.array(z.string()).optional(), manualPromotionReason: z.string().nullable().optional(),
+  /** ADR-0072 rule 2 (types.ts:347-350, 406): counted by dayo only (rules-usage.json · ruling R3) — the tablet never sends it. */
+  exhaustedPromotions: z.array(z.looseObject({ id: z.string(), scope: z.enum(['total', 'day']) })).optional(),
 })
 export type ParityDraft = z.infer<typeof ParityDraft>
+const OptionAddEntry = z.looseObject({ code: z.string(), add: z.number(), paid: z.number() })
 export const ParityMoney = z.looseObject({
   ok: z.boolean(), itemsSubtotal: z.number(), itemsDiscount: z.number(), billDiscountAmount: z.number(), totalAmount: z.number(), channelFeeAmount: z.number(),
-  lines: z.array(z.looseObject({ lineNo: z.number().int(), unitPrice: z.number(), discountPerCup: z.number(), lineTotal: z.number() })),
+  lines: z.array(z.looseObject({
+    lineNo: z.number().int(), unitPrice: z.number(), discountPerCup: z.number(), lineTotal: z.number(),
+    /** types.ts:456-477 — only on cups with a priced option / more than one promotion; else null or absent. */
+    optionAdds: z.looseObject({ milk: OptionAddEntry.optional(), grade: OptionAddEntry.optional() }).nullable().optional(),
+    promoBreakdown: z.array(z.looseObject({ promotionId: z.string(), amount: z.number() })).nullable().optional(),
+  })),
   promotionsApplied: z.array(z.looseObject({ promotionId: z.string(), discountAmount: z.number() })),
+  /** ADR-0070 rule 4 (types.ts:505) — exports from before 0069 have none. */
+  manualPromotionReasonRequired: z.boolean().optional(),
 })
 export type ParityMoney = z.infer<typeof ParityMoney>
 export const ParityCase = z.looseObject({ spec: z.string().min(1), note: z.string().optional(), draft: ParityDraft, expected: ParityMoney })
 export type ParityCase = z.infer<typeof ParityCase>
+/**
+ * One file of dayo's shared golden set `packages/shared/test/fixtures/promo-rules/rules-*.json` priced by dayo's database
+ * (F8 · export-pos-parity.ts:433-496 as first seen at f4cda56; pinned at 7a90847): the catalog is `api_pos_catalog` at the highest rule version.
+ */
+export const ParityRuleCase = z.looseObject({ name: z.string().min(1), draft: ParityDraft, expected: ParityMoney })
+export type ParityRuleCase = z.infer<typeof ParityRuleCase>
+export const ParityRuleFixture = z.looseObject({
+  fixture: z.string().min(1), description: z.string(), catalog_version: z.number().int(), catalog: PosOrderCatalog, cases: z.array(ParityRuleCase).min(1),
+})
+export type ParityRuleFixture = z.infer<typeof ParityRuleFixture>
 export const ParityFile = z.looseObject({
   dayo_commit: z.string(), pricing_files_sha256: z.record(z.string(), z.string()), generated_at: z.string(),
-  /** dayo's export does not write it yet. */
+  /** The 7a90847 export writes it (31 in the pinned file); kept optional so exports from before that still parse. */
   catalog_version: z.number().int().optional(),
   catalog: PosOrderCatalog,
   cases: z.array(ParityCase).min(1),
+  /** dayo f4cda56 and later, incl. the pinned 7a90847 (F8) — none in older exports. */
+  rule_fixtures: z.array(ParityRuleFixture).exactOptional(),
 })
 
 // ── fixtures/parity/pos-shift-cash-parity.json (spec §4.10 "dayo คิดเอง" · D84 — POS owns it; hand-computed, never edited to

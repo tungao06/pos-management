@@ -13,7 +13,7 @@ const CATALOG = {
   promotions: [{ id: 'p1', code: null, name: 'โปรทดสอบ', kind: 'item_discount', requiresCode: false, autoApply: true, priority: 1, stackable: false, isActive: true, params: {} }],
 } as unknown as PosOrderCatalog
 
-const BASE: CartState = { orderId: 'o1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, lines: [] }
+const BASE: CartState = { orderId: 'o1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: '', lines: [] }
 
 function Probe(): JSX.Element {
   const { state } = useCart()

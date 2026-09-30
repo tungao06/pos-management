@@ -1,6 +1,6 @@
 import fc from 'fast-check'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { computeOrder, type CupSizeEntry, type OrderCatalog, type OrderDraft } from '@dayo/dayo-pricing'
+import { computeOrder, normPromoCode, type CupSizeEntry, type OrderCatalog, type OrderDraft } from '@dayo/dayo-pricing'
 import { PosOrderCatalog as PosOrderCatalogSchema, type PosOrderCatalogParsed } from '@dayo/contracts'
 import { loadRichCatalog } from '@dayo/contracts/fixture-files'
 import { edgeBahtToSatang } from '../src/money-edge.js'
@@ -11,7 +11,7 @@ import {
 import { POS_CATALOG } from './fixtures/pos-catalog.js'
 
 const line = (over: Partial<CartLineDraft> = {}): CartLineDraft => ({ code: 'Thai Tea', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1, free: false, discountSatang: null, discountPercent: null, discountReason: null, ...over })
-const cart = (lines: CartLineDraft[], over: Partial<CartDraft> = {}): CartDraft => ({ channelCode: 'store', paymentCode: 'cash', lines, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, ...over })
+const cart = (lines: CartLineDraft[], over: Partial<CartDraft> = {}): CartDraft => ({ channelCode: 'store', paymentCode: 'cash', lines, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: null, ...over })
 const FRI_1030 = '2026-09-25T03:30:00.000Z' // Friday 10:30 Bangkok
 const REFUSE = (f: () => unknown, code: CartError['code']): void => {
   try { f(); expect.unreachable() } catch (e) { expect(e).toBeInstanceOf(CartError); expect((e as CartError).code).toBe(code) }
@@ -19,7 +19,10 @@ const REFUSE = (f: () => unknown, code: CartError['code']): void => {
 
 describe('toPricingCatalog (the E1 catalog as dayo\'s OrderCatalog)', () => {
   it('the parsed contract type satisfies the POS catalog type with no cast, sizes included', () => {
+    // both promotion shapes (legacy kind + params, and rule-only) assign to f4cda56's Promotion with no cast (plan 10 T3)
     expectTypeOf<PosOrderCatalogParsed>().toExtend<PosOrderCatalog>()
+    expectTypeOf<PosOrderCatalogParsed['promotions'][number]>().toExtend<OrderCatalog['promotions'][number]>()
+    expectTypeOf<NonNullable<PosOrderCatalogParsed['promotionGroups']>[number]>().toExtend<NonNullable<OrderCatalog['promotionGroups']>[number]>()
     expectTypeOf<PosOrderCatalog>().toExtend<Omit<OrderCatalog, 'ingredients' | 'milkOptions' | 'gradeOptions'>>()
     // the only other widening: an option's ingredientId/multiplier may be null (dayo menu_options columns are nullable)
     expectTypeOf<PosOrderCatalog['milkOptions'][number]['ingredientId']>().toEqualTypeOf<string | null>()
@@ -171,7 +174,7 @@ describe('priceCart', () => {
           billDiscountBaht: bill?.kind === 'satang' ? bill.satang / 100 : null,
           billDiscountPercent: bill?.kind === 'percent' ? bill.percent : null,
           billDiscountReason: bill?.reason ?? null,
-          promoCode,
+          promoCode: promoCode === null ? null : normPromoCode(promoCode), // plan 10 §0.2: the engine gets the normPromoCode form
           skipPromotionIds: noPromotions ? promotionIds : skip, // spec §4.5: no_promotions = skip every promotion of the catalog
         }
 

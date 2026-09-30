@@ -122,7 +122,7 @@ describe('block 3 migration (D101 · spec §4.10 ข้อ 4)', () => {
     const objectsBefore = one(raw, `select type, name, tbl_name, sql from sqlite_master where name not like 'sqlite_%' and type <> 'table' order by type, name`)
     const tableSqlBefore = one(raw, `select name, sql from sqlite_master where type = 'table' and name not in ('shift', 'cash_count', 'order') order by name`)
 
-    migrateSqlite(db, SQLITE_MIGRATIONS_FOLDER)
+    migrateSqlite(db, folderUpTo(THIS.tag)) // up to block 3 only — 0007 (payment rebuild) is zero-bill.test.ts
 
     expect(dump()).toEqual(before) // same rows, same rowids, every old value
     expect(columnsOf('shift')).toEqual([...oldColumns.get('shift')!, 'counted_at', 'sync_mode'])
@@ -151,6 +151,8 @@ describe('block 3 migration (D101 · spec §4.10 ข้อ 4)', () => {
   })
   it('the tablet own runner (browser bundle over sqlite-proxy) applies it to a device on the previous migration the same way', async () => {
     expect(SQLITE_MIGRATIONS.map((m) => m.tag)).toContain(THIS.tag) // the regenerated bundle carries it
+    const triggersOfFresh = (await (await migratedTo(THIS.tag)).all(`select name from sqlite_master where type = 'trigger' order by name`)).map((r) => String(r['name']))
+    expect(triggersOfFresh.length).toBeLessThan(SQLITE_TRIGGERS.length) // later migrations add more (0007)
     const { raw: old, db: oldDb } = await plan4DeviceWithBills()
     migrateSqlite(oldDb, folderUpTo(BEFORE))
     old.exec(`insert into shift (id, device_id, business_date, status, opened_by, opened_at, opening_float_satang, closed_by, closed_at)
@@ -168,11 +170,12 @@ describe('block 3 migration (D101 · spec §4.10 ข้อ 4)', () => {
         const shiftBefore = rows(`select rowid, * from shift order by rowid`)
         const countBefore = rows(`select rowid, * from cash_count order by rowid`)
         const orderBefore = rows(`select rowid, * from "order" order by rowid`)
-        expect((await migrateSqliteRemote(drizzleProxy(nodeSqliteCallback(raw as unknown as NodeSqliteLike)))).applied).toEqual([THIS.tag])
+        const upToThis = SQLITE_MIGRATIONS.slice(0, SQLITE_MIGRATIONS.findIndex((m) => m.tag === THIS.tag) + 1) // 0007 is zero-bill.test.ts
+        expect((await migrateSqliteRemote(drizzleProxy(nodeSqliteCallback(raw as unknown as NodeSqliteLike)), upToThis)).applied).toEqual([THIS.tag])
         expect(rows(`select rowid, * from shift order by rowid`)).toEqual(shiftBefore.map((r) => ({ ...r, counted_at: r['id'] === 'shift-0' ? '2026-09-19T11:59:00.000Z' : null, sync_mode: 'local_only' })))
         expect(rows(`select rowid, * from cash_count order by rowid`)).toEqual(countBefore.map((r) => ({ ...r, counted_at: '2026-09-19T11:59:00.000Z', includes_bot_cash: 0 })))
         expect(rows(`select rowid, * from "order" order by rowid`)).toEqual(orderBefore.map((r) => ({ ...r, off_catalog_at: null, central_mismatch_json: null })))
-        expect((raw.prepare(`select name from sqlite_master where type = 'trigger' order by name`).all() as { name: string }[]).map((r) => r.name)).toEqual([...SQLITE_TRIGGERS])
+        expect((raw.prepare(`select name from sqlite_master where type = 'trigger' order by name`).all() as { name: string }[]).map((r) => r.name)).toEqual(triggersOfFresh)
         expect(rows('PRAGMA foreign_key_check')).toEqual([])
         expect(raw.prepare('PRAGMA foreign_keys').get()).toEqual({ foreign_keys: 1 })
       } finally {

@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, isNotNull, max } from 'drizzle-orm'
 import type { RemoteDb } from '@dayo/db-schema/browser'
 import * as s from '@dayo/db-schema/sqlite'
 import { bangkokDateOf, rowKey } from '@dayo/contracts'
-import { centralDiffSatang, type PricedPromotion } from '@dayo/domain'
+import { centralDiffSatang, manualPromotionsOf, type CartDraft, type PricedLine, type PricedPromotion } from '@dayo/domain'
 import { readCatalog, staffDisplayName } from '../sync/catalog'
 import { decodeLastError, estimatedServerMs } from '../sync/state'
 import { currentOpenShift, requireDevice } from './bootstrap'
@@ -105,10 +105,36 @@ export async function listOrders(db: RemoteDb): Promise<OrderSummaryDto[]> {
   return orders.map((o) => summarize(o, payments.filter((p) => p.orderId === o.id), cupRows.filter((l) => l.orderId === o.id), ctx))
 }
 
+/**
+ * pricing_json as frozen at payment (a block-2 bill; null on a plan-3 bill). Read with every key optional: a bill frozen
+ * before plan 10 has no manual keys in `cart` and no promoBreakdown on `priced.lines` (review L2).
+ */
+type FrozenPricing = { cart?: Partial<CartDraft>; priced?: { promotionsApplied?: PricedPromotion[]; lines?: Partial<PricedLine>[] } } | null
+const frozenOf = (o: OrderRow): FrozenPricing => o.pricingJson as FrozenPricing
+
 /** The promotions frozen in pricing_json at payment (a block-2 bill); none on a plan-3 bill. */
 function promotionsOf(o: OrderRow): { name: string; discountSatang: number }[] {
-  const applied = (o.pricingJson as { priced?: { promotionsApplied?: PricedPromotion[] } } | null)?.priced?.promotionsApplied ?? []
+  const applied = frozenOf(o)?.priced?.promotionsApplied ?? []
   return applied.map((p) => ({ name: p.name, discountSatang: p.discountSatang }))
+}
+
+/**
+ * plan 10 R2: line `lineNo`'s per-promotion split (satang) from pricing_json — the priced line of that lineNo (fix round 1
+ * L6: matched by number, never by position). Named from the bill's own promotionsApplied (the id when a name is missing).
+ */
+function promoBreakdownOf(o: OrderRow, lineNo: number): OrderLineDto['promoBreakdown'] {
+  const frozen = frozenOf(o)
+  const split = frozen?.priced?.lines?.find((l) => l.lineNo === lineNo)?.promoBreakdown ?? null
+  if (split === null) return null
+  const names = new Map((frozen?.priced?.promotionsApplied ?? []).map((p) => [p.promotionId, p.name]))
+  return split.map((b) => ({ promotionId: b.promotionId, name: names.get(b.promotionId) ?? b.promotionId, satang: b.satang }))
+}
+
+/** plan 10 T8: the reason the bill's manual promotions were sent with (manualPromotionsOf of the frozen cart), else null. */
+function manualReasonOf(o: OrderRow): string | null {
+  const cart = frozenOf(o)?.cart
+  if (cart === undefined) return null
+  return manualPromotionsOf({ noPromotions: false, ...cart } as CartDraft).reason
 }
 
 /**
@@ -145,8 +171,8 @@ export async function getOrder(db: RemoteDb, deps: Pick<ApiDeps, 'now'>, orderId
   const shift = await currentOpenShift(db, device.id)
   const payment = payments[0]
   const lines: OrderLineDto[] = items.length > 0
-    ? items.map((l) => ({ lineNo: l.lineNo, productName: l.menuNameTh, sizeName: l.size, sweetnessName: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty, unitPriceSatang: l.unitPriceSatang, lineTotalSatang: l.lineTotalSatang }))
-    : oldLines.map((l) => ({ lineNo: l.lineNo, productName: l.productName, sizeName: l.sizeName, sweetnessName: l.sweetnessName, milk: null, grade: null, qty: l.qty, unitPriceSatang: l.unitPriceSatang, lineTotalSatang: l.lineTotalSatang }))
+    ? items.map((l) => ({ lineNo: l.lineNo, productName: l.menuNameTh, sizeName: l.size, sweetnessName: l.sweetness, milk: l.milk, grade: l.grade, qty: l.qty, unitPriceSatang: l.unitPriceSatang, lineTotalSatang: l.lineTotalSatang, promoBreakdown: promoBreakdownOf(o, l.lineNo) }))
+    : oldLines.map((l) => ({ lineNo: l.lineNo, productName: l.productName, sizeName: l.sizeName, sweetnessName: l.sweetnessName, milk: null, grade: null, qty: l.qty, unitPriceSatang: l.unitPriceSatang, lineTotalSatang: l.lineTotalSatang, promoBreakdown: null }))
   const ctx: SummaryContext = { sellerName: await sellerNames(db, [o.createdById]), outbox: await outboxOf(db, [o.id]) }
   // Only paid orders of the open shift can be voided (D47 ข้อ 2 · Q3-13); a block-2 bill only on the Thai day it was sold (spec 04 §4.7)
   const sameDay = o.soldAt === null || bangkokDateOf((await voidInstant(db, device.id, deps.now())).judge) === bangkokDateOf(o.soldAt)
@@ -164,6 +190,7 @@ export async function getOrder(db: RemoteDb, deps: Pick<ApiDeps, 'now'>, orderId
     channelCode: o.channelCode,
     catalogVersion: o.catalogVersion,
     promotions: promotionsOf(o),
+    manualPromotionReason: manualReasonOf(o),
     lines,
     events: events.map((e) => ({ seq: e.seq, type: e.type, at: e.at, actorId: e.actorId, payload: e.payloadJson })),
     // a bill dayo reports cancelled on its web is not offered again (it would only earn a duplicate) — spec §4.6, Task 15

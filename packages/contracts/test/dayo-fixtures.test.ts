@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ApiErrorBody, BLOCK3_PHASE1_KINDS, BLOCK3_PHASE1_SUPPORTED_FIELDS, BLOCK3_PHASE2_KINDS, CashCountAcceptedData, CashMovementAcceptedData, detailPrefix,
   ExistsConflictData, KIND_ID_FIELD, OffCatalogAcceptedData, OrderAcceptedData, OrdersListResponse, PosCatalogResponse, PushEnvelope, PushRequest, PushResponse,
-  ShiftCashResponse, ShiftCloseAcceptedData, ShiftOpenAcceptedData, type PushKind,
+  ShiftCashResponse, ShiftCloseAcceptedData, ShiftOpenAcceptedData, supportedOf, type PushKind,
 } from '../src/dayo-api.js'
 import { BLOCK3_FIXTURE_NAMES, BLOCK3_PHASE2_FIXTURE_NAMES, CONTRACT_FIXTURE_NAMES, header, PosContractFixture } from '../src/dayo-fixture.js'
 import { contractFixtureHashes, fixtureSha256, listContractFixtures, loadContractFixture } from '../src/dayo-fixture-files.js'
@@ -139,7 +139,8 @@ describe('block 3 contract fixtures (plan 09 Task 7)', () => {
     expect(b3.supported_kinds).toEqual([...(b2['supported_kinds'] as string[]), ...BLOCK3_PHASE1_KINDS])
     expect(b3.supported_kinds.filter((k) => (BLOCK3_PHASE2_KINDS as readonly string[]).includes(k))).toEqual([])
     const sorted = (f: Readonly<Record<string, readonly string[]>>) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, [...v].sort()]))
-    expect(sorted(b3.supported_fields)).toEqual(sorted({ ...(b2['supported_fields'] as Record<string, string[]>), ...BLOCK3_PHASE1_SUPPORTED_FIELDS }))
+    expect(Object.keys(b3.supported_fields).sort()).toEqual(Object.keys(supportedOf(b3.supported_kinds, b3.supported_fields).fields).sort()) // every value a field list
+    expect(sorted(supportedOf(b3.supported_kinds, b3.supported_fields).fields)).toEqual(sorted({ ...(b2['supported_fields'] as Record<string, string[]>), ...BLOCK3_PHASE1_SUPPORTED_FIELDS }))
     expect(b3.client).toEqual({ ...(b2['client'] as object), last_z_no: 41, last_z_hash: 'ab'.repeat(32), last_z_until: '2026-09-24T12:00:00.000+00:00' })
     for (const k of ['changed', 'pricing', 'catalog_version', 'staff', 'catalog']) expect((b3 as Record<string, unknown>)[k], k).toEqual(b2[k])
     expect(b3.server_time).toBe(SERVER_TIME)

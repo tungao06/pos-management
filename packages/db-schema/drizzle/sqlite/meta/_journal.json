@@ -50,6 +50,13 @@
       "when": 1790654480696,
       "tag": "0006_block3_shift_cash",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790705034901,
+      "tag": "0007_zero_total_promo_bill",
+      "breakpoints": true
     }
   ]
 }

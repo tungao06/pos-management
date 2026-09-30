@@ -40,6 +40,7 @@ function bootstrap(overrides: Partial<BootstrapState> = {}): BootstrapState {
     countingShift: null,
     zWaiting: [],
     centralLastZNo: null,
+    promo: { manualSupported: false, ruleBehind: false, ruleVersions: [] },
     ...overrides,
   }
 }

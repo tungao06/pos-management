@@ -1,6 +1,7 @@
+import { normPromoCode } from '@dayo/dayo-pricing'
 import type { OrderRowData } from '@dayo/contracts'
 import { edgeBahtToSatang, edgeSatangToBaht } from './money-edge.js'
-import { CartError, type BillDiscountDraft, type CartDraft, type CartLineDraft, type PricedCart } from './price-cart.js'
+import { CartError, manualPromotionsOf, type BillDiscountDraft, type CartDraft, type CartLineDraft, type PricedCart } from './price-cart.js'
 
 export type OrderRowInput = { posOrderId: string; receiptNo: string; queueNo: number; staffId: string; catalogVersion: number; shiftId: string | null; cart: CartDraft; priced: PricedCart; note: string | null }
 
@@ -23,6 +24,7 @@ function billToRow(d: BillDiscountDraft | null): OrderRowData['bill_discount'] {
 /** `data` of an E2 row of kind `order` (spec 04 §4.5) — money converted once, here, at write time (spec §6.1). */
 export function buildOrderRowData(i: OrderRowInput): OrderRowData {
   const p = i.priced
+  const manual = manualPromotionsOf(i.cart)
   return {
     pos_order_id: i.posOrderId,
     receipt_no: i.receiptNo,
@@ -36,7 +38,7 @@ export function buildOrderRowData(i: OrderRowInput): OrderRowData {
     shift_id: i.shiftId, // block 3: the shift id of a central shift, null for a local-only one (spec §4.5 shift_id · §4.10 ข้อ 4)
     lines: i.cart.lines.map(lineToRow),
     bill_discount: billToRow(i.cart.billDiscount),
-    promo_code: i.cart.promoCode,
+    promo_code: i.cart.promoCode === null ? null : normPromoCode(i.cart.promoCode), // plan 10 §0.2: the form dayo compares
     skip_promotion_ids: i.cart.noPromotions ? [] : [...i.cart.skipPromotionIds],
     no_promotions: i.cart.noPromotions,
     totals: {
@@ -46,6 +48,9 @@ export function buildOrderRowData(i: OrderRowInput): OrderRowData {
       total: edgeSatangToBaht(p.totalSatang),
     },
     note: i.note,
+    // plan 10 §0.2: both keys only when a manual promotion leaves the tablet, so any other row stays byte-identical to
+    // the row of before (a dayo that does not list them holds it UNSUPPORTED) — the same ids and reason the bill was priced with
+    ...(manual.ids.length > 0 ? { manual_promotion_ids: manual.ids, manual_promotion_reason: manual.reason } : {}),
   }
 }
 
@@ -75,6 +80,8 @@ export function orderRowToCart(draft: OrderRowData): { cart: CartDraft; soldAt: 
       promoCode: draft.promo_code ?? null,
       skipPromotionIds: draft.no_promotions ? [] : [...(draft.skip_promotion_ids ?? [])],
       noPromotions: draft.no_promotions ?? false,
+      manualPromotionIds: [...(draft.manual_promotion_ids ?? [])],
+      manualPromotionReason: draft.manual_promotion_reason ?? null,
     },
   }
 }

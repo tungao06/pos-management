@@ -17,6 +17,9 @@ export const DAYO_KEYS = {
   lastReceiptNo: 'dayo.last_receipt_no',
   catalogCheckedAt: 'dayo.catalog_checked_at',
   catalogError: 'dayo.catalog_error',
+  // plan 10 R6: the promo_rule_version the STORED catalog was asked with — written only with an accepted catalog; another
+  // value (or none: a catalog stored before plan 10) than the one the tablet asks with now = the next E1 asks known_version=0
+  catalogRuleVersion: 'dayo.catalog_rule_version',
   pushFailStreak: 'dayo.push_fail_streak',
   pushBackoffUntil: 'dayo.push_backoff_until',
   // 'network' (offline — an online wake may forget it) | 'failure' (timeout / 5xx / unreadable 200 — only a manual, open or

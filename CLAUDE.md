@@ -21,6 +21,7 @@ pnpm install
 pnpm turbo run typecheck · pnpm turbo run test      # ต้องผ่านทั้ง repo ก่อน merge
 pnpm --filter @dayo/domain test                      # รายแพ็กเกจ: @dayo/pos, @dayo/contracts, @dayo/db-schema, @dayo/excel-import
 pnpm --filter @dayo/pos e2e                          # Playwright
+# หลัง vendor:update (แพ็กเกจ dayo-pricing) ต้องรัน build:types เพื่อออก .d.ts · turbo typecheck/test พึ่ง ^build:types
 ```
 
 ## กฎเหล็ก

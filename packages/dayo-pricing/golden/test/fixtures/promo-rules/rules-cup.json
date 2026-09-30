@@ -1,0 +1,1288 @@
+{
+  "description": "รางวัลรายแก้ว: หมวด/ขนาด/ตัวแปร/ตัวเลือก/ยกเว้น × percent/amount/fixed_price × apply_to option (ค่าตัวเลือกที่จ่ายจริงหลังช่องทาง R2) × cap_baht × floor_baht",
+  "form": "rule",
+  "groups": [
+    {
+      "code": "main",
+      "name": "ทั่วไป",
+      "sortOrder": 0,
+      "stackMode": "separate",
+      "isActive": true
+    }
+  ],
+  "promotions": [
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาไทยทุกเมนูลด 20%",
+      "template": "item_discount",
+      "priority": 10,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "categories": [
+            "ชาไทย"
+          ]
+        },
+        "reward": {
+          "type": "percent",
+          "percent": 20
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "แก้ว 20 oz ลด 10",
+      "template": "item_discount",
+      "priority": 11,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "sizes": [
+            "20 oz"
+          ]
+        },
+        "reward": {
+          "type": "amount",
+          "baht": 10
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาไทยหวาน 50% ราคา 29",
+      "template": "fixed_price",
+      "priority": 12,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "variants": [
+            {
+              "menu": "TT01",
+              "size": "16 oz",
+              "sweetness": "50%"
+            }
+          ]
+        },
+        "reward": {
+          "type": "fixed_price",
+          "price": 29
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "นมโอ๊ตฟรี",
+      "template": "custom",
+      "priority": 13,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "options": {
+            "milk": [
+              "oat"
+            ]
+          }
+        },
+        "reward": {
+          "type": "percent",
+          "percent": 100,
+          "apply_to": "option"
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "เกรด Isuzu ลด 30",
+      "template": "custom",
+      "priority": 14,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "options": {
+            "grade": [
+              "Isuzu"
+            ]
+          }
+        },
+        "reward": {
+          "type": "amount",
+          "baht": 30,
+          "apply_to": "option"
+        }
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+      "template": "item_discount",
+      "priority": 15,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "exclude_menus": [
+            "WT01"
+          ]
+        },
+        "reward": {
+          "type": "percent",
+          "percent": 10
+        },
+        "cap_baht": 15
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาเขียวลด 15% ปัดลงบาท",
+      "template": "item_discount",
+      "priority": 16,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "GT01"
+          ]
+        },
+        "reward": {
+          "type": "percent",
+          "percent": 15
+        },
+        "rounding": "floor_baht"
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "มัตจะราคา 50 ไม่เกิน 20",
+      "template": "fixed_price",
+      "priority": 17,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "target": {
+          "menus": [
+            "MT01"
+          ]
+        },
+        "reward": {
+          "type": "fixed_price",
+          "price": 50
+        },
+        "cap_baht": 20
+      }
+    },
+    {
+      "code": null,
+      "timeWindows": [],
+      "groupCode": "main",
+      "startsOn": null,
+      "endsOn": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "isActive": true,
+      "name": "ชาไทย 2 แก้ว 60 ไม่เกิน 10",
+      "template": "bundle",
+      "priority": 18,
+      "rule": {
+        "v": 1,
+        "scope": "cup",
+        "reward": {
+          "type": "bundle",
+          "items": [
+            {
+              "target": {
+                "categories": [
+                  "ชาไทย"
+                ]
+              },
+              "qty": 2
+            }
+          ],
+          "price": 60,
+          "max_sets": null
+        },
+        "cap_baht": 10
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "หมวดชาไทย 20%",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "นมโอ๊ตฟรี",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 120,
+        "itemsDiscount": 16,
+        "billDiscountAmount": 0,
+        "totalAmount": 104,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 7,
+            "promotion": "ชาไทยทุกเมนูลด 20%",
+            "lineTotal": 28
+          },
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 9,
+            "promotion": "ชาไทยทุกเมนูลด 20%",
+            "lineTotal": 36
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 40
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยทุกเมนูลด 20%",
+            "kind": "item_discount",
+            "discountAmount": 16
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ขนาด 20 oz ลด 10",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "ชาไทยหวาน 50% ราคา 29",
+          "นมโอ๊ตฟรี",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 180,
+        "itemsDiscount": 20,
+        "billDiscountAmount": 0,
+        "totalAmount": 160,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 10,
+            "promotion": "แก้ว 20 oz ลด 10",
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 50,
+            "discountPerCup": 10,
+            "promotion": "แก้ว 20 oz ลด 10",
+            "lineTotal": 40
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 85
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "แก้ว 20 oz ลด 10",
+            "kind": "item_discount",
+            "discountAmount": 20
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ตัวแปร หวาน 50% ราคา 29",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "นมโอ๊ตฟรี",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 105,
+        "itemsDiscount": 12,
+        "billDiscountAmount": 0,
+        "totalAmount": 93,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "50%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 6,
+            "promotion": "ชาไทยหวาน 50% ราคา 29",
+            "lineTotal": 58
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทยหวาน 50% ราคา 29",
+            "kind": "fixed_price",
+            "discountAmount": 12
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นมโอ๊ตฟรี หน้าร้าน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "milk": "oat"
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 80,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 0,
+        "totalAmount": 70,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 10,
+            "promotion": "นมโอ๊ตฟรี",
+            "lineTotal": 35,
+            "optionAdds": {
+              "milk": {
+                "code": "oat",
+                "add": 10,
+                "paid": 10
+              }
+            }
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "นมโอ๊ตฟรี",
+            "kind": "custom",
+            "discountAmount": 10
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นมโอ๊ตฟรี Grab (จ่ายจริง 13)",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "milk": "oat"
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 59,
+        "itemsDiscount": 13,
+        "billDiscountAmount": 0,
+        "totalAmount": 46,
+        "channelFeeAmount": 13.8,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 59,
+            "discountPerCup": 13,
+            "promotion": "นมโอ๊ตฟรี",
+            "lineTotal": 46,
+            "optionAdds": {
+              "milk": {
+                "code": "oat",
+                "add": 10,
+                "paid": 13
+              }
+            }
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "นมโอ๊ตฟรี",
+            "kind": "custom",
+            "discountAmount": 13
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "นมโอ๊ตฟรี Lineman (จ่ายจริง 11.5)",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "lineman",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "milk": "oat"
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 53.75,
+        "itemsDiscount": 11.5,
+        "billDiscountAmount": 0,
+        "totalAmount": 42.25,
+        "channelFeeAmount": 8.45,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "oat",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 53.75,
+            "discountPerCup": 11.5,
+            "promotion": "นมโอ๊ตฟรี",
+            "lineTotal": 42.25,
+            "optionAdds": {
+              "milk": {
+                "code": "oat",
+                "add": 10,
+                "paid": 11.5
+              }
+            }
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "นมโอ๊ตฟรี",
+            "kind": "custom",
+            "discountAmount": 11.5
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "Isuzu ลด 30 จากค่าเกรด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "grade": "Isuzu"
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "grade": "Daizu"
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "นมโอ๊ตฟรี",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 300,
+        "itemsDiscount": 30,
+        "billDiscountAmount": 0,
+        "totalAmount": 270,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": "Isuzu",
+            "qty": 1,
+            "unitPrice": 175,
+            "discountPerCup": 30,
+            "promotion": "เกรด Isuzu ลด 30",
+            "lineTotal": 145,
+            "optionAdds": {
+              "grade": {
+                "code": "Isuzu",
+                "add": 90,
+                "paid": 90
+              }
+            }
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": "Daizu",
+            "qty": 1,
+            "unitPrice": 125,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 125,
+            "optionAdds": {
+              "grade": {
+                "code": "Daizu",
+                "add": 40,
+                "paid": 40
+              }
+            }
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เกรด Isuzu ลด 30",
+            "kind": "custom",
+            "discountAmount": 30
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "Isuzu Grab",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "grade": "Isuzu"
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "นมโอ๊ตฟรี",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 228,
+        "itemsDiscount": 30,
+        "billDiscountAmount": 0,
+        "totalAmount": 198,
+        "channelFeeAmount": 59.4,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": "Isuzu",
+            "qty": 1,
+            "unitPrice": 228,
+            "discountPerCup": 30,
+            "promotion": "เกรด Isuzu ลด 30",
+            "lineTotal": 198,
+            "optionAdds": {
+              "grade": {
+                "code": "Isuzu",
+                "add": 90,
+                "paid": 117
+              }
+            }
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เกรด Isuzu ลด 30",
+            "kind": "custom",
+            "discountAmount": 30
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "เพดาน 15 ไล่ตามลำดับแก้ว",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "นมโอ๊ตฟรี",
+          "เกรด Isuzu ลด 30",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 240,
+        "itemsDiscount": 15,
+        "billDiscountAmount": 0,
+        "totalAmount": 225,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 35,
+            "discountPerCup": 3.5,
+            "promotion": "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+            "lineTotal": 94.5
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 4,
+            "promotion": "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+            "lineTotal": 36
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 0.5,
+            "promotion": "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+            "lineTotal": 84.5
+          },
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 10,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 10
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+            "kind": "item_discount",
+            "discountAmount": 15
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ปัดลงบาท",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "นมโอ๊ตฟรี",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 90,
+        "itemsDiscount": 13,
+        "billDiscountAmount": 0,
+        "totalAmount": 77,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 6,
+            "promotion": "ชาเขียวลด 15% ปัดลงบาท",
+            "lineTotal": 34
+          },
+          {
+            "menuCode": "GT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 50,
+            "discountPerCup": 7,
+            "promotion": "ชาเขียวลด 15% ปัดลงบาท",
+            "lineTotal": 43
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาเขียวลด 15% ปัดลงบาท",
+            "kind": "item_discount",
+            "discountAmount": 13
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ปัดลงบาท Lineman",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "lineman",
+        "lines": [
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "นมโอ๊ตฟรี",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "มัตจะราคา 50 ไม่เกิน 20",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 48,
+        "itemsDiscount": 7,
+        "billDiscountAmount": 0,
+        "totalAmount": 41,
+        "channelFeeAmount": 8.2,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 48,
+            "discountPerCup": 7,
+            "promotion": "ชาเขียวลด 15% ปัดลงบาท",
+            "lineTotal": 41
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาเขียวลด 15% ปัดลงบาท",
+            "kind": "item_discount",
+            "discountAmount": 7
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ราคาคงที่ติดเพดาน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "นมโอ๊ตฟรี",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "ชาไทย 2 แก้ว 60 ไม่เกิน 10"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 20,
+        "billDiscountAmount": 0,
+        "totalAmount": 150,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 20,
+            "promotion": "มัตจะราคา 50 ไม่เกิน 20",
+            "lineTotal": 65
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 0,
+            "promotion": "มัตจะราคา 50 ไม่เกิน 20",
+            "lineTotal": 85
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "มัตจะราคา 50 ไม่เกิน 20",
+            "kind": "fixed_price",
+            "discountAmount": 20
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "เซ็ตหมวดติดเพดาน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "ชาไทยทุกเมนูลด 20%",
+          "แก้ว 20 oz ลด 10",
+          "ชาไทยหวาน 50% ราคา 29",
+          "นมโอ๊ตฟรี",
+          "เกรด Isuzu ลด 30",
+          "ทุกเมนูยกเว้นน้ำ ลด 10% ไม่เกิน 15",
+          "ชาเขียวลด 15% ปัดลงบาท",
+          "มัตจะราคา 50 ไม่เกิน 20"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 80,
+        "itemsDiscount": 10,
+        "billDiscountAmount": 0,
+        "totalAmount": 70,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": "ชาไทย 2 แก้ว 60 ไม่เกิน 10",
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "TT02",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 10,
+            "promotion": "ชาไทย 2 แก้ว 60 ไม่เกิน 10",
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "ชาไทย 2 แก้ว 60 ไม่เกิน 10",
+            "kind": "bundle",
+            "discountAmount": 10
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}

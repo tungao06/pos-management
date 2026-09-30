@@ -234,7 +234,6 @@ export const TH = {
   // review I4: a bill discount left with a reason still clamps to ฿0 (dayo never goes negative) — the tablet must
   // still refuse to pay a ฿0 bill (D50 Q3-20) and say why, instead of a silent disabled button.
   errBillDiscountTooBig: 'ส่วนลดท้ายบิลมากกว่าหรือเท่ากับยอดรวม — บิลเหลือ 0 บาท ขายไม่ได้ ลดส่วนลดหรือลบบรรทัด',
-  errZeroTotal: 'ยอดสุทธิเป็น 0 บาท ขายไม่ได้ — บิลต้องมากกว่า 0 บาท',
   // minor: a line dayo priced some units at ฿0 from a promotion (buy-2-get-1) — shown next to that cart line.
   freeUnits: (n: number): string => `แถม ${n} แก้ว`,
   errStockCountNotOpen: 'ใบนับนี้ปิดไปแล้ว — เปิดหน้านับสต็อกใหม่',
@@ -613,4 +612,33 @@ export const TH = {
 
   // fu app-version — เวอร์ชันที่กำลังใช้งาน (/status เต็มบรรทัด, BrandBar ย่อ)
   statusVersionLine: (version: string, commit: string, builtAt: string): string => `เวอร์ชัน v${version} · commit ${commit} · build ${builtAt}`,
+
+  // แผน 10 T0 — โปรโมชันเลือกเอง + แคตตาล็อกรุ่นใหม่ (spec §5.1, owner Q1=ข, Q3=ก, ADR-0072)
+  // owner Q7=ก · D133: asked only for a ฿0 bill that has a manual promotion — never on every manual pick
+  errManualReasonRequired: 'บิลนี้ยอด 0 บาทและมีโปรที่เลือกเอง — ต้องใส่เหตุผลก่อนชำระ',
+  errManualPromoUnsupported: 'ระบบกลางรุ่นนี้ยังไม่รองรับการเลือกโปรโมชันเอง',
+  // ต่างจาก errDiscountTooBig (ส่วนลดต้องน้อยกว่ายอดรวม) — นี่คือกรณีส่วนลดกรอกเองทำให้ยอดเหลือ 0 บาทพอดี
+  errZeroTotalNotAllowed: 'ส่วนลดทำให้ยอดเหลือ 0 บาท ขายไม่ได้ — ลดส่วนลดหรือลบบรรทัดก่อน',
+  // แผน 10 T3 — CartError BAD_MANUAL_PROMOTION: เลือกเกิน 20 โปร หรือเหตุผลที่ระบบกลางไม่รับ
+  errBadManualPromotion: 'โปรที่เลือกเองไม่ถูกต้อง — เลือกได้ไม่เกิน 20 โปร และเหตุผลต้องยาว 1–200 ตัวอักษร บรรทัดเดียว',
+  manualPromos: 'โปรโมชันที่เลือกเอง',
+  manualReason: 'เหตุผลที่เลือกโปรนี้เอง',
+  promoModeAuto: 'อัตโนมัติ',
+  promoModeCode: 'รหัสโปร',
+  promoModeManual: 'เลือกเอง',
+  // Q3=(ก): ป้ายอ่านอย่างเดียว — แท็บเล็ตไม่นับจำนวนครั้งที่ใช้ (ADR-0072 ข้อ 2)
+  promoLimitInfo: (n: number, perDay: boolean): string => (perDay ? `จำกัด ${n} ครั้ง/วัน` : `จำกัด ${n} ครั้ง`),
+  promoRuleBehind: 'ระบบกลางมีโปรรุ่นใหม่กว่าแอปนี้',
+  promoWarnings: 'คำเตือนโปรโมชัน',
+  // owner Q1=(ข): บิล 0 บาทจากโปรโมชันขายได้ แต่รับเงินสดเท่านั้น
+  zeroBillCashOnly: 'บิลนี้ยอด 0 บาทจากโปรโมชัน — รับชำระด้วยเงินสดเท่านั้น',
+  // แผน 10 T9 — หน้าขาย
+  // ถามเหตุผลเฉพาะเมื่อระบบขอ (ยอด 0 บาทและมีโปรที่เลือกเอง) — ไม่ใช่ทุกครั้งที่เลือกโปรเอง
+  manualReasonNeeded: 'ยอดเหลือ 0 บาทและมีโปรที่เลือกเอง — ใส่เหตุผล 1–200 ตัวอักษรก่อนชำระ',
+  manualReasonCount: (n: number): string => `${n}/200`,
+  promoCodeNormalized: (code: string): string => `รหัสที่ใช้: ${code}`,
+  perCupDiscount: (amount: string): string => `ลด ${amount}/แก้ว`,
+  cupsWith: (n: number): string => `${n} แก้ว`,
+  orderManualReason: (reason: string): string => `เหตุผลที่เลือกโปรเอง: ${reason}`,
+  zeroBillPayNote: 'ยอด 0 บาท — กดยืนยันรับเงินสด ไม่ต้องรับเงิน',
 } as const

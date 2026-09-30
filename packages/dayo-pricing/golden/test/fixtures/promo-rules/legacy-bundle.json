@@ -1,0 +1,1102 @@
+{
+  "description": "เซ็ตราคาพิเศษ (bundle) — แบ่งส่วนลดตามราคา แก้วท้ายรับเศษ · หลายชุด · spec ทับกัน (ADR-0070 ข้อ 14) · max_sets · ราคาเซ็ตแพงกว่า",
+  "form": "legacy",
+  "promotions": [
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "เซ็ตชาไทย+มัตจะ 100",
+      "kind": "bundle",
+      "priority": 10,
+      "params": {
+        "items": [
+          {
+            "menu_codes": [
+              "TT01"
+            ],
+            "qty": 1
+          },
+          {
+            "menu_codes": [
+              "MT01"
+            ],
+            "qty": 1
+          }
+        ],
+        "bundle_price": 100
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "เซ็ตมัตจะ+อะไรก็ได้ 100",
+      "kind": "bundle",
+      "priority": 20,
+      "params": {
+        "items": [
+          {
+            "menu_codes": [
+              "MT01"
+            ],
+            "qty": 1
+          },
+          {
+            "menu_codes": [],
+            "qty": 1
+          }
+        ],
+        "bundle_price": 100
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+      "kind": "bundle",
+      "priority": 30,
+      "params": {
+        "items": [
+          {
+            "menu_codes": [
+              "TT01",
+              "MT01"
+            ],
+            "qty": 1
+          },
+          {
+            "menu_codes": [
+              "MT01"
+            ],
+            "qty": 1
+          }
+        ],
+        "bundle_price": 100
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+      "kind": "bundle",
+      "priority": 40,
+      "params": {
+        "items": [
+          {
+            "menu_codes": [],
+            "qty": 2
+          }
+        ],
+        "bundle_price": 60,
+        "max_sets": 1
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "เซ็ตน้ำเปล่าแพงกว่าราคา",
+      "kind": "bundle",
+      "priority": 50,
+      "params": {
+        "items": [
+          {
+            "menu_codes": [
+              "WT01"
+            ],
+            "qty": 2
+          }
+        ],
+        "bundle_price": 30
+      }
+    },
+    {
+      "code": null,
+      "startsOn": null,
+      "endsOn": null,
+      "daysOfWeek": null,
+      "timeFrom": null,
+      "timeTo": null,
+      "channelCodes": null,
+      "applyMode": "auto",
+      "stackable": true,
+      "isActive": true,
+      "name": "เซ็ตชาไทย 3 แก้ว 99",
+      "kind": "bundle",
+      "priority": 60,
+      "params": {
+        "items": [
+          {
+            "menu_codes": [
+              "TT01"
+            ],
+            "qty": 3
+          }
+        ],
+        "bundle_price": 99
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "ชาไทย+มัตจะ 1 ชุด",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตมัตจะ+อะไรก็ได้ 100",
+          "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+          "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+          "เซ็ตน้ำเปล่าแพงกว่าราคา",
+          "เซ็ตชาไทย 3 แก้ว 99"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 120,
+        "itemsDiscount": 20,
+        "billDiscountAmount": 0,
+        "totalAmount": 100,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5.83,
+            "promotion": "เซ็ตชาไทย+มัตจะ 100",
+            "lineTotal": 29.17
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 14.17,
+            "promotion": "เซ็ตชาไทย+มัตจะ 100",
+            "lineTotal": 70.83
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตชาไทย+มัตจะ 100",
+            "kind": "bundle",
+            "discountAmount": 20
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "2 ชุด + เหลือ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตมัตจะ+อะไรก็ได้ 100",
+          "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+          "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+          "เซ็ตน้ำเปล่าแพงกว่าราคา",
+          "เซ็ตชาไทย 3 แก้ว 99"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 275,
+        "itemsDiscount": 40,
+        "billDiscountAmount": 0,
+        "totalAmount": 235,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 5.83,
+            "promotion": "เซ็ตชาไทย+มัตจะ 100",
+            "lineTotal": 58.34
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 14.17,
+            "promotion": "เซ็ตชาไทย+มัตจะ 100",
+            "lineTotal": 141.66
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตชาไทย+มัตจะ 100",
+            "kind": "bundle",
+            "discountAmount": 40
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทับกัน: มัตจะ+อะไรก็ได้ 2 มัตจะ 1 ชาไทย",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตชาไทย+มัตจะ 100",
+          "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+          "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+          "เซ็ตน้ำเปล่าแพงกว่าราคา",
+          "เซ็ตชาไทย 3 แก้ว 99"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 205,
+        "itemsDiscount": 70,
+        "billDiscountAmount": 0,
+        "totalAmount": 135,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 35,
+            "promotion": "เซ็ตมัตจะ+อะไรก็ได้ 100",
+            "lineTotal": 100
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตมัตจะ+อะไรก็ได้ 100",
+            "kind": "bundle",
+            "discountAmount": 70
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทับกัน: มัตจะ+อะไรก็ได้ 3 มัตจะ 2 ชาไทย",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตชาไทย+มัตจะ 100",
+          "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+          "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+          "เซ็ตน้ำเปล่าแพงกว่าราคา",
+          "เซ็ตชาไทย 3 แก้ว 99"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 325,
+        "itemsDiscount": 90,
+        "billDiscountAmount": 0,
+        "totalAmount": 235,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 35,
+            "promotion": "เซ็ตมัตจะ+อะไรก็ได้ 100",
+            "lineTotal": 100
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 14.17,
+            "promotion": "เซ็ตมัตจะ+อะไรก็ได้ 100",
+            "lineTotal": 70.83
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5.83,
+            "promotion": "เซ็ตมัตจะ+อะไรก็ได้ 100",
+            "lineTotal": 29.17
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตมัตจะ+อะไรก็ได้ 100",
+            "kind": "bundle",
+            "discountAmount": 90
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทับกัน: (ชาไทย|มัตจะ)+มัตจะ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตชาไทย+มัตจะ 100",
+          "เซ็ตมัตจะ+อะไรก็ได้ 100",
+          "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+          "เซ็ตน้ำเปล่าแพงกว่าราคา",
+          "เซ็ตชาไทย 3 แก้ว 99"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 205,
+        "itemsDiscount": 70,
+        "billDiscountAmount": 0,
+        "totalAmount": 135,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 35,
+            "promotion": "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+            "lineTotal": 100
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+            "kind": "bundle",
+            "discountAmount": 70
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทับกัน: (ชาไทย|มัตจะ)+มัตจะ 3 มัตจะ 2 ชาไทย",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตชาไทย+มัตจะ 100",
+          "เซ็ตมัตจะ+อะไรก็ได้ 100",
+          "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+          "เซ็ตน้ำเปล่าแพงกว่าราคา",
+          "เซ็ตชาไทย 3 แก้ว 99"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 325,
+        "itemsDiscount": 90,
+        "billDiscountAmount": 0,
+        "totalAmount": 235,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 5.83,
+            "promotion": "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+            "lineTotal": 29.17
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 85,
+            "discountPerCup": 35,
+            "promotion": "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+            "lineTotal": 100
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 14.17,
+            "promotion": "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+            "lineTotal": 70.83
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+            "kind": "bundle",
+            "discountAmount": 90
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ชุดเดียว 4 แก้ว",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตชาไทย+มัตจะ 100",
+          "เซ็ตมัตจะ+อะไรก็ได้ 100",
+          "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+          "เซ็ตน้ำเปล่าแพงกว่าราคา",
+          "เซ็ตชาไทย 3 แก้ว 99"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 170,
+        "itemsDiscount": 65,
+        "billDiscountAmount": 0,
+        "totalAmount": 105,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 85,
+            "discountPerCup": 44.2,
+            "promotion": "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+            "lineTotal": 40.8
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 20.8,
+            "promotion": "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+            "lineTotal": 19.2
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 35
+          },
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 10,
+            "discountPerCup": 0,
+            "promotion": null,
+            "lineTotal": 10
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+            "kind": "bundle",
+            "discountAmount": 65
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ราคาเซ็ตแพงกว่า → ส่วนลด 0",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตชาไทย+มัตจะ 100",
+          "เซ็ตมัตจะ+อะไรก็ได้ 100",
+          "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+          "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+          "เซ็ตชาไทย 3 แก้ว 99"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 20,
+        "itemsDiscount": 0,
+        "billDiscountAmount": 0,
+        "totalAmount": 20,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 10,
+            "discountPerCup": 0,
+            "promotion": "เซ็ตน้ำเปล่าแพงกว่าราคา",
+            "lineTotal": 20
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตน้ำเปล่าแพงกว่าราคา",
+            "kind": "bundle",
+            "discountAmount": 0
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ชาไทย 3 แก้วผสมขนาด แบ่งเศษ",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          },
+          {
+            "code": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "qty": 1
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตชาไทย+มัตจะ 100",
+          "เซ็ตมัตจะ+อะไรก็ได้ 100",
+          "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+          "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+          "เซ็ตน้ำเปล่าแพงกว่าราคา"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 115,
+        "itemsDiscount": 16,
+        "billDiscountAmount": 0,
+        "totalAmount": 99,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 35,
+            "discountPerCup": 4.87,
+            "promotion": "เซ็ตชาไทย 3 แก้ว 99",
+            "lineTotal": 60.26
+          },
+          {
+            "menuCode": "TT01",
+            "size": "20 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 45,
+            "discountPerCup": 6.26,
+            "promotion": "เซ็ตชาไทย 3 แก้ว 99",
+            "lineTotal": 38.74
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตชาไทย 3 แก้ว 99",
+            "kind": "bundle",
+            "discountAmount": 16
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ชาไทย+มัตจะ Grab",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "grab",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1,
+            "grade": "Daizu"
+          }
+        ],
+        "skipPromotions": [
+          "เซ็ตมัตจะ+อะไรก็ได้ 100",
+          "เซ็ตชาไทยหรือมัตจะ+มัตจะ 100",
+          "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+          "เซ็ตน้ำเปล่าแพงกว่าราคา",
+          "เซ็ตชาไทย 3 แก้ว 99"
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 209,
+        "itemsDiscount": 109,
+        "billDiscountAmount": 0,
+        "totalAmount": 100,
+        "channelFeeAmount": 30,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 46,
+            "discountPerCup": 23.99,
+            "promotion": "เซ็ตชาไทย+มัตจะ 100",
+            "lineTotal": 22.01
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": "Daizu",
+            "qty": 1,
+            "unitPrice": 163,
+            "discountPerCup": 85.01,
+            "promotion": "เซ็ตชาไทย+มัตจะ 100",
+            "lineTotal": 77.99
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตชาไทย+มัตจะ 100",
+            "kind": "bundle",
+            "discountAmount": 109
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "name": "ทุกเซ็ตพร้อมกัน",
+      "draft": {
+        "saleDate": "2026-09-24",
+        "saleTime": "13:00",
+        "channelCode": "store",
+        "lines": [
+          {
+            "code": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 4
+          },
+          {
+            "code": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 3
+          },
+          {
+            "code": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 1
+          },
+          {
+            "code": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "qty": 2
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "itemsSubtotal": 455,
+        "itemsDiscount": 75,
+        "billDiscountAmount": 0,
+        "totalAmount": 380,
+        "channelFeeAmount": 0,
+        "manualPromotionReasonRequired": false,
+        "lines": [
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 35,
+            "discountPerCup": 5.83,
+            "promotion": "เซ็ตชาไทย+มัตจะ 100",
+            "lineTotal": 87.51
+          },
+          {
+            "menuCode": "TT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 35,
+            "discountPerCup": 7,
+            "promotion": "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+            "lineTotal": 28
+          },
+          {
+            "menuCode": "MT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 3,
+            "unitPrice": 85,
+            "discountPerCup": 14.17,
+            "promotion": "เซ็ตชาไทย+มัตจะ 100",
+            "lineTotal": 212.49
+          },
+          {
+            "menuCode": "GT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 1,
+            "unitPrice": 40,
+            "discountPerCup": 8,
+            "promotion": "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+            "lineTotal": 32
+          },
+          {
+            "menuCode": "WT01",
+            "size": "16 oz",
+            "sweetness": "100%",
+            "milk": "fresh",
+            "grade": null,
+            "qty": 2,
+            "unitPrice": 10,
+            "discountPerCup": 0,
+            "promotion": "เซ็ตน้ำเปล่าแพงกว่าราคา",
+            "lineTotal": 20
+          }
+        ],
+        "promotionsApplied": [
+          {
+            "name": "เซ็ตชาไทย+มัตจะ 100",
+            "kind": "bundle",
+            "discountAmount": 60
+          },
+          {
+            "name": "เซ็ตอะไรก็ได้ 2 แก้ว 60 ชุดเดียว",
+            "kind": "bundle",
+            "discountAmount": 15
+          },
+          {
+            "name": "เซ็ตน้ำเปล่าแพงกว่าราคา",
+            "kind": "bundle",
+            "discountAmount": 0
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}

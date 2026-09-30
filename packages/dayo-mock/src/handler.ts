@@ -7,7 +7,8 @@ import { highestGoodZ, highestZNo } from './judge-shift.js'
 import { utcMs } from './judge-util.js'
 import { clearRecompute, recomputeAll } from './recompute.js'
 import { shiftCashAnswer } from './shift-cash.js'
-import { ALL_SCOPES, BLOCK3_SCOPES, emptyKnown, freshCatalog, learnCatalog, type MockDayo, type MockOptions, type MockState, type StoredOrder } from './state.js'
+import { applyManualFields, MAIN_GROUP, PROMO_RULE_VERSION_INVALID, PROMO_RULES_OFF, promotionRow, promotionsFor, readPromoRuleVersion } from './promo-rules.js'
+import { ALL_SCOPES, BLOCK3_SCOPES, emptyKnown, freshCatalog, learnCatalog, storedCatalog, type MockDayo, type MockOptions, type MockState, type StoredOrder } from './state.js'
 
 export const MOCK_API_KEY = `dayo_${'0123456789abcdef'.repeat(4)}`
 const utf8 = new TextEncoder()
@@ -54,7 +55,9 @@ function setPhases(s: MockState, phase1: boolean, phase2: boolean, scopes: boole
 
 export function createMockDayo(opts: MockOptions = {}): MockDayo {
   const init = (): MockState => {
-    const catalog = opts.catalog ? structuredClone(opts.catalog) : freshCatalog()
+    const catalog = opts.catalog ? storedCatalog(opts.catalog) : freshCatalog()
+    const promoRules = structuredClone(opts.promoRules ?? PROMO_RULES_OFF)
+    applyManualFields(catalog.supported_fields, promoRules.manualFields)
     const known = emptyKnown()
     learnCatalog(known, catalog)
     const phase2 = opts.block3Phase2 === true
@@ -65,7 +68,7 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       scopes: [...(opts.scopes ?? (phase1 ? BLOCK3_SCOPES : ALL_SCOPES))], catalog, pricing: opts.pricing ?? null, known, closedPromotions: new Map(),
       orders: new Map(), receipts: new Map(), keys: new Map(), seq: new Map(), overrides: [], seedOrders: [...(opts.seedOrders ?? [])], log: [],
       block3: false, block3Phase2: false, shifts: new Map(), movements: new Map(), counts: new Map(), zReports: new Map(), preloadedZ: null, conflicts: [], block3LiveFrom: null,
-      offCatalogCap: DEFAULT_OFF_CATALOG_CAP, rejections: new Map(),
+      offCatalogCap: DEFAULT_OFF_CATALOG_CAP, rejections: new Map(), promoRules, exhausted: [],
     }
     if (phase1) setPhases(s, phase1, phase2, false) // no bump · explicit opts.scopes win (the default block 3 key has shift:write)
     return s
@@ -128,16 +131,34 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
     if (s.mode === 'forbidden') return err(403, 'DY403', s.forbiddenMessage, h) // legacy 403 mode before 429 (dayo order: 403 before 429)
     if (s.mode === 'rate_limited') return err(429, 'DY429', 'rate_limited: เกินจำนวนคำขอต่อนาที (60/min)', { ...h, 'Retry-After': String(s.retryAfterSec) })
 
-    if (req.method === 'GET' && url.pathname === '/api/v1/pos/catalog') {
-      const c = s.catalog
-      const common = { pricing: s.pricing ?? c.pricing, catalog_version: c.catalog_version, server_time: serverTime(), supported_kinds: c.supported_kinds, supported_fields: c.supported_fields }
-      const known = Number(url.searchParams.get('known_version') ?? '0')
-      return json(200, { ok: true, data: known === c.catalog_version ? { ...common, changed: false } : { ...c, ...common, client: clientOf(c.client), changed: true } }, { ...h, 'Cache-Control': 'no-store' })
-    }
+    if (req.method === 'GET' && url.pathname === '/api/v1/pos/catalog') return catalogAnswer(url, h)
     if (isPush) return push(req, h)
     if (req.method === 'GET' && url.pathname === '/api/v1/orders') return listOrders(url, h)
     if (isShiftCash) { const r = shiftCashAnswer(s, url); return json(r.status, r.body, h) } // E4 (0067:31-75)
     return err(404, 'DY404', 'not_found', h)
+  }
+
+  /**
+   * E1 (0074 api_pos_catalog of the release played — plan 10 Task 5): a dayo with rule versions reads promo_rule_version
+   * (DY422 when malformed — the route checks it before the RPC), serves the promotions through dayo_pos_promotions_for,
+   * sends promotionGroups with every changed answer and names its versions in supported_fields (changed or not). A dayo
+   * before 0071 reads none of it: version 0, no groups, no versions key.
+   */
+  function catalogAnswer(url: URL, h: Record<string, string>): Response {
+    const c = s.catalog
+    // lib/api/pos.ts:19-24 (dayo's route, before promo_rule_version): '' or absent = none · else an integer ≥ 0 by Number()
+    const knownRaw = url.searchParams.get('known_version')
+    const known = knownRaw === null || knownRaw === '' ? null : Number(knownRaw)
+    if (known !== null && (!Number.isInteger(known) || known < 0)) return err(422, 'DY422', 'invalid: known_version ต้องเป็นจำนวนเต็มตั้งแต่ 0 ขึ้นไป', h)
+    const versions = s.promoRules.versions
+    const asked = versions === null ? 0 : readPromoRuleVersion(url.searchParams.get('promo_rule_version'))
+    if (asked === null) return err(422, 'DY422', PROMO_RULE_VERSION_INVALID, h)
+    const supported_fields = versions === null ? c.supported_fields : { ...c.supported_fields, promotion_rule_versions: [...versions] }
+    const common = { pricing: s.pricing ?? c.pricing, catalog_version: c.catalog_version, server_time: serverTime(), supported_kinds: c.supported_kinds, supported_fields }
+    if (known === c.catalog_version) return json(200, { ok: true, data: { ...common, changed: false } }, { ...h, 'Cache-Control': 'no-store' })
+    const { promotionGroups, ...rest } = c.catalog
+    const catalog = { ...rest, promotions: promotionsFor(c.catalog.promotions, asked), ...(versions === null ? {} : { promotionGroups: promotionGroups ?? [MAIN_GROUP] }) }
+    return json(200, { ok: true, data: { ...c, ...common, catalog, client: clientOf(c.client), changed: true } }, { ...h, 'Cache-Control': 'no-store' })
   }
 
   /**
@@ -220,6 +241,21 @@ export function createMockDayo(opts: MockOptions = {}): MockDayo {
       if (promotion === undefined) throw new Error(`closePromotion: ${id} is not an active promotion of the mock catalog`)
       s.closedPromotions.set(id, { promotion: structuredClone(promotion), closedAt: Date.parse(at) })
       s.catalog.catalog.promotions = s.catalog.catalog.promotions.filter((p) => p.id !== id) // E1 sends active promotions only (ADR-0053 rule 5)
+      return bump()
+    },
+    setPromotions: (promotions, groups) => {
+      s.catalog.catalog.promotions = promotions.map(promotionRow)
+      if (groups !== undefined) s.catalog.catalog.promotionGroups = structuredClone([...groups])
+      return bump()
+    },
+    exhaust: (promoId: string, scope: 'total' | 'day', saleDate?: string) => {
+      if (scope === 'day' && (saleDate === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(saleDate))) throw new Error('exhaust: scope day needs the sale_date (YYYY-MM-DD) it is used up on')
+      const day = scope === 'day' ? saleDate! : null
+      if (!s.exhausted.some((e) => e.id === promoId && e.scope === scope && e.saleDate === day)) s.exhausted.push({ id: promoId, scope, saleDate: day })
+    },
+    setPromoRules: (p) => {
+      s.promoRules = structuredClone(p)
+      applyManualFields(s.catalog.supported_fields, p.manualFields)
       return bump()
     },
     editPosOrder: (posOrderId, e) => {
