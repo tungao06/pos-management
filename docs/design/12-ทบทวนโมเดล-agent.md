@@ -24,7 +24,7 @@
 | `devops` | Sonnet · medium | **Sonnet · low** | เขียนขั้นตอนให้เจ้าของทำเอง ไม่แตะ production · เรียกไม่บ่อย |
 | `test-runner` | Haiku · maxTurns 12 | คงเดิม | รันแล้วสรุป · ถูกที่สุดแล้ว |
 | `docs-researcher` | Haiku · maxTurns 10 | คงเดิม | ค้นแล้วอ้างแหล่งที่มา · ถูกที่สุดแล้ว |
-| `worktree-janitor` | Haiku · maxTurns 15 | **Haiku · maxTurns 8** | สั่งให้ตรวจทุก worktree ในคำสั่งเดียว จึงใช้รอบน้อยลง |
+| `worktree-janitor` | Haiku · maxTurns 15 | **Haiku · maxTurns 12** | ตรวจทุก worktree ในคำสั่งเดียว · รอบแรกตั้ง 8 แต่ตอนลบ 7 ที่ใช้ไม่พอ จึงเพิ่มเป็น 12 |
 
 ## ที่ประหยัดได้จริงมากกว่าการลดรุ่นในไฟล์
 
