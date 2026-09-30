@@ -29,6 +29,20 @@ it('fixture hashes ignore CRLF vs LF (D82) and report a missing file', () => {
   expect(contractFixtureHashes(tmpdir()).every((h) => h.sha256 === null)).toBe(true)
 })
 
+it('no fixture expects Cache-Control: spec 04 does not ask for it and dayo main does not send it (Task 19 report #1-4)', () => {
+  for (const file of listContractFixtures()) {
+    const fx = loadContractFixture(basename(file, '.json'))
+    expect(header(fx.response.headers, 'Cache-Control'), fx.name).toBeUndefined()
+  }
+})
+
+it('preflight-allowed-api-off allows Authorization, Content-Type and Idempotency-Key (spec 04 §4.1, S9) and no Expose-Headers', () => {
+  const fx = loadContractFixture('preflight-allowed-api-off')
+  expect(header(fx.response.headers, 'Access-Control-Allow-Headers')).toBe('Authorization, Content-Type, Idempotency-Key')
+  expect(header(fx.response.headers, 'Access-Control-Expose-Headers')).toBeUndefined()
+  expect(fx.response.headers_absent).toContain('Access-Control-Expose-Headers')
+})
+
 it('an unknown path under /api/v1 is a 404 that still carries CORS (err-404-unknown-path, spec §4.1)', () => {
   const fx = loadContractFixture('err-404-unknown-path')
   expect(fx.response.status).toBe(404)
@@ -49,7 +63,9 @@ for (const file of listContractFixtures()) {
       expect(header(fx.response.headers, 'Vary')).toBe('Origin')
       if (allowed) {
         expect(header(fx.response.headers, 'Access-Control-Allow-Origin')).toBe(origin)
-        expect(header(fx.response.headers, 'Access-Control-Expose-Headers')).toBe('Retry-After')
+        // Expose-Headers is for the real (non-preflight) answer only: it does nothing on OPTIONS (dayo cors.ts:69-82 · Task 19 report #7)
+        if (fx.request.method === 'OPTIONS') expect(fx.response.headers_absent).toContain('Access-Control-Expose-Headers')
+        else expect(header(fx.response.headers, 'Access-Control-Expose-Headers')).toBe('Retry-After')
       } else {
         expect(fx.response.headers_absent).toContain('Access-Control-Allow-Origin')
       }
@@ -159,5 +175,9 @@ describe('block 3 contract fixtures (plan 09 Task 7)', () => {
     const d = ShiftCashResponse.parse(fx.response.body).data
     expect(d.bills.map((b) => b.sold_at)).toEqual(['2026-09-25T04:00:00.000+00:00'])
     expect(d.cash_total).toBe(d.bills.reduce((a, b) => a + b.total, 0))
+  })
+
+  it('e4-shift-cash carries data.server_time in the dayo …mmm+00:00 form (0076:50-52)', () => {
+    expect(bodyData(loadContractFixture('e4-shift-cash'))['server_time']).toBe(SERVER_TIME)
   })
 })

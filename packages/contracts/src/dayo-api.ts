@@ -512,7 +512,7 @@ export const OrdersListResponse = z.looseObject({ ok: z.literal(true), data: z.a
  */
 export const ShiftCashBill = z.looseObject({ order_no: z.string().min(1), version: z.number().int(), source: z.string(), sold_at: IsoReceived.nullable(), total: z.number().finite().nonnegative(), created_by_name: z.string().nullable() })
 export type ShiftCashBill = z.infer<typeof ShiftCashBill>
-export const ShiftCashData = z.looseObject({ bills: z.array(ShiftCashBill), cash_total: z.number().finite().nonnegative() })
+export const ShiftCashData = z.looseObject({ bills: z.array(ShiftCashBill), cash_total: z.number().finite().nonnegative(), server_time: IsoReceived.optional() })
 export type ShiftCashData = z.infer<typeof ShiftCashData>
 export const ShiftCashResponse = z.looseObject({ ok: z.literal(true), data: ShiftCashData })
 export type ShiftCashResponse = z.infer<typeof ShiftCashResponse>

@@ -75,7 +75,7 @@ const bad = (why: string): PosError => new PosError('DAYO_BAD_RESPONSE', `E4 ${w
  * count's counted_at) is later than that + 5 min is not closed yet — a bot bill created between the answer and
  * counted_at would be in neither this Z (not listed now) nor the next (its window starts at counted_at). Refused as
  * BAD_INPUT `CLOCK_AHEAD:` + Thai text (the screen shows the detail), nothing stored; asking again once dayo's time has
- * passed the count works. E4 carries no server_time (0067): dayo's time is the tablet's estimate at the answer — the
+ * passed the count works. E4 sends server_time since dayo 0076 (older dayo does not) and POS does not use it here: dayo's time is the tablet's estimate at the answer — the
  * last skew E1/E2 measured while fresh (D106 `estimatedServerMs`), else the device clock. fetchBotCash refreshes a
  * stale skew with one E1 first (fix round 1 item 5), so the device-clock fallback is left for an E1 that failed.
  */

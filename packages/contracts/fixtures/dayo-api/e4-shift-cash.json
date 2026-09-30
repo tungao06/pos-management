@@ -24,7 +24,8 @@
       "ok": true,
       "data": {
         "bills": [{ "order_no": "L260925-901", "version": 1, "source": "line", "sold_at": "2026-09-25T04:00:00.000+00:00", "total": 70, "created_by_name": "DCm" }],
-        "cash_total": 70
+        "cash_total": 70,
+        "server_time": "2026-09-25T12:10:00.410+00:00"
       }
     }
   }

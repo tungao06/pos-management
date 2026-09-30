@@ -226,7 +226,7 @@ describe('E4 GET /v1/pos/shift-cash (0067:31-75)', () => {
     mock.seedCentralOrders([{ ...botBill('L260925-901', 70, '2026-09-25T04:00:00Z'), created_by_name: 'บอท' }, { ...botBill('L260925-902', 10.5, '2026-09-25T04:00:00Z'), source: 'web' }])
     const r = await get(mock, `?after=${encodeURIComponent(at(0))}&until=${encodeURIComponent(at(5))}`)
     const body = ShiftCashResponse.parse(await r.json())
-    expect(body.data).toEqual({ cash_total: 80.5, bills: [
+    expect(body.data).toEqual({ cash_total: 80.5, server_time: '2026-09-25T12:10:00.000+00:00', bills: [
       { order_no: 'L260925-901', version: 1, source: 'line', sold_at: pg(at(4)), total: 70, created_by_name: 'บอท' },
       { order_no: 'L260925-902', version: 1, source: 'web', sold_at: pg(at(4)), total: 10.5, created_by_name: null },
     ] })
@@ -239,7 +239,7 @@ describe('E4 GET /v1/pos/shift-cash (0067:31-75)', () => {
     expect([bad.status, await bad.json()]).toEqual([422, { ok: false, error: { code: 'DY422', message: 'invalid: after และ until ต้องเป็นเวลา ISO-8601 ที่มีเขตเวลา' } }])
     const rev = await get(mock, `?after=${encodeURIComponent(at(5))}&until=${encodeURIComponent(at(5))}`)
     expect([rev.status, await rev.json()]).toEqual([422, { ok: false, error: { code: 'DY422', message: 'invalid: after ต้องน้อยกว่า until' } }])
-    expect(await (await get(mock, `?after=${encodeURIComponent(at(0))}&until=${encodeURIComponent(at(5))}`)).json()).toEqual({ ok: true, data: { bills: [], cash_total: 0 } })
+    expect(await (await get(mock, `?after=${encodeURIComponent(at(0))}&until=${encodeURIComponent(at(5))}`)).json()).toEqual({ ok: true, data: { bills: [], cash_total: 0, server_time: '2026-09-25T12:10:00.000+00:00' } })
     mock.setScopes(['catalog:read', 'staff:read', 'orders:write', 'shift:write'])
     expect((await get(mock, `?after=${encodeURIComponent(at(0))}&until=${encodeURIComponent(at(5))}`)).status).toBe(403)
   })

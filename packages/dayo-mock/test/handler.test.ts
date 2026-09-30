@@ -6,6 +6,23 @@ const auth = { authorization: `Bearer ${MOCK_API_KEY}`, origin: 'http://localhos
 const acceptedBody = () => JSON.stringify({ ...(loadContractFixture('e2-order-accepted').request.body as object) })
 
 describe('mock dayo', () => {
+  it('E1 answers carry no Cache-Control (spec 04 does not ask for it · dayo main does not send it), changed or not', async () => {
+    const m = createMockDayo({ now: '2026-09-25T02:00:00.000Z' })
+    const changed = await m.fetch('http://mock/api/v1/pos/catalog?known_version=1', { headers: auth })
+    const unchanged = await m.fetch('http://mock/api/v1/pos/catalog?known_version=42', { headers: auth })
+    expect(changed.headers.get('Cache-Control')).toBeNull()
+    expect(unchanged.headers.get('Cache-Control')).toBeNull()
+  })
+  it('a preflight allows Idempotency-Key and leaves out Expose-Headers; a normal answer keeps Expose-Headers', async () => {
+    const m = createMockDayo({ now: '2026-09-25T02:00:00.000Z' })
+    const pre = await m.fetch('http://mock/api/v1/pos/push', { method: 'OPTIONS', headers: { origin: 'http://localhost:4173' } })
+    expect(pre.status).toBe(204)
+    expect(pre.headers.get('Access-Control-Allow-Headers')).toBe('Authorization, Content-Type, Idempotency-Key')
+    expect(pre.headers.get('Access-Control-Expose-Headers')).toBeNull()
+    expect(pre.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:4173')
+    const real = await m.fetch('http://mock/api/v1/pos/catalog?known_version=42', { headers: auth })
+    expect(real.headers.get('Access-Control-Expose-Headers')).toBe('Retry-After')
+  })
   it('bumpCatalog makes the next known_version call answer changed:true with the new version', async () => {
     const m = createMockDayo({ now: '2026-09-25T02:00:00.000Z' })
     const v = m.bumpCatalog((c) => { c.catalog.variants[0]!.price = 40 })
