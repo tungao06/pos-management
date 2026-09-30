@@ -1,6 +1,6 @@
 {
   "name": "e2-unsupported-kind-and-field",
-  "spec": "04 §4.1 ความเข้ากันได้: ชนิด/ฟิลด์ที่ไม่รู้จัก = deferred UNSUPPORTED",
+  "spec": "04 §4.1 ความเข้ากันได้: ชนิด/ฟิลด์ที่ไม่รู้จัก = deferred UNSUPPORTED · dayo main รู้จัก shift_open แล้ว (ก้อน 3 ระยะ 1) แถว shift_open ในไฟล์นี้จึงตกที่ฟิลด์ id (ที่รองรับคือ shift_id) ไม่ใช่ชนิด → detail ของฟิลด์ (รายงานเล่นซ้ำ Task 19 R2-6)",
   "env": { "API_V1_ENABLED": "1", "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173", "DAYO_SHOP_ID": "11111111-2222-4333-8444-555555555555" },
   "rpc": {
     "api_authenticate": { "ok": true, "api_client_id": "5b8e2c1a-7d3f-4e6a-9b0c-2d4e6f8a0b1c", "shop_id": "11111111-2222-4333-8444-555555555555", "name": "แท็บเล็ตขาย 1", "scopes": ["catalog:read", "staff:read", "orders:read", "orders:write"] },
@@ -26,7 +26,7 @@
     "status": 200,
     "headers": { "Access-Control-Allow-Origin": "https://pos.dayo.test", "Vary": "Origin", "Access-Control-Expose-Headers": "Retry-After" },
     "body": { "ok": true, "data": { "server_time": "2026-09-25T07:00:00.200+00:00", "results": [
-      { "key": "shift_open:6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", "status": "deferred", "reason": "UNSUPPORTED", "detail": "ชนิดแถวนี้ระบบกลางยังไม่รองรับ" },
+      { "key": "shift_open:6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d", "status": "deferred", "reason": "UNSUPPORTED", "detail": "มีฟิลด์ที่ระบบกลางยังไม่รองรับ" },
       { "key": "order:7b8c9d0e-1f2a-4b3c-9d4e-5f6a7b8c9d0e", "status": "deferred", "reason": "UNSUPPORTED", "detail": "มีฟิลด์ที่ระบบกลางยังไม่รองรับ" }
     ] } }
   }

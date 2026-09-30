@@ -71,7 +71,7 @@
               "recipeLines": [ { "ingredientId": null, "baseId": "5e1f2a3b-4c5d-4e6f-8a7b-9c0d1e2f3a4b", "qty": 120, "unit": "ml" }, { "ingredientId": "c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f", "baseId": null, "qty": 60, "unit": "ml" } ] },
             { "menuCode": "Matcha Latte", "menuNameTh": "มัตจะลาเต้", "family": "มัตจะ", "categoryLabel": "มัตจะ", "menuSortOrder": 3, "size": "16 oz", "sweetness": "50%", "price": 85, "allowOatMilk": true, "isMatcha": true,
               "recipeLines": [ { "ingredientId": "e5f6a7b8-c9d0-4e1f-8a2b-3c4d5e6f7a8b", "baseId": null, "qty": 3.5, "unit": "g" }, { "ingredientId": "c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f", "baseId": null, "qty": 150, "unit": "ml" } ] },
-            { "menuCode": "Fresh Milk", "menuNameTh": "นมสด", "family": "นม", "categoryLabel": null, "menuSortOrder": 4, "size": "20 oz", "sweetness": "50%", "price": 45, "allowOatMilk": true, "isMatcha": false,
+            { "menuCode": "Fresh Milk", "menuNameTh": "นมสด", "family": "อื่นๆ", "categoryLabel": null, "menuSortOrder": 4, "size": "20 oz", "sweetness": "50%", "price": 45, "allowOatMilk": true, "isMatcha": false,
               "recipeLines": [ { "ingredientId": "c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f", "baseId": null, "qty": 200, "unit": "ml" } ] }
           ],
           "ingredients": {
