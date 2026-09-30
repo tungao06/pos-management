@@ -11,7 +11,16 @@
       "Bash(pnpm --filter *)",
       "Bash(git status *)",
       "Bash(git diff *)",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Bash(git worktree list*)",
+      "Bash(git worktree remove *)",
+      "Bash(git worktree prune*)",
+      "Bash(git merge-base *)",
+      "Bash(git -C * status *)",
+      "Bash(git -C * log *)",
+      "Bash(git -C * rev-list *)",
+      "Bash(git -C * stash list*)",
+      "Bash(git -C * rev-parse *)"
     ],
     "ask": [
       "Bash(git push *)",
@@ -21,6 +30,10 @@
       "Bash(npx wrangler secret *)"
     ],
     "deny": [
+      "Bash(git worktree remove --force*)",
+      "Bash(git worktree remove -f*)",
+      "Bash(git worktree remove * --force*)",
+      "Bash(git worktree remove * -f*)",
       "Read(./.env)",
       "Read(./**/.env)",
       "Read(./**/.env.local)",

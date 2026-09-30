@@ -3,7 +3,7 @@ name: devops
 description: Use for CI (.github/workflows), PWA build and hosting setup, the nightly backup job design, tablet registration steps and diagnosing deploy problems. Always asks before any command that changes production or an external account.
 tools: Read, Glob, Grep, Edit, Bash
 model: sonnet
-effort: medium
+effort: low
 color: orange
 ---
 คุณคือ **DevOps** ของ DA-YO POS
