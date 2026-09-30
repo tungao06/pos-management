@@ -47,6 +47,13 @@ export function SellScreen(): JSX.Element {
     seenVersion.current = version
   }, [catalogQuery.data?.catalogVersion])
 
+  // plan 10 §0.2: a dayo whose E1 lacks manual_promotion_ids would hold the E2 row UNSUPPORTED — a manual pick made
+  // while it was supported is dropped (with its reason) when support goes away, so the row stays as an older dayo reads it.
+  const manualSupported = boot.data?.promo?.manualSupported ?? false
+  useEffect(() => {
+    if (boot.data !== undefined && !manualSupported && cart.manualPromotionIds.length > 0) dispatch({ type: 'clearManualPromotions' })
+  }, [boot.data, manualSupported, cart.manualPromotionIds.length, dispatch])
+
   // Starts the cart on dayo's own default channel (never a hardcoded one) — only while the cart is still empty, so
   // switching channel mid-sale is always the cashier's own choice.
   useEffect(() => {
@@ -156,7 +163,7 @@ export function SellScreen(): JSX.Element {
         payments={dto.payments}
         maxQtyPerLine={dto.maxQtyPerLine}
         onOpenDiscount={() => setDiscountOpen(true)}
-        manualSupported={boot.data?.promo?.manualSupported ?? false}
+        manualSupported={manualSupported}
         onPay={(method) => void navigate({ to: method === 'CASH' ? '/pay/cash' : '/pay/qr' })}
       />
       {picking !== null && (

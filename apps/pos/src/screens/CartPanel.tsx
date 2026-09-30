@@ -132,7 +132,7 @@ export function CartPanel({
           const freeQty = sumSatang(matched.filter((p) => p.promotionId !== null && p.lineTotalSatang === 0).map((p) => p.qty))
           // a promotion can split one line by promo (and a cup two promos share): each discounted part is shown as priced
           const discounted = matched.filter((p) => p.promotionId !== null && p.discountPerCupSatang > 0)
-          const promoName = (id: string): string => priced?.promotionsApplied.find((a) => a.promotionId === id)?.name ?? id
+          const promoName = (id: string): string | null => priced?.promotionsApplied.find((a) => a.promotionId === id)?.name ?? null
           const badLine = lineErrors[i] ?? null
           return (
             <div key={l.key} className="cart-line" data-testid={`cart-line-${i}`}>
@@ -150,11 +150,16 @@ export function CartPanel({
                     {TH.perCupDiscount(formatBahtFull(p.discountPerCupSatang))}
                     {p.promoBreakdown !== null && p.promoBreakdown.length >= 2 && (
                       <ul className="promo-breakdown" data-testid={`cart-line-breakdown-${i}-${j}`}>
-                        {p.promoBreakdown.map((b) => (
-                          <li key={b.promotionId}>
-                            {promoName(b.promotionId)} −{formatBahtFull(b.satang)}
-                          </li>
-                        ))}
+                        {p.promoBreakdown.flatMap((b) => {
+                          const name = promoName(b.promotionId)
+                          return name === null
+                            ? []
+                            : [
+                                <li key={b.promotionId}>
+                                  {name} −{formatBahtFull(b.satang)}
+                                </li>,
+                              ]
+                        })}
                       </ul>
                     )}
                   </div>
@@ -187,9 +192,9 @@ export function CartPanel({
             {cartErrorMessage(error)}
           </p>
         )}
-        {priced !== null && !priced.ok && (
+        {priced !== null && !priced.ok && priced.warnings.some((w) => !w.startsWith('ไม่ใช้โปร')) && (
           <p role="alert" className="error" data-testid="cart-warnings">
-            {priced.warnings.join(' · ')}
+            {priced.warnings.filter((w) => !w.startsWith('ไม่ใช้โปร')).join(' · ')}
           </p>
         )}
         {billDiscountTooBig && (
@@ -199,7 +204,7 @@ export function CartPanel({
         )}
         {zeroTotal && !billDiscountTooBig && (
           <p role="alert" className="error" data-testid="cart-zero-total">
-            {TH.errZeroTotal}
+            {TH.errZeroTotalNotAllowed}
           </p>
         )}
         {zeroCashOnly && (

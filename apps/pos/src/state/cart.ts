@@ -41,8 +41,7 @@ export type CartAction =
   | { type: 'setPromoCode'; code: string | null }
   | { type: 'toggleManualPromotion'; id: string }
   | { type: 'setManualReason'; text: string }
-  | { type: 'toggleManualPromotion'; id: string }
-  | { type: 'setManualReason'; text: string }
+  | { type: 'clearManualPromotions' }
   | { type: 'reset'; orderId: string; channelCode: string }
 
 export const lineKey = (code: string, size: string, sweetness: string, milk: string, grade: string | null): string => `${code}|${size}|${sweetness}|${milk}|${grade ?? ''}`
@@ -91,10 +90,12 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       if (text.length > MANUAL_REASON_MAX) {
         text = text.slice(0, MANUAL_REASON_MAX)
         // never leave half of a surrogate pair at the cut
-        if (/[�-�]$/.test(text)) text = text.slice(0, -1)
+        if (/[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1)
       }
       return { ...state, manualPromotionReason: text }
     }
+    case 'clearManualPromotions':
+      return { ...state, manualPromotionIds: [], manualPromotionReason: '' }
     case 'reset':
       return emptyCart(action.orderId, action.channelCode)
   }

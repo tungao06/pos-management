@@ -1,4 +1,4 @@
-import { useEffect, type JSX } from 'react'
+import type { JSX } from 'react'
 import { normPromoCode } from '@dayo/dayo-pricing'
 import { zeroBillNeedsReason, type PosOrderCatalog, type PricedCart } from '@dayo/domain'
 import { useCart } from '../app/cart-context'
@@ -20,11 +20,6 @@ export function PromoPanel({ priced, catalog, manualSupported = false }: { price
   // Q2 = ก: the reason is asked only when the system asks for it (zeroBillNeedsReason) — never just because one was picked
   const needsReason = priced !== null && zeroBillNeedsReason({ ...toCartDraft(state), paymentCode: 'cash' }, priced)
   const pickedIds = state.manualPromotionIds.length
-  const hasReason = state.manualPromotionReason !== ''
-  useEffect(() => {
-    // the bill no longer needs it (e.g. a cup was added) → do not send a stale reason with it
-    if (priced !== null && pickedIds > 0 && !needsReason && hasReason) dispatch({ type: 'setManualReason', text: '' })
-  }, [priced, pickedIds, needsReason, hasReason, dispatch])
   const normalizedCode = state.promoCode === null ? null : normPromoCode(state.promoCode)
   const promoWarnings = (priced?.warnings ?? []).filter((w) => w.startsWith('ไม่ใช้โปร'))
   return (
@@ -55,26 +50,32 @@ export function PromoPanel({ priced, catalog, manualSupported = false }: { price
       ))}
       {promoWarnings.length > 0 && (
         <ul className="promo-warnings" data-testid="promo-warnings" aria-label={TH.promoWarnings}>
-          {promoWarnings.map((w) => (
-            <li key={w}>{w}</li>
+          {promoWarnings.map((w, i) => (
+            <li key={i}>{w}</li>
           ))}
         </ul>
       )}
       <ManualPromoPicker catalog={catalog} manualSupported={manualSupported} />
       {needsReason && pickedIds > 0 && (
-        <label className="manual-reason">
-          {TH.manualReason}
-          <input
-            data-testid="manual-reason"
-            maxLength={MANUAL_REASON_MAX}
-            value={state.manualPromotionReason}
-            onChange={(e) => dispatch({ type: 'setManualReason', text: e.target.value })}
-          />
-          <span className="badge" data-testid="manual-reason-count">
+        <div className="manual-reason">
+          <label>
+            {TH.manualReason}
+            <input
+              data-testid="manual-reason"
+              maxLength={MANUAL_REASON_MAX}
+              aria-required="true"
+              aria-describedby="manual-reason-hint manual-reason-count"
+              value={state.manualPromotionReason}
+              onChange={(e) => dispatch({ type: 'setManualReason', text: e.target.value })}
+            />
+          </label>
+          <span id="manual-reason-count" className="badge" data-testid="manual-reason-count">
             {TH.manualReasonCount(state.manualPromotionReason.length)}
           </span>
-          <span data-testid="manual-reason-hint">{TH.manualReasonNeeded}</span>
-        </label>
+          <span id="manual-reason-hint" data-testid="manual-reason-hint">
+            {TH.manualReasonNeeded}
+          </span>
+        </div>
       )}
       <label className="check">
         <input type="checkbox" data-testid="no-promotions" checked={state.noPromotions} onChange={(e) => dispatch({ type: 'setNoPromotions', value: e.target.checked })} />

@@ -615,7 +615,8 @@ export const TH = {
   statusVersionLine: (version: string, commit: string, builtAt: string): string => `เวอร์ชัน v${version} · commit ${commit} · build ${builtAt}`,
 
   // แผน 10 T0 — โปรโมชันเลือกเอง + แคตตาล็อกรุ่นใหม่ (spec §5.1, owner Q1=ข, Q3=ก, ADR-0072)
-  errManualReasonRequired: 'ต้องใส่เหตุผลก่อนชำระ เมื่อเลือกโปรโมชันเอง',
+  // owner Q7=ก · D133: asked only for a ฿0 bill that has a manual promotion — never on every manual pick
+  errManualReasonRequired: 'บิลนี้ยอด 0 บาทและมีโปรที่เลือกเอง — ต้องใส่เหตุผลก่อนชำระ',
   errManualPromoUnsupported: 'ระบบกลางรุ่นนี้ยังไม่รองรับการเลือกโปรโมชันเอง',
   // ต่างจาก errDiscountTooBig (ส่วนลดต้องน้อยกว่ายอดรวม) — นี่คือกรณีส่วนลดกรอกเองทำให้ยอดเหลือ 0 บาทพอดี
   errZeroTotalNotAllowed: 'ส่วนลดทำให้ยอดเหลือ 0 บาท ขายไม่ได้ — ลดส่วนลดหรือลบบรรทัดก่อน',
@@ -623,7 +624,6 @@ export const TH = {
   errBadManualPromotion: 'โปรที่เลือกเองไม่ถูกต้อง — เลือกได้ไม่เกิน 20 โปร และเหตุผลต้องยาว 1–200 ตัวอักษร บรรทัดเดียว',
   manualPromos: 'โปรโมชันที่เลือกเอง',
   manualReason: 'เหตุผลที่เลือกโปรนี้เอง',
-  manualReasonHint: 'ต้องใส่เหตุผลก่อนชำระ ถ้าเลือกโปรโมชันเอง',
   promoModeAuto: 'อัตโนมัติ',
   promoModeCode: 'รหัสโปร',
   promoModeManual: 'เลือกเอง',
