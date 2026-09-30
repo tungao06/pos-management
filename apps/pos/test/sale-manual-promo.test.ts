@@ -4,10 +4,11 @@ import * as s from '@dayo/db-schema/sqlite'
 import { OrderRowData, OrderVoidRowData } from '@dayo/contracts'
 import { loadContractFixture } from '@dayo/contracts/fixture-files'
 import type { CatalogPromotion, PromotionGroup } from '@dayo/dayo-mock'
-import { priceCart, selectableManualPromotions } from '@dayo/domain'
+import { priceCart, selectableManualPromotions, verifyChain } from '@dayo/domain'
 import { countSyncProblems } from '../src/api/bootstrap'
 import { posErrorCode } from '../src/api/errors'
 import { PAYMENT_CODE, type RecordSaleInput } from '../src/api/types'
+import { loadDeviceChain } from '../src/db/events'
 import { pushOnce } from '../src/sync/push'
 import { openConnectedApi, STAFF } from './helpers/dayo'
 import { countAndClose } from './helpers/shift'
@@ -33,6 +34,12 @@ const REASON = 'ชงผิดสูตร ทำแก้วใหม่ให
 const owner = { approverUserId: STAFF.TungAo, approverPin: '1111', reason: 'แก้ตามหน้าส่งไม่ผ่าน' }
 
 const promo = (id: string): CatalogPromotion => structuredClone(E1.data.catalog.promotions.find((p) => p.id === id)!)
+/** An AUTO promotion made here from FREE: 100% off Cocoa, applied without being picked. */
+const AUTO_COCOA = '5c5c5c5c-0000-4000-8000-000000000007'
+function autoFreeCocoa(): CatalogPromotion {
+  const p = promo(FREE)
+  return { ...p, id: AUTO_COCOA, name: 'โกโก้ฟรี (อัตโนมัติ)', applyMode: 'auto', autoApply: true, priority: 5, rule: { ...p.rule!, target: { menus: ['Cocoa'] } } } as CatalogPromotion
+}
 function threeBaht(): CatalogPromotion {
   const p = promo(FIVE)
   return { ...p, id: THREE, name: 'ลดชาไทย 3 บาท (เลือกเอง)', groupCode: 'main', rule: { ...p.rule!, reward: { type: 'amount', baht: 3 } } } as CatalogPromotion
@@ -109,6 +116,8 @@ describe('recordSale with manual promotions (plan 10 T8 · §0.2 E2 order)', () 
     const reasonOnly = await sell(t, cartOf([line('Thai Tea')], [], REASON), { method: 'CASH', tenderedSatang: 3_500 })
     const none = await sell(t, cartOf([line('Thai Tea')], [FIVE], REASON, { noPromotions: true }), { method: 'CASH', tenderedSatang: 3_500 })
     for (const r of [plain, reasonOnly, none]) {
+      // fix round 1 L2: a reason with no manual promotion leaving the tablet is not frozen either
+      expect(((await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())!.pricingJson as { cart: Cart }).cart.manualPromotionReason).toBeNull()
       const row = await rowOf(t, r.orderId)
       expect(Object.keys(row.rowJson as object)).toEqual(ROW_KEYS_BEFORE_PLAN_10)
       expect(JSON.stringify(row.rowJson)).not.toContain('manual')
@@ -143,10 +152,17 @@ describe('recordSale with manual promotions (plan 10 T8 · §0.2 E2 order)', () 
 
   it('a reason that is not one clean line of 1–200 characters is refused before anything is written', async () => {
     const t = await open()
-    for (const bad of ['เหตุผล\nสองบรรทัด', 'ก'.repeat(201), 'ซ่อน​อักษร']) {
+    for (const bad of ['เหตุผล\nสองบรรทัด', 'ก'.repeat(201), 'ซ่อน\u200bอักษร']) {
       expect(await refusal(sell(t, cartOf([line('Thai Tea')], [FIVE], bad), { method: 'PROMPTPAY' }, { expected: 3_000 }))).toBe('BAD_INPUT')
     }
     await nothingWritten(t)
+    // …but the same text left over with no manual promotion sent is dropped, never a refusal (fix round 1 L2)
+    for (const cart of [cartOf([line('Thai Tea')], [], 'เหตุผล\nสองบรรทัด'), cartOf([line('Thai Tea')], [FIVE], 'ซ่อน\u200bอักษร', { noPromotions: true })]) {
+      const r = await sell(t, cart, { method: 'PROMPTPAY' }, { expected: 3_500 })
+      const o = (await t.db.select().from(s.order).where(eq(s.order.id, r.orderId)).get())!
+      expect((o.pricingJson as { cart: Cart }).cart.manualPromotionReason).toBeNull()
+      expect(JSON.stringify((await rowOf(t, r.orderId)).rowJson)).not.toContain('manual')
+    }
   })
 })
 
@@ -188,12 +204,29 @@ describe('a ฿0 bill (D124 · owner Q1 = ข)', () => {
       cartOf([line('Cocoa', { discountSatang: 4_500, discountReason: 'ลดให้' })]),
       cartOf([line('Cocoa')], [], null, { billDiscount: { kind: 'satang', satang: 4_500, reason: 'ลดให้' } }),
       cartOf([line('Cocoa'), line('Thai Tea', { free: true, discountReason: 'แถม' })], [FREE], REASON), // the promotion zeroes one cup, a typed free cup the other
+      // fix round 1 L1: the same with no reason — the engine's only problem is that reason, so the ฿0 rule speaks first
+      // (never PRICE_NOT_OK, which would change to ZERO_TOTAL_NOT_ALLOWED once a reason is typed)
+      cartOf([line('Cocoa'), line('Thai Tea', { free: true, discountReason: 'แถม' })], [FREE]),
     ]
     for (const cart of carts) {
       expect(await shown(t, cart, 'CASH')).toBe(0)
       expect(await refusal(sell(t, cart, CASH0))).toBe('ZERO_TOTAL_NOT_ALLOWED')
     }
     await nothingWritten(t)
+  })
+
+  it('owner Q7 = ก (D133): ฿0 from an AUTO promotion with a manual one picked that gives nothing still needs the reason', async () => {
+    const t = await open({ promos: [autoFreeCocoa(), promo(FIVE)] })
+    const cart = cartOf([line('Cocoa')], [FIVE]) // FIVE is Thai Tea only: no discount on this bill, and the engine asks nothing
+    const cat = await t.api.loadSellCatalog()
+    const priced = priceCart({ ...cart, paymentCode: 'cash' }, cat.catalog, t.clock.now())
+    expect([priced.totalSatang, priced.ok, priced.manualPromotionReasonRequired]).toEqual([0, true, false])
+    expect(await refusal(sell(t, cart, CASH0))).toBe('MANUAL_REASON_REQUIRED')
+    await nothingWritten(t)
+    const r = await sell(t, cartOf([line('Cocoa')], [FIVE], REASON), CASH0)
+    expect(r).toMatchObject({ totalSatang: 0, changeSatang: 0 })
+    const data = OrderRowData.parse((await rowOf(t, r.orderId)).rowJson)
+    expect([data.manual_promotion_ids, data.manual_promotion_reason, data.totals.total]).toEqual([[FIVE], REASON, 0])
   })
 
   it('counts in the X report and the Z as one bill of ฿0 (the formulas do not change)', async () => {
@@ -220,6 +253,7 @@ describe('voiding a ฿0 bill (plan 10 T8 step 3)', () => {
     expect(OrderVoidRowData.parse(v.rowJson)).toMatchObject({ pos_order_id: r.orderId, reason: 'ลูกค้าไม่เอา' })
     expect((await eventsOf(t, r.orderId)).find((e) => e.type === 'VOIDED')!.payloadJson).toMatchObject({ cashRefundSatang: 0, cashMovementId: null, qrRefundSatang: 0 })
     expect((await t.api.shiftReport()).sales).toMatchObject({ orderCount: 1, voidCount: 1, voidedSatang: 0, netSalesSatang: 0 })
+    expect(verifyChain(await loadDeviceChain(t.db, t.device.id))).toEqual({ ok: true }) // fix round 1 L3a: the ฿0 sale and its void
     expect(await pushOnce(ctxOf(t))).toMatchObject({ sent: 2 })
   })
 
@@ -295,6 +329,10 @@ describe('the split of a cup discounted by two promotions (R2 · OrderDetailDto.
       { promotionId: FIVE, name: 'ลดชาไทย 5 บาท (เลือกเอง)', satang: 500 },
     ])
     expect(d.manualPromotionReason).toBeNull()
+    // fix round 1 L3a: the chain holds with promoBreakdown and the manual keys under the hash
+    const paid = (await eventsOf(t, r.orderId)).find((e) => e.type === 'PAID')!
+    expect(paid.payloadJson).toMatchObject({ manualPromotionIds: [FIVE, THREE], manualPromotionReason: null })
+    expect(verifyChain(await loadDeviceChain(t.db, t.device.id))).toEqual({ ok: true })
   })
 })
 

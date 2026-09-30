@@ -40,20 +40,23 @@ async function lastQueueNo(db: RemoteDb, deviceId: string, businessDate: string)
  * The cart as the caller sent it, reasons trimmed, with its payment code — what a bill is priced from and stored as.
  * The manual-promotion reason is cut with dayo's own trim (trimWs — the text dayo stores, byte for byte); one that trims
  * to nothing is no reason at all (null), so a ฿0 bill that needs one is refused MANUAL_REASON_REQUIRED, never frozen blank.
+ * A reason left over with no manual promotion leaving the tablet (none picked, or noPromotions) is dropped here (T8 fix
+ * round 1 L2): it neither blocks the sale in checkCart nor is frozen in pricing_json.cart.
  * A caller of before plan 10 may send neither manual key: they read as none.
  */
 function normalizeCart(input: RecordSaleInput): CartDraft {
   const d = input.cart.billDiscount
   const typed = input.cart.manualPromotionReason ?? null
-  const manualReason = typed === null ? null : trimWs(typed)
-  return {
+  const trimmed = typed === null ? null : trimWs(typed)
+  const cart: CartDraft = {
     ...input.cart,
     billDiscount: d === null ? null : { ...d, reason: d.reason === null ? null : d.reason.trim() },
     lines: input.cart.lines.map((l) => ({ ...l, discountReason: l.discountReason === null ? null : l.discountReason.trim() })),
     manualPromotionIds: [...(input.cart.manualPromotionIds ?? [])],
-    manualPromotionReason: manualReason === '' ? null : manualReason,
+    manualPromotionReason: trimmed === '' ? null : trimmed,
     paymentCode: PAYMENT_CODE[input.payment.method],
   }
+  return manualPromotionsOf(cart).ids.length > 0 ? cart : { ...cart, manualPromotionReason: null }
 }
 
 /**
@@ -96,6 +99,9 @@ export async function lastReceiptNoOverall(db: RemoteDb, device: DeviceDto): Pro
   const best = counter(central) > counter(local) ? central : local
   return counter(best) > 0 ? best : null
 }
+
+/** A valid manual-promotion reason, only ever priced to ask the engine whether a missing reason is its only problem — never stored. */
+const REASON_PROBE = 'probe'
 
 /** Every free-text reason that travels in the E2 row must pass dayo's Text200 (1–200 code points, no control character). */
 function checkReason(text: string | null, what: string): void {
@@ -147,10 +153,14 @@ export async function recordSale(db: RemoteDb, deps: ApiDeps, input: RecordSaleI
     const totalSatang = priced.totalSatang
     if (totalSatang < 0) throw new PosError('DISCOUNT_TOO_BIG', 'the total must not go below 0') // never: the domain cross-checks the quote
     // D124 · owner Q1 = ข: a ฿0 bill only from promotions, with a reason when a manual one needs it, paid in cash — the
-    // domain's ONE rule. A cart the engine refused is PRICE_NOT_OK first (an unknown channel prices to 0 too), except the
-    // missing manual reason, which also makes priced.ok false: MANUAL_REASON_REQUIRED says what to do about it.
+    // domain's ONE rule. A cart the engine refused is PRICE_NOT_OK first (an unknown channel prices to 0 too) — unless the
+    // engine's ONLY problem is the missing manual reason (it sets ok=false for that alone): then the ฿0 verdict speaks, so a
+    // reason typed next never meets another refusal (fix round 1 L1). "Only" = the same cart with a reason prices ok —
+    // asked of the engine itself, never read from its warning text.
     const zero = zeroTotalVerdict(cart, priced)
-    if (!priced.ok && zero !== 'MANUAL_REASON_REQUIRED') throw new PosError('PRICE_NOT_OK', priced.warnings.join(' · '))
+    const onlyReasonMissing = !priced.ok && priced.manualPromotionReasonRequired && manual.reason === null
+      && priceCart({ ...cart, manualPromotionReason: REASON_PROBE }, stored.catalog, soldAt).ok
+    if (!priced.ok && !onlyReasonMissing) throw new PosError('PRICE_NOT_OK', priced.warnings.join(' · '))
     if (zero !== 'ok') throw new PosError(zero, `total ${totalSatang}`)
     if (totalSatang !== input.expectedTotalSatang) throw new PosError('PRICE_CHANGED', `shown ${input.expectedTotalSatang}, now ${totalSatang}`)
     let tenderedSatang: number | null = null

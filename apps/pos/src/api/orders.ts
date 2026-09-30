@@ -119,12 +119,12 @@ function promotionsOf(o: OrderRow): { name: string; discountSatang: number }[] {
 }
 
 /**
- * plan 10 R2: line `lineNo`'s per-promotion split (satang) from pricing_json — priced.lines is in lineNo order (recordSale
- * writes order_item.line_no = index + 1). Named from the bill's own promotionsApplied (the id when a name is missing).
+ * plan 10 R2: line `lineNo`'s per-promotion split (satang) from pricing_json — the priced line of that lineNo (fix round 1
+ * L6: matched by number, never by position). Named from the bill's own promotionsApplied (the id when a name is missing).
  */
 function promoBreakdownOf(o: OrderRow, lineNo: number): OrderLineDto['promoBreakdown'] {
   const frozen = frozenOf(o)
-  const split = frozen?.priced?.lines?.[lineNo - 1]?.promoBreakdown ?? null
+  const split = frozen?.priced?.lines?.find((l) => l.lineNo === lineNo)?.promoBreakdown ?? null
   if (split === null) return null
   const names = new Map((frozen?.priced?.promotionsApplied ?? []).map((p) => [p.promotionId, p.name]))
   return split.map((b) => ({ promotionId: b.promotionId, name: names.get(b.promotionId) ?? b.promotionId, satang: b.satang }))
