@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BLOCK3_FIXTURE_NAMES, header, PROMO_RULES_FIXTURE_NAMES, type CentralOrder, type OrderRowData } from '@dayo/contracts'
+import { BLOCK3_FIXTURE_NAMES, DAYO_MAIN_FIXTURE_NAMES, header, PROMO_RULES_FIXTURE_NAMES, type CentralOrder, type OrderRowData } from '@dayo/contracts'
 import { listContractFixtures, loadContractFixture } from '@dayo/contracts/fixture-files'
 import { basename } from 'node:path'
 import { ALL_SCOPES, createMockDayo, type MockDayo, type MockMode } from '../src/index.js'
@@ -28,6 +28,8 @@ const SETUP: Partial<Record<string, (m: MockDayo, fx: Fx) => void>> = {
   },
   // plan 10 Task 5: the bill numbers dayo gave the two manual-promotion bills (the fixture's order_no)
   'e2-order-manual-promo-accepted': (m) => m.setNextOrderNo('2026-09-25', 15),
+  // Task 19 round 2: dayo main's E1 asked with promo_rule_version=1 — an earlier Z of this key fills client.last_z_* (0067:134-155)
+  'e1-catalog-changed-main': (m) => m.preloadZ({ zNo: 41, hash: 'ab'.repeat(32), countedAt: '2026-09-24T12:00:00.000Z' }),
   'e1-catalog-changed-old-dayo': (m) => m.preloadZ({ zNo: 41, hash: 'ab'.repeat(32), countedAt: '2026-09-24T12:00:00.000Z' }), // as e1-catalog-changed-block3
   'e2-row-server-error': (m) => {
     m.override({ match: { key: 'order:8c9d0e1f-2a3b-4c4d-8e5f-6a7b8c9d0e1f' }, verdict: { status: 'deferred', reason: 'SERVER_ERROR', detail: 'SQLSTATE XX000' }, times: 1 })
@@ -41,6 +43,11 @@ const SETUP: Partial<Record<string, (m: MockDayo, fx: Fx) => void>> = {
  * fields) replay on a mock playing that release; e1-catalog-changed-old-dayo on one playing dayo 12885fe (block 3, no rules).
  */
 const F4CDA56 = new Set(['e1-catalog-changed-promo-rules', 'e1-catalog-unchanged-promo-rules', 'e2-order-manual-promo-accepted', 'e2-order-manual-reason-required'])
+/** Task 19 round 2: dayo main knows shift_open (phase 1), so the `id` field of the fixture's shift_open row is what it refuses. */
+const BLOCK3_MOCK = new Set(['e2-unsupported-kind-and-field'])
+/** …and the fixtures of dayo main's own E1 (Task 19 round 2): the same release as F4CDA56, asked with promo_rule_version=1. */
+// compared with sortedFields: dayo does not sort supported_fields (0066:603-606), so the lists are sets, not sequences
+const MAIN_SHAPED = new Set<string>([...F4CDA56, ...DAYO_MAIN_FIXTURE_NAMES])
 const LEGACY_KEYS = ['kind', 'params', 'daysOfWeek', 'timeFrom', 'timeTo', 'stackable']
 /**
  * dayo's tables behind e1-catalog-changed-promo-rules: the promotions as the owner saves them (rules only) — the old-shape
@@ -68,7 +75,8 @@ function mockFor(fx: Fx): MockDayo {
     apiKey: 'dayo_fixture_key_0001', origins: String(fx.env['POS_ORIGINS'] ?? '').split(','), now, mode,
     retryAfterSec: auth?.retry_after ?? 30, scopes,
     ...(fx.name === 'e1-catalog-changed' ? { catalog: data as never } : {}),
-    ...(F4CDA56.has(fx.name) ? { block3: true, promoRules: { versions: [1, 2], manualFields: true }, catalog: f4cda56Catalog() as never } : {}),
+    ...(MAIN_SHAPED.has(fx.name) ? { block3: true, promoRules: { versions: [1, 2], manualFields: true }, catalog: f4cda56Catalog() as never } : {}),
+    ...(BLOCK3_MOCK.has(fx.name) ? { block3: true } : {}),
     ...(fx.name === 'e1-catalog-changed-old-dayo' ? { block3: true, catalog: (loadContractFixture('e1-catalog-changed').response.body as { data: never }).data } : {}),
     ...(manifest === undefined ? {} : { pricing: manifest }),
     ...(fx.name === 'e3-orders-today' ? { seedOrders: (data as unknown as CentralOrder[]) } : {}),
@@ -103,7 +111,7 @@ for (const file of listContractFixtures().filter((f) => !BLOCK3.has(basename(f, 
       for (const h of fx.response.headers_absent ?? []) expect(res.headers.get(h), h).toBeNull()
       const text = await res.text()
       const got: unknown = text === '' ? undefined : JSON.parse(text)
-      if (PROMO_RULES.has(fx.name)) expect(sortedFields(got)).toEqual(sortedFields(fx.response.body))
+      if (PROMO_RULES.has(fx.name) || MAIN_SHAPED.has(fx.name)) expect(sortedFields(got)).toEqual(sortedFields(fx.response.body))
       else expect(got).toEqual(fx.response.body)
       void header
     })

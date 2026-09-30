@@ -19,7 +19,7 @@ export type PosContractFixture = z.infer<typeof PosContractFixture>
  * dayo main's SQL and handed to dayo. Adding or dropping one = change this list.
  */
 export const CONTRACT_FIXTURE_NAMES = [
-  'e1-catalog-changed', 'e1-catalog-changed-block3', 'e1-catalog-changed-old-dayo', 'e1-catalog-changed-promo-rules', 'e1-catalog-unchanged',
+  'e1-catalog-changed', 'e1-catalog-changed-block3', 'e1-catalog-changed-main', 'e1-catalog-changed-old-dayo', 'e1-catalog-changed-promo-rules', 'e1-catalog-unchanged',
   'e1-catalog-unchanged-promo-rules', 'e1-missing-staff-scope', 'e2-cash-count-counted-conflict',
   'e2-envelope-invalid', 'e2-key-reused-different-content', 'e2-missing-orders-write-scope', 'e2-order-accepted', 'e2-order-and-void-same-batch',
   'e2-order-duplicate', 'e2-order-manual-promo-accepted', 'e2-order-manual-reason-required', 'e2-order-off-catalog-accepted', 'e2-order-off-catalog-exists', 'e2-order-off-catalog-exists-order',
@@ -54,6 +54,20 @@ export const BLOCK3_PHASE2_FIXTURE_NAMES = [
 export const PROMO_RULES_FIXTURE_NAMES = [
   'e1-catalog-changed-old-dayo', 'e1-catalog-changed-promo-rules', 'e1-catalog-unchanged-promo-rules', 'e2-order-manual-promo-accepted', 'e2-order-manual-reason-required',
 ] as const satisfies readonly (typeof CONTRACT_FIXTURE_NAMES)[number][]
+
+/**
+ * Task 19 round 2: E1 fixtures that describe an OLDER dayo on purpose — the POS keeps them to test what it does against a dayo that
+ * has not shipped everything yet (they do not match dayo main and dayo's replay skips them): `-unchanged`/`-changed` = block 1
+ * (2 kinds, no shift kinds, no last_z_*, no manual_promotion_*, HH:MM:SS times), `-block3` = dayo 12885fe (before 0069-0073),
+ * `-old-dayo` = a dayo that ignores promo_rule_version. Do not rewrite them to look like main — add a main fixture instead.
+ */
+export const OLDER_DAYO_FIXTURE_NAMES = ['e1-catalog-changed', 'e1-catalog-changed-block3', 'e1-catalog-changed-old-dayo', 'e1-catalog-unchanged'] as const satisfies readonly (typeof CONTRACT_FIXTURE_NAMES)[number][]
+/**
+ * Task 19 round 2: E1 fixtures copied from what dayo main really answers (checked against its SQL on a local Supabase): the
+ * 4 shift kinds, manual_promotion_*, promotion_rule_versions, applyMode, promotionGroups, client.last_z_*, times as HH:MM.
+ * (`-promo-rules` and `-unchanged-promo-rules` are main-shaped too, and are listed in PROMO_RULES_FIXTURE_NAMES.)
+ */
+export const DAYO_MAIN_FIXTURE_NAMES = ['e1-catalog-changed-main'] as const satisfies readonly (typeof CONTRACT_FIXTURE_NAMES)[number][]
 
 /** Header lookup ignoring case — the fixtures write `Access-Control-Allow-Origin`, fetch lower-cases. */
 export function header(h: Record<string, string> | undefined, name: string): string | undefined {

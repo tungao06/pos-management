@@ -1,6 +1,6 @@
 {
-  "name": "e1-catalog-changed-promo-rules",
-  "spec": "04 §4.4 · แผน 10 §0.2 · dayo f4cda56: GET ?known_version=0&promo_rule_version=2 → supported_fields.promotion_rule_versions [1, 2] (0073:1715 · docs/API.md:97) + order มี manual_promotion_ids/manual_promotion_reason (0069 dayo_pos_supported) · โปรสองรูปตาม dayo_promo_json + dayo_pos_promotions_for (0074:163-202): รูปเดิม+กฎ (มี kind) และกฎล้วน (ไม่มี kind/params/daysOfWeek/timeFrom/timeTo/stackable) · usageLimit* ส่งเมื่อรุ่น ≥ 2 · promotionGroups ส่งเสมอ (0071:4163) · pricing 7 ไฟล์ (F7) · client ไม่มี Z · ที่เหลือเท่ากับ e1-catalog-changed",
+  "name": "e1-catalog-changed-main",
+  "spec": "04 §4.4 · §4.10 · ตรงกับ dayo main (ตรวจกับ SQL จริงบน Supabase ในเครื่อง — รายงานเล่นซ้ำ Task 19 รอบ 2): GET ?known_version=0&promo_rule_version=1 (แท็บเล็ตที่ยังไม่ทำขั้นบันได — docs/API.md:190) → supported_kinds ครบ 4 ชนิดกะ (0066:594-606) + order มี manual_promotion_ids/manual_promotion_reason (0069:1486-1508) + promotion_rule_versions [1, 2] (0073:1713-1715) · client.last_z_* มีค่า (Z ก่อนหน้าของคีย์นี้ 0067:134-155) · โปรทุกตัวมี applyMode (0069) · timeFrom/timeTo/timeWindows เป็น HH:MM (0074:172) · promotionGroups ส่งเสมอ (0071) · dayo_pos_promotions_for(…, 1) (0074:188-202): โปร rule.v=2 ไม่ส่ง · usageLimitTotal/usageLimitPerDay ไม่ส่ง · โปรกฎล้วน v1 ส่งโดยไม่มี kind/params/stackable · family ใช้ค่าที่ dayo ส่งได้ (0002_catalog.sql:72) · rule.stop_group = !stackable ของโปรรูปเดิม (0071:622) · ไม่มี order_off_catalog (ระยะ 2) · ที่เหลือเท่ากับ e1-catalog-changed-promo-rules",
   "env": {
     "API_V1_ENABLED": "1",
     "POS_ORIGINS": "https://pos.dayo.test,http://localhost:5173",
@@ -35,7 +35,7 @@
   },
   "request": {
     "method": "GET",
-    "path": "/api/v1/pos/catalog?known_version=0&promo_rule_version=2",
+    "path": "/api/v1/pos/catalog?known_version=0&promo_rule_version=1",
     "headers": {
       "Origin": "https://pos.dayo.test",
       "Authorization": "Bearer dayo_fixture_key_0001"
@@ -69,9 +69,9 @@
         "client": {
           "name": "แท็บเล็ตขาย 1",
           "last_receipt_no": "A-000312",
-          "last_z_no": null,
-          "last_z_hash": null,
-          "last_z_until": null
+          "last_z_no": 41,
+          "last_z_hash": "abababababababababababababababababababababababababababababababab",
+          "last_z_until": "2026-09-24T12:00:00.000+00:00"
         },
         "supported_kinds": [
           "order",
@@ -397,8 +397,6 @@
               "requiresCode": false,
               "autoApply": true,
               "isActive": true,
-              "usageLimitTotal": null,
-              "usageLimitPerDay": null,
               "daysOfWeek": null,
               "timeFrom": null,
               "timeTo": null,
@@ -449,8 +447,6 @@
               "requiresCode": false,
               "autoApply": true,
               "isActive": true,
-              "usageLimitTotal": null,
-              "usageLimitPerDay": null,
               "daysOfWeek": null,
               "timeFrom": "17:00",
               "timeTo": "20:00",
@@ -488,64 +484,6 @@
               "summaryTh": null
             },
             {
-              "id": "3a3a3a3a-0000-4000-8000-000000000003",
-              "code": null,
-              "name": "ชาไทยครบ 2 ลด 10% ครบ 3 ลด 15%",
-              "applyMode": "auto",
-              "startsOn": null,
-              "endsOn": null,
-              "channelCodes": [],
-              "requiresCode": false,
-              "autoApply": true,
-              "isActive": true,
-              "usageLimitTotal": 500,
-              "usageLimitPerDay": 50,
-              "priority": 30,
-              "template": "tiered_item",
-              "rule": {
-                "v": 2,
-                "scope": "cup",
-                "target": {
-                  "menus": [
-                    "Thai Tea"
-                  ]
-                },
-                "reward": {
-                  "type": "tiered",
-                  "basis": "qty",
-                  "tiers": [
-                    {
-                      "min": 2,
-                      "percent": 10
-                    },
-                    {
-                      "min": 3,
-                      "percent": 15
-                    }
-                  ]
-                }
-              },
-              "timeWindows": [
-                {
-                  "days": [
-                    5,
-                    6
-                  ],
-                  "from": "22:00",
-                  "to": "02:00"
-                },
-                {
-                  "days": [
-                    0
-                  ],
-                  "from": null,
-                  "to": null
-                }
-              ],
-              "groupCode": "stack",
-              "summaryTh": null
-            },
-            {
               "id": "5c5c5c5c-0000-4000-8000-000000000004",
               "code": null,
               "name": "ชงผิด ฟรีแก้วใหม่ (เลือกเอง)",
@@ -557,8 +495,6 @@
               "requiresCode": false,
               "autoApply": false,
               "isActive": true,
-              "usageLimitTotal": null,
-              "usageLimitPerDay": null,
               "daysOfWeek": null,
               "timeFrom": null,
               "timeTo": null,
@@ -594,8 +530,6 @@
               "requiresCode": false,
               "autoApply": false,
               "isActive": true,
-              "usageLimitTotal": null,
-              "usageLimitPerDay": null,
               "priority": 50,
               "template": "item_discount",
               "rule": {
