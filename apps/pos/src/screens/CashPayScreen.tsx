@@ -7,6 +7,7 @@ import { useCart } from '../app/cart-context'
 import { sellCatalogKey } from '../app/queries'
 import { useCommitSale } from '../app/use-commit-sale'
 import { usePricedCart } from '../app/use-priced-cart'
+import { zeroVerdictOf } from '../app/zero-bill'
 import { cartErrorMessage, errorMessage } from '../ui/errors'
 import { formatBaht, formatBahtFull, parseBahtInput } from '../ui/format'
 import { TH } from '../ui/th'
@@ -24,7 +25,10 @@ export function CashPayScreen(): JSX.Element {
   if (state.lines.length === 0 && !isPending && !isSuccess) return <Navigate to="/sell" />
 
   const total = priced?.totalSatang ?? 0
-  const tendered = parseBahtInput(tenderText)
+  // D124 · Q1 = ข: a ฿0 bill (from promotions) is confirmed as cash with nothing tendered — recordSale refuses any amount
+  const isZero = priced !== null && total === 0
+  const verdict = zeroVerdictOf(state, priced)
+  const tendered = isZero ? 0 : parseBahtInput(tenderText)
   const change = tendered !== null && tendered >= total ? cashChangeSatang(total, tendered) : null
 
   return (
@@ -33,20 +37,29 @@ export function CashPayScreen(): JSX.Element {
       <div>
         {TH.total} <span className="big-amount" data-testid="cash-total">{formatBahtFull(total)}</span>
       </div>
-      <div className="choices">
+      {isZero && (
+        <p className="badge" data-testid="zero-bill-note">
+          {TH.zeroBillCashOnly} {TH.zeroBillPayNote}
+        </p>
+      )}
+      {!isZero && <div className="choices">
         {quickTenderOptions(total).map((amount, i) => (
           <button key={amount} type="button" data-testid={i === 0 ? 'tender-exact' : `tender-${amount / 100}`} onClick={() => setTenderText(String(amount / 100))}>
             {i === 0 ? TH.exact : formatBaht(amount)}
           </button>
         ))}
-      </div>
-      <label>
-        {TH.tendered}
-        <input data-testid="tender-input" inputMode="decimal" value={tenderText} onChange={(e) => setTenderText(e.target.value)} />
-      </label>
-      <div>
-        {TH.change} <span className="big-amount" data-testid="cash-change">{change === null ? '–' : formatBahtFull(change)}</span>
-      </div>
+      </div>}
+      {!isZero && (
+        <>
+          <label>
+            {TH.tendered}
+            <input data-testid="tender-input" inputMode="decimal" value={tenderText} onChange={(e) => setTenderText(e.target.value)} />
+          </label>
+          <div>
+            {TH.change} <span className="big-amount" data-testid="cash-change">{change === null ? '–' : formatBahtFull(change)}</span>
+          </div>
+        </>
+      )}
       {priceChanged !== null && (
         <p role="alert" className="error" data-testid="price-changed">
           {TH.priceChanged(formatBahtFull(priceChanged.shownSatang), formatBahtFull(priceChanged.nowSatang))}
@@ -75,7 +88,7 @@ export function CashPayScreen(): JSX.Element {
             type="button"
             className="primary"
             data-testid="price-changed-confirm"
-            disabled={isPending || tendered === null || priced === null || tendered < total || priced.totalSatang !== priceChanged.nowSatang}
+            disabled={isPending || tendered === null || priced === null || tendered < total || priced.totalSatang !== priceChanged.nowSatang || verdict !== 'ok'}
             onClick={() => tendered !== null && priced !== null && void pay({ method: 'CASH', tenderedSatang: tendered }, priced.totalSatang)}
           >
             {TH.priceChangedConfirm}
@@ -85,7 +98,7 @@ export function CashPayScreen(): JSX.Element {
             type="button"
             className="primary"
             data-testid="confirm-cash"
-            disabled={change === null || tendered === null || isPending || priced === null || !priced.ok}
+            disabled={change === null || tendered === null || isPending || priced === null || !priced.ok || verdict !== 'ok'}
             onClick={() => tendered !== null && priced !== null && void pay({ method: 'CASH', tenderedSatang: tendered }, priced.totalSatang)}
           >
             {TH.confirmCash}

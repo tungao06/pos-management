@@ -40,7 +40,7 @@ const PAYMENTS = { cash: true, qr: true }
 
 const line = (size = '16 oz'): CartLine => ({ key: `Original|${size}|50%|fresh|`, code: 'Original', nameTh: 'ชาไทยเย็น', size, sweetness: '50%', milk: 'fresh', grade: null, qty: 2 })
 
-const twoCups: CartState = { orderId: 'o-1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, lines: [line()] }
+const twoCups: CartState = { orderId: 'o-1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: '', lines: [line()] }
 
 describe('CartPanel', () => {
   it('shows totals priced by the domain, changes qty and pays', async () => {
@@ -61,7 +61,7 @@ describe('CartPanel', () => {
 
   it('disables paying and discount on an empty cart', () => {
     render(
-      <CartProvider initial={{ orderId: 'o', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, lines: [] }}>
+      <CartProvider initial={{ orderId: 'o', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: '', lines: [] }}>
         <CartPanel catalog={CATALOG} channels={CHANNELS} payments={PAYMENTS} maxQtyPerLine={99} onOpenDiscount={() => undefined} onPay={() => undefined} />
       </CartProvider>,
     )
@@ -154,7 +154,7 @@ describe('CartPanel', () => {
 })
 
 describe('CartPanel — phone bottom sheet', () => {
-  const EMPTY: CartState = { orderId: 'o', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, lines: [] }
+  const EMPTY: CartState = { orderId: 'o', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: '', lines: [] }
   const panel = (initial: CartState) => (
     <CartProvider initial={initial}>
       <CartPanel catalog={CATALOG} channels={CHANNELS} payments={PAYMENTS} maxQtyPerLine={99} onOpenDiscount={() => undefined} onPay={() => undefined} />

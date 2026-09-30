@@ -633,4 +633,13 @@ export const TH = {
   promoWarnings: 'คำเตือนโปรโมชัน',
   // owner Q1=(ข): บิล 0 บาทจากโปรโมชันขายได้ แต่รับเงินสดเท่านั้น
   zeroBillCashOnly: 'บิลนี้ยอด 0 บาทจากโปรโมชัน — รับชำระด้วยเงินสดเท่านั้น',
+  // แผน 10 T9 — หน้าขาย
+  // ถามเหตุผลเฉพาะเมื่อระบบขอ (ยอด 0 บาทและมีโปรที่เลือกเอง) — ไม่ใช่ทุกครั้งที่เลือกโปรเอง
+  manualReasonNeeded: 'ยอดเหลือ 0 บาทและมีโปรที่เลือกเอง — ใส่เหตุผล 1–200 ตัวอักษรก่อนชำระ',
+  manualReasonCount: (n: number): string => `${n}/200`,
+  promoCodeNormalized: (code: string): string => `รหัสที่ใช้: ${code}`,
+  perCupDiscount: (amount: string): string => `ลด ${amount}/แก้ว`,
+  cupsWith: (n: number): string => `${n} แก้ว`,
+  orderManualReason: (reason: string): string => `เหตุผลที่เลือกโปรเอง: ${reason}`,
+  zeroBillPayNote: 'ยอด 0 บาท — กดยืนยันรับเงินสด ไม่ต้องรับเงิน',
 } as const

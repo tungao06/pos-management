@@ -156,6 +156,7 @@ export function SellScreen(): JSX.Element {
         payments={dto.payments}
         maxQtyPerLine={dto.maxQtyPerLine}
         onOpenDiscount={() => setDiscountOpen(true)}
+        manualSupported={boot.data?.promo?.manualSupported ?? false}
         onPay={(method) => void navigate({ to: method === 'CASH' ? '/pay/cash' : '/pay/qr' })}
       />
       {picking !== null && (

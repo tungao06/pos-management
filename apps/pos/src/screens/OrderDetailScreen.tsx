@@ -102,6 +102,15 @@ export function OrderDetailScreen(): JSX.Element {
             {l.grade !== null && ` · ${TH.grade} ${l.grade}`}
             {' — '}
             {formatBaht(l.lineTotalSatang)}
+            {l.promoBreakdown !== null && (
+              <ul className="promo-breakdown" data-testid={`order-line-breakdown-${i}`}>
+                {l.promoBreakdown.map((b) => (
+                  <li key={b.promotionId}>
+                    {b.name} −{formatBahtFull(b.satang)}
+                  </li>
+                ))}
+              </ul>
+            )}
           </li>
         ))}
       </ol>
@@ -116,6 +125,9 @@ export function OrderDetailScreen(): JSX.Element {
             ))}
           </ol>
         </>
+      )}
+      {o.manualPromotionReason !== null && (
+        <p data-testid="order-manual-reason">{TH.orderManualReason(o.manualPromotionReason)}</p>
       )}
       <div className="totals">
         <div>

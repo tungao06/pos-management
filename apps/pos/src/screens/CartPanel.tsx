@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX, type PointerEvent } from 'react'
 import { CartError, checkLine, maxQtyPerLineOf, sumSatang, type CartLineDraft, type PosOrderCatalog, type PricedLine } from '@dayo/domain'
 import { usePricedCart } from '../app/use-priced-cart'
+import { zeroVerdictOf } from '../app/zero-bill'
 import { useCart } from '../app/cart-context'
 import type { CartLine } from '../state/cart'
 import { cartErrorMessage } from '../ui/errors'
@@ -32,6 +33,7 @@ export function CartPanel({
   maxQtyPerLine,
   onOpenDiscount,
   onPay,
+  manualSupported = false,
 }: {
   catalog: PosOrderCatalog | undefined
   channels: { code: string; name: string }[]
@@ -39,17 +41,24 @@ export function CartPanel({
   maxQtyPerLine: number
   onOpenDiscount: () => void
   onPay: (method: 'CASH' | 'PROMPTPAY') => void
+  /** dayo takes manual promotions (E1 supported_fields.order has manual_promotion_ids) — else the picker is hidden. */
+  manualSupported?: boolean
 }): JSX.Element {
   const { state, dispatch, clear } = useCart()
   const { priced, error } = usePricedCart(state, catalog)
   const empty = state.lines.length === 0
   // review I4: dayo's own pricing never goes negative — a bill discount left at/above the subtotal just clamps the
-  // total to ฿0 with `priced.ok` still true, so the ฿0 floor (D50 Q3-20 — no 0-baht bills) must be checked here too.
-  const canPay = priced !== null && priced.ok && priced.totalSatang > 0
-  const zeroTotal = priced !== null && priced.ok && priced.totalSatang === 0 && !empty
+  // total to ฿0 with `priced.ok` still true. D124 · Q1 = ข: a ฿0 bill is sold only when it comes from promotions (the
+  // domain's `zeroTotalVerdict`), with a reason when one is asked for, and paid in cash only — never by QR.
+  const verdict = empty ? 'ok' : zeroVerdictOf(state, priced)
+  const isZero = priced !== null && priced.totalSatang === 0 && !empty
+  const canPay = priced !== null && priced.ok && (priced.totalSatang > 0 || verdict === 'ok')
+  const canPayQr = canPay && !isZero
+  const zeroTotal = isZero && verdict === 'ZERO_TOTAL_NOT_ALLOWED'
+  const zeroCashOnly = isZero && canPay
   const billDiscountTooBig = zeroTotal && state.billDiscount !== null
   const lineErrors = state.lines.map((l, i) => (catalog === undefined ? null : lineError(catalog, l, i, maxQtyPerLineOf(catalog))))
-  const hasProblem = error !== null || (priced !== null && !priced.ok) || zeroTotal || lineErrors.some((e) => e !== null)
+  const hasProblem = error !== null || (priced !== null && !priced.ok) || zeroTotal || (isZero && verdict === 'MANUAL_REASON_REQUIRED') || lineErrors.some((e) => e !== null)
   const cups = state.lines.reduce((n, l) => n + l.qty, 0)
   const channelName = channels.find((c) => c.code === state.channelCode)?.name ?? state.channelCode
 
@@ -121,6 +130,9 @@ export function CartPanel({
           const matched = priced?.lines.filter((p) => sameCombo(p, l)) ?? []
           const lineTotal = sumSatang(matched.map((p) => p.lineTotalSatang))
           const freeQty = sumSatang(matched.filter((p) => p.promotionId !== null && p.lineTotalSatang === 0).map((p) => p.qty))
+          // a promotion can split one line by promo (and a cup two promos share): each discounted part is shown as priced
+          const discounted = matched.filter((p) => p.promotionId !== null && p.discountPerCupSatang > 0)
+          const promoName = (id: string): string => priced?.promotionsApplied.find((a) => a.promotionId === id)?.name ?? id
           const badLine = lineErrors[i] ?? null
           return (
             <div key={l.key} className="cart-line" data-testid={`cart-line-${i}`}>
@@ -132,6 +144,21 @@ export function CartPanel({
                   {l.grade !== null ? ` · ${l.grade}` : ''}
                   {freeQty > 0 && ` · ${TH.freeUnits(freeQty)}`}
                 </div>
+                {discounted.map((p, j) => (
+                  <div key={j} className="line-discount" data-testid={`cart-line-discount-${i}-${j}`}>
+                    {discounted.length > 1 && `${TH.cupsWith(p.qty)}: `}
+                    {TH.perCupDiscount(formatBahtFull(p.discountPerCupSatang))}
+                    {p.promoBreakdown !== null && p.promoBreakdown.length >= 2 && (
+                      <ul className="promo-breakdown" data-testid={`cart-line-breakdown-${i}-${j}`}>
+                        {p.promoBreakdown.map((b) => (
+                          <li key={b.promotionId}>
+                            {promoName(b.promotionId)} −{formatBahtFull(b.satang)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
                 {badLine !== null && (
                   <p role="alert" className="error" data-testid={`cart-line-error-${i}`}>
                     {cartErrorMessage(badLine)}
@@ -154,7 +181,7 @@ export function CartPanel({
             </div>
           )
         })}
-        <PromoPanel priced={priced} catalog={catalog} />
+        <PromoPanel priced={priced} catalog={catalog} manualSupported={manualSupported} />
         {error !== null && (
           <p role="alert" className="error" data-testid="cart-error">
             {cartErrorMessage(error)}
@@ -173,6 +200,11 @@ export function CartPanel({
         {zeroTotal && !billDiscountTooBig && (
           <p role="alert" className="error" data-testid="cart-zero-total">
             {TH.errZeroTotal}
+          </p>
+        )}
+        {zeroCashOnly && (
+          <p className="badge" data-testid="cart-zero-cash-only">
+            {TH.zeroBillCashOnly}
           </p>
         )}
       </div>
@@ -209,7 +241,7 @@ export function CartPanel({
             </button>
           )}
           {payments.qr && (
-            <button type="button" className="primary" data-testid="pay-qr" disabled={!canPay} onClick={() => onPay('PROMPTPAY')}>
+            <button type="button" className="primary" data-testid="pay-qr" disabled={!canPayQr} onClick={() => onPay('PROMPTPAY')}>
               {TH.payQr}
             </button>
           )}

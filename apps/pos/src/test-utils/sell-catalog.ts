@@ -1,5 +1,6 @@
 import rich from '@dayo/contracts/fixtures/pos-test/e1-catalog-rich.json' with { type: 'json' }
 import { PosCatalogResponse } from '@dayo/contracts'
+import promoRules from '@dayo/contracts/fixtures/dayo-api/e1-catalog-changed-promo-rules.json' with { type: 'json' }
 import { saleSettingsOf } from '@dayo/dayo-pricing'
 import { toPricingCatalog } from '@dayo/domain'
 import type { SellCatalogDto } from '../api/types'
@@ -25,4 +26,17 @@ export function testSellCatalog(): SellCatalogDto {
         defaultSize, defaultSweetness: vs.some((v) => v.sweetness === '100%') ? '100%' : vs[0]!.sweetness }
     }),
   }
+}
+
+/** ids of the plan 10 rule fixture: ชงผิด ฟรีแก้วใหม่ (เลือกเอง) — 100% any cup · ลดชาไทย 5 บาท (เลือกเอง). */
+export const MANUAL_FREE_ID = '5c5c5c5c-0000-4000-8000-000000000004'
+export const MANUAL_FIVE_ID = '5c5c5c5c-0000-4000-8000-000000000005'
+
+/** testSellCatalog() plus the promotions and groups of the plan 10 rule fixture (two manual promotions) — screens only. */
+export function promoSellCatalog(): SellCatalogDto {
+  const base = testSellCatalog()
+  const e1 = PosCatalogResponse.parse((promoRules as { response: { body: unknown } }).response.body).data
+  if (!e1.changed) throw new Error('promo fixture must be changed:true')
+  const withRules = toPricingCatalog(e1.catalog)
+  return { ...base, catalog: { ...base.catalog, promotions: withRules.promotions, promotionGroups: withRules.promotionGroups ?? [] } }
 }

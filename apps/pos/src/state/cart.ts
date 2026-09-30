@@ -1,4 +1,5 @@
 import type { MilkCode, Sweetness } from '@dayo/dayo-pricing'
+import { trimWs } from '@dayo/contracts'
 import type { CartDraft, CartLineDraft } from '@dayo/domain'
 
 /**
@@ -16,7 +17,14 @@ export type CartState = {
   promoCode: string | null
   skipPromotionIds: string[]
   noPromotions: boolean
+  /** plan 10 T9: manual promotions picked (apply_mode 'manual'), in the order picked. */
+  manualPromotionIds: string[]
+  /** The reason as typed (untrimmed, at most MANUAL_REASON_MAX UTF-16 units); trimWs happens in toCartDraft. '' = none. */
+  manualPromotionReason: string
 }
+
+/** The engine counts UTF-16 units (vendor money.ts), so `.length` — not code points — is the limit. */
+export const MANUAL_REASON_MAX = 200
 
 export type CartAction =
   // same code|size|sweetness|milk|grade → one line (D48 Q3-8); qty never above maxQty (dayo's computeOrder would clamp silently).
@@ -31,12 +39,16 @@ export type CartAction =
   | { type: 'unskipPromotion'; id: string }
   | { type: 'setNoPromotions'; value: boolean }
   | { type: 'setPromoCode'; code: string | null }
+  | { type: 'toggleManualPromotion'; id: string }
+  | { type: 'setManualReason'; text: string }
+  | { type: 'toggleManualPromotion'; id: string }
+  | { type: 'setManualReason'; text: string }
   | { type: 'reset'; orderId: string; channelCode: string }
 
 export const lineKey = (code: string, size: string, sweetness: string, milk: string, grade: string | null): string => `${code}|${size}|${sweetness}|${milk}|${grade ?? ''}`
 
 export function emptyCart(orderId: string, channelCode: string): CartState {
-  return { orderId, lines: [], channelCode, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false }
+  return { orderId, lines: [], channelCode, billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: '' }
 }
 
 export function cartReducer(state: CartState, action: CartAction): CartState {
@@ -69,6 +81,20 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       return { ...state, noPromotions: action.value }
     case 'setPromoCode':
       return { ...state, promoCode: action.code }
+    case 'toggleManualPromotion': {
+      const ids = state.manualPromotionIds.includes(action.id) ? state.manualPromotionIds.filter((id) => id !== action.id) : [...state.manualPromotionIds, action.id]
+      // no manual promotion left → the reason it was asked for goes too
+      return { ...state, manualPromotionIds: ids, manualPromotionReason: ids.length === 0 ? '' : state.manualPromotionReason }
+    }
+    case 'setManualReason': {
+      let text = action.text
+      if (text.length > MANUAL_REASON_MAX) {
+        text = text.slice(0, MANUAL_REASON_MAX)
+        // never leave half of a surrogate pair at the cut
+        if (/[�-�]$/.test(text)) text = text.slice(0, -1)
+      }
+      return { ...state, manualPromotionReason: text }
+    }
     case 'reset':
       return emptyCart(action.orderId, action.channelCode)
   }
@@ -96,8 +122,8 @@ export function toCartDraft(state: CartState): Omit<CartDraft, 'paymentCode'> {
     promoCode: state.promoCode,
     skipPromotionIds: [...state.skipPromotionIds],
     noPromotions: state.noPromotions,
-    // plan 10 T3: the cart state has no manual promotions yet (T9 adds the picker) — none picked
-    manualPromotionIds: [],
-    manualPromotionReason: null,
+    // plan 10 T9: what checkCart/dayo see — the reason cut with dayo's own trimWs (a blank one is none)
+    manualPromotionIds: [...state.manualPromotionIds],
+    manualPromotionReason: trimWs(state.manualPromotionReason) === '' ? null : trimWs(state.manualPromotionReason),
   }
 }

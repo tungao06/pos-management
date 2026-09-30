@@ -27,6 +27,7 @@ export function StatusBannersView({
   onGoStatus,
   onGoProblems,
   onGoIssueZ,
+  ruleBehind = false,
 }: {
   sync: SyncStatusDto
   role: PosRole
@@ -36,6 +37,8 @@ export function StatusBannersView({
   onGoStatus: () => void
   onGoProblems: () => void
   onGoIssueZ: (shiftId: string) => void
+  /** plan 10 T7: dayo lists a promotion rule version above this app's — its newer promotions are not priced here. */
+  ruleBehind?: boolean
 }): JSX.Element {
   // fix round 2 (parked Low): the permission table, not a raw role string, is what actually gates /sync-problems —
   // `sync_problems` is owner-only there too, so this stays byte-for-byte the same decision, just sourced from one
@@ -77,6 +80,11 @@ export function StatusBannersView({
       {sync.catalogError !== null && (
         <p className="banner warn" data-testid="banner-catalog">
           {TH.bannerCatalog}
+        </p>
+      )}
+      {ruleBehind && (
+        <p className="banner warn" data-testid="banner-rule-behind">
+          {TH.promoRuleBehind}
         </p>
       )}
       {sync.pendingOver24h && (
@@ -161,6 +169,7 @@ export function StatusBanners(): JSX.Element | null {
       onGoStatus={() => void navigate({ to: '/status' })}
       onGoProblems={() => void navigate({ to: '/sync-problems' })}
       onGoIssueZ={(shiftId) => void navigate({ to: '/shift/z/$shiftId', params: { shiftId } })}
+      ruleBehind={boot.data.promo?.ruleBehind ?? false}
     />
   )
 }
