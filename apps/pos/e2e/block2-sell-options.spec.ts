@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { firstRun, login, mock, mockState } from './helpers'
+import { login, mock, mockState, openShift, setOtherPin, setupDevice } from './helpers'
 
 /**
  * spec table row "block2-sell-options" (ADR-0054): milk/grade options, the buy-2-get-1 promo, a channel switch and
@@ -10,7 +10,16 @@ import { firstRun, login, mock, mockState } from './helpers'
  * (ceil(45 × 1.30)) · ฿55.00 for one Thai Tea 22 oz on the store channel after the bump below (no promotion applies).
  */
 test('block2: milk/grade options price correctly, the buy-2-get-1 promo applies, a channel switch reprices, and a bumped 22 oz sells and reaches dayo', async ({ page, request }) => {
-  await firstRun(page, request)
+  // The catalog's "มัตฉะบ่าย ลด 15%" (Mon-Fri 14:00-16:00 Bangkok) would cut the ฿155.00 below by ฿15.75 whenever the suite
+  // runs in that window. `page.clock` cannot pin it: the sale is priced in the DB worker with the real clock, so the
+  // recheck at payment disagrees with the pinned preview. Dayo's owner closing the promotion (like the real flow, E1
+  // then sends active promotions only) makes this spec independent of the time of day; p10 tests the windows.
+  await mock(request, 'reset')
+  await mock(request, 'close-promotion', { id: '9f8e0000-0000-4000-8000-000000000002', at: new Date().toISOString() })
+  await setupDevice(page)
+  await setOtherPin(page)
+  await login(page)
+  await openShift(page)
 
   await page.getByTestId('menu-Thai Tea').click()
   await page.getByTestId('item-milk-oat').click()
