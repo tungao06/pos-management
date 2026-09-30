@@ -100,6 +100,16 @@ describe('promotion times: HH:MM and HH:MM:SS are the same window for the pricin
     expect(price(c, END).promotionsApplied.map((p) => p.name)).toEqual([NAME])
     expect(price(c, AFTER).promotionsApplied).toEqual([])
   })
+  it('timeWindows given as HH:MM:SS is refused (catalog_rejected) — pins the current behaviour: dayo enforces HH:MM there with a check constraint (0071: promotions_time_windows_valid)', async () => {
+    const d = dataOf('e1-catalog-changed-main')
+    const evening = d.catalog.promotions.find((p) => p['name'] === NAME)!
+    evening['timeWindows'] = (evening['timeWindows'] as { days: number[]; from: string; to: string }[]).map((w) => ({ ...w, from: `${w.from}:00`, to: `${w.to}:00` }))
+    const t = await openTestApi({ fetch: e1Dayo(d), now: '2026-09-25T03:00:00.000Z' })
+    await writeKey(t.db, DAYO_KEYS.baseUrl, 'https://mock/api/v1')
+    await t.deps.secrets.setApiKey(MOCK_API_KEY)
+    expect((await pullCatalog({ db: t.db, deps: t.deps, serial: <T>(fn: () => Promise<T>) => fn() })).outcome).toBe('catalog_rejected')
+    expect(await readCatalog(t.db)).toBeNull()
+  })
   it('the three forms price the same bill to the satang', async () => {
     const [a, b, c] = [price(await catalogWith('windows'), IN), price(await catalogWith('legacy'), IN), price(await catalogWith('legacy-seconds'), IN)]
     expect([b.totalSatang, c.totalSatang]).toEqual([a.totalSatang, a.totalSatang])

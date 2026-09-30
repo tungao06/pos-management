@@ -46,6 +46,7 @@ const F4CDA56 = new Set(['e1-catalog-changed-promo-rules', 'e1-catalog-unchanged
 /** Task 19 round 2: dayo main knows shift_open (phase 1), so the `id` field of the fixture's shift_open row is what it refuses. */
 const BLOCK3_MOCK = new Set(['e2-unsupported-kind-and-field'])
 /** …and the fixtures of dayo main's own E1 (Task 19 round 2): the same release as F4CDA56, asked with promo_rule_version=1. */
+// compared with sortedFields: dayo does not sort supported_fields (0066:603-606), so the lists are sets, not sequences
 const MAIN_SHAPED = new Set<string>([...F4CDA56, ...DAYO_MAIN_FIXTURE_NAMES])
 const LEGACY_KEYS = ['kind', 'params', 'daysOfWeek', 'timeFrom', 'timeTo', 'stackable']
 /**
