@@ -21,6 +21,7 @@ export function QrPayScreen(): JSX.Element {
   const { pay, isPending, isSuccess, isError, error, priceChanged, priceBump } = useCommitSale()
   const catalogQuery = useQuery({ queryKey: sellCatalogKey, queryFn: () => api.loadSellCatalog() })
   const { priced, error: cartError } = usePricedCart(state, catalogQuery.data?.catalog, priceBump)
+  const isZero = priced !== null && priced.totalSatang === 0 // D124 · Q1 = ข: a ฿0 bill is cash only
   const total = priced?.totalSatang ?? 0 // after a PRICE_CHANGED re-price the QR below is rebuilt for the new total
   const payload = useQuery({ queryKey: ['promptpay', total], queryFn: () => api.promptPayForAmount(total), enabled: total > 0 })
   const image = useQuery({
@@ -37,6 +38,11 @@ export function QrPayScreen(): JSX.Element {
       <div className="big-amount" data-testid="qr-total">
         {formatBahtFull(total)}
       </div>
+      {isZero && (
+        <p role="alert" className="error" data-testid="zero-bill-cash-only">
+          {TH.zeroBillCashOnly}
+        </p>
+      )}
       {image.data !== undefined && payload.data !== undefined && <img data-testid="qr-image" data-payload={payload.data} src={image.data} alt={TH.qrTitle} />}
       {priceChanged !== null && (
         <p role="alert" className="error" data-testid="price-changed">
@@ -68,7 +74,7 @@ export function QrPayScreen(): JSX.Element {
             type="button"
             className="primary"
             data-testid="price-changed-confirm"
-            disabled={isPending || priced === null || !priced.ok || payload.data === undefined || priced.totalSatang !== priceChanged.nowSatang}
+            disabled={isPending || priced === null || !priced.ok || isZero || payload.data === undefined || priced.totalSatang !== priceChanged.nowSatang}
             onClick={() => priced !== null && void pay({ method: 'PROMPTPAY' }, priced.totalSatang)}
           >
             {TH.priceChangedConfirm}
@@ -78,7 +84,7 @@ export function QrPayScreen(): JSX.Element {
             type="button"
             className="primary"
             data-testid="qr-received"
-            disabled={payload.data === undefined || isPending || priced === null || !priced.ok}
+            disabled={payload.data === undefined || isPending || priced === null || !priced.ok || isZero}
             onClick={() => priced !== null && void pay({ method: 'PROMPTPAY' }, priced.totalSatang)}
           >
             {TH.qrReceived}

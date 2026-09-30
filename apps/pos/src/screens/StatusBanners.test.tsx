@@ -210,3 +210,27 @@ describe('StatusBanners — the warning table (spec §4.4 ข้อ 9, §6.3, §
     expect(await screen.findByTestId('banner-problems')).toHaveTextContent('5')
   })
 })
+
+describe('StatusBanners — promotion rule behind (plan 10 T9)', () => {
+  it('shows the banner when dayo lists a newer promotion rule version, and not otherwise', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const api: Partial<PosApi> = { bootstrap: vi.fn(async () => bootstrapWith(BASE_SYNC, { promo: { manualSupported: true, ruleBehind: true, ruleVersions: [1, 2, 3] } })) }
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ApiProvider api={api as PosApi}>
+          <SessionProvider>
+            <SignedIn role="staff">
+              <StatusBanners />
+            </SignedIn>
+          </SessionProvider>
+        </ApiProvider>
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByTestId('banner-rule-behind')).toHaveTextContent('ระบบกลางมีโปรรุ่นใหม่กว่าแอปนี้')
+  })
+
+  it('no banner when the rule versions are not ahead', async () => {
+    renderBanners(BASE_SYNC, 'staff')
+    await waitFor(() => expect(screen.queryByTestId('banner-rule-behind')).toBeNull())
+  })
+})

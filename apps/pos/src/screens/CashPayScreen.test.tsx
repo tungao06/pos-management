@@ -22,7 +22,7 @@ afterEach(() => cleanup())
 
 const OWNER: UserDto = { id: 'u1', displayName: 'TungAo', role: 'owner' }
 const CART: CartState = {
-  orderId: 'o1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false,
+  orderId: 'o1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: '',
   lines: [{ key: 'Thai Tea|16 oz|50%|fresh|', code: 'Thai Tea', nameTh: 'ชาไทย', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 }],
 }
 

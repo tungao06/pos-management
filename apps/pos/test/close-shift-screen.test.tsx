@@ -41,7 +41,7 @@ function mount(t: ReadyApi): QueryClient {
     <QueryClientProvider client={queryClient}>
       <ApiProvider api={t.api}>
         <SessionProvider>
-          <CartProvider initial={{ orderId: 'o', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, lines: [] }}>
+          <CartProvider initial={{ orderId: 'o', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: '', lines: [] }}>
             <SignedIn user={t.owner} />
           </CartProvider>
         </SessionProvider>

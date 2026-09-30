@@ -27,7 +27,7 @@ afterEach(() => cleanup())
 
 const OWNER: UserDto = { id: 'u1', displayName: 'TungAo', role: 'owner' }
 const CART: CartState = {
-  orderId: 'o1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false,
+  orderId: 'o1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: '',
   lines: [{ key: 'Thai Tea|16 oz|50%|fresh|', code: 'Thai Tea', nameTh: 'ชาไทย', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: null, qty: 1 }],
 }
 
@@ -97,7 +97,7 @@ describe('QrPayScreen — review round 2 item 1 (Medium): a clock-crossed promot
 
       const matchaLine: CartLineDraft = { code: 'Matcha Latte', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: 'Excellent', qty: 1, free: false, discountSatang: null, discountPercent: null, discountReason: null }
       const matchaDraft: CartDraft = { channelCode: 'store', paymentCode: 'cash', lines: [matchaLine], billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: null }
-      const matchaCart: CartState = { orderId: 'o1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, lines: [{ key: 'Matcha Latte|16 oz|50%|fresh|Excellent', code: 'Matcha Latte', nameTh: 'มัตฉะลาเต้', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: 'Excellent', qty: 1 }] }
+      const matchaCart: CartState = { orderId: 'o1', channelCode: 'store', billDiscount: null, promoCode: null, skipPromotionIds: [], noPromotions: false, manualPromotionIds: [], manualPromotionReason: '', lines: [{ key: 'Matcha Latte|16 oz|50%|fresh|Excellent', code: 'Matcha Latte', nameTh: 'มัตฉะลาเต้', size: '16 oz', sweetness: '50%', milk: 'fresh', grade: 'Excellent', qty: 1 }] }
 
       const dto = testSellCatalog()
       // The exact same reference every call — simulates react-query's structural sharing when nothing in the
